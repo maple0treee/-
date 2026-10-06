@@ -5577,7 +5577,7 @@ function syncPeers(peers){
     o.name=safeName(pr.n);o.lv=clamp(Math.floor(num(pr.lv,1)),1,9999);o.h=clamp(num(pr.h,1),0,1);o.pt=typeof pr.pt==='string'?pr.pt:null;
     o.tag.classList.toggle('pty',!!(party&&party.members.some(m=>m.id===p.peer)));
     o.tx=clamp(num(pr.x),-200,600);o.ty=clamp(num(pr.y),-10,60);o.tz=clamp(num(pr.z),-200,500);o.r=num(pr.r);
-    if(num(pr.sw)!==o.sw){if(o.swInit&&o.mesh&&!(typeof pr.mo==='string'&&pr.mo)&&!(o.mesh.userData.stick&&o.mesh.userData.stick.style==='fist'))slashFx(o.mesh.position,num(pr.r),JOBS[o.job].weapon,null,num(pr.sw)%2===1);if(o.swInit)sfx(JOBS[o.job].weapon==='dagger'?'stab':'swing',o.mesh.position,.5);o.sw=num(pr.sw);o.swT=0;o.moObj=typeof pr.mo==='string'&&pr.mo?motionFor(JOBS[o.job].weapon,pr.mo):null;}
+    if(num(pr.sw)!==o.sw){if(o.swInit&&o.mesh&&!(typeof pr.mo==='string'&&pr.mo)&&!(o.mesh.userData.stick&&o.mesh.userData.stick.style==='fist'))slashFx(o.mesh.position,num(pr.r),JOBS[o.job].weapon,null,num(pr.sw)%2===1);if(o.swInit)sfx(o.mesh.userData.stick&&o.mesh.userData.stick.style==='fist'?'punch':JOBS[o.job].weapon==='dagger'?'stab':'swing',o.mesh.position,.5);o.sw=num(pr.sw);o.swT=0;o.moObj=typeof pr.mo==='string'&&pr.mo?motionFor(JOBS[o.job].weapon,pr.mo):null;}
     o.b.textContent=o.name;o.s.textContent=`${JOBS[job].name} Lv ${o.lv}`;
   }
   for(const [k,o] of others)if(!seen.has(k)){scene.remove(o.mesh);o.tag.remove();others.delete(k);partyPeerLeft(k);}
@@ -5675,6 +5675,13 @@ let chatAt=0;
 function sendChat(){
   const inp=$('#chatIn');const text=cleanChat(inp.value);inp.value='';
   if(!text||!P)return;
+  if(text==='/item'){ // 테스트: 모든 칸을 가장 좋은 장비(+10)로
+    const score=I=>Object.entries(I.st||{}).reduce((s,[k,v])=>s+(k==='crit'||k==='spd'?v*300:v),0);
+    for(const slot of SLOTS){if(slot==='sub'&&!JOBS[P.job].sub)continue;
+      const best=Object.keys(ITEMS).filter(k=>ITEMS[k].kind==='gear'&&ITEMS[k].slot===slot&&canWear(k,P.job)).sort((a,b)=>score(ITEMS[b])-score(ITEMS[a]))[0];
+      if(!best)continue;const old=P.equip[slot];if(old&&old!==best&&P.bag.length<BAG_SIZE)P.bag.push(bagGear(old,P.enh[slot]));
+      P.equip[slot]=best;P.enh[slot]=10;}
+    computeStats(P);P.hp=P.maxhp;P.mp=P.maxmp;log('[테스트] 모든 장비를 최상급 +10으로 맞췄다','sys');invDirty();updateHud();save();return;}
   if(text==='/gold'){P.gold+=10000;log('[테스트] 10000 골드를 받았다','sys');invDirty();updateHud();save();return;}
   if(text==='/levelup'){const to=Math.min(MAX_LV,P.lv+20);while(P.lv<to)gainExp(needExp(P.lv)-P.exp);log(`[테스트] 레벨이 올랐다 → Lv ${P.lv}`,'sys');return;}
   if(performance.now()-chatAt<700){toast('조금 천천히 말해 주세요');return;}chatAt=performance.now();
