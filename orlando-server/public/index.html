@@ -232,6 +232,7 @@ body.softlock #c{cursor:none}
 .cell.vacant{background:rgba(0,0,0,.2);cursor:default;box-shadow:none}
 .cell.sel{border-color:var(--brass);box-shadow:inset 0 -3px 0 var(--tier),0 0 0 1px var(--brass)}
 .cell .glyph{color:var(--tier);font-weight:700;text-align:center;line-height:1.1;padding:2px}
+.cell .enhb{position:absolute;top:2px;left:4px;font-size:10px;line-height:1;color:#f3d36a;font-weight:700;text-shadow:0 1px 2px #000}
 .cell .cnt{position:absolute;top:2px;right:4px;font-size:10px;line-height:1;color:var(--parch);font-variant-numeric:tabular-nums}
 .cell.ghost{position:fixed;width:52px;transform:translate(-50%,-50%);z-index:100;pointer-events:none;opacity:.9;border-color:var(--me)}
 body.dragging,body.dragging *{cursor:grabbing!important}
@@ -4655,14 +4656,14 @@ function startGame(data){
   for(const k in P.equip)if(P.equip[k]&&!ITEMS[P.equip[k]])P.equip[k]=null;
   P.enh={...(data.enh||{})};P.home=data.home==='town'?'town':'village';P.quest=data.quest&&MON[data.quest.ty]?{...data.quest}:null;
   P.quick=(data.quick||['hp_s','mp_s',null]).slice(0,3);while(P.quick.length<3)P.quick.push(null);
-  P.bag=Array.isArray(data.bag)?data.bag.filter(e=>e&&ITEMS[e.id]).map(e=>({id:e.id,n:Math.max(1,e.n|0)})):null;
+  P.bag=Array.isArray(data.bag)?data.bag.filter(e=>e&&ITEMS[e.id]).map(e=>({id:e.id,n:Math.max(1,e.n|0),...(e.enh>0?{enh:Math.min(10,e.enh|0)}:{})})):null;
   if(!P.bag){P.bag=[];addItem('hp_s',data.potions??3,true);addItem('mp_s',2,true);if(!data.equip)P.equip.weapon='w1';}
   delete P.potions;P.skills={...(data.skills||{})};P.slots=(data.slots||[]).slice(0,NSK);
   while(P.slots.length<NSK)P.slots.push(null);P.sp=data.sp??P.lv;
   // 바뀐 스킬: 지금 직업에 없는 스킬은 SP를 돌려주고 칸에서 뺀다
   if(data.skv!==SKILL_VER){fixSkills('스킬이 새로 바뀌어');}P.skv=SKILL_VER;
   // 직업에 맞지 않는 장비는 가방으로
-  for(const s of ['weapon','sub']){const id=P.equip[s];if(id&&!canWear(id,P.job)){P.equip[s]=null;P.enh[s]=0;P.bag.push({id,n:1});}}
+  for(const s of ['weapon','sub']){const id=P.equip[s];if(id&&!canWear(id,P.job)){P.bag.push(bagGear(id,P.enh[s]));P.equip[s]=null;P.enh[s]=0;}}
   // 직업 전용 장비 지급 (처음 한 번)
   P.got={...(data.got||{})};giveJobGear(true);
   computeStats(P);
@@ -5015,7 +5016,7 @@ function closeMentor(){$('#mentor').hidden=true;mode='world';canvas.focus();sync
 $('#mLater').onclick=closeMentor;
 function advance(j){
   const from=JOBS[P.job].name;P.job=j;P.mentorReady=false;
-  if(P.equip.sub&&!canWear(P.equip.sub,j)){P.bag.push({id:P.equip.sub,n:1});P.equip.sub=null;P.enh.sub=0;}
+  if(P.equip.sub&&!canWear(P.equip.sub,j)){P.bag.push(bagGear(P.equip.sub,P.enh.sub));P.equip.sub=null;P.enh.sub=0;}
   giveJobGear();fixSkills('전직하면서 전사 스킬을 내려놓고');
   computeStats(P);P.hp=P.maxhp;P.mp=P.maxmp;
   const pos=player.position.clone();scene.remove(player);player=makePlayerMesh(j,gearOf(P));player.position.copy(pos);player.visible=false;scene.add(player);setViewModel(j);
@@ -5282,6 +5283,7 @@ function fixSkills(why){const valid=new Set(treeOf(P.job).map(s=>s.id));let back
   for(const id in P.skills)if(!valid.has(id)){back+=P.skills[id]||0;delete P.skills[id];}
   P.slots=P.slots.map(id=>id&&valid.has(id)&&P.skills[id]?id:null);
   if(back){P.sp+=back;setTimeout(()=>log(`${why} SP ${back}을(를) 돌려받았다. 스킬창(K)에서 다시 배우자.`,'sys'),600);}}
+function bagGear(id,enh){return enh>0?{id,n:1,enh:enh|0}:{id,n:1};}
 function canWear(id,job){const I=ITEMS[id];if(!I)return false;if(I.jobs&&!I.jobs.includes(job))return false;if(I.slot==='sub'&&!JOBS[job].sub)return false;return true;}
 // 직업에 맞는 장비를 한 번씩 준다: 전사는 나무 방패, 검사는 검사의 장검, 방패병은 방패병의 방패
 function giveJobGear(quiet){
@@ -5290,7 +5292,7 @@ function giveJobGear(quiet){
   const owned=P.equip[slot]===id||P.bag.some(e=>e.id===id);if(owned)return;
   const old=P.equip[slot];
   if(slot==='sub'&&!old){P.equip.sub=id;}
-  else if(slot==='weapon'){P.equip.weapon=id;P.enh.weapon=0;if(old)P.bag.push({id:old,n:1});}
+  else if(slot==='weapon'){if(old)P.bag.push(bagGear(old,P.enh.weapon));P.equip.weapon=id;P.enh.weapon=0;}
   else P.bag.push({id,n:1});
   computeStats(P);setTimeout(()=>log(`[${itemName(id,P.job)}]을(를) 받았다.`,'sys'),700);
 }
@@ -5298,14 +5300,14 @@ function equipAt(idx){
   const e=P.bag[idx];if(!e)return;const I=ITEMS[e.id];if(I.kind!=='gear')return;
   if(!canWear(e.id,P.job)){const why=I.slot==='sub'&&!JOBS[P.job].sub?'이 직업은 보조무기를 쓰지 않아요':`${I.jobs.map(j=>JOBS[j].name).join('·')} 전용이에요`;toast(why);log(`${itemName(e.id,P.job)}: ${why}`,'bad');return;}
   if(P.lv<I.req){toast(`레벨 제한: Lv ${I.req}부터 착용할 수 있어요`);log(`${itemName(e.id,P.job)}은(는) 레벨 제한 때문에 착용할 수 없다 (Lv ${I.req} 필요, 지금 Lv ${P.lv})`,'bad');return;}
-  if(P.enh[I.slot]){log(`${SLOT_NAME[I.slot]} 강화(+${P.enh[I.slot]})는 새 장비로 옮겨지지 않는다`,'bad');P.enh[I.slot]=0;}
-  const old=P.equip[I.slot];P.bag.splice(idx,1);P.equip[I.slot]=e.id;if(old)P.bag.splice(idx,0,{id:old,n:1});
+  // 강화 수치는 장비 하나하나에 붙어 다닌다
+  const old=P.equip[I.slot],oldEnh=P.enh[I.slot]||0;P.bag.splice(idx,1);P.equip[I.slot]=e.id;P.enh[I.slot]=e.enh||0;if(old)P.bag.splice(idx,0,bagGear(old,oldEnh));
   const hr=P.hp/P.maxhp,mr=P.mp/P.maxmp;computeStats(P);P.hp=Math.round(P.maxhp*hr);P.mp=Math.round(P.maxmp*mr);
   log(`${itemName(e.id,P.job)} 장착`,'sys');invSel=null;invDirty();updateHud();save();
 }
 function unequip(slot){
   const id=P.equip[slot];if(!id)return;if(P.bag.length>=BAG_SIZE){toast('가방이 가득 찼어요');return;}
-  P.equip[slot]=null;P.enh[slot]=0;P.bag.push({id,n:1});computeStats(P);log(`${itemName(id,P.job)} 해제`);invDirty();updateHud();save();
+  P.bag.push(bagGear(id,P.enh[slot]));P.equip[slot]=null;P.enh[slot]=0;computeStats(P);log(`${itemName(id,P.job)} 해제`);invDirty();updateHud();save();
 }
 
 /* 소지품 창 */
@@ -5356,7 +5358,8 @@ function cellFor(id,n,opts={}){
   const I=ITEMS[id];c.style.setProperty('--tier',TIER_COLOR[I.tier]);
   const t=document.createElement('span');t.className='glyph';t.textContent=itemShort(id,P.job);c.appendChild(t);
   if(I.kind==='use'||n>1){const k=document.createElement('span');k.className='cnt';k.textContent=n;c.appendChild(k);}
-  c.title=itemName(id,P.job);
+  if(opts.enh>0){const k=document.createElement('span');k.className='enhb';k.textContent='+'+opts.enh;c.appendChild(k);}
+  c.title=itemName(id,P.job)+(opts.enh>0?` +${opts.enh}`:'');
   if(I.kind==='gear'&&I.req>P.lv){c.classList.add('locked');const lk=document.createElement('span');lk.className='lk';lk.textContent='Lv'+I.req;c.appendChild(lk);c.title+=` · 레벨 제한 Lv ${I.req}`;}
   return c;
 }
@@ -5380,7 +5383,7 @@ function renderInv(){
   // 가방
   const g=$('#invGrid');g.innerHTML='';
   for(let i=0;i<BAG_SIZE;i++){
-    const e=P.bag[i];const c=cellFor(e&&e.id,e&&e.n);
+    const e=P.bag[i];const c=cellFor(e&&e.id,e&&e.n,{enh:e&&e.enh});
     if(e){c.dataset.idx=i;c.tabIndex=0;if(invSel&&invSel.idx===i)c.classList.add('sel');
       c.addEventListener('pointerdown',ev=>startDrag2(ev,i));
       c.addEventListener('keydown',ev=>{if(ev.key==='Enter'){invSel={idx:i};renderInv();}});}
@@ -5404,10 +5407,11 @@ function renderInv(){
   if(!id){const p=document.createElement('p');p.className='note';p.textContent='아이템을 누르면 정보가 보여요. 두 번 누르면 장비는 바로 장착되고, 소비 아이템은 비어 있는 1~3번 칸에 들어가요. 끌어다 놓아도 돼요.';dt.appendChild(p);return;}
   const I=ITEMS[id];
   const h=document.createElement('div');h.className='dh';
-  const nm=document.createElement('b');nm.textContent=itemName(id,P.job);nm.style.color=TIER_COLOR[I.tier];
+  const enhD=idx!=null?(P.bag[idx].enh||0):eqSlot?(P.enh[eqSlot]||0):0;
+  const nm=document.createElement('b');nm.textContent=itemName(id,P.job)+(enhD?` +${enhD}`:'');nm.style.color=TIER_COLOR[I.tier];
   const tg=document.createElement('small');tg.textContent=`${TIER_NAME[I.tier]} · ${I.kind==='use'?'소비':SLOT_NAME[I.slot]}`;
   h.append(nm,tg);dt.appendChild(h);
-  const p=document.createElement('p');p.textContent=itemSub(id);dt.appendChild(p);
+  const p=document.createElement('p');p.textContent=enhD&&I.kind==='gear'?`${statText(gearStats(id,enhD))} · Lv ${I.req}`+(I.desc?` · ${I.desc}`:''):itemSub(id);dt.appendChild(p);
   if(I.kind==='gear'&&I.req>P.lv){const w=document.createElement('p');w.className='warn reqw';w.textContent=`레벨 제한: Lv ${I.req}부터 착용할 수 있어요 (지금 Lv ${P.lv})`;dt.appendChild(w);}
   if(I.kind==='gear'&&idx!=null){const cur=P.equip[I.slot];if(cur){const c=document.createElement('p');c.className='note';c.textContent=`지금 장착: ${itemName(cur,P.job)} (${statText(ITEMS[cur].st)})`;dt.appendChild(c);}}
   const acts=document.createElement('div');acts.className='dacts';
@@ -5654,6 +5658,7 @@ let chatAt=0;
 function sendChat(){
   const inp=$('#chatIn');const text=cleanChat(inp.value);inp.value='';
   if(!text||!P)return;
+  if(text==='/levelup'){const to=Math.min(MAX_LV,P.lv+20);while(P.lv<to)gainExp(needExp(P.lv)-P.exp);log(`[테스트] 레벨이 올랐다 → Lv ${P.lv}`,'sys');return;}
   if(performance.now()-chatAt<700){toast('조금 천천히 말해 주세요');return;}chatAt=performance.now();
   if(/^\/(p|파티)\s+/.test(text)){const t=text.replace(/^\/(p|파티)\s+/,'');if(!party){toast('파티가 없어요');return;}if(!t)return;logChat(`[파티] ${P.name}`,t,true);for(const m of party.members)if(m.id!==myPeer())dm(m.id,{k:'pchat',m:t});return;}
   logChat(P.name,text,true);
