@@ -54,7 +54,7 @@
         if (Math.hypot(x - LAIR.x, z - LAIR.z) < LAIR.r + 8) continue;
         if (blocked(x, z, 1)) continue;
         let near = false;
-        for (const c of clients.values()) if (c.pres.on && Math.hypot(c.pres.x - x, c.pres.z - z) < 18) near = true;
+        for (const c of clients.values()) if (c.pres.on && Math.hypot(c.pres.x - x, c.pres.z - z) < 2.5) near = true; // 바로 발밑만 피한다
         if (!near) return { x, z };
       }
       return null;

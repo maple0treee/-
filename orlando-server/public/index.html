@@ -299,6 +299,9 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 #npc .nameplate small{font-size:10.5px;color:#aab6d0;letter-spacing:.06em}
 #npc .talkmain{display:grid;align-content:start;gap:12px;min-width:0;padding-top:4px}
 #npc .say{margin:0;font-size:16px;line-height:1.75;color:#f2f4f8;min-height:3.5em;text-shadow:0 1px 2px rgba(0,0,0,.5);word-break:keep-all}
+#npc .next .kf{display:none;min-width:15px;height:15px;margin-right:5px;padding:0 3px;border:1px solid rgba(200,212,240,.55);border-radius:3px;font-size:10px;line-height:13px;text-align:center;box-sizing:border-box;vertical-align:1px}
+#npc .next.pg .kf{display:inline-block}
+body.touch #npc .next .kf{display:none!important}
 #npc .next{position:absolute;right:18px;bottom:10px;font-size:12px;color:#c8d4f0;animation:bob 1s ease-in-out infinite}
 @keyframes bob{50%{transform:translateY(3px)}}
 .npcacts{display:flex;flex-wrap:wrap;gap:8px}
@@ -639,7 +642,7 @@ body.talking #buffBar{visibility:hidden}
       <div class="talkmain">
         <p class="say" id="npcSay"></p>
         <div id="npcActs" class="npcacts"></div>
-        <span class="next" id="npcNext" hidden>▼</span>
+        <span class="next" id="npcNext" hidden><span class="kf">F</span>▼</span>
       </div>
       <button type="button" class="tclose" id="npcClose" aria-label="대화 닫기">✕</button>
     </section>
@@ -894,7 +897,7 @@ body.talking #buffBar{visibility:hidden}
         if (Math.hypot(x - LAIR.x, z - LAIR.z) < LAIR.r + 8) continue;
         if (blocked(x, z, 1)) continue;
         let near = false;
-        for (const c of clients.values()) if (c.pres.on && Math.hypot(c.pres.x - x, c.pres.z - z) < 18) near = true;
+        for (const c of clients.values()) if (c.pres.on && Math.hypot(c.pres.x - x, c.pres.z - z) < 2.5) near = true; // 바로 발밑만 피한다
         if (!near) return { x, z };
       }
       return null;
@@ -4765,7 +4768,7 @@ function drawPortrait(n){
 let typeT=null,typing=false,typeDone=null;
 function typeText(el,text,done){
   clearInterval(typeT);el.textContent='';typing=true;typeDone=done;const t0=performance.now();
-  $('#npcNext').hidden=true;
+  $('#npcNext').hidden=true;$('#npcNext').classList.remove('pg');
   let lastK=0;const voice=npcCur?.7+([...String(npcCur.id||'')].reduce((a,c)=>a+c.charCodeAt(0),0)%9)*.12:1;
   typeT=setInterval(()=>{const k=Math.floor((performance.now()-t0)/22);el.textContent=text.slice(0,k);if(k-lastK>=3&&k<text.length){lastK=k;if(text[k]&&text[k]!==' ')sfx('talk',null,.6,voice*(.95+Math.random()*.1));}if(k>=text.length)finishTyping(text);},30);
   el.dataset.full=text;
@@ -4813,7 +4816,7 @@ function showPages(pages,i=0){
   const n=npcCur;$('#npcName').textContent=n.name;$('#npcRole').textContent=n.role;
   $('#npcBody').innerHTML='';$('#npcActs').innerHTML='';$('#npcChoices').hidden=true;npcPageNext=null;
   if(i>=pages.length-1){renderNpc(pages[i]);return;}
-  typeText($('#npcSay'),pages[i],()=>{npcPageNext=()=>showPages(pages,i+1);$('#npcNext').hidden=false;});
+  typeText($('#npcSay'),pages[i],()=>{npcPageNext=()=>showPages(pages,i+1);$('#npcNext').hidden=false;$('#npcNext').classList.add('pg');});
 }
 function nextNpcPage(){if(!npcPageNext)return false;const f=npcPageNext;npcPageNext=null;f();return true;}
 // 선택지마다 숫자키 표시 (숫자키 고르기와 같은 순서)
@@ -4892,10 +4895,10 @@ function renderQuest(msg){
     P.gold+=q.gold;const reward=pick(GEAR_BY_TIER[tierForLevel(q.lv)]);const gotItem=addItem(reward,1,true);
     log(`의뢰 완료! EXP +${q.exp} · ${q.gold} 골드${gotItem?` · [${itemName(reward,P.job)}]`:''}`,'sys');P.quest=null;gainExp(q.exp);updateQuestHud();save();
     renderNpc('훌륭해! 약속한 보상이다. 다음 의뢰도 보겠나?',box=>{npcBtn(box,'다른 의뢰 보기',()=>renderQuest(),'pri wide');});return;}
-  if(q){renderNpc(msg||`${MON[q.ty].name} ${q.need}마리 사냥 중이군. 지금 ${q.have}마리. 끝나면 다시 오게.`,box=>{npcBtn(box,'계속하기',()=>closeNpc(),'pri wide').dataset.skip='1';npcBtn(box,'의뢰 포기',()=>{P.quest=null;updateQuestHud();save();renderQuest('알겠네. 다른 일을 맡아 보게.');},'wide');});return;}
+  if(q){renderNpc(msg||`${MON[q.ty].name} ${q.need}마리 사냥 중이군(권장 Lv ${q.lv}). 지금 ${q.have}마리. 끝나면 다시 오게.`,box=>{npcBtn(box,'계속하기',()=>closeNpc(),'pri wide').dataset.skip='1';npcBtn(box,'의뢰 포기',()=>{P.quest=null;updateQuestHud();save();renderQuest('알겠네. 다른 일을 맡아 보게.');},'wide');});return;}
   const offers=questOffers();
   renderNpc(msg||(offers.length?'지금 네게 맞는 일거리다. 하나 골라 보게.':'지금은 맞는 일이 없군. 레벨을 올려서 다시 오게.'),box=>{
-    for(const o of offers)npcBtn(box,`${ZONES[o.zone].name} · ${MON[o.ty].name} ${o.need}마리 → EXP ${o.exp} · ${o.gold} 골드 · 장비`,()=>{P.quest={...o,from:npcCur.id,fromName:npcCur.name};updateQuestHud();save();renderQuest(`좋아, ${MON[o.ty].name} ${o.need}마리다. ${ZONES[o.zone].name}로 가게.`);},'pri wide');});
+    for(const o of offers)npcBtn(box,`${ZONES[o.zone].name} · ${MON[o.ty].name} ${o.need}마리 (권장 Lv ${o.lv}) → EXP ${o.exp} · ${o.gold} 골드 · 장비`,()=>{P.quest={...o,from:npcCur.id,fromName:npcCur.name};updateQuestHud();save();renderQuest(`좋아, ${MON[o.ty].name} ${o.need}마리다. ${ZONES[o.zone].name}로 가게.`);},'pri wide');});
 }
 function questKill(m){const q=P.quest;if(!q||q.have>=q.need||m.t!==q.ty)return;q.have++;updateQuestHud();
   if(q.have>=q.need){const who=q.fromName||'카일';log(`의뢰 목표 달성! ${who}에게 보고하자. (의뢰를 주는 사람 누구에게나 보고할 수 있다)`,'sys');toast(`의뢰 완료 · ${who}에게 보고`);}}
