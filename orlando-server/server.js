@@ -55,7 +55,7 @@ function cleanPresence(d) {
   return {
     n: cleanText(d.n, 12) || '모험가',
     j: cleanText(d.j, 16) || 'warrior',
-    lv: Math.max(1, Math.min(100, Math.floor(n(d.lv)) || 1)),
+    lv: Math.max(1, Math.min(9999, Math.floor(n(d.lv)) || 1)),
     x: n(d.x), y: n(d.y), z: n(d.z), r: n(d.r),
     sw: Math.floor(n(d.sw)) % 1e6,
     on: d.on ? 1 : 0,
