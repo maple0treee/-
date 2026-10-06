@@ -126,7 +126,7 @@
     road: ['dog', 'bandit'], waste: ['scorpion', 'bandit', 'sandslime'], snow: ['whitewolf', 'yeti', 'iceslime'],
     grave: ['ghoul', 'wraith', 'boneknight'], volcano: ['fireslime', 'lavagiant', 'salamander'], abyss: ['voidslime', 'shadowwolf', 'fallen'],
   };
-  const ZONE_COUNT = { forest: 10, plains: 9, swamp: 8, ruins: 7, road: 5, waste: 11, snow: 10, grave: 10, volcano: 10, abyss: 13 };
+  const ZONE_COUNT = { forest: 10, plains: 9, swamp: 8, ruins: 7, road: 8, waste: 17, snow: 15, grave: 15, volcano: 15, abyss: 20 }; // 큰 지역은 1.5배
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
     const d2 = Math.hypot(x - C2.x, z - C2.z);
