@@ -10,7 +10,7 @@ const { WebSocketServer } = require('ws');
 const createSim = require('./sim.js');
 
 const PORT = process.env.PORT || 3000;
-const VERSION = 4; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
+const VERSION = 8; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
 const PUBLIC = path.join(__dirname, 'public');
 
 // 파일을 미리 읽어 두고(압축본 포함) 바로 보내 준다
@@ -60,6 +60,10 @@ function cleanPresence(d) {
     sw: Math.floor(n(d.sw)) % 1e6,
     on: d.on ? 1 : 0,
     al: d.al ? 1 : 0,
+    pt: typeof d.pt === 'string' ? cleanText(d.pt, 24) : null,
+    h: Math.max(0, Math.min(1, typeof d.h === 'number' && isFinite(d.h) ? Math.round(d.h * 100) / 100 : 1)),
+    g: typeof d.g === 'string' && /^[-0-9,]{0,24}$/.test(d.g) ? d.g : '',
+    mo: typeof d.mo === 'string' && /^[a-z0-9]{0,16}$/.test(d.mo) ? d.mo : '',
   };
 }
 
@@ -96,6 +100,14 @@ wss.on('connection', (ws) => {
       const out = { k: ['p', 'r', 'b'].includes(d.k) ? d.k : 'b' };
       for (const key of ['x', 'y', 'z', 'dx', 'dy', 'dz', 'sp', 's', 'c', 'g', 'd']) if (key in d) out[key] = n(d[key]);
       broadcast({ t: 'fx', id, d: out }, ws);
+    } else if (m.t === 'dm' && m.d && typeof m.d === 'object' && typeof m.d.to === 'string') {
+      // 파티·거래: 한 사람에게만 전달
+      const to = clients.get(m.d.to);
+      if (!to || to === ws) return;
+      let body;
+      try { body = JSON.stringify(m.d); } catch { return; }
+      if (body.length > 4000) return;
+      send(to, { t: 'dm', from: id, d: m.d });
     } else if (m.t === 'chat' && m.d && typeof m.d === 'object') {
       const now = Date.now();
       if (now - ws.chatAt < 700) return; // 도배 방지
