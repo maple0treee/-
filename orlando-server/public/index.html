@@ -1786,10 +1786,10 @@ function buildVillage(){
   // 분수: 두 단 수반, 넘쳐 흐르는 물
   buildVillageFountain(0,heightAt(0,0),0);
   colliders.push({x:0,z:0,r:3.6});
-  // 등불
+  // 화톳불 기둥 (나무 기둥 위 쇠 바구니에 장작불)
   for(let i=0;i<4;i++){
     const a=i/4*Math.PI*2+Math.PI/4,x=Math.cos(a)*7.5,z=Math.sin(a)*7.5;
-    buildLampPost(x,z,2.5).rotation.y=-a;colliders.push({x,z,r:.3});
+    buildCresset(x,z,2.3);colliders.push({x,z,r:.3});
   }
 }
 
@@ -2226,6 +2226,56 @@ function addHearthFire(parent,px,py,pz,w=.8,d=.7){
   _amb().push({x:0,z:0,always:true,fn:(dt)=>{t+=dt;for(const f of flames){const k=1+Math.sin(t*11+f.userData.ph)*.2+Math.sin(t*23+f.userData.ph)*.1;f.scale.set(1,k,1);f.position.y=.12+f.userData.h*k*.4;}
     spT-=dt;if(spT<=0&&player){g.getWorldPosition(wp);if(Math.abs(wp.x-player.position.x)+Math.abs(wp.z-player.position.z)<45){spT=.12;VFX.emit(0,wp.x+(Math.random()-.5)*w*.6,wp.y+.3,wp.z+(Math.random()-.5)*d*.5,(Math.random()-.5)*.4,1.5+Math.random()*1.5,(Math.random()-.5)*.4,0xffa040,.9,-.5,1);}else spT=.5;}}});
   return g;
+}
+
+/* ---------- 시대에 맞는 불: 마을은 화톳불 기둥(나무 기둥 위 쇠 바구니), 도시는 돌 받침 위 큰 쇠 화로 ---------- */
+function _fireBundle(par,px,py,pz,s,list){
+  // 장작 몇 개 + 숯 + 흔들리는 불꽃 여러 겹
+  const wood=mat(0x4a2e1a,{roughness:.9});
+  for(let i=0;i<4;i++){const l=new THREE.Mesh(new THREE.CylinderGeometry(.035*s,.04*s,.34*s,6),wood);l.position.set(px+(Math.random()-.5)*.08*s,py+.05*s,pz+(Math.random()-.5)*.08*s);l.rotation.set(Math.PI/2*.7,i*Math.PI/2+Math.random()*.4,0);par.add(l);}
+  for(let i=0;i<7;i++){const c=new THREE.Mesh(new THREE.DodecahedronGeometry((.04+Math.random()*.03)*s,0),mat(0x5a1a0a,{emissive:0xff3a08,emissiveIntensity:.6+Math.random()*.8}));
+    c.position.set(px+(Math.random()-.5)*.22*s,py,pz+(Math.random()-.5)*.22*s);par.add(c);}
+  const cols=[0xffd060,0xff9a20,0xff6a10];
+  for(let i=0;i<5;i++){const h=(.3+Math.random()*.25)*s;const f=new THREE.Mesh(new THREE.ConeGeometry((.07+Math.random()*.05)*s,h,7),flameMat(cols[i%3]));
+    f.position.set(px+(Math.random()-.5)*.14*s,py+.08*s+h/2,pz+(Math.random()-.5)*.14*s);f.userData={ph:Math.random()*6,h,by:py+.08*s};par.add(f);list.push(f);}
+}
+function _fireAnim(x,z,par,flames,sparkY,spread){
+  const wp=new THREE.Vector3();let t=Math.random()*9,spT=0;
+  _amb().push({x,z,fn:(dt,near)=>{t+=dt;for(const f of flames){const k=1+Math.sin(t*11+f.userData.ph)*.18+Math.sin(t*23+f.userData.ph)*.1;f.scale.set(1-(k-1)*.5,k,1-(k-1)*.5);f.position.y=f.userData.by+f.userData.h*k/2;f.rotation.z=Math.sin(t*4+f.userData.ph)*.08;}
+    spT-=dt;if(near&&spT<=0){spT=.16;par.getWorldPosition(wp);VFX.emit(0,wp.x+(Math.random()-.5)*spread,wp.y+sparkY,wp.z+(Math.random()-.5)*spread,(Math.random()-.5)*.5,1.6+Math.random()*1.6,(Math.random()-.5)*.5,0xffa040,1,-.6,1);}}});
+}
+function buildCresset(x,z,h=2.3){
+  const y=heightAt(x,z),g=new THREE.Group();g.position.set(x,y,z);g.userData.anim=true;
+  const timber=mat(0x5a3d24,{roughness:.9}),iron=mat(0x2a2826,{metalness:.55,roughness:.5});
+  const M=(geo,m,px,py,pz,rx=0,ry=0,rz=0)=>{const o=new THREE.Mesh(geo,m);o.position.set(px,py,pz);o.rotation.set(rx,ry,rz);o.castShadow=true;g.add(o);return o;};
+  // 거친 나무 기둥 + 아래 돌 몇 개 + 쇠 띠
+  M(new THREE.CylinderGeometry(.075,.1,h,7),timber,0,h/2,0);
+  for(let i=0;i<4;i++){const a=i/4*Math.PI*2+.4;M(new THREE.DodecahedronGeometry(.11,0),mat(0x8a8272),Math.cos(a)*.16,.06,Math.sin(a)*.16);}
+  for(const yy of [.5,h-.35])M(new THREE.CylinderGeometry(.085,.085,.05,8),iron,0,yy,0);
+  // 쇠 바구니: 고리 세 개 + 바깥으로 벌어진 쇠살
+  const by=h+.02;
+  M(new THREE.CylinderGeometry(.06,.06,.06,8),iron,0,by,0);
+  for(const [r,yy] of [[.12,by+.06],[.2,by+.2],[.26,by+.36]])M(new THREE.TorusGeometry(r,.014,5,14),iron,0,yy,0,Math.PI/2,0,0);
+  for(let i=0;i<8;i++){const a=i/8*Math.PI*2;const bar=M(new THREE.CylinderGeometry(.011,.011,.42,4),iron,Math.cos(a)*.19,by+.2,Math.sin(a)*.19);bar.rotation.set(0,0,0);bar.lookAt(x+Math.cos(a)*1,y+by+.2+2.4,z+Math.sin(a)*1);bar.rotateX(Math.PI/2);}
+  const flames=[];_fireBundle(g,0,by+.1,0,1,flames);
+  scene.add(g);_fireAnim(x,z,g,flames,by+.5,.25);return g;
+}
+function buildBrazier(x,z){
+  const y=heightAt(x,z),g=new THREE.Group();g.position.set(x,y,z);g.userData.anim=true;
+  const stone=mat(0xb4ab96,{roughness:.85}),stone2=mat(0x958c78,{roughness:.9}),iron=mat(0x2c2a28,{metalness:.6,roughness:.45,flatShading:false});
+  const M=(geo,m,px,py,pz,rx=0,ry=0,rz=0)=>{const o=new THREE.Mesh(geo,m);o.position.set(px,py,pz);o.rotation.set(rx,ry,rz);o.castShadow=true;o.receiveShadow=true;g.add(o);return o;};
+  // 돌 받침: 팔각 기둥, 위아래 테
+  M(new THREE.CylinderGeometry(.42,.48,.18,8),stone2,0,.09,0,0,Math.PI/8,0);
+  M(new THREE.CylinderGeometry(.3,.36,.9,8),stone,0,.63,0,0,Math.PI/8,0);
+  M(new THREE.CylinderGeometry(.4,.34,.14,8),stone2,0,1.15,0,0,Math.PI/8,0);
+  // 쇠 화로: 다리 셋 + 넓은 그릇 + 테두리 + 바깥쪽 고리 장식
+  for(let i=0;i<3;i++){const a=i/3*Math.PI*2;const leg=M(new THREE.CylinderGeometry(.025,.03,.36,6),iron,Math.cos(a)*.2,1.36,Math.sin(a)*.2);leg.rotation.set(Math.sin(a)*.35,0,-Math.cos(a)*.35);
+    M(new THREE.TorusGeometry(.05,.012,5,10,Math.PI*1.4),iron,Math.cos(a)*.3,1.24,Math.sin(a)*.3,0,-a,0);}
+  const bowl=lathe([[0,1.46],[.2,1.48],[.42,1.6],[.52,1.78],[.5,1.8],[.4,1.66],[.18,1.56],[0,1.55]],16,iron);bowl.castShadow=true;g.add(bowl);
+  M(new THREE.TorusGeometry(.51,.025,6,24),iron,0,1.79,0,Math.PI/2,0,0);
+  for(let i=0;i<8;i++){const a=i/8*Math.PI*2;M(new THREE.ConeGeometry(.025,.08,5),iron,Math.cos(a)*.51,1.84,Math.sin(a)*.51);}
+  const flames=[];_fireBundle(g,0,1.6,0,1.7,flames);
+  scene.add(g);_fireAnim(x,z,g,flames,2.1,.5);return g;
 }
 
 /* ---------- 몬스터 모델 (세부 표현) ---------- */
@@ -3720,9 +3770,9 @@ function addNpc(o){
   // 광장: 영웅 동상과 둥근 연못
   buildCityFountain(cx,y0,cz);
   colliders.push({x:cx,z:cz,r:5.2});
-  // 등불
+  // 광장 둘레의 큰 쇠 화로
   for(let k=0;k<8;k++){const a=k/8*Math.PI*2+.2,x=cx+Math.cos(a)*7.5,z=cz+Math.sin(a)*7.5;
-    buildLampPost(x,z,2.7).rotation.y=-a;}
+    buildBrazier(x,z);colliders.push({x,z,r:.55});}
 
   // 사람들
   const at=(a,r)=>({x:cx+Math.cos(a)*r,z:cz+Math.sin(a)*r});
