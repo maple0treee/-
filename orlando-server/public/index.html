@@ -1403,12 +1403,12 @@ const BASES=['warrior','rogue','mage','archer'];
 // type: melee 근접 · aoe 내 주변 · proj 투사체 · zone 조준 지점 범위 · dash 돌진 · buff 강화 · heal 회복
 const SKILLS={
   warrior:[
-    {id:'thrust1',name:'찌르기',req:1,mp:5,cd:3,type:'melee',single:true,mult:2.2,range:3,desc:'검으로 바로 앞의 적 하나를 찌른다. 공격력 220%'},
+    {id:'thrust1',needSword:true,name:'찌르기',req:1,mp:5,cd:3,type:'melee',single:true,mult:2.2,range:3,desc:'검으로 바로 앞의 적 하나를 찌른다. 공격력 220%'},
     {id:'parry',name:'막아내기',req:3,mp:8,cd:7,type:'front',needSub:true,mult:1.5,range:3.6,stun:1.2,buff:{def:1.3},dur:3,color:0xe0cfa0,desc:'방패로 앞을 막아내며 앞쪽의 적들에게 150% 피해, 맞은 적은 1.2초 기절. 3초 동안 방어력 30% 증가'}],
   swordsman:[
-    {id:'swing',name:'휘두르기',req:10,mp:10,cd:5,type:'front',mult:2,range:4.2,color:0xdff4ff,desc:'검을 크게 휘둘러 앞쪽의 적들에게 200% 피해'},
-    {id:'guardcut',name:'막고 치기',req:12,mp:12,cd:8,type:'block',dur:.5,pct:.12,color:0xbfe3ff,desc:'검으로 몸을 막아 0.5초 동안 적의 공격을 완전히 막는다. 막아내면 HP를 12% 회복'},
-    {id:'downcut',name:'내려찍기',req:15,mp:14,cd:6,type:'melee',single:true,mult:3.6,range:3,desc:'검을 내려쳐 바로 앞의 적 하나에게 360% 피해'}],
+    {id:'swing',needSword:true,name:'휘두르기',req:10,mp:10,cd:5,type:'front',mult:2,range:4.2,color:0xdff4ff,desc:'검을 크게 휘둘러 앞쪽의 적들에게 200% 피해'},
+    {id:'guardcut',needSword:true,name:'막고 치기',req:12,mp:12,cd:8,type:'block',dur:.5,pct:.12,color:0xbfe3ff,desc:'검으로 몸을 막아 0.5초 동안 적의 공격을 완전히 막는다. 막아내면 HP를 12% 회복'},
+    {id:'downcut',needSword:true,name:'내려찍기',req:15,mp:14,cd:6,type:'melee',single:true,mult:3.6,range:3,desc:'검을 내려쳐 바로 앞의 적 하나에게 360% 피해'}],
   guardian:[
     {id:'bash',name:'방패 강타',req:5,mp:8,cd:5,type:'melee',mult:1.7,stun:2,range:3,desc:'방패로 쳐서 170% 피해, 2초 기절'},
     {id:'wall',name:'철벽',req:7,mp:12,cd:18,type:'buff',buff:{def:2},dur:8,desc:'8초 동안 방어력 2배'},
@@ -2564,6 +2564,10 @@ function makeShield(kind='buckler',tier=0){
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   return g;
 }
+// 방패 손잡이 위치(방패 안 좌표). 손이 정확히 여기를 쥐도록 방패를 옮긴다
+const SHIELD_GRIP={buckler:new THREE.Vector3(0,-.06,-.1),tower:new THREE.Vector3(.05,.02,-.13)};
+function mountShield(sh,kind,scale,rotY=0){sh.scale.setScalar(scale);sh.rotation.set(0,rotY,0);
+  sh.position.copy(SHIELD_GRIP[kind]).multiplyScalar(scale).applyAxisAngle(new THREE.Vector3(0,1,0),rotY).negate();}
 function kiteShield(){return makeShield('tower',0);}
 function arrowMesh(){
   const g=new THREE.Group();
@@ -2630,10 +2634,10 @@ function makeStickPlayer(job,gear){
   else if(style==='staff'){w=stickWeapon('staff',job,G.weapon);const holder=new THREE.Group();holder.add(w);AR.hand.add(holder);w=holder;}
   else if(style==='shield'){
     // 방패병: 큰 방패 하나만 든다 (왼손)
-    const sh=new THREE.Group();const S2=makeShield('tower',G.weapon);S2.scale.setScalar(.85);S2.position.set(0,-.05,.08);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;w=sh;}
+    const sh=new THREE.Group();const S2=makeShield('tower',G.weapon);mountShield(S2,'tower',.85);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;w=sh;}
   else{w=stickWeapon(style,job,G.weapon);w.rotation.x=Math.PI/2;AR.hand.add(w);
     if(style==='dagger'){w2=stickWeapon('dagger',job,G.weapon);w2.rotation.x=Math.PI/2;AL.hand.add(w2);}
-    if(style==='sword'&&(G.sub??-1)>=0){const sh=new THREE.Group();const S2=makeShield('buckler',G.sub);S2.scale.setScalar(.8);S2.position.set(0,0,.07);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;}}
+    if(style==='sword'&&(G.sub??-1)>=0){const sh=new THREE.Group();const S2=makeShield('buckler',G.sub);mountShield(S2,'buckler',.8);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;}}
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   const bodyG=new THREE.Group();while(g.children.length)bodyG.add(g.children[0]);g.add(bodyG);
   g.userData={mats,stick:{L,R,AL,AR,upper,torso,head,style,w,w2,shield,nock,body:bodyG},weapon:w,head,torso};
@@ -4268,9 +4272,9 @@ function fpArm(h){const u=h.userData;u.arm.visible=h.visible;if(!h.visible)retur
   _fpD.copy(h.position).sub(u.shoulder);const len=_fpD.length();u.arm.position.copy(u.shoulder);u.arm.scale.set(1,len,1);u.arm.quaternion.setFromUnitVectors(_fpUp,_fpD.normalize());}
 // 1인칭 열쇠 자세: [x,y,z,rx,ry,rz] (카메라 기준, 앞이 -z)
 const FP={
-  sword:{L:[[0,[-.44,-.46,-.66,0,0,0]],[1,null]],R:[[0,[.34,-.36,-.6,0,0,0]],[.3,[.5,-.06,-.5,.6,-.3,-.75]],[.55,[-.06,-.4,-.66,-1.0,.3,.95]],[1,null]]},
+  sword:{L:[[0,[-.36,-.36,-.7,0,0,0]],[1,null]],R:[[0,[.34,-.36,-.6,0,0,0]],[.3,[.5,-.06,-.5,.6,-.3,-.75]],[.55,[-.06,-.4,-.66,-1.0,.3,.95]],[1,null]]},
   shield:{R:[[0,[.36,-.5,-.6,0,0,0]],[1,null]],
-          L:[[0,[-.43,-.46,-.72,0,0,0]],[.28,[-.3,-.42,-.5,0,.25,0]],[.55,[-.08,-.3,-1.0,0,-.1,0]],[1,null]]},
+          L:[[0,[-.36,-.33,-.74,0,0,0]],[.28,[-.3,-.42,-.5,0,.25,0]],[.55,[-.08,-.3,-1.0,0,-.1,0]],[1,null]]},
   dagger:{R:[[0,[.29,-.27,-.58,0,0,0]],[.2,[.3,-.36,-.36,-.95,0,0]],[.42,[.07,-.21,-1.0,-1.02,0,0]],[.68,[.2,-.27,-.72,-.6,0,0]],[1,null]],
           L:[[0,[-.29,-.27,-.58,0,0,0]],[1,null]]},
   staff:{R:[[0,[.34,-.6,-.62,0,0,0]],[.3,[.4,-.5,-.58,-.05,0,-.3]],[.55,[.18,-.42,-.82,-.5,0,.08]],[1,null]],
@@ -4288,8 +4292,8 @@ function makeViewModel(job){
   const R=fpHand(1,root),L=fpHand(-1,root);root.add(R,L);L.visible=false;
   const u={style,R,L,arrow:null,orb:null};
   if(style==='sword'){const w=stickWeapon(style,job,G.weapon);w.rotation.set(-.5,0,-.12);w.scale.setScalar(.85);R.add(w);
-    if((G.sub??-1)>=0){L.visible=true;u.hasL=true;const sh=makeShield('buckler',G.sub);sh.scale.setScalar(.85);sh.position.set(.1,.13,-.06);sh.rotation.set(0,Math.PI-.4,0);L.add(sh);}}
-  else if(style==='shield'){R.visible=false;u.noR=true;L.visible=true;u.hasL=true;const sh=makeShield('tower',G.weapon);sh.scale.setScalar(.82);sh.position.set(.04,.16,-.05);sh.rotation.set(0,Math.PI-.35,0);L.add(sh);}
+    if((G.sub??-1)>=0){L.visible=true;u.hasL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
+  else if(style==='shield'){R.visible=false;u.noR=true;L.visible=true;u.hasL=true;const sh=makeShield('tower',G.weapon);mountShield(sh,'tower',.82,Math.PI-.35);L.add(sh);}
   else if(style==='dagger'){[R,L].forEach((h,k)=>{const w=stickWeapon('dagger',job,G.weapon);w.rotation.set(-.6,0,k?.22:-.22);w.scale.setScalar(.95);h.add(w);});L.visible=true;}
   else if(style==='staff'){const w=stickWeapon('staff',job,G.weapon);w.scale.setScalar(.62);w.position.y=-.1;w.rotation.set(-.12,0,-.08);R.add(w);u.orb=w.userData.orb;u.ring=w.userData.ring;L.visible=true;}
   else if(style==='bow'){const w=stickWeapon('bow',job,G.weapon);w.rotation.set(0,Math.PI,0);w.scale.setScalar(.52);L.add(w);L.visible=true;
@@ -5154,6 +5158,7 @@ function useSkillInner(i){
   const id=P.slots[i];if(!id){toast(`${SLOT_KEYS[i]}에 등록된 스킬이 없어요 (K)`);return;}
   const S=SK[id],lvl=P.skills[id]||0;if(!lvl)return;
   if((cds[id]||0)>0){toast(`${S.name} 재사용 대기 ${Math.ceil(cds[id])}초`);return;}
+  if(S.needSword&&(JOBS[P.job].weapon==='shield'||!P.equip.weapon||(ITEMS[P.equip.weapon]&&ITEMS[P.equip.weapon].jobs&&ITEMS[P.equip.weapon].jobs.includes('guardian')))){toast('검을 들어야 쓸 수 있어요');return;}
   if(S.needSub&&!(P.equip.sub&&ITEMS[P.equip.sub])&&JOBS[P.job].weapon!=='shield'){toast('보조무기(방패)를 들어야 쓸 수 있어요');return;}
   if(P.mp<S.mp){toast('MP가 부족해요');return;}
   P.mp-=S.mp;cds[id]=S.cd;swingT=0;swingN++;myMoId=id;myMo=motionFor(JOBS[P.job].weapon,id);sfxSkill(S,id);
