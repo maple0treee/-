@@ -2067,7 +2067,7 @@ function clubMesh(c=0x5a3b22,spikes=true){
 function spearMesh(){const g=new THREE.Group();g.add(MD.at(MD.cyl(.025,.025,1.8,mat(0x6b4a2e),6),0,.3,0));const tip=MD.cone(.06,.3,mat(0xcfd3d8,{metalness:.6}),4);tip.position.y=1.32;g.add(tip);return g;}
 function bigSword(c=0xb8bec8,glow){const g=new THREE.Group();const st=mat(c,glow?{metalness:.6,roughness:.3,emissive:glow,emissiveIntensity:.7}:{metalness:.6,roughness:.3});
   g.add(MD.cyl(.03,.03,.26,mat(0x2a2020),6));g.add(MD.at(MD.box(.36,.06,.08,mat(0x4a4050,{metalness:.5})),0,.15,0));
-  g.add(MD.at(MD.box(.11,1.25,.025,st),0,.8,0));const tip=MD.cone(.078,.2,st,4);tip.position.y=1.52;tip.rotation.y=Math.PI/4;tip.scale.z=.3;g.add(tip);return g;}
+  g.add(taperedBlade(.055,.175,1.22,.24,.026,st));return g;}
 function roundShield(c=0x6d7a8f,rim=0xb08a3e){const g=new THREE.Group();const p=MD.cyl(.34,.34,.05,mat(c,{metalness:.35}),14);p.rotation.x=Math.PI/2;g.add(p);
   const r=new THREE.Mesh(new THREE.TorusGeometry(.34,.03,6,20),mat(rim,{metalness:.5}));g.add(r);const b=MD.sph(.08,mat(rim,{metalness:.6}),8,6);b.position.z=.04;g.add(b);return g;}
 
@@ -2383,6 +2383,10 @@ function makeDragonMesh(D){
 /* ---------- 막대 인간(쫄라맨) 플레이어 ----------
    머리는 구, 몸통은 원통, 팔다리는 가는 원통 두 개씩.
    좌표: 모델은 +z를 바라본다. 팔은 어깨에서 -y로 매달리고, 손 그룹은 팔뚝 끝에 있다. */
+// 끝이 부드럽게 좁아지는 칼날 (몬스터·NPC 칼에도 쓴다). y0에서 위로 len만큼 뻗고 tip만큼 뾰족해진다
+function taperedBlade(w,y0,len,tip,thick,m){const sh=new THREE.Shape();sh.moveTo(-w,y0);sh.lineTo(w,y0);sh.lineTo(w*.9,y0+len);
+  sh.quadraticCurveTo(w*.8,y0+len+tip*.6,0,y0+len+tip);sh.quadraticCurveTo(-w*.8,y0+len+tip*.6,-w*.9,y0+len);sh.lineTo(-w,y0);
+  const g=new THREE.ExtrudeGeometry(sh,{depth:thick*.3,bevelEnabled:true,bevelThickness:thick*.35,bevelSize:thick*.22,bevelSegments:1,curveSegments:10});g.translate(0,0,-thick*.15);g.computeVertexNormals();return new THREE.Mesh(g,m);}
 const tierCol=t=>new THREE.Color(TIER_COLOR[Math.max(0,Math.min(10,t))]);
 // 무기는 손잡이가 원점, 칼날은 +y 방향으로 만든다 (붙일 때 돌린다)
 function stickWeapon(kind,job,tier=-1){
@@ -2396,6 +2400,10 @@ function stickWeapon(kind,job,tier=-1){
   const assassin=job==='assassin',thief=job==='thief';
   const cone=(r,h,m,s=6)=>new THREE.Mesh(new THREE.ConeGeometry(r,h,s),m);
   const sph=(r,m,a=8,b=6)=>new THREE.Mesh(new THREE.SphereGeometry(r,a,b),m);
+  // 칼날: 날 모양 하나를 통째로 뽑아내서 끝이 부드럽게 좁아지며 뾰족해진다 (가장자리는 비스듬히 갈린 날)
+  const bladeMesh=(shape,thick,m)=>{const g2=new THREE.ExtrudeGeometry(shape,{depth:thick*.3,bevelEnabled:true,bevelThickness:thick*.35,bevelSize:thick*.22,bevelSegments:1,curveSegments:10});g2.translate(0,0,-thick*.15);g2.computeVertexNormals();return new THREE.Mesh(g2,m);};
+  const straight=(w,y0,len,tip,taper=.9)=>{const sh=new THREE.Shape();sh.moveTo(-w,y0);sh.lineTo(w,y0);sh.lineTo(w*taper,y0+len);
+    sh.quadraticCurveTo(w*taper*.9,y0+len+tip*.6,0,y0+len+tip);sh.quadraticCurveTo(-w*taper*.9,y0+len+tip*.6,-w*taper,y0+len);sh.lineTo(-w,y0);return sh;};
   if(kind==='sword'&&job==='swordmaster'){
     // 검전사: 넓고 긴 바스타드 소드. 은빛 날에 푸르게 빛나는 룬 홈, 앞으로 휜 날개 코등이, 검은 손잡이에 은 감개, 푸른 보석 폼멜
     const L=1.14,silver=mat(0xc9ced8,{metalness:.8,roughness:.22,flatShading:false}),black=mat(0x1b1b24,{roughness:.6}),
@@ -2409,12 +2417,11 @@ function stickWeapon(kind,job,tier=-1){
     [-1,1].forEach(s2=>{add(box(.17,.03,.05,silver),s2*.13,.155,0,0,0,s2*.32);add(box(.12,.022,.04,dsteel),s2*.19,.2,0,0,0,s2*.75);
       add(cone(.016,.07,silver,5),s2*.235,.25,0,0,0,-s2*.35);add(box(.08,.02,.035,silver),s2*.1,.11,0,0,0,-s2*.35);});
     // 날: 넓은 몸통 + 밝은 양날 + 가운데 등줄 + 빛나는 룬 홈 마디
-    add(box(.085,L,.016,dsteel),0,.17+L/2,0);
-    [-1,1].forEach(s2=>add(box(.016,L*.97,.012,edge),s2*.04,.17+L*.485,0));
+    add(bladeMesh(straight(.046,.17,L,.27,.88),.018,edge),0,0,0);
+    add(bladeMesh(straight(.03,.17,L*.98,.2,.85),.024,dsteel),0,0,0);
     add(box(.016,L*.9,.022,silver),0,.17+L*.46,0);
     for(let k=0;k<5;k++)add(box(.01,L*.12,.026,rune),0,.27+k*L*.16,0);
     add(box(.1,.05,.02,silver),0,.2,0);
-    const tip=add(cone(.05,.24,edge,4),0,.17+L+.115,0,0,Math.PI/4,0);tip.scale.z=.3;
   }else if(kind==='sword'&&job==='swordsman'){
     // 검사: 길고 가는 장검, 붉은 손잡이, 위로 휜 코등이, 붉게 빛나는 홈
     const L=1.06,red=mat(0x7a1c1c,{roughness:.7}),ruby=mat(0xd02838,{emissive:0x901020,emissiveIntensity:.9});
@@ -2423,9 +2430,8 @@ function stickWeapon(kind,job,tier=-1){
     add(sph(.038,gold),0,-.15,0);add(new THREE.Mesh(new THREE.OctahedronGeometry(.026,0),ruby),0,-.19,0);
     add(box(.09,.05,.07,gold),0,.12,0);add(new THREE.Mesh(new THREE.OctahedronGeometry(.024,0),ruby),0,.12,.04);
     [-1,1].forEach(s=>{add(box(.15,.028,.04,gold),s*.11,.15,0,0,0,s*.45);add(cone(.018,.06,gold,5),s*.18,.2,0,0,0,-s*.5);});
-    add(box(.06,L,.014,steel),0,.15+L/2,0);
+    add(bladeMesh(straight(.031,.15,L,.24,.85),.015,steel),0,0,0);
     add(box(.012,L*.86,.018,mat(0xff4030,{emissive:0xc02010,emissiveIntensity:1.1})),0,.15+L*.45,0);
-    const tip=add(cone(.042,.22,steel,4),0,.15+L+.105,0,0,Math.PI/4,0);tip.scale.z=.3;
   }else if(kind==='shield'){
     // 방패병: 짧고 넓은 한손검, 두꺼운 쇠 코등이, 푸른 보석
     const L=.66,blue=mat(0x3a7ad8,{emissive:0x1a3a90,emissiveIntensity:.8});
@@ -2433,9 +2439,8 @@ function stickWeapon(kind,job,tier=-1){
     add(new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,.04,8),dark),0,-.11,0);
     add(box(.26,.05,.08,dark),0,.11,0);add(new THREE.Mesh(new THREE.OctahedronGeometry(.03,0),blue),0,.11,.045);
     [-1,1].forEach(s=>add(box(.04,.08,.08,dark),s*.13,.12,0));
-    add(box(.11,L,.02,steel),0,.14+L/2,0);
+    add(bladeMesh(straight(.055,.14,L,.18,.92),.02,steel),0,0,0);
     add(box(.03,L*.75,.024,dark),0,.14+L*.4,0);
-    const tip=add(cone(.078,.16,steel,4),0,.14+L+.075,0,0,Math.PI/4,0);tip.scale.z=.26;
   }else if(kind==='sword'){
     const L=.88;
     // 손잡이: 가죽 감개 + 고리
@@ -2445,20 +2450,17 @@ function stickWeapon(kind,job,tier=-1){
     add(new THREE.Mesh(new THREE.OctahedronGeometry(.022,0),mat(0xc0303a,{emissive:0x701018,emissiveIntensity:.6})),0,-.12,.035);
     add(box(.2,.04,.06,gold),0,.12,0);
     [-1,1].forEach(s=>{add(sph(.03,gold),s*.11,.14,0);});
-    add(box(.07,L,.016,steel),0,.14+L/2,0);
+    add(bladeMesh(straight(.035,.14,L,.2,.88),.016,steel),0,0,0);
     add(box(.018,L*.8,.02,dark),0,.14+L*.42,0);
-    const tip=add(cone(.05,.16,steel,4),0,.14+L+.075,0,0,Math.PI/4,0);tip.scale.z=.32;
   }else if(kind==='dagger'&&thief){
     // 도둑: 앞으로 굽은 넓은 쿠크리, 놋쇠빛 날, 등에 톱니
     const blade=mat(0xc9ab72,Object.assign({metalness:.7,roughness:.3,flatShading:false},glow)),cloth=mat(0x8a3a2a,{roughness:.9});
     add(cyl(.022,.026,.13,cloth),0,0,0);
     add(new THREE.Mesh(new THREE.TorusGeometry(.034,.01,5,12),gold),0,-.09,0);
     add(box(.1,.03,.05,gold),0,.07,0);
-    add(box(.05,.12,.012,blade),0,.14,0);
-    add(box(.075,.12,.012,blade),.015,.25,0,0,0,.25);
-    add(box(.07,.1,.012,blade),.005,.35,0,0,0,.55);
-    const tip=add(cone(.034,.08,blade,4),-.02,.42,0,0,Math.PI/4,.85);tip.scale.z=.35;
-    for(let k=0;k<4;k++)add(cone(.012,.03,blade,4),-.03+k*.004,.13+k*.06,0,0,0,.9);
+    {const sh=new THREE.Shape();sh.moveTo(-.024,.08);sh.lineTo(.024,.08);sh.quadraticCurveTo(.085,.27,.03,.4);sh.quadraticCurveTo(.0,.44,-.045,.46);
+      sh.quadraticCurveTo(-.01,.39,-.005,.3);sh.quadraticCurveTo(-.012,.18,-.024,.08);add(bladeMesh(sh,.013,blade),0,0,0);}
+    for(let k=0;k<3;k++)add(cone(.01,.028,blade,4),-.03+k*.004,.14+k*.05,0,0,0,.9);
   }else if(kind==='dagger'&&assassin){
     // 어쌔신: 길고 가는 검은 날, 보랏빛 날끝, 앞으로 굽은 초승달 코등이
     const blade=mat(0x24202c,{metalness:.8,roughness:.2,flatShading:false}),edgeM=mat(0xb060ff,{emissive:0x8030e0,emissiveIntensity:1.2});
@@ -2466,17 +2468,15 @@ function stickWeapon(kind,job,tier=-1){
     for(let k=0;k<3;k++)add(new THREE.Mesh(new THREE.TorusGeometry(.022,.005,4,10),edgeM),0,-.04+k*.04,0,Math.PI/2,0,0);
     add(new THREE.Mesh(new THREE.OctahedronGeometry(.03,0),edgeM),0,-.1,0);
     add(new THREE.Mesh(new THREE.TorusGeometry(.07,.012,5,14,Math.PI),blade),0,.04,0,0,0,0);
-    add(box(.034,.38,.01,blade),0,.27,0);
-    add(box(.006,.36,.014,edgeM),.017,.27,0);
-    const tip=add(cone(.02,.1,blade,4),0,.51,0,0,Math.PI/4,0);tip.scale.z=.45;
+    add(bladeMesh(straight(.018,.07,.38,.13,.85),.011,blade),0,0,0);
+    add(box(.005,.34,.013,edgeM),.016,.25,0);
   }else if(kind==='dagger'){
     const blade=mat(0xd9dde2,Object.assign({metalness:.7,roughness:.25,flatShading:false},glow));
     add(cyl(.02,.022,.12,leather),0,0,0);
     add(new THREE.Mesh(new THREE.TorusGeometry(.03,.009,5,10),gold),0,-.08,0);
     add(box(.12,.025,.045,gold),0,.07,0);
-    add(box(.045,.18,.012,blade),0,.17,0);
-    add(box(.04,.14,.012,blade),.012,.31,0,0,0,-.18);
-    const tip=add(cone(.024,.08,blade,4),.028,.41,0,0,Math.PI/4,-.18);tip.scale.z=.4;
+    {const sh=new THREE.Shape();sh.moveTo(-.022,.08);sh.lineTo(.022,.08);sh.quadraticCurveTo(.03,.3,.05,.45);sh.quadraticCurveTo(.02,.38,-.004,.33);sh.quadraticCurveTo(-.014,.2,-.022,.08);
+      add(bladeMesh(sh,.012,blade),0,0,0);}
   }else if(kind==='staff'){
     const cleric=job==='cleric',wizard=job==='wizard',top=1.17;
     if(cleric){
@@ -3426,7 +3426,7 @@ function makeNpcMesh(o){
     if(o.hat==='hair'){const back=new THREE.Mesh(new THREE.SphereGeometry(.235,10,8),mat(o.hatC||0x4a3322));back.position.set(0,1.78,-.06);back.scale.set(1,1,.9);g.add(back);
       if(o.long){const lh=new THREE.Mesh(new THREE.CylinderGeometry(.2,.24,.55,10,1,true,Math.PI*.5,Math.PI),mat(o.hatC||0x4a3322,{side:THREE.DoubleSide}));lh.position.set(0,1.55,-.04);g.add(lh);}}
     const P2=o.prop;
-    if(P2==='sword'){const b=new THREE.Group();b.add(new THREE.Mesh(new THREE.BoxGeometry(.08,1.1,.03),mat(0xcfd3d8,{metalness:.6,roughness:.3})));
+    if(P2==='sword'){const b=new THREE.Group();{const bl=taperedBlade(.04,0,.95,.18,.03,mat(0xcfd3d8,{metalness:.6,roughness:.3}));bl.rotation.z=Math.PI;bl.position.y=.57;b.add(bl);}
       const gd=new THREE.Mesh(new THREE.BoxGeometry(.3,.06,.08),mat(0xc9a050,{metalness:.5}));gd.position.y=.6;b.add(gd);const gr=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,.22,6),mat(0x3a2a1a));gr.position.y=.74;b.add(gr);
       b.position.set(0,1.35,-.33);b.rotation.z=.6;g.add(b);}
     if(P2==='hammer'){const h=new THREE.Group();h.add(new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,.8,6),mat(0x5a3d22)));const hd=new THREE.Mesh(new THREE.BoxGeometry(.28,.15,.15),mat(0x5a5f66,{metalness:.6}));hd.position.y=.4;h.add(hd);
