@@ -221,6 +221,7 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 .eqrow{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;padding:6px;border:1px solid var(--line);border-radius:6px;background:#2a2219;text-align:left;min-width:0}
 .eqrow.sel{border-color:var(--brass)}
 .eqrow.off{opacity:.45}
+body.softlock #c{cursor:none}
 .eqtx{display:grid;gap:1px;min-width:0}
 .eqtx small{font-size:10.5px;color:var(--dim);letter-spacing:.1em}
 .eqtx b{font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2847,8 +2848,8 @@ function verbFP(v,o,style){
       r(.68,{x:.02,y:-.5*a,z:-.72,rx:-1.25,rz:0});l(.68,{x:-.08,y:-.52*a,z:-.72,rx:-1.2});break;
     case 'chop':
       r(.38,{x:.12,y:.22,z:-.28,rx:1.45,rz:.08});l(.38,{x:-.02,y:.18,z:-.3,rx:1.4});
-      r(.56,{x:.03,y:-.16,z:-.62,rx:-2.1,rz:0});l(.56,{x:-.07,y:-.19,z:-.6,rx:-2.05});
-      r(.8,{x:.03,y:-.18,z:-.62,rx:-2.1});l(.8,{x:-.07,y:-.21,z:-.6,rx:-2.05});break;
+      r(.56,{x:.05,y:-.38,z:-.58,rx:-.82,rz:0});l(.56,{x:-.05,y:-.41,z:-.56,rx:-.78});
+      r(.8,{x:.05,y:-.38,z:-.58,rx:-.82});l(.8,{x:-.05,y:-.41,z:-.56,rx:-.78});break;
     case 'dash':
       r(.2,{x:.42,y:-.62,z:-.32,rx:.5});r(.75,{x:.44,y:-.64,z:-.3,rx:.5});r(.88,{x:-.1*sd,y:-.35,z:-.75,rx:-.9,rz:.9*sd});break;
     case 'spin':
@@ -3012,6 +3013,7 @@ const SFX_DEF={
 };
 // name: 소리 이름, at: 위치(없으면 내 귀), vol, pitch
 function sfx(name,at,vol=1,pitch=1){
+  if(typeof mode!=='undefined'&&mode==='title'&&name!=='ui')return; // 캐릭터 고르는 화면에서는 바깥 소리를 끈다
   if(!SFX.ctx||SFX.vol<=0||!SFX_DEF[name])return;
   const now=SFX.ctx.currentTime,k=name+(at?Math.round(at.x)+','+Math.round(at.z):'');
   if(SFX.last[k]&&now-SFX.last[k]<.045)return;SFX.last[k]=now;
@@ -4331,7 +4333,7 @@ const isLocked=()=>document.pointerLockElement===canvas;
 const coarse=()=>matchMedia('(pointer:coarse)').matches;
 function lockPointer(){if(mode!=='world'||!canLock())return;try{const r=canvas.requestPointerLock();if(r&&r.catch)r.catch(()=>{});}catch(e){}}
 function unlockPointer(){quietUnlock=!!document.pointerLockElement;try{if(document.pointerLockElement)document.exitPointerLock();}catch(e){}}
-function syncLockTip(){$('#lockTip').hidden=coarse()||lockFailed||isLocked()||mode!=='world';$('#cross').hidden=mode!=='world';}
+function syncLockTip(){$('#lockTip').hidden=coarse()||lockFailed||isLocked()||mode!=='world'||wantLock;$('#cross').hidden=mode!=='world';}
 let lockFailed=false;
 document.addEventListener('pointerlockerror',()=>{lockFailed=true;syncLockTip();});
 document.addEventListener('pointerlockchange',()=>{if(!isLocked())attackHeld=false;syncLockTip();});
@@ -4605,21 +4607,21 @@ function renderChars(){
     row.append(b,d);box.appendChild(row);
   }
 }
-function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,quick:P.quick,home:P.home,sp:P.sp,skills:P.skills,slots:P.slots,x:player.position.x,z:player.position.z,mentorReady:P.mentorReady,got:P.got}:null;}
+function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,quick:P.quick,home:P.home,sp:P.sp,skills:P.skills,slots:P.slots,x:player.position.x,z:player.position.z,mentorReady:P.mentorReady,got:P.got,skv:P.skv}:null;}
 function save(){const s=snapshotP();if(!s)return;const list=loadChars();const i=list.findIndex(c=>c.id===s.id);if(i>=0)list[i]=s;else list.push(s);storeChars(list);}
 
 /* ---------- 메뉴 ---------- */
 let quietUnlock=false;
 let menuAt=0;
-function openMenu(){if(mode!=='world')return;wantLock=false;mode='dialog';menuAt=performance.now();attackHeld=false;for(const k in keys)keys[k]=false;quietUnlock=true;unlockPointer();syncLockTip();$('#menu').hidden=false;$('#mnResume').focus();}
+function openMenu(){if(mode!=='world')return;wantLock=false;document.body.classList.remove('softlock');mode='dialog';menuAt=performance.now();attackHeld=false;for(const k in keys)keys[k]=false;quietUnlock=true;unlockPointer();syncLockTip();$('#menu').hidden=false;$('#mnResume').focus();}
 function closeMenu(){$('#menu').hidden=true;mode='world';syncLockTip();focusGame();relock();}
 // 창을 닫으면 바로 마우스 시선 고정으로 돌아간다 (Esc로 닫으면 브라우저가 막을 수 있다)
 // Esc는 브라우저가 '사용자 동작'으로 쳐주지 않아서 다시 고정이 거절될 수 있다.
 // 그때는 바로 다음 키·마우스 입력(Esc 빼고)에서 다시 고정한다.
-let wantLock=false;
-function relock(){if(mode==='world'&&!coarse()&&canLock()&&!isLocked()){wantLock=true;lockPointer();}}
-document.addEventListener('pointerlockchange',()=>{if(isLocked())wantLock=false;});
-const _retryLock=e=>{if(!wantLock)return;if(mode!=='world'||isLocked()||coarse()){wantLock=false;return;}
+var wantLock=false;
+function relock(){if(mode==='world'&&!coarse()&&canLock()&&!isLocked()){wantLock=true;document.body.classList.add('softlock');syncLockTip();lockPointer();}}
+document.addEventListener('pointerlockchange',()=>{if(isLocked()){wantLock=false;document.body.classList.remove('softlock');}});
+const _retryLock=e=>{if(!wantLock)return;if(mode!=='world'||isLocked()||coarse()){wantLock=false;document.body.classList.remove('softlock');return;}
   if(e.type==='keydown'&&(e.code==='Escape'||(e.target&&e.target.tagName==='INPUT')))return;lockPointer();};
 addEventListener('keydown',_retryLock,true);addEventListener('mousedown',_retryLock,true);
 $('#mnResume').onclick=closeMenu;
@@ -4658,7 +4660,7 @@ function startGame(data){
   delete P.potions;P.skills={...(data.skills||{})};P.slots=(data.slots||[]).slice(0,NSK);
   while(P.slots.length<NSK)P.slots.push(null);P.sp=data.sp??P.lv;
   // 바뀐 스킬: 지금 직업에 없는 스킬은 SP를 돌려주고 칸에서 뺀다
-  fixSkills('스킬이 새로 바뀌어');
+  if(data.skv!==SKILL_VER){fixSkills('스킬이 새로 바뀌어');}P.skv=SKILL_VER;
   // 직업에 맞지 않는 장비는 가방으로
   for(const s of ['weapon','sub']){const id=P.equip[s];if(id&&!canWear(id,P.job)){P.equip[s]=null;P.enh[s]=0;P.bag.push({id,n:1});}}
   // 직업 전용 장비 지급 (처음 한 번)
@@ -5275,6 +5277,7 @@ function useItem(id){
 function useQuick(i){if(mode!=='world'||!P)return;const id=P.quick[i];if(!id){toast(`${i+1}번 칸에 등록된 아이템이 없어요 (I)`);return;}useItem(id);}
 function setQuick(i,id){if(!ITEMS[id]||ITEMS[id].kind!=='use')return;const cur=P.quick.indexOf(id);if(cur>=0)P.quick[cur]=null;P.quick[i]=id;invDirty();save();}
 // 지금 직업에 없는 스킬은 SP를 돌려주고 칸에서 뺀다
+const SKILL_VER=2;
 function fixSkills(why){const valid=new Set(treeOf(P.job).map(s=>s.id));let back=0;
   for(const id in P.skills)if(!valid.has(id)){back+=P.skills[id]||0;delete P.skills[id];}
   P.slots=P.slots.map(id=>id&&valid.has(id)&&P.skills[id]?id:null);
@@ -5682,7 +5685,8 @@ addEventListener('blur',()=>{for(const k in keys)keys[k]=false;attackHeld=false;
 $('#interact').onclick=()=>doInteract();
 const SENS=.0022;
 function look(dx,dy){cam.yaw-=dx*SENS;cam.pitch=clamp(cam.pitch-dy*SENS,-1.45,1.45);}
-document.addEventListener('mousemove',e=>{if(isLocked()&&mode==='world')look(e.movementX,e.movementY);});
+// Esc로 창을 닫은 뒤 다시 고정되기 전까지도 마우스로 시점이 돌아가게 (커서는 숨긴다)
+document.addEventListener('mousemove',e=>{if(mode==='world'&&(isLocked()||(wantLock&&!coarse())))look(e.movementX,e.movementY);});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 let drag=null;
 canvas.addEventListener('pointerdown',e=>{
