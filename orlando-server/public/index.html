@@ -2646,17 +2646,21 @@ function makeStickPlayer(job,gear){
     if(style==='sword'&&(G.sub??-1)>=0){const sh=new THREE.Group();const S2=makeShield('buckler',G.sub);mountShield(S2,'buckler',.8);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;}}
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   const bodyG=new THREE.Group();while(g.children.length)bodyG.add(g.children[0]);g.add(bodyG);
+  // 모델의 '오른팔'이 실제로 오른쪽에 오도록 좌우를 뒤집는다 (+z를 바라볼 때 오른쪽은 -x)
+  bodyG.scale.x=-1;
   g.userData={mats,stick:{L,R,AL,AR,upper,torso,head,style,w,w2,shield,nock,body:bodyG},weapon:w,head,torso};
   return g;
 }
 /* 공격 동작: 직업(무기)마다 다른 열쇠 자세를 시간에 따라 섞는다
    값: [오른어깨x, 오른어깨z, 오른팔꿈치, 왼어깨x, 왼어깨z, 왼팔꿈치, 허리비틀기, 숙이기] */
-const STICK_IDLE={sword:[-.15,.14,-.35,-.1,-.14,-.35,0,0,0],shield:[-.15,.14,-.35,-.5,-.25,-1.2,0,0,0],dagger:[-.3,.1,-1.25,-.3,-.1,-1.25,0,0,0],
-  fist:[-.45,.12,-1.75,-.45,-.12,-1.75,0,.04,0],staff:[-.35,.12,-.5,-.1,-.14,-.3,0,0,0],bow:[-.12,.14,-.3,-.3,-.16,-.15,0,0,0]};
+// 기본 자세: 1인칭(내 눈)에서도 무기가 보이도록 팔을 앞으로 든 준비 자세
+// 기본 자세: 1인칭(내 눈)에서도 무기가 보이도록 팔을 앞으로 든 준비 자세. 9번째 값은 오른손목, 10번째는 왼손목
+const STICK_IDLE={sword:[-1.3,.2,-.9,-.15,-.14,-.35,0,0,1.0,0],shield:[-.15,.14,-.35,-1.3,-.28,-.85,0,0,0,0],dagger:[-1.3,.22,-.9,-1.3,-.22,-.9,0,0,1.0,1.0],
+  fist:[-1.3,.22,-1.35,-1.3,-.22,-1.35,0,.04,0,0],staff:[-1.15,.04,-.75,-.15,-.14,-.35,0,0,0,0],bow:[-.15,.14,-.35,-1.3,-.04,-.6,0,0,0,0]};
 const STICK_KEYS={
   sword:[[0,null],[.3,[-2.9,.55,-1.0,-.4,-.3,-.6,-.4,-.06,-.6]],[.55,[-.75,-.55,-.15,-.6,-.2,-.5,.5,.16,1.1]],[1,null]],
   shield:[[0,null],[.28,[-.3,.14,-.4,-.9,.1,-1.8,-.4,0,0]],[.55,[-.4,.14,-.4,-1.55,.3,-.05,.5,.16,0]],[1,null]],
-  dagger:[[0,null],[.22,[.35,.15,-1.85,-.3,-.1,-1.25,-.3,0,1.5]],[.45,[-1.55,-.02,-.05,-.4,-.15,-1.1,.3,.16,1.5]],[.7,[-1.35,0,-.35,-.35,-.12,-1.2,.2,.1,1.1]],[1,null]],
+  dagger:[[0,null],[.22,[.35,.15,-1.85,-.3,-.1,-1.25,-.3,0,1.5]],[.45,[-1.85,-.02,-.08,-1.2,-.2,-.9,.3,.1,1.5]],[.7,[-1.35,0,-.35,-.35,-.12,-1.2,.2,.1,1.1]],[1,null]],
   fist:[[0,null],[.2,[-.85,.08,-2.1,-.5,-.12,-1.8,-.25,0,0]],[.42,[-1.55,-.02,-.05,-.55,-.12,-1.9,.38,.12,0]],[.62,[-1.3,0,-.5,-.5,-.12,-1.8,.2,.06,0]],[1,null]],
   staff:[[0,null],[.3,[-2.5,.25,-.5,-.6,-.4,-.8,-.15,-.12,0]],[.55,[-1.5,0,-.05,-1.5,.15,-.1,.15,.16,0]],[1,null]],
   bow:[[0,null],[.22,[-1.5,-.3,-.5,-1.55,.05,0,.3,0,0]],[.55,[-1.45,-.1,-2.3,-1.55,.05,0,.35,0,0]],[.62,[-1.45,.2,-1.3,-1.55,.05,0,.35,0,0]],[1,null]]};
@@ -2666,7 +2670,7 @@ function stickPose(style,p,alt){
   const keys=STICK_KEYS[style]||STICK_KEYS.sword;
   let a=keys[0],b=keys[keys.length-1];for(let i=0;i<keys.length-1;i++)if(p>=keys[i][0]&&p<=keys[i+1][0]){a=keys[i];b=keys[i+1];break;}
   const k=_sm((p-a[0])/Math.max(1e-4,b[0]-a[0]));const A=a[1]||idle,B=b[1]||idle;
-  const out=A.map((v,i)=>v+(B[i]-v)*k);
+  const out=idle.map((_,i)=>{const av=A[i]??idle[i],bv=B[i]??idle[i];return av+(bv-av)*k;});
   if((style==='dagger'||style==='fist')&&alt){const r=out.slice(0,3),l=out.slice(3,6);out[0]=l[0];out[1]=-l[1];out[2]=l[2];out[3]=r[0];out[4]=-r[1];out[5]=r[2];out[6]=-out[6];}
   return out;
 }
@@ -2688,10 +2692,12 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
     if(lf>.15&&!air){S.L.hip.rotation.x=-.6;S.L.knee.rotation.x=1.1;S.R.hip.rotation.x=.1;S.R.knee.rotation.x=.6;}}
   // 걸을 때 팔 흔들기 (공격 중이 아닐 때만)
   const sw=atk?0:s*.6;
-  S.AR.sh.rotation.set(q[0]+sw,0,q[1]+(air&&!atk?.4:0));S.AR.el.rotation.x=q[2]-k*.2;{const hr=q[8]||0,lh=S.style==='dagger'&&alt&&!(atk&&mo&&mo.k3);S.AR.hand.rotation.x=lh?0:hr;S.AL.hand.rotation.x=lh?hr:0;}
-  if(S.shield&&S.style==='sword'&&!(atk&&mo&&mo.k3)){q=q.slice();q[3]=-.45;q[4]=-.22;q[5]=-1.05;}
+  S.AR.sh.rotation.set(q[0]+sw,0,q[1]+(air&&!atk?.4:0));S.AR.el.rotation.x=q[2]-k*.2;{const hr=q[8]||0,lh=S.style==='dagger'&&alt&&!(atk&&mo&&mo.k3);const hl=q[9]||0;S.AR.hand.rotation.x=lh?hl:hr;S.AL.hand.rotation.x=lh?hr:hl;}
+  if(S.shield&&S.style==='sword'&&!(atk&&mo&&mo.k3)){q=q.slice();q[3]=-1.25;q[4]=-.3;q[5]=-.85;}
   S.AL.sh.rotation.set(q[3]-(S.style==='bow'||S.shield?sw*.3:sw),0,q[4]-(air&&!atk?.4:0));S.AL.el.rotation.x=q[5];
   S.upper.rotation.set(q[7]+k*.08,q[6],0);
+  // 바라보는 위아래: 몸통과 팔이 반씩 따라가서 무기가 늘 시야 안에 있다
+  {const pt=mesh.userData.pitch||0;S.upper.rotation.x-=pt*.45;S.AR.sh.rotation.x-=pt*.55;S.AL.sh.rotation.x-=pt*.55;S.head.rotation.x=-pt*.4;}
   S.head.position.y=.88+Math.sin(t*2)*.012*(1-k);S.head.rotation.y=-q[6]*.6;
   // 활과 지팡이는 손 방향과 상관없이 세워 든다
   if(S.style==='bow'){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.w.rotation.set(-lx,0,-S.AL.sh.rotation.z);
@@ -2763,7 +2769,7 @@ function verb3(v,o,style){
       k(.6,{rx:-3.0,rz:.15*sd,re:-.2,tw:.35*sd,ln:-.25,lf:.25*a,wr:-.5});break;
     case 'thrust':
       k(.3,{rx:-.6,re:-2.0,tw:-.35,ln:-.1,cr:.12+c,lx:-.3,le:-1.0,wr:style==='sword'?1.2:0});
-      k(.52,{rx:-1.6,re:0,tw:.35,ln:.3*a,cr:.22+c,lx:-.2,le:-.6,wr:style==='sword'?1.5:0});break;
+      k(.52,{rx:-1.85,re:0,tw:.35,ln:.3*a,cr:.22+c,lx:-.2,le:-.6,wr:style==='sword'?1.5:0});break;
     case 'sweep':
       k(.3,{rx:-1.45,rz:1.25,re:-.35,tw:-.7,ln:-.05,wr:0,lx:-.5,lz:-.3});
       k(.68,{rx:-1.5,rz:-.75,re:-.1,tw:.75,ln:.15,wr:0,lx:-.5,lz:-.3});break;
@@ -4244,6 +4250,9 @@ function renderTrade(){
 /* ---------- 플레이어 모델: 막대 인간 ---------- */
 function makePlayerMesh(job,gear){const m=makeStickPlayer(job,gear);m.userData.gcode=gear?gearCode(gear):'';return m;}
 let myMo=null,myMoId=''; // 지금 쓰는 스킬 동작 (기본 공격이면 null)
+const _eye=new THREE.Vector3();
+// 내 머리는 내 카메라에만 안 보이게 (그림자·거울·다른 사람에게는 그대로)
+function setHeadHidden(mesh,on){const S=mesh.userData.stick;if(!S||S._hh===on)return;S._hh=on;S.head.traverse(o=>o.layers.set(on?1:0));}
 function animPlayer(mesh,speed,t,swing,air,alt,mo){
   if(mesh.userData.stick){animStick(mesh,speed,t,swing,air,alt,mo);return;}
   animBiped(mesh,speed,t);if(swing<1&&mesh.userData.armR)mesh.userData.armR.rotation.x=-Math.sin(swing*Math.PI)*2;
@@ -5536,7 +5545,7 @@ function publishPresence(force){
   if(!room||!P||!player)return;
   const now=performance.now();if(!force&&now-lastPres<100)return;lastPres=now;
   const f2=v=>isFinite(v)?+v.toFixed(2):0;
-  const pr={n:P.name,j:P.job,lv:P.lv,x:f2(player.position.x),y:f2(player.position.y),z:f2(player.position.z),r:f2(cam.yaw%(Math.PI*2)),sw:swingN,on:mode!=='title'?1:0,al:P.hp>0&&mode!=='title'?1:0,pt:party?party.id:null,h:+clamp(P.hp/P.maxhp,0,1).toFixed(2),g:gearCode(gearOf(P)),mo:myMoId};
+  const pr={n:P.name,j:P.job,lv:P.lv,p:f2(clamp(cam.pitch,-1.5,1.5)),x:f2(player.position.x),y:f2(player.position.y),z:f2(player.position.z),r:f2(cam.yaw%(Math.PI*2)),sw:swingN,on:mode!=='title'?1:0,al:P.hp>0&&mode!=='title'?1:0,pt:party?party.id:null,h:+clamp(P.hp/P.maxhp,0,1).toFixed(2),g:gearCode(gearOf(P)),mo:myMoId};
   const key=JSON.stringify(pr);if(key===lastPresKey)return;lastPresKey=key;
   room.presence(pr).catch(e=>{presErr=(e&&e.code)||'오류';renderOnline();});
 }
@@ -5576,7 +5585,7 @@ function syncPeers(peers){
     o.swInit=true;
     o.name=safeName(pr.n);o.lv=clamp(Math.floor(num(pr.lv,1)),1,9999);o.h=clamp(num(pr.h,1),0,1);o.pt=typeof pr.pt==='string'?pr.pt:null;
     o.tag.classList.toggle('pty',!!(party&&party.members.some(m=>m.id===p.peer)));
-    o.tx=clamp(num(pr.x),-200,600);o.ty=clamp(num(pr.y),-10,60);o.tz=clamp(num(pr.z),-200,500);o.r=num(pr.r);
+    o.tx=clamp(num(pr.x),-200,600);o.ty=clamp(num(pr.y),-10,60);o.tz=clamp(num(pr.z),-200,500);o.r=num(pr.r);o.p=clamp(num(pr.p,0),-1.5,1.5);
     if(num(pr.sw)!==o.sw){if(o.swInit&&o.mesh&&!(typeof pr.mo==='string'&&pr.mo)&&!(o.mesh.userData.stick&&o.mesh.userData.stick.style==='fist'))slashFx(o.mesh.position,num(pr.r),JOBS[o.job].weapon,null,num(pr.sw)%2===1);if(o.swInit)sfx(o.mesh.userData.stick&&o.mesh.userData.stick.style==='fist'?'punch':JOBS[o.job].weapon==='dagger'?'stab':'swing',o.mesh.position,.5);o.sw=num(pr.sw);o.swT=0;o.moObj=typeof pr.mo==='string'&&pr.mo?motionFor(JOBS[o.job].weapon,pr.mo):null;}
     o.b.textContent=o.name;o.s.textContent=`${JOBS[job].name} Lv ${o.lv}`;
   }
@@ -5601,6 +5610,7 @@ function updateOthers(dt){
     let dr=(o.r+Math.PI)-m.rotation.y;dr=Math.atan2(Math.sin(dr),Math.cos(dr));m.rotation.y+=dr*Math.min(1,dt*10);
     const sp=prev.distanceTo(m.position)/Math.max(dt,1e-3);
     if(o.swT<1)o.swT=Math.min(1,o.swT+dt*(o.moObj?1/o.moObj.dur:swingSpd(o.job)));
+    m.userData.pitch+=((o.p||0)-(m.userData.pitch||0))*Math.min(1,dt*10);
     animPlayer(m,sp/6,tAll,o.swT,m.position.y-heightAt(m.position.x,m.position.z)>.35,o.sw%2===1,o.moObj);
     const s=screenOf(m.position.clone().add(new THREE.Vector3(0,2.3,0)));
     const d=m.position.distanceTo(camera.position);
@@ -5817,8 +5827,9 @@ function updatePlayer(dt){
   if(moving&&jumpY===0)cam.bob+=dt*moving*9;
   const bobY=(moving&&jumpY===0?Math.sin(cam.bob)*.06:0)-(cam.land||0);
   camera.rotation.set(cam.pitch,cam.yaw,0);
+  player.userData.pitch=cam.pitch;
   if(cam.third){
-    player.visible=true;if(viewModel)viewModel.visible=false;
+    player.visible=true;if(viewModel)viewModel.visible=false;setHeadHidden(player,false);
     animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);
     const back=new THREE.Vector3(0,0,1).applyQuaternion(camera.quaternion);
     const eye=new THREE.Vector3(player.position.x,player.position.y+1.65,player.position.z);
@@ -5828,9 +5839,14 @@ function updatePlayer(dt){
     camera.position.copy(cp);
     swingT=Math.min(1,swingT+dt*(myMo?1/myMo.dur:swingSpd(P.job)));
   }else{
-    player.visible=false;if(viewModel)viewModel.visible=true;
-    camera.position.set(player.position.x,player.position.y+1.62+bobY,player.position.z);
-    updateViewModel(dt,moving&&jumpY===0);
+    // 진짜 1인칭: 3인칭과 같은 몸을 그대로 쓰고, 눈 위치에 카메라를 둔다 (머리만 내 눈에 안 보이게)
+    player.visible=true;if(viewModel)viewModel.visible=false;setHeadHidden(player,true);
+    animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);
+    swingT=Math.min(1,swingT+dt*(myMo?1/myMo.dur:swingSpd(P.job)));
+    player.updateMatrixWorld(true);
+    const S=player.userData.stick;
+    if(S){S.head.getWorldPosition(_eye);_eye.x-=Math.sin(cam.yaw)*.13;_eye.z-=Math.cos(cam.yaw)*.13;_eye.y+=.05-(cam.land||0);camera.position.copy(_eye);}
+    else camera.position.set(player.position.x,player.position.y+1.62+bobY,player.position.z);
   }
   return moving;
 }
