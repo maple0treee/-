@@ -1505,6 +1505,7 @@ const BUFF_NAME={atk:'공격↑',def:'방어↑',speed:'속도↑',crit:'치명�
 const SLOT_KEYS=['우클릭','휠↑','휠↓','휠클릭','E','R','T'];
 const NSK=SLOT_KEYS.length; // 스킬 칸 수
 const BASIC={
+  fist:{kind:'melee',range:2.2,cd:.42,mult:.45},
   sword:{kind:'melee',range:2.8,cd:.55,mult:1},
   shield:{kind:'melee',range:2.8,cd:.6,mult:1},
   dagger:{kind:'melee',range:2.4,cd:.4,mult:.8},
@@ -2625,7 +2626,8 @@ function makeStickPlayer(job,gear){
   if(G.boots>=0){const bm=G.boots===0?mat(0x5a3a22):mat(new THREE.Color(0x7a828c).lerp(tierCol(G.boots),.35).getHex(),{metalness:.5,roughness:.4});
     [L,R].forEach(l=>{l.foot.material=bm;l.foot.scale.set(1.25,1.4,1.1);const sh=new THREE.Mesh(new THREE.CylinderGeometry(.06,.055,.2,8),bm);sh.position.y=-.36;l.knee.add(sh);});}
   // 무기
-  const style=J.weapon==='shield'?'shield':J.weapon;
+  // 무기가 없으면 어느 직업이든 맨손
+  const style=(G.weapon??-1)<0?'fist':J.weapon==='shield'?'shield':J.weapon;
   let w,w2=null,shield=null,quiver=null,nock=null;
   if(style==='bow'){w=stickWeapon('bow',job,G.weapon);const holder=new THREE.Group();holder.add(w);AL.hand.add(holder);w=holder;
     quiver=new THREE.Group();const q=new THREE.Mesh(new THREE.CylinderGeometry(.07,.06,.48,10),mat(0x5a3a22));quiver.add(q);
@@ -2637,10 +2639,11 @@ function makeStickPlayer(job,gear){
   else if(style==='shield'){
     // 방패병: 큰 방패 하나만 든다 (왼손)
     const sh=new THREE.Group();const S2=makeShield('tower',G.weapon);mountShield(S2,'tower',.85);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;w=sh;}
+  else if(style==='fist'){w=new THREE.Group();AR.hand.add(w);
+    if((G.sub??-1)>=0&&JOBS[job].sub){const sh=new THREE.Group();const S2=makeShield('buckler',G.sub);mountShield(S2,'buckler',.8);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;}}
   else{w=stickWeapon(style,job,G.weapon);w.rotation.x=Math.PI/2;AR.hand.add(w);
     if(style==='dagger'){w2=stickWeapon('dagger',job,G.weapon);w2.rotation.x=Math.PI/2;AL.hand.add(w2);}
     if(style==='sword'&&(G.sub??-1)>=0){const sh=new THREE.Group();const S2=makeShield('buckler',G.sub);mountShield(S2,'buckler',.8);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;}}
-  if((G.weapon??-1)<0){if(w&&w!==shield)w.visible=false;if(w2)w2.visible=false;if(style==='shield'&&shield)shield.visible=false;}
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   const bodyG=new THREE.Group();while(g.children.length)bodyG.add(g.children[0]);g.add(bodyG);
   g.userData={mats,stick:{L,R,AL,AR,upper,torso,head,style,w,w2,shield,nock,body:bodyG},weapon:w,head,torso};
@@ -2649,11 +2652,12 @@ function makeStickPlayer(job,gear){
 /* 공격 동작: 직업(무기)마다 다른 열쇠 자세를 시간에 따라 섞는다
    값: [오른어깨x, 오른어깨z, 오른팔꿈치, 왼어깨x, 왼어깨z, 왼팔꿈치, 허리비틀기, 숙이기] */
 const STICK_IDLE={sword:[-.15,.14,-.35,-.1,-.14,-.35,0,0,0],shield:[-.15,.14,-.35,-.5,-.25,-1.2,0,0,0],dagger:[-.3,.1,-1.25,-.3,-.1,-1.25,0,0,0],
-  staff:[-.35,.12,-.5,-.1,-.14,-.3,0,0,0],bow:[-.12,.14,-.3,-.3,-.16,-.15,0,0,0]};
+  fist:[-.45,.12,-1.75,-.45,-.12,-1.75,0,.04,0],staff:[-.35,.12,-.5,-.1,-.14,-.3,0,0,0],bow:[-.12,.14,-.3,-.3,-.16,-.15,0,0,0]};
 const STICK_KEYS={
   sword:[[0,null],[.3,[-2.9,.55,-1.0,-.4,-.3,-.6,-.4,-.06,-.6]],[.55,[-.75,-.55,-.15,-.6,-.2,-.5,.5,.16,1.1]],[1,null]],
   shield:[[0,null],[.28,[-.3,.14,-.4,-.9,.1,-1.8,-.4,0,0]],[.55,[-.4,.14,-.4,-1.55,.3,-.05,.5,.16,0]],[1,null]],
   dagger:[[0,null],[.22,[.35,.15,-1.85,-.3,-.1,-1.25,-.3,0,1.5]],[.45,[-1.55,-.02,-.05,-.4,-.15,-1.1,.3,.16,1.5]],[.7,[-1.35,0,-.35,-.35,-.12,-1.2,.2,.1,1.1]],[1,null]],
+  fist:[[0,null],[.2,[-.85,.08,-2.1,-.5,-.12,-1.8,-.25,0,0]],[.42,[-1.55,-.02,-.05,-.55,-.12,-1.9,.38,.12,0]],[.62,[-1.3,0,-.5,-.5,-.12,-1.8,.2,.06,0]],[1,null]],
   staff:[[0,null],[.3,[-2.5,.25,-.5,-.6,-.4,-.8,-.15,-.12,0]],[.55,[-1.5,0,-.05,-1.5,.15,-.1,.15,.16,0]],[1,null]],
   bow:[[0,null],[.22,[-1.5,-.3,-.5,-1.55,.05,0,.3,0,0]],[.55,[-1.45,-.1,-2.3,-1.55,.05,0,.35,0,0]],[.62,[-1.45,.2,-1.3,-1.55,.05,0,.35,0,0]],[1,null]]};
 const _sm=x=>x*x*(3-2*x);
@@ -2663,7 +2667,7 @@ function stickPose(style,p,alt){
   let a=keys[0],b=keys[keys.length-1];for(let i=0;i<keys.length-1;i++)if(p>=keys[i][0]&&p<=keys[i+1][0]){a=keys[i];b=keys[i+1];break;}
   const k=_sm((p-a[0])/Math.max(1e-4,b[0]-a[0]));const A=a[1]||idle,B=b[1]||idle;
   const out=A.map((v,i)=>v+(B[i]-v)*k);
-  if(style==='dagger'&&alt){const r=out.slice(0,3),l=out.slice(3,6);out[0]=l[0];out[1]=-l[1];out[2]=l[2];out[3]=r[0];out[4]=-r[1];out[5]=r[2];out[6]=-out[6];}
+  if((style==='dagger'||style==='fist')&&alt){const r=out.slice(0,3),l=out.slice(3,6);out[0]=l[0];out[1]=-l[1];out[2]=l[2];out[3]=r[0];out[4]=-r[1];out[5]=r[2];out[6]=-out[6];}
   return out;
 }
 function animStick(mesh,speed,t,swing,air,alt,mo){
@@ -2974,6 +2978,7 @@ function _noise(out,ftype,f0,f1,t,dur,vol=1,q=1,att=.005){
 const SFX_DEF={
   swing:(o,t,p)=>{_noise(o,'bandpass',1400*p,380*p,t,.2,.9,1.4,.03);},
   swing2:(o,t,p)=>{_noise(o,'bandpass',900*p,260*p,t,.32,1,1.2,.05);_tone(o,'sine',160*p,90*p,t+.05,.25,.25);},
+  punch:(o,t,p)=>{_tone(o,'sine',140*p,60,t,.12,.7,.004);_noise(o,'lowpass',900*p,250,t,.1,.6,1,.004);},
   block:(o,t,p)=>{_tone(o,'triangle',1250*p,900*p,t,.18,.5,.005);_tone(o,'square',620*p,520*p,t,.12,.18,.005);_noise(o,'highpass',3000,2000,t,.08,.5,1,.004);},
   stab:(o,t,p)=>{_noise(o,'bandpass',2600*p,1200*p,t,.1,.8,2,.01);},
   bow:(o,t,p)=>{_tone(o,'triangle',220*p,140*p,t,.16,.6);_noise(o,'highpass',3000,5000,t,.06,.5,1);_noise(o,'bandpass',1800,900,t+.02,.14,.35,2);},
@@ -4262,7 +4267,7 @@ function animBiped(mesh,speed,t){
 /* ---------- 1인칭 손 ---------- */
 let viewModel=null;
 const SWING_SPD={sword:2.1,shield:2.0,dagger:2.8,staff:1.85,bow:1.8};
-const swingSpd=job=>job==='swordsman'?2.7:SWING_SPD[JOBS[job]?(JOBS[job].weapon):'sword']||2;
+const swingSpd=job=>P&&!P.equip.weapon?2.6:job==='swordsman'?2.7:SWING_SPD[JOBS[job]?(JOBS[job].weapon):'sword']||2;
 function fpHand(side,root){
   const g=new THREE.Group();
   g.add(new THREE.Mesh(new THREE.SphereGeometry(.05,12,10),mat(0xf1e6d2,{flatShading:false,roughness:.55})));
@@ -4276,6 +4281,8 @@ function fpArm(h){const u=h.userData;u.arm.visible=h.visible;if(!h.visible)retur
   _fpD.copy(h.position).sub(u.shoulder);const len=_fpD.length();u.arm.position.copy(u.shoulder);u.arm.scale.set(1,len,1);u.arm.quaternion.setFromUnitVectors(_fpUp,_fpD.normalize());}
 // 1인칭 열쇠 자세: [x,y,z,rx,ry,rz] (카메라 기준, 앞이 -z)
 const FP={
+  // 맨손: 두 주먹을 들고, 번갈아 잽
+  fist:{R:[[0,[.24,-.29,-.55,.2,0,0]],[.2,[.26,-.32,-.44,.3,0,0]],[.42,[.06,-.17,-.95,0,0,0]],[.62,[.18,-.24,-.7,.1,0,0]],[1,null]],L:[[0,[-.24,-.29,-.55,.2,0,0]],[1,null]]},
   sword:{L:[[0,[-.36,-.36,-.7,0,0,0]],[1,null]],R:[[0,[.34,-.36,-.6,0,0,0]],[.3,[.5,-.06,-.5,.6,-.3,-.75]],[.55,[-.06,-.4,-.66,-1.0,.3,.95]],[1,null]]},
   shield:{R:[[0,[.36,-.5,-.6,0,0,0]],[1,null]],
           L:[[0,[-.36,-.33,-.74,0,0,0]],[.28,[-.3,-.42,-.5,0,.25,0]],[.55,[-.08,-.3,-1.0,0,-.1,0]],[1,null]]},
@@ -4292,10 +4299,11 @@ function fpPose(keys,p){
   const k=_sm((p-a[0])/Math.max(1e-4,b[0]-a[0]));const A=a[1]||idle,B=b[1]||idle;return A.map((v,i)=>v+(B[i]-v)*k);
 }
 function makeViewModel(job){
-  const J=JOBS[job],G=P?gearOf(P):{weapon:-1},style=J.weapon,root=new THREE.Group();
+  const J=JOBS[job],G=P?gearOf(P):{weapon:-1},style=(G.weapon??-1)<0?'fist':J.weapon,root=new THREE.Group();
   const R=fpHand(1,root),L=fpHand(-1,root);root.add(R,L);L.visible=false;
   const u={style,R,L,arrow:null,orb:null};
-  if(style==='sword'){const w=stickWeapon(style,job,G.weapon);w.rotation.set(-.5,0,-.12);w.scale.setScalar(.85);R.add(w);
+  if(style==='fist'){L.visible=true;if((G.sub??-1)>=0&&J.sub){u.hasL=true;u.shieldL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
+  else if(style==='sword'){const w=stickWeapon(style,job,G.weapon);w.rotation.set(-.5,0,-.12);w.scale.setScalar(.85);R.add(w);
     if((G.sub??-1)>=0){L.visible=true;u.hasL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
   else if(style==='shield'){R.visible=false;u.noR=true;L.visible=true;u.hasL=true;const sh=makeShield('tower',G.weapon);mountShield(sh,'tower',.82,Math.PI-.35);L.add(sh);}
   else if(style==='dagger'){[R,L].forEach((h,k)=>{const w=stickWeapon('dagger',job,G.weapon);w.rotation.set(-.6,0,k?.22:-.22);w.scale.setScalar(.95);h.add(w);});L.visible=true;}
@@ -4303,9 +4311,6 @@ function makeViewModel(job){
   else if(style==='bow'){const w=stickWeapon('bow',job,G.weapon);w.rotation.set(0,Math.PI,0);w.scale.setScalar(.52);L.add(w);L.visible=true;
     const a=arrowMesh();a.rotation.y=Math.PI;a.visible=false;R.add(a);u.arrow=a;}
   // 무기를 빼면 1인칭에서도 손만 보인다 (보조무기 방패는 그대로)
-  if((G.weapon??-1)<0){const keepSub=style==='sword'&&(G.sub??-1)>=0;
-    for(const h of [R,L])for(const c of h.children.slice(1))if(!(keepSub&&h===L))c.visible=false;
-    if(u.arrow){u.arrow=null;}if(style==='shield'){u.noR=false;R.visible=true;}}
   root.userData=u;
   return root;
 }
@@ -4314,7 +4319,7 @@ function updateViewModel(dt,moving){
   if(!viewModel)return;const u=viewModel.userData,F=FP[u.style]||FP.sword;
   const sx=moving?Math.cos(cam.bob*.5)*.018:0,sy=moving?Math.abs(Math.sin(cam.bob*.5))*.018:Math.sin(tAll*1.6)*.006;
   swingT=Math.min(1,swingT+dt*(myMo?1/myMo.dur:swingSpd(P?P.job:'warrior')));
-  const alt=u.style==='dagger'&&swingN%2===1;
+  const alt=(u.style==='dagger'||(u.style==='fist'&&!u.shieldL))&&swingN%2===1;
   const apply=(h,keys,mirror)=>{if(!keys)return;const q=fpPose(keys,swingT);
     h.position.set((mirror?-q[0]:q[0])+sx,q[1]+sy-jumpY*.02,q[2]);h.rotation.set(q[3],mirror?-q[4]:q[4],mirror?-q[5]:q[5]);};
   if(myMo&&swingT<1){
@@ -4323,7 +4328,7 @@ function updateViewModel(dt,moving){
     const vr=myMo.fp.R.length?blendKeys(myMo.fp.R,swingT,io(fr),nm):fr,vl=myMo.fp.L.length?blendKeys(myMo.fp.L,swingT,io(fl),nm):fl;
     u.R.position.set(vr[0]+sx,vr[1]+sy,vr[2]);u.R.rotation.set(vr[3],vr[4],vr[5]);
     u.L.visible=u.style!=='sword'||myMo.fp.L.length>0||!!u.hasL;if(u.noR)u.R.visible=false;u.L.position.set(vl[0]+sx,vl[1]+sy,vl[2]);u.L.rotation.set(vl[3],vl[4],vl[5]);
-  }else if(u.style==='dagger'){
+  }else if(u.style==='dagger'||u.style==='fist'){
     const idleR=F.R[0][1];
     if(alt){apply(u.L,F.R,true);u.R.position.set(idleR[0]+sx,idleR[1]+sy,idleR[2]);u.R.rotation.set(0,0,0);}
     else{apply(u.R,F.R,false);u.L.position.set(-idleR[0]+sx,idleR[1]+sy,idleR[2]);u.L.rotation.set(0,0,0);}
@@ -5159,6 +5164,9 @@ function basicRim(job){if(JOBS[job].weapon!=='staff')return null;return job==='c
 function basicAttack(){return shared(basicAttackInner);}
 function basicAttackInner(){
   if(basicCd>0||!P)return;
+  if(!P.equip.weapon){  // 맨손: 모든 직업이 같다
+    basicCd=BASIC.fist.cd;swingT=0;swingN++;myMo=null;myMoId='';sfx('punch');
+    setTimeout(()=>{if(mode!=='world'||!P)return;shared(()=>singleHit(BASIC.fist.range,BASIC.fist.mult,{color:0xffe8c8}));const f=flatFwd(),q=player.position;VFX.burst(new THREE.Vector3(q.x+f.x*1.3,q.y+1.3,q.z+f.z*1.3),0xffe8c8,8,2.5,.25,{up:.1});},90);return;}
   const B=BASIC[JOBS[P.job].weapon];basicCd=B.cd*(P.job==='swordsman'?.75:1);swingT=0;swingN++;myMo=null;myMoId='';sfxWeapon(JOBS[P.job].weapon);
   if(B.kind==='melee'){meleeHit(B.range,B.mult,{color:0xffffff});slashFx(player.position,cam.yaw,JOBS[P.job].weapon,null,swingN%2===1);}
   else fireProj({color:basicColor(P.job,B),rim:basicRim(P.job),speed:B.speed,size:B.size,mult:B.mult});
@@ -5169,6 +5177,7 @@ function useSkillInner(i){
   const id=P.slots[i];if(!id){toast(`${SLOT_KEYS[i]}에 등록된 스킬이 없어요 (K)`);return;}
   const S=SK[id],lvl=P.skills[id]||0;if(!lvl)return;
   if((cds[id]||0)>0){toast(`${S.name} 재사용 대기 ${Math.ceil(cds[id])}초`);return;}
+  if(!P.equip.weapon){toast('맨손일 때는 기본 공격만 할 수 있어요');return;}
   if(S.needSword&&(JOBS[P.job].weapon==='shield'||!P.equip.weapon||(ITEMS[P.equip.weapon]&&ITEMS[P.equip.weapon].jobs&&ITEMS[P.equip.weapon].jobs.includes('guardian')))){toast('검을 들어야 쓸 수 있어요');return;}
   if(S.needSub&&!(P.equip.sub&&ITEMS[P.equip.sub])&&JOBS[P.job].weapon!=='shield'){toast('보조무기(방패)를 들어야 쓸 수 있어요');return;}
   if(P.mp<S.mp){toast('MP가 부족해요');return;}
@@ -5568,7 +5577,7 @@ function syncPeers(peers){
     o.name=safeName(pr.n);o.lv=clamp(Math.floor(num(pr.lv,1)),1,9999);o.h=clamp(num(pr.h,1),0,1);o.pt=typeof pr.pt==='string'?pr.pt:null;
     o.tag.classList.toggle('pty',!!(party&&party.members.some(m=>m.id===p.peer)));
     o.tx=clamp(num(pr.x),-200,600);o.ty=clamp(num(pr.y),-10,60);o.tz=clamp(num(pr.z),-200,500);o.r=num(pr.r);
-    if(num(pr.sw)!==o.sw){if(o.swInit&&o.mesh&&!(typeof pr.mo==='string'&&pr.mo))slashFx(o.mesh.position,num(pr.r),JOBS[o.job].weapon,null,num(pr.sw)%2===1);if(o.swInit)sfx(JOBS[o.job].weapon==='dagger'?'stab':'swing',o.mesh.position,.5);o.sw=num(pr.sw);o.swT=0;o.moObj=typeof pr.mo==='string'&&pr.mo?motionFor(JOBS[o.job].weapon,pr.mo):null;}
+    if(num(pr.sw)!==o.sw){if(o.swInit&&o.mesh&&!(typeof pr.mo==='string'&&pr.mo)&&!(o.mesh.userData.stick&&o.mesh.userData.stick.style==='fist'))slashFx(o.mesh.position,num(pr.r),JOBS[o.job].weapon,null,num(pr.sw)%2===1);if(o.swInit)sfx(JOBS[o.job].weapon==='dagger'?'stab':'swing',o.mesh.position,.5);o.sw=num(pr.sw);o.swT=0;o.moObj=typeof pr.mo==='string'&&pr.mo?motionFor(JOBS[o.job].weapon,pr.mo):null;}
     o.b.textContent=o.name;o.s.textContent=`${JOBS[job].name} Lv ${o.lv}`;
   }
   for(const [k,o] of others)if(!seen.has(k)){scene.remove(o.mesh);o.tag.remove();others.delete(k);partyPeerLeft(k);}
