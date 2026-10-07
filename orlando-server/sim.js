@@ -44,14 +44,13 @@
       for (let i = 0; i < 400; i++) {
         let x, z;
         if (zone === 'road') { x = rnd(ROAD.x0 + 10, ROAD.x1 - 6); z = rnd(-3, 3); }
-        else if (['waste', 'snow', 'grave', 'volcano', 'abyss'].includes(zone)) {
+        else if (['wwest', 'wnorth', 'wsouth', 'weast'].includes(zone)) {
           const a = rnd(-Math.PI, Math.PI), d = rnd(TOWN_R + 5, R2 - 4); x = C2.x + Math.cos(a) * d; z = C2.z + Math.sin(a) * d;
           if (Math.abs(z) < 6 && x < C2.x) continue; // 도시로 가는 길은 비워 둔다
         } else { const a = rnd(-Math.PI, Math.PI), d = rnd(34, 100); x = Math.cos(a) * d; z = Math.sin(a) * d; }
         if (zoneAt(x, z) !== zone) continue;
         if (zone !== 'road' && Math.min(Math.abs(x), Math.abs(z)) < 4 && x < 110) continue;
         if (Math.hypot(x - PIT.x, z - PIT.z) < 13) continue;
-        if (Math.hypot(x - LAIR.x, z - LAIR.z) < LAIR.r + 8) continue;
         if (blocked(x, z, 1)) continue;
         let near = false;
         for (const c of clients.values()) if (c.pres.on && Math.hypot(c.pres.x - x, c.pres.z - z) < 2.5) near = true; // 바로 발밑만 피한다
@@ -84,7 +83,7 @@
     }
     for (const z in ZONE_COUNT) for (let k = 0; k < ZONE_COUNT[z]; k++) spawn(z);
     spawnBoss();
-    spawnDragon();
+    // 용의 둥지는 없앴다 (붉은 용은 나오지 않는다)
 
     function kill(m) {
       monsters.delete(m.i);
@@ -322,6 +321,14 @@
       yeti:      { k: 'smash', sh: 'c', at: 'front', range: [0, 4], tele: 1.0, r: 2.5, mul: 1.7, cd: [6, 9], jump: 1 },
       lavagiant: { k: 'smash', sh: 'c', at: 'front', range: [0, 4.5], tele: 1.05, r: 2.8, mul: 1.8, cd: [6, 9], jump: 1, pool: [3, 0.3], col: 1 },
       fallen:    { k: 'smash', sh: 'c', at: 'front', range: [0, 4], tele: 0.85, r: 2.6, mul: 1.6, cd: [5, 8], jump: 1 },
+      jackal:    { k: 'dash',  sh: 'l', range: [0, 9], tele: 0.7, len: 8, w: 0.9, mul: 1.2, cd: [6, 9] },
+      hyena:     { k: 'dash',  sh: 'l', range: [0, 10], tele: 0.65, len: 9, w: 0.9, mul: 1.25, cd: [6, 9] },
+      rockslime: { k: 'leap',  sh: 'c', at: 'target', range: [0, 8], tele: 0.85, r: 2.2, mul: 1.2, cd: [6, 9], jump: 1 },
+      nomad:     { k: 'spin',  sh: 'c', at: 'self', range: [0, 3], tele: 0.75, r: 2.8, mul: 1.35, cd: [6, 9] },
+      duneogre:  { k: 'smash', sh: 'c', at: 'front', range: [0, 4], tele: 1.0, r: 2.5, mul: 1.7, cd: [6, 9], jump: 1 },
+      redlizard: { k: 'thrust',sh: 'l', range: [0, 4.5], tele: 0.6, len: 4.6, w: 0.7, mul: 1.5, cd: [5, 7] },
+      emberslime:{ k: 'spit',  sh: 'c', at: 'target', range: [0, 12], tele: 1.0, r: 2.0, mul: 1.0, cd: [6, 9], pool: [3, 0.35], col: 1 },
+      redgiant:  { k: 'smash', sh: 'c', at: 'front', range: [0, 4.5], tele: 1.05, r: 2.8, mul: 1.8, cd: [6, 9], jump: 1 },
       wraith:    { k: 'scream',sh: 'c', at: 'self', range: [0, 4], tele: 0.9, r: 4, mul: 1.0, cd: [7, 10] },
     };
     function startSkill(m, S, tgt, dist) {

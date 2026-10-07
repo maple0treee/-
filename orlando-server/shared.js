@@ -22,13 +22,11 @@
     const d2 = Math.hypot(x - C2.x, z - C2.z);
     if (x > 150) {
       if (d2 < TOWN_R) return 'town';
+      // 도시를 중심으로 네 방향 황야 (북쪽 = -z)
       const a = Math.atan2(z - C2.z, x - C2.x);
-      if (Math.hypot(x - LAIR.x, z - LAIR.z) < LAIR.r) return 'lair';
-      if (d2 >= 80) return Math.abs(a) > 1.9 ? 'waste' : 'abyss';
-      if (Math.abs(a) > 2.36) return 'waste';
-      if (a < -0.785 && a >= -2.36) return 'snow';
-      if (a > 0.785 && a <= 2.36) return 'grave';
-      return 'volcano';
+      if (Math.abs(a) <= PI / 4) return 'weast';
+      if (Math.abs(a) >= PI * 3 / 4) return 'wwest';
+      return a < 0 ? 'wnorth' : 'wsouth';
     }
     const d = Math.hypot(x, z);
     if (d < 26) return 'village';
@@ -84,25 +82,21 @@
     // 길
     dog:      { name: '들개', lv: 12, build: 'quad', color: 0x7a5a3a, hpM: 0.8, atkM: 1 },
     bandit:   { name: '산적', lv: 16, build: 'biped', color: 0x6b4a2e, hpM: 1, atkM: 1.05, sword: true },
-    // 황야
-    scorpion: { name: '전갈', lv: 22, build: 'quad', color: 0xb07a3a, hpM: 1.1, atkM: 1.1, tail: true, scale: 1.1 },
+    // 서쪽 황야 (Lv 15–20)
+    jackal:   { name: '자칼', lv: 15, build: 'quad', color: 0xa88a5a, hpM: 0.85, atkM: 1 },
     sandslime:{ name: '모래 슬라임', lv: 18, build: 'slime', color: 0xc9a46a, hpM: 1.2, atkM: 0.9, scale: 1.3 },
-    // 설원
-    whitewolf:{ name: '흰 늑대', lv: 27, build: 'quad', color: 0xe8eef2, hpM: 0.9, atkM: 1.15 },
-    yeti:     { name: '예티', lv: 38, build: 'biped', color: 0xf0f4f6, hpM: 1.6, atkM: 1.2, scale: 1.6, club: true },
-    iceslime: { name: '얼음 슬라임', lv: 32, build: 'slime', color: 0x9fd8f0, hpM: 1.1, atkM: 1, scale: 1.4, glow: 0x3a88b0 },
-    // 묘지
-    ghoul:    { name: '구울', lv: 42, build: 'biped', color: 0x6f7f62, hpM: 1.1, atkM: 1.15 },
-    wraith:   { name: '망령', lv: 48, build: 'biped', color: 0x9a86c8, hpM: 0.8, atkM: 1.3, ghost: true },
-    boneknight:{ name: '해골 기사', lv: 54, build: 'biped', color: 0xd8d0bc, hpM: 1.4, atkM: 1.15, bone: true, sword: true, scale: 1.2 },
-    // 화산
-    fireslime:{ name: '불꽃 정령', lv: 57, build: 'slime', color: 0xff8a3a, hpM: 1, atkM: 1.25, scale: 1.3, glow: 0xff5a10 },
-    lavagiant:{ name: '용암 거인', lv: 69, build: 'biped', color: 0x5a2a22, hpM: 1.8, atkM: 1.25, scale: 2.1, club: true, glow: 0xb03010 },
-    salamander:{ name: '불도마뱀', lv: 63, build: 'biped', color: 0xb8402a, hpM: 1.1, atkM: 1.2, tail: true },
-    // 심연
-    voidslime:{ name: '공허 슬라임', lv: 85, build: 'slime', color: 0x5a3a8a, hpM: 1.3, atkM: 1.2, scale: 1.6, glow: 0x6020a0 },
-    shadowwolf:{ name: '그림자 늑대', lv: 75, build: 'quad', color: 0x2a2433, hpM: 1.1, atkM: 1.35, scale: 1.2 },
-    fallen:   { name: '타락한 기사', lv: 95, build: 'biped', color: 0x2b2633, hpM: 1.7, atkM: 1.3, scale: 1.35, sword: true, glow: 0x7020c0 },
+    // 북쪽 황야 (Lv 20–28)
+    hyena:    { name: '하이에나', lv: 21, build: 'quad', color: 0x8a7a5a, hpM: 0.95, atkM: 1.1, scale: 1.05 },
+    rockslime:{ name: '바위 슬라임', lv: 24, build: 'slime', color: 0x8a8478, hpM: 1.4, atkM: 0.95, scale: 1.4 },
+    nomad:    { name: '황야 약탈자', lv: 27, build: 'biped', color: 0x5a4a3a, hpM: 1.05, atkM: 1.15, sword: true },
+    // 남쪽 황야 (Lv 26–34)
+    scorpion: { name: '전갈', lv: 29, build: 'quad', color: 0xb07a3a, hpM: 1.1, atkM: 1.1, tail: true, scale: 1.1 },
+    salamander:{ name: '불도마뱀', lv: 31, build: 'biped', color: 0xb8402a, hpM: 1.1, atkM: 1.2, tail: true },
+    duneogre: { name: '모래 오우거', lv: 33, build: 'biped', color: 0xa08060, hpM: 1.6, atkM: 1.2, scale: 1.7, club: true },
+    // 동쪽 황야 (Lv 32–40)
+    redlizard:{ name: '붉은 리자드맨', lv: 35, build: 'biped', color: 0x9a4a32, hpM: 1.1, atkM: 1.2, tail: true, sword: true },
+    emberslime:{ name: '불씨 슬라임', lv: 37, build: 'slime', color: 0xd8702a, hpM: 1.1, atkM: 1.2, scale: 1.4, glow: 0xff5a10 },
+    redgiant: { name: '붉은 바위 거인', lv: 39, build: 'biped', color: 0x7a3a2a, hpM: 1.8, atkM: 1.25, scale: 2.1, club: true },
     // 석굴
     kingslime:{ name: '킹 슬라임', lv: 20, fixed: { hp: 16000, atk: 70, def: 14, exp: 4500 }, gold: 1500, build: 'slime', color: 0x56c860, scale: 4.2, boss: true },
     slimelet: { name: '킹 슬라임 조각', lv: 18, build: 'slime', color: 0x7fe07a, hpM: 0.5, atkM: 0.8, scale: 1.1 },
@@ -125,25 +119,24 @@
   }
   const ZONE_MON = {
     forest: ['slime', 'slime', 'wolf'], plains: ['boar', 'goblin'], swamp: ['toad', 'lizard'], ruins: ['skeleton', 'skeleton', 'ogre'],
-    road: ['dog', 'bandit'], waste: ['scorpion', 'bandit', 'sandslime'], snow: ['whitewolf', 'yeti', 'iceslime'],
-    grave: ['ghoul', 'wraith', 'boneknight'], volcano: ['fireslime', 'lavagiant', 'salamander'], abyss: ['voidslime', 'shadowwolf', 'fallen'],
+    road: ['dog', 'bandit'],
+    wwest: ['jackal', 'bandit', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'salamander', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 13, swamp: 12, ruins: 10, road: 10, waste: 22, snow: 20, grave: 20, volcano: 20, abyss: 26 }; // 큰 지역은 1.5배
+  const ZONE_COUNT = { forest: 14, plains: 13, swamp: 12, ruins: 10, road: 10, wwest: 24, wnorth: 24, wsouth: 24, weast: 24 };
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
     const d2 = Math.hypot(x - C2.x, z - C2.z);
     const f = (a, b, lo, hi) => Math.round(lo + (hi - lo) * clampN((d2 - a) / (b - a), 0, 1));
     switch (zone) {
       case 'road': return 12 + Math.round(clampN((x - ROAD.x0) / (ROAD.x1 - ROAD.x0), 0, 1) * 4);
-      case 'waste': return d2 >= 80 ? f(138, 80, 15, 20) : f(80, TOWN_R, 20, 25);
-      case 'snow': return f(TOWN_R, 80, 25, 40);
-      case 'grave': return f(TOWN_R, 80, 40, 55);
-      case 'volcano': return f(TOWN_R, 80, 55, 70);
-      case 'abyss': return f(80, 138, 70, 100);
+      case 'wwest': return f(138, TOWN_R, 15, 20);   // 길에서 들어오는 쪽이 약하다
+      case 'wnorth': return f(TOWN_R, 138, 20, 28);
+      case 'wsouth': return f(TOWN_R, 138, 26, 34);
+      case 'weast': return f(TOWN_R, 138, 32, 40);
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 4], plains: [4, 7], swamp: [7, 11], ruins: [11, 15], dungeon: [18, 22], road: [12, 16], town: [0, 0], waste: [15, 25], snow: [25, 40], grave: [40, 55], volcano: [55, 70], abyss: [70, 100], lair: [100, 100] };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 4], plains: [4, 7], swamp: [7, 11], ruins: [11, 15], dungeon: [18, 22], road: [12, 16], town: [0, 0], wwest: [15, 20], wnorth: [20, 28], wsouth: [26, 34], weast: [32, 40] };
 
   const api = { R1, C2, R2, ROAD, TOWN_R, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
