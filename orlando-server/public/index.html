@@ -5229,7 +5229,7 @@ function animBiped(mesh,speed,t){
 
 /* ---------- 1인칭 손 ---------- */
 let viewModel=null;
-const SWING_SPD={sword:2.1,shield:1.5,dagger:2.8,staff:1.85,bow:1.8};
+const SWING_SPD={sword:2.1,shield:.95,dagger:2.8,staff:1.85,bow:1.8};
 const swingSpd=job=>P&&!P.equip.weapon?2.6:job==='swordsman'||job==='swordmaster'?2.7*(1+famLv()*.05*(P&&P.buffs.fam?P.famN||0:0)):SWING_SPD[JOBS[job]?(JOBS[job].weapon):'sword']||2;
 function fpHand(side,root){
   const g=new THREE.Group();
@@ -6177,6 +6177,9 @@ function basicAttackInner(){
     basicCd=BASIC.fist.cd;swingT=0;swingN++;myMo=null;myMoId='';sfx('punch');
     setTimeout(()=>{if(mode!=='world'||!P)return;shared(()=>singleHit(BASIC.fist.range,BASIC.fist.mult,{color:0xffe8c8}));const f=flatFwd(),q=player.position;VFX.burst(new THREE.Vector3(q.x+f.x*1.3,q.y+1.3,q.z+f.z*1.3),0xffe8c8,8,2.5,.25,{up:.1});},90);return;}
   const B=BASIC[JOBS[P.job].weapon];basicCd=B.cd*(P.job==='swordsman'||P.job==='swordmaster'?.75:1)/(1+famLv()*.05*(P.famN||0));swingT=0;swingN++;myMo=null;myMoId='';sfxWeapon(JOBS[P.job].weapon);
+  // 방패병: 크게 휘둘러서, 방패가 앞으로 나가는 순간(약 0.5초 뒤)에 맞는다
+  if(B.kind==='melee'&&JOBS[P.job].weapon==='shield'){const sw=swingN;setTimeout(()=>{if(mode!=='world'||!P||swingN!==sw)return;const n=shared(()=>meleeHit(B.range,B.mult,{color:0xffffff}));
+      const q=player.position,f=flatFwd();if(n)shakeT=Math.max(shakeT,.08);VFX.burst(new THREE.Vector3(q.x+f.x*1.6,q.y+1.1,q.z+f.z*1.6),0xdde8ff,n?16:8,n?4:2.5,.35,{mix:0xffffff});sfx(n?'block':'swing2',null,.7);slashFx(player.position,cam.yaw,'shield',null,sw%2===1);},520);return;}
   if(B.kind==='melee'){const nHit=meleeHit(B.range,B.mult,{color:0xffffff});
     // 익숙한 감각: 적중했을 때만 쌓인다
     if(nHit>0&&P.skills.familiar){P.famN=Math.min(5,(P.famN||0)+1);P.buffs.fam={v:P.famN,t:4,max:4};}
@@ -6757,7 +6760,7 @@ function look(dx,dy){cam.yaw-=dx*SENS;cam.pitch=clamp(cam.pitch-dy*SENS,-1.45,1.
 // Esc로 창을 닫은 뒤 다시 고정되기 전까지도 마우스로 시점이 돌아가게 (커서는 숨긴다)
 document.addEventListener('mousemove',e=>{if(mode==='world'&&(isLocked()||(wantLock&&!coarse())))look(e.movementX,e.movementY);});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-let drag=null,touchUI=false,joyStart=()=>false;
+let drag=null,touchUI=false,joyStart=()=>false;const autoCam={t:0,w:0};
 canvas.addEventListener('pointerdown',e=>{
   // 시선 고정 상태로 NPC와 대화 중이면 클릭은 대사 넘기기
   if(mode==='dialog'&&isLocked()&&!$('#npc').hidden){if(e.button===0){if(typing)finishTyping();else nextNpcPage();}return;}
@@ -6818,7 +6821,13 @@ function updatePlayer(dt){
   f-=joy.y;r+=joy.x;
   if(P.pushPrep){f=0;r=0;}
   // 휴대폰: 이동 방향을 따라 시선도 저절로 돈다 (화면을 끌어 보고 있을 때는 그대로)
-  if(touchUI&&!drag&&!P.dash&&Math.abs(joy.x)>.12){const back=joy.y>.35?.35:1;cam.yaw-=Math.sign(joy.x)*(Math.abs(joy.x)-.12)/.88*2.6*back*dt;}
+  // 휴대폰: 시선이 이동 방향을 부드럽게 따라간다 (배그 모바일처럼)
+  //  - 옆으로 갈수록 빨리, 앞으로 갈 때는 거의 안 돌고, 뒤로 걸을 때는 돌지 않는다
+  //  - 움직이기 시작하면 천천히 붙고, 멈추면 천천히 풀린다 (갑자기 돌지 않게)
+  if(touchUI){const jm=Math.hypot(joy.x,joy.y),ja=Math.atan2(joy.x,-joy.y);
+    let want=0;if(!drag&&!P.dash&&!P.pushPrep&&jm>.18&&Math.abs(ja)<2.2){autoCam.t=Math.min(1,autoCam.t+dt/.35);want=-Math.sin(ja)*Math.min(1,(jm-.18)/.6)*2.4*autoCam.t;}
+    else autoCam.t=Math.max(0,autoCam.t-dt*3);
+    autoCam.w+=(want-autoCam.w)*Math.min(1,dt*(want?5:8));if(Math.abs(autoCam.w)>1e-4)cam.yaw+=autoCam.w*dt;}
   if(sitting&&(Math.hypot(f,r)>.1||keys.Space||attackHeld||P.dash))sitting=false;
   player.userData.sit=sitting;
   const len=Math.hypot(f,r);
@@ -6866,7 +6875,9 @@ function updatePlayer(dt){
   pos.y=py;jumpY=Math.max(0,py-ground);
   if(P.leap){P.leap.t+=dt;if((P.leap.t>.25&&jumpY<=.001)||P.leap.t>3)leapLand();}
   cam.land=Math.max(0,(cam.land||0)-dt*.9);
-  player.rotation.y=cam.yaw+Math.PI;
+  {let by=cam.yaw+Math.PI;
+    if(touchUI&&cam.third&&swingT>=1&&!P.guardT&&!P.pushPrep&&!P.dash&&Math.hypot(pvel.x,pvel.z)>1.2)by=Math.atan2(-pvel.x,-pvel.z)+Math.PI;
+    const cur=player.rotation.y,d=Math.atan2(Math.sin(by-cur),Math.cos(by-cur));player.rotation.y=cur+d*Math.min(1,dt*(touchUI?12:60));}
   if(moving&&jumpY===0)cam.bob+=dt*moving*9;
   const bobY=(moving&&jumpY===0?Math.sin(cam.bob)*.06:0)-(cam.land||0);
   camera.rotation.set(cam.pitch,cam.yaw,0);
