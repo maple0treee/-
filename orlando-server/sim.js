@@ -187,7 +187,8 @@
       if (m.stun > 0 || m.vuln > 0 || m.gap > 0) { roomClamp(m, m.r * 0.8); return; }
       // 노릴 대상
       let t = tg.find((q) => q.id === m.aggroOn);
-      if (!t || Math.random() < 0.02) { t = pick(tg); m.aggroOn = t.id; }
+      if (m.taunt > 0) m.taunt -= TICK;
+      if (!t || (!(m.taunt > 0) && Math.random() < 0.02)) { t = pick(tg); m.aggroOn = t.id; }
       const dx = t.x - m.x, dz = t.z - m.z, dist = Math.hypot(dx, dz);
       turn(m, Math.atan2(dx, dz), 0.35);
       const cdm = rage ? 0.7 : 1;
@@ -410,6 +411,7 @@
           const pri = t.id === m.aggroOn ? d - 6 : d;
           if ((d < 9 || t.id === m.aggroOn) && pri < best) { best = pri; tgt = t; }
         }
+        if (m.taunt > 0) { m.taunt -= TICK; const tt = ts.find((q) => q.id === m.aggroOn && (dun ? q.rot : !q.dun)); if (tt) tgt = tt; }
         if (!tgt) m.aggroOn = null;
         // 기절시키면 준비 중인 기술이 끊긴다
         if (m.sk && !m.sk.done && m.stun > 0) { broadcast({ t: 'mskx', i: m.i }); m.sk = null; m.skCd = rnd(3, 5); }
@@ -499,6 +501,10 @@
         if (m.dragon && !inLair(c.pres)) return;
         const st = Number(d.st);
         if (isFinite(st) && st > 0) m.stun = Math.max(m.stun, Math.min(st, 4) * (m.boss ? 0.25 : m.dragon ? 0 : 1));
+        // 도발: 잠시 동안 이 사람만 노린다 · 밀치기: 맞은 방향으로 밀려난다 (보스·용은 꿈쩍 않는다)
+        const tau = Number(d.tau);
+        if (isFinite(tau) && tau > 0 && !m.dragon) { m.aggroOn = id; m.taunt = Math.min(tau, 5); }
+        if (Array.isArray(d.kb) && !m.boss && !m.dragon) { const kx = Number(d.kb[0]), kz = Number(d.kb[1]), l = Math.hypot(kx, kz); if (isFinite(l) && l > 0.01) { const s = Math.min(l, 8) / l; m.x += kx * s; m.z += kz * s; m.windup = 0; m.dirty = true; } }
         if (Array.isArray(d.dot)) { const dps = Number(d.dot[0]), t = Number(d.dot[1]); if (isFinite(dps) && isFinite(t) && dps > 0) m.dot = { dps: Math.min(dps, 3000), t: Math.min(t, 10), acc: 0 }; }
         hurt(m, Math.min(dmg, 60000), id);
       },
