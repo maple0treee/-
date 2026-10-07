@@ -4191,9 +4191,10 @@ function floorAt(x,z,y){
   // 계단 (보이는 건 층계, 밟는 건 경사)
   const stair=(strip,fromY,dir,sx=SX,solid=false,n=12)=>{const run=sx[1]-sx[0];
     for(let i=0;i<n;i++){const t=(i+.5)/n,x=dir>0?sx[0]+run*t:sx[1]-run*t,h=fromY+FH*(i+1)/n;
-      if(solid)box(run/n+.02,h-(fromY)+.01,strip[1]-strip[0]-.06,cellar,x,fromY+(h-fromY)/2,(strip[0]+strip[1])/2);
-      box(run/n+.04,.08,strip[1]-strip[0]-.04,wood,x,h-.04,(strip[0]+strip[1])/2);
-      if(!solid)box(run/n,h-fromY,.08,dark,x,fromY+(h-fromY)/2,strip[1]-.05);}
+      box(run/n+.02,h-fromY-.06,strip[1]-strip[0]-.06,solid?trim:wood,x,fromY+(h-fromY-.06)/2,(strip[0]+strip[1])/2);
+      box(run/n+.06,.07,strip[1]-strip[0]-.02,dark,x,h-.035,(strip[0]+strip[1])/2);}
+    // 옆판 (바깥쪽)
+    for(const zz of [strip[0]+.02,strip[1]-.02]){const pn=box(Math.hypot(run,FH)+.1,.12,.05,dark,(sx[0]+sx[1])/2,fromY+FH/2+.04,zz);pn.rotation.z=dir*Math.atan2(FH,run);}
     SURFACES.push({x0:CX+sx[0],x1:CX+sx[1],z0:CZ+strip[0],z1:CZ+strip[1],ramp:'x',ya:Y0+(dir>0?fromY:fromY+FH),yb:Y0+(dir>0?fromY+FH:fromY)});};
   stair(S1,0,1);stair(S2,FH,-1);stair(S1,FH*2,1);
   // 바깥벽 (층마다): 앞벽(z=+hd) 1층에 문
@@ -4329,6 +4330,48 @@ function floorAt(x,z,y){
   for(const [x,z] of [[-1.3,-IZ+.45],[3.7,IZ-.45],[-3.8,IZ-.45]]){cyl(.03,.05,1.3,dark,x,BY+.65,z,6);cyl(.12,.08,.06,gold,x,BY+1.3,z,8);candle(x,z,BY+1.33);
     const L=new THREE.PointLight(0xffb060,1.1,9,1.6);L.position.set(CX+x,Y0+BY+1.7,CZ+z);scene.add(L);}
   {const L=new THREE.PointLight(0x9ad7ff,.9,8,1.6);L.position.set(CX+2.4,Y0+BY+.8,CZ+1.3);scene.add(L);}
+  /* --- 빈 곳 채우기: 층마다 가구와 소품 --- */
+  const colBox=(x,z,w,d,fy)=>{const n=Math.max(1,Math.round(Math.max(w,d)/.8));for(let i=0;i<n;i++){const t=(i+.5)/n-.5;colliders.push({x:CX+x+(w>=d?w*t:0),z:CZ+z+(w<d?d*t:0),r:Math.min(w,d)/2+.15,y0:Y0+fy-.4,y1:Y0+fy+2,bld:true});}};
+  const chair=(x,z,fy,ry)=>{const c=new THREE.Group();c.position.set(x,fy,z);c.rotation.y=ry;g.add(c);box(.5,.06,.5,wood,0,.48,0,c);box(.5,.6,.06,wood,0,.8,-.22,c);
+    for(const [a,b] of [[-.2,-.2],[.2,-.2],[-.2,.2],[.2,.2]])box(.05,.48,.05,dark,a,.24,b,c);};
+  const armchair=(x,z,fy,ry,col)=>{const c=new THREE.Group();c.position.set(x,fy,z);c.rotation.y=ry;g.add(c);const cm=mat(col);box(.8,.4,.75,cm,0,.3,0,c);box(.8,.75,.18,cm,0,.75,-.3,c);for(const a of [-.36,.36])box(.12,.3,.7,cm,a,.6,0,c);};
+  const shelfFree=(x,z,ry,fy)=>{shelf(x,z,ry,fy);colBox(x,z,ry?0.6:2.3,ry?2.3:.6,fy);};
+  const plant=(x,z,fy)=>{cyl(.22,.16,.4,mat(0x9a5a3a),x,fy+.2,z,10);const b=new THREE.Mesh(new THREE.IcosahedronGeometry(.38,0),mat(0x4a7a3a));b.position.set(x,fy+.75,z);b.scale.y=1.2;b.castShadow=true;g.add(b);};
+  const candelabra=(x,z,fy)=>{cyl(.03,.05,1.4,dark,x,fy+.7,z,6);cyl(.16,.2,.05,dark,x,fy+.03,z,8);for(const [dx,dz] of [[0,0],[.12,0],[-.12,0]]){box(.04,.03,.04,gold,x+dx,fy+1.4,z+dz);candle(x+dx,z+dz,fy+1.41);}};
+  const chest=(x,z,fy,ry)=>{const c=new THREE.Group();c.position.set(x,fy,z);c.rotation.y=ry;g.add(c);box(.9,.5,.55,wood,0,.25,0,c);const lid=new THREE.Mesh(new THREE.CylinderGeometry(.28,.28,.9,10,1,false,0,Math.PI),wood);lid.rotation.z=Math.PI/2;lid.position.y=.5;c.add(lid);
+    for(const a of [-.3,.3])box(.05,.56,.57,gold,a,.27,0,c);};
+  const bench=(x,z,fy,ry,w=1.8)=>{const c=new THREE.Group();c.position.set(x,fy,z);c.rotation.y=ry;g.add(c);box(w,.08,.45,wood,0,.45,0,c);for(const a of [-w/2+.15,w/2-.15])box(.08,.45,.4,dark,a,.22,0,c);};
+  const wallMap=(x,z,y,ry,w,h)=>{const t=cv(256,192,(x2,W2,H2)=>{x2.fillStyle='#e8d8b0';x2.fillRect(0,0,W2,H2);x2.strokeStyle='#8a6a3a';x2.lineWidth=6;x2.strokeRect(3,3,W2-6,H2-6);
+      x2.strokeStyle='#6a5030';x2.lineWidth=2;for(let i=0;i<6;i++){x2.beginPath();let px=20+rnd()*60,py=20+rnd()*150;x2.moveTo(px,py);for(let k=0;k<6;k++){px+=rnd()*40;py+=(rnd()-.5)*40;x2.lineTo(px,py);}x2.stroke();}
+      x2.fillStyle='#4a7ab0';x2.beginPath();x2.ellipse(170,120,40,28,0,0,Math.PI*2);x2.fill();x2.fillStyle='#a03a2a';for(let i=0;i<5;i++){x2.beginPath();x2.arc(30+rnd()*200,30+rnd()*130,4,0,Math.PI*2);x2.fill();}});
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshStandardMaterial({map:t,roughness:.9}));m.position.set(x,y,z);m.rotation.y=ry;g.add(m);};
+  const display=(x,z,fy)=>{box(1.4,.8,.7,wood,x,fy+.4,z);const gc=box(1.3,.45,.6,mat(0xcfe6f0,{transparent:true,opacity:.35,roughness:.1}),x,fy+1.03,z);gc.castShadow=false;
+    const sc=cyl(.05,.05,.5,mat(0xe8dcc0),x-.2,fy+.86,z,8);sc.rotation.z=Math.PI/2;const orb=new THREE.Mesh(new THREE.SphereGeometry(.1,12,10),mat(0x9ad7ff,{emissive:0x4a8ab0,emissiveIntensity:.8}));orb.position.set(x+.35,fy+.92,z);g.add(orb);colBox(x,z,1.4,.7,fy);};
+  // 1층: 가운데 서가 두 줄, 열람 책상, 사서 책상, 진열장, 문가의 화분과 의자
+  shelfFree(5.3,-2.9,0,0);shelfFree(5.3,-.9,0,0);
+  table(2.6,-1,0,1.8,1);colBox(2.6,-1,1.8,1,0);chair(2.6,-1.75,0,0);chair(2.6,-.25,0,Math.PI);chair(3.6,2.5-.75,0,0);chair(3.6,3.25,0,Math.PI);chair(2.4,3.25,0,Math.PI);
+  {box(2.4,.95,.6,wood,-3.6,.47,3.4);box(2.5,.06,.7,dark,-3.6,.97,3.4);box(.6,.95,1.2,wood,-4.5,.47,2.5);colBox(-3.6,3.4,2.4,.6,0);candle(-3,3.4,1);box(.3,.05,.22,mat(0xe8dcc0),-3.9,1.02,3.4);}
+  display(-6.2,-.4,0);display(-6.2,1.0+1.5,0);
+  for(const x of [-2.1,2.1])plant(x,5.2,0);bench(-4.8,5.4,0,Math.PI);bench(4.8,5.4,0,Math.PI);
+  candelabra(-1.2,-.9,0);candelabra(6.9,5.2,0);
+  // 2층: 도면 서랍장, 작업 책상, 벽 지도, 상자
+  for(const x of [4.4,6.6]){box(1.9,1.0,.7,wood,x,FH+.5,-5.45);for(let r=0;r<4;r++)box(1.8,.02,.02,dark,x,FH+.2+r*.22,-5.09);colBox(x,-5.45,1.9,.7,FH);}
+  wallMap(5.5,-5.82,FH+2,0,2.6,1.3);wallMap(-7.83,3.8,FH+1.9,Math.PI/2,1.8,1.2);
+  table(5,-2.6,FH,1.6,.9);colBox(5,-2.6,1.6,.9,FH);chair(5,-1.9,FH,Math.PI);candle(4.5,-2.7,FH+.85);{const pp=box(.6,.02,.4,mat(0xe8dcc0),5.3,FH+.86,-2.6);pp.rotation.y=.3;}
+  chest(7,-.8,FH,-Math.PI/2);chest(-6.8,5.2,FH,Math.PI);for(const [x,z] of [[1.3,1.5-1.1],[3.7,1.5-1.1],[2.5,1.5+1.1]])chair(x,z,FH,z<1.5?0:Math.PI);
+  bench(-1.5,5.4,FH,Math.PI);candelabra(-6.9,-.5,FH);plant(6.9,5.2,FH);
+  // 3층: 벽난로, 안락의자, 손님 침상, 서가
+  {const fx=-7.6,fz=3.5;box(.5,1.3,2.0,stone2,fx,FH*2+.65,fz);box(.4,.8,1.2,mat(0x2a2018),fx+.06,FH*2+.45,fz);box(.6,.12,2.2,trim,fx+.05,FH*2+1.35,fz);box(.5,FH-1.4,1.2,stone2,fx,FH*2+1.4+(FH-1.4)/2,fz);
+    const fl=box(.25,.3,.6,flameM,fx+.12,FH*2+.25,fz);fl.castShadow=false;colBox(fx,fz,.6,2.1,FH*2);
+    const L=new THREE.PointLight(0xff9040,1,8,1.6);L.position.set(CX+fx+.6,Y0+FH*2+.6,CZ+fz);scene.add(L);}
+  armchair(-4.4,3.5,FH*2,Math.PI/2,0x6a2a3a);armchair(-1.6,3.5,FH*2,-Math.PI/2,0x6a2a3a);
+  {box(2,.35,1,wood,5.6,FH*2+.2,4.8);box(1.9,.15,.9,mat(0xd8d0c0),5.6,FH*2+.42,4.8);box(.5,.12,.7,mat(0xf0e8d8),4.85,FH*2+.55,4.8);colBox(5.6,4.8,2,1,FH*2);
+    const cur=new THREE.Mesh(new THREE.PlaneGeometry(2.4,2.6),mat(0x5a3a6a,{side:THREE.DoubleSide}));cur.position.set(5.6,FH*2+1.4,3.9);g.add(cur);box(2.6,.05,.05,dark,5.6,FH*2+2.75,3.9);}
+  shelfFree(3,-.6,0,FH*2);chest(1,-.6,FH*2,0);candelabra(-6.9,-.3,FH*2);plant(-1,5.3,FH*2);
+  // 지하: 서가 더, 탁자 주변 의자
+  scrollRack(-.2,IZ-.3,Math.PI);chair(0,1.7,BY,0);chair(.9,2.4,BY,-Math.PI/2);chest(-4.6,-3.1,BY,0);
+  // 땅을 판 자리가 바깥에서 보이지 않게 벽을 땅속까지 내린다
+  box(W+.3,6,.3,cellar,0,-3,hd);box(W+.3,6,.3,cellar,0,-3,-hd);box(.3,6,D+.3,cellar,hw,-3,0);box(.3,6,D+.3,cellar,-hw,-3,0);
   // 모든 벽·바닥에 그림자
   g.traverse(o=>{if(o.isMesh){o.receiveShadow=true;}});
   // 사람들 (층마다)
