@@ -2401,7 +2401,7 @@ function animeGrad(){if(animeGrad.t)return animeGrad.t;const d=new Uint8Array([1
 // 툰 재질은 빛을 그대로 더해 쉽게 하얗게 날아가서, 바탕색을 조금 낮춰 둔다
 function animeMat(c,po){const k='m'+c+(po?'p':'');if(!_animeCache.has(k)){const m=new THREE.MeshToonMaterial({color:new THREE.Color(c).multiplyScalar(.62),gradientMap:animeGrad()});if(po){m.polygonOffset=true;m.polygonOffsetFactor=-2;m.polygonOffsetUnits=-2;}_animeCache.set(k,m);}return _animeCache.get(k);}
 function animeOutline(){if(animeOutline.m)return animeOutline.m;const m=new THREE.MeshBasicMaterial({color:0x2a1c18,side:THREE.BackSide});
-  m.onBeforeCompile=s=>{s.vertexShader=s.vertexShader.replace('#include <begin_vertex>','vec3 transformed = position + normal * 0.0055;');};animeOutline.m=m;return m;}
+  m.onBeforeCompile=s=>{s.vertexShader=s.vertexShader.replace('#include <begin_vertex>','vec3 transformed = position + normal * 0.0028;');};animeOutline.m=m;return m;}
 function _part(key,f,b0,b1,h){const k='g'+key;if(_animeCache.has(k))return _animeCache.get(k);
   const g=_surfaceNet(f,()=>[1,1,1],b0,b1,h);g.deleteAttribute('color');_animeCache.set(k,g);return g;}
 // 얼굴 그림 (눈 뜬 것 / 감은 것)
@@ -2496,6 +2496,49 @@ function buildAnimeNpc(o,g){
   add(_part('boots'+(skirt?'s':''),(x,y,z)=>{const ax=Math.abs(x);return _smin(_cap(ax,y,z,.082,.07,0,.082,skirt?.14:.4,0,.05,.056),_ell(ax,y,z,.082,.045,.045,.048,.045,.105),.04);},[-.15,-.01,-.08],[.15,.45,.17],.014),o.boots||0x3a2618);
   return {head,face,outlines,open:face.material,closed:animeFaceTex(o,true)};
 }
+
+/* ---------- 미리 구워 둔 NPC (npcbake/<id>.json) ----------
+   옷·머리·자세가 다 입혀진 완성 모델을 게임이 시작된 뒤 뒤에서 하나씩 불러와,
+   그 자리의 임시 NPC 모습과 바꿔 끼운다. 가까운 NPC부터 먼저 불러온다. */
+const NPCBAKE={dir:'npcbake/',pending:[],busy:0,done:new Map()};
+function _b64u8(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
+function _bakedGeo(g){const n=g.n,q=new Uint16Array(_b64u8(g.p).buffer),P=new Float32Array(n*3);
+  for(let i=0;i<n;i++)for(let k=0;k<3;k++)P[i*3+k]=g.mn[k]+q[i*3+k]/65535*(g.mx[k]-g.mn[k]);
+  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(P,3));
+  geo.setAttribute('normal',new THREE.BufferAttribute(new Int8Array(_b64u8(g.nr).buffer),3,true));
+  if(g.uv)geo.setAttribute('uv',new THREE.BufferAttribute(new Uint16Array(_b64u8(g.uv).buffer),2,true));
+  if(g.c)geo.setAttribute('color',new THREE.BufferAttribute(_b64u8(g.c),3,true));
+  const ib=_b64u8(g.i);geo.setIndex(new THREE.BufferAttribute(g.i32?new Uint32Array(ib.buffer):new Uint16Array(ib.buffer),1));
+  geo.computeBoundingSphere();return geo;}
+function _bakedModel(d){
+  const G=new THREE.Group(),open=[],closed=[],outlines=[];let tex=null;
+  if(d.atlas){const im=new Image();tex=new THREE.Texture(im);tex.flipY=false;tex.encoding=THREE.sRGBEncoding;tex.anisotropy=4;im.onload=()=>{tex.needsUpdate=true;};im.src=d.atlas;}
+  for(const g of d.groups){const geo=_bakedGeo(g);let m;
+    if(g.kind==='t')m=new THREE.MeshToonMaterial({map:tex,color:new THREE.Color(.8,.8,.8),gradientMap:animeGrad(),side:THREE.DoubleSide,
+      alphaTest:g.alpha==='mask'?.5:0,transparent:g.alpha==='blend',depthWrite:g.alpha!=='blend'});
+    else m=new THREE.MeshToonMaterial({vertexColors:true,color:new THREE.Color(.8,.8,.8),gradientMap:animeGrad()});
+    const mesh=new THREE.Mesh(geo,m);mesh.castShadow=g.face==='b';G.add(mesh);
+    if(g.face==='open')open.push(mesh);if(g.face==='closed'){closed.push(mesh);mesh.visible=false;}
+    if(g.face==='b'&&g.alpha==='opaque'){const ol=new THREE.Mesh(geo,animeOutline());G.add(ol);outlines.push(ol);}}
+  return {G,open,closed,outlines,height:d.height};}
+// NPC 메시(그룹) 하나를 구운 모델로 바꾼다. 머리 위 표시는 남긴다.
+function _swapBaked(mesh,M){const u=mesh.userData;
+  for(const c of [...mesh.children])if(c!==u.marker)mesh.remove(c);
+  mesh.scale.setScalar(1);mesh.add(M.G);
+  u.baked={open:M.open,closed:M.closed};u.outlines=M.outlines;u.head=u.head||new THREE.Object3D();u.lids=[];u.face=null;u.up=u.body=u.armL=null;
+  if(u.marker){u.marker.position.y=M.height+.35;u.markerY=M.height+.35;}}
+function npcBakeKey(id){return id==='elis_v'?'elis':id;}
+function npcBakeData(key){if(!NPCBAKE.done.has(key))NPCBAKE.done.set(key,fetch(NPCBAKE.dir+key+'.json').then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}));return NPCBAKE.done.get(key);}
+function npcBakeRequest(key,mesh){NPCBAKE.pending.push({key,mesh});_npcBakePump();}
+function _npcBakePump(){if(NPCBAKE.busy>=2||!NPCBAKE.pending.length)return;
+  // 플레이어에게 가까운 것부터
+  let pp=null;try{pp=player&&player.position;}catch(e){}
+  if(pp)NPCBAKE.pending.sort((a,b)=>a.mesh.position.distanceToSquared(pp)-b.mesh.position.distanceToSquared(pp));
+  const job=NPCBAKE.pending.shift();NPCBAKE.busy++;
+  const go=d=>{try{_swapBaked(job.mesh,_bakedModel(d));}catch(e){console.warn('npc bake',job.key,e);}NPCBAKE.busy--;setTimeout(_npcBakePump,30);};
+  if(NPCBAKE.done.has(job.key)){NPCBAKE.done.get(job.key).then(go,()=>{NPCBAKE.busy--;_npcBakePump();});return;}
+  const pr=npcBakeData(job.key);
+  pr.then(go,e=>{console.warn('npc bake load',job.key,e);NPCBAKE.busy--;_npcBakePump();});}
 
 /* ---------- 몬스터 모델 (세부 표현) ---------- */
 const MD={
@@ -3905,6 +3948,8 @@ function npcFolds(mesh,n,amp,y0,y1){const P=mesh.geometry.attributes.position;
   mesh.geometry.computeVertexNormals();return mesh;}
 // 살아 있는 듯한 움직임: 숨쉬기, 고개 돌리기, 눈 깜박이기, 팔 흔들기
 function animNpc(g,t,dt){const u=g.userData;if(!u.head)return;const ph=u.ph||0;
+  if(u.baked){u.blinkT=(u.blinkT??(2+Math.random()*3))-dt;let c=false;if(u.blinkT<0){c=-u.blinkT<.14;if(!c)u.blinkT=2+Math.random()*4;}
+    if(u.bc!==c){u.bc=c;for(const m of u.baked.open)m.visible=!c;for(const m of u.baked.closed)m.visible=c;}return;}
   const b=Math.sin(t*1.7+ph);if(u.up)u.up.scale.set(1+.012*b,1+.02*b,1+.012*b);if(u.body)u.body.scale.set(1+.007*b,1,1+.012*b);
   u.head.rotation.y=Math.sin(t*.37+ph)*.16+Math.sin(t*.13+ph*2)*.1;u.head.rotation.z=Math.sin(t*.53+ph)*.045;u.head.rotation.x=Math.sin(t*.29+ph)*.04;
   u.blinkT=(u.blinkT??(2+Math.random()*3))-dt;let lid=.04;if(u.blinkT<0){const k=-u.blinkT/.14;lid=k<1?Math.sin(k*Math.PI):.04;if(k>=1)u.blinkT=2+Math.random()*4;}
@@ -3959,7 +4004,7 @@ function makeNpcMesh(o){
 function addNpc(o){
   const y=o.y??heightAt(o.x,o.z);const mesh=makeNpcMesh(o.look);mesh.position.set(o.x,y,o.z);mesh.lookAt(o.faceX??C2.x,y,o.faceZ??C2.z);scene.add(mesh);
   colliders.push(o.y!==undefined?{x:o.x,z:o.z,r:.6,npc:true,y0:y-.6,y1:y+2.4,bld:true}:{x:o.x,z:o.z,r:.6,npc:true});
-  const n={...o,mesh,y};NPCS.push(n);return n;
+  const n={...o,mesh,y};NPCS.push(n);npcBakeRequest(npcBakeKey(o.id),mesh);return n;
 }
 (function buildTown(){
   const cx=C2.x,cz=C2.z,y0=heightAt(cx,cz);
@@ -4024,7 +4069,7 @@ function addNpc(o){
   { const q=at(1.1,13.3);const board=box(2,1.4,.12,0x6b4a2e,0,1.8,0);const papers=[0,1,2,3].map(k=>box(.4,.5,.02,0xf0e6cc,-.6+k*.4,1.85+(k%2)*.15,.07));
     prop(q.x,q.z,[box(.12,2.6,.12,0x4a3220,-.9,1.3,0),box(.12,2.6,.12,0x4a3220,.9,1.3,0),board,...papers],toward(q));colliders.push({...q,r:1.1}); }
   p=at(2.2,11.5);addNpc({id:'elis',name:'엘리스',role:'순간이동 술사',...p,look:{long:1,robe:0x3a2f6a,robe2:0x5a4a9a,hat:'hood',hatC:0x2a2050,staff:0x9ad7ff},
-    lines:['어디로 가고 싶나요? 별빛을 따라 데려다 드릴게요.','마을의 제 제자 파울도 같은 술법을 써요.','석굴 입구로도 보내 드릴 수 있어요. 준비가 되었다면요.'],acts:[['이동하기','travel']]});
+    lines:['어디로 가고 싶나요? 별빛을 따라 데려다 드릴게요.','마을 분수 근처에서도 저를 찾을 수 있어요.','석굴 입구로도 보내 드릴 수 있어요. 준비가 되었다면요.'],acts:[['이동하기','travel']]});
   { const q=at(2.2,13.6);const ring=new THREE.Mesh(new THREE.RingGeometry(1.1,1.4,32),new THREE.MeshBasicMaterial({color:0x9ad7ff,transparent:true,opacity:.7,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,depthWrite:false}));
     ring.rotation.x=-Math.PI/2;ring.position.set(q.x,heightAt(q.x,q.z)+.06,q.z);scene.add(ring); }
   p=at(2.8,12.5);addNpc({id:'sera',name:'세라',role:'현자',...p,look:{prop:'book',robe:0xe8e0c8,robe2:0xd0c8b0,hat:'hood',hatC:0xc8c0a8,beard:0xf0f0f0,staff:0xfff0a0},
@@ -4040,8 +4085,8 @@ function addNpc(o){
   addNpc({id:'marta',name:'마르타',role:'마을 의뢰인',x:-8.2,z:8.4,faceX:0,faceZ:0,look:{prop:'book',robe:0x6a5a3a,robe2:0xa08a5a,hat:'hair',hatC:0x8a5a2a,long:1,apron:0xe8dcc0},
     lines:['어서 와요. 마을 사람들이 부탁한 일을 게시판에 모아 두고 있어요.','숲의 늑대 때문에 나무꾼들이 일을 못 하고 있대요. 도와주면 사례할게요.','도시의 카일 씨와 같은 길드 일이라, 끝내면 저나 카일 씨 누구에게 보고해도 돼요.'],acts:[['의뢰 보기','quest']]});
   // 첫 마을의 순간이동 술사
-  addNpc({id:'paul',name:'파울',role:'순간이동 술사',x:7.5,z:7,faceX:0,faceZ:0,look:{robe:0x3a2f6a,robe2:0x5a4a9a,hat:'hood',hatC:0x2a2050,staff:0x9ad7ff},
-    lines:['스승님(엘리스)께 배운 술법이에요. 도시까지 한 번에 모셔다 드릴게요.','걸어서 가려면 동쪽 길을 따라가세요. 길에도 들개와 산적이 있어요.'],acts:[['이동하기','travel']]});
+  addNpc({id:'elis_v',name:'엘리스',role:'순간이동 술사',x:7.5,z:7,faceX:0,faceZ:0,look:{long:1,robe:0x3a2f6a,robe2:0x5a4a9a,hat:'hood',hatC:0x2a2050,staff:0x9ad7ff},
+    lines:['어디로 가고 싶나요? 별빛을 따라 도시까지 한 번에 모셔다 드릴게요.','걸어서 가려면 동쪽 길을 따라가세요. 길에도 들개와 산적이 있어요.'],acts:[['이동하기','travel']]});
 })();
 
 /* ---------- 도시 기록관: 들어갈 수 있는 3층 건물 (옥상까지) ----------
@@ -5302,7 +5347,7 @@ const merchant=(function(){
   const pots=[0xc4493b,0x4f7fc4,0xc4493b,0xd4ae63];pots.forEach((c,k)=>{const b=new THREE.Mesh(new THREE.CylinderGeometry(.09,.11,.26,8),mat(c,{emissive:c,emissiveIntensity:.25}));b.position.set(-.9+k*.32,1.1,1.2);g.add(b);});
   const sw=new THREE.Mesh(new THREE.BoxGeometry(.9,.05,.08),mat(0xcfd3d8,{metalness:.6,roughness:.35}));sw.position.set(.75,1.0,1.1);sw.rotation.y=.4;g.add(sw);
   // 상인
-  const npc=makeNpcMesh({robe:0x4a5b3a,robe2:0x6a7b4a,hat:'wide',hatC:0x6b4a2e,beard:0x6a4a2a,prop:'bag',apron:0xd8c8a0});npc.userData.marker.visible=false;npc.position.set(0,0,.1);g.add(npc);
+  const npc=makeNpcMesh({robe:0x4a5b3a,robe2:0x6a7b4a,hat:'wide',hatC:0x6b4a2e,beard:0x6a4a2a,prop:'bag',apron:0xd8c8a0});npc.userData.marker.visible=false;npc.position.set(0,0,.1);g.add(npc);npcBakeRequest('merchant',npc);
   // 간판(빙글빙글 도는 금화)
   const sign=new THREE.Mesh(new THREE.CylinderGeometry(.25,.25,.05,16),mat(0xf0c95f,{metalness:.6,roughness:.3,emissive:0x8a6a10,emissiveIntensity:.4}));
   sign.rotation.x=Math.PI/2;const sg=new THREE.Group();sg.add(sign);sg.position.set(0,3.2,.6);g.add(sg);
@@ -5379,9 +5424,11 @@ function drawPortrait(n){
   try{
     if(!portraitR){portraitR=new THREE.WebGLRenderer({canvas:$('#npcPortrait'),alpha:true,antialias:true});portraitR.setPixelRatio(1);portraitR.setSize(360,400,false);portraitR.outputEncoding=THREE.sRGBEncoding;}
     while(portraitScene.children.length>3)portraitScene.remove(portraitScene.children[3]);
-    const m=makeNpcMesh(n.look);m.userData.marker.visible=false;m.rotation.y=.35;portraitScene.add(m);
-    const s=n.look.small?.7:1;portraitCam.position.set(.3*s,1.78*s,2.1*s);portraitCam.lookAt(0,1.58*s,0);
-    portraitR.render(portraitScene,portraitCam);
+    const show=(m,h)=>{while(portraitScene.children.length>3)portraitScene.remove(portraitScene.children[3]);m.rotation.y=.35;portraitScene.add(m);
+      portraitCam.position.set(.3*h/1.75,h-.02,2.1*h/1.75);portraitCam.lookAt(0,h-.2*h/1.75,0);portraitR.render(portraitScene,portraitCam);};
+    const m=makeNpcMesh(n.look);m.userData.marker.visible=false;show(m,(n.look.small?.7:1)*1.78);
+    drawPortrait.cur=n;npcBakeData(npcBakeKey(n.id)).then(d=>{if(drawPortrait.cur!==n)return;const M=_bakedModel(d);const im=M.G.children.find(c=>c.material&&c.material.map);
+      const go=()=>{if(drawPortrait.cur===n)show(M.G,M.height-.04);};const img=im&&im.material.map.image;if(img&&!img.complete)img.addEventListener('load',()=>setTimeout(go,0));else go();},()=>{});
   }catch(e){}
 }
 let typeT=null,typing=false,typeDone=null;
@@ -5527,7 +5574,7 @@ addEventListener('keydown',e=>{if(codeOf(e)==='Escape'&&!$('#shop').hidden)close
 /* ---------- 스승 / 전직 ---------- */
 function summonMentor(quiet){
   if(mentor)return;
-  mentor=makeMentorMesh();mentor.position.set(0,heightAt(0,5),5.2);scene.add(mentor);
+  mentor=makeMentorMesh();mentor.position.set(0,heightAt(0,5),5.2);scene.add(mentor);npcBakeRequest('mentor',mentor);
   colliders.push({x:0,z:5.2,r:.6,mentor:true});
   if(!quiet)log(`${(MENTORS[P.job]||MENTORS[baseOf(P.job)]).name}이(가) 마을 분수 곁에 나타났다. 전직할 수 있다.`,'sys');
 }
@@ -6402,7 +6449,7 @@ function updateWorld(dt){
   // 스승과 상인
   let it=null;
   if(mentor){
-    animNpc(mentor,tAll,dt);    mentor.userData.marker.rotation.y+=dt*2;mentor.userData.marker.position.y=2.9+Math.sin(tAll*2)*.12;
+    animNpc(mentor,tAll,dt);    mentor.userData.marker.rotation.y+=dt*2;mentor.userData.marker.position.y=(mentor.userData.markerY??2.9)+Math.sin(tAll*2)*.12;
     if(Math.hypot(player.position.x-mentor.position.x,player.position.z-mentor.position.z)<3.2)it='mentor';
   }
   const md=Math.hypot(player.position.x-MERCHANT_POS.x,player.position.z-MERCHANT_POS.z);
@@ -6414,7 +6461,7 @@ function updateWorld(dt){
   // 사람들: 머리 위 표시가 돈다 (말을 걸 때만 쳐다본다)
   let bestN=null,bd=3.3;
   for(const n of NPCS){const d=Math.hypot(player.position.x-n.x,player.position.z-n.z);n.mesh.visible=d<110;{const ol=n.mesh.userData.outlines,on=d<20;if(ol&&ol.length&&ol[0].visible!==on)for(const m of ol)m.visible=on;}
-    if(d<30){animNpc(n.mesh,tAll,dt);n.mesh.userData.marker.rotation.y+=dt*2;n.mesh.userData.marker.position.y=(n.look.small?2.2:2.6)+Math.sin(tAll*2+n.x)*.08;}
+    if(d<30){animNpc(n.mesh,tAll,dt);n.mesh.userData.marker.rotation.y+=dt*2;n.mesh.userData.marker.position.y=(n.mesh.userData.markerY??(n.look.small?2.2:2.6))+Math.sin(tAll*2+n.x)*.08;}
     if(d<bd&&Math.abs(player.position.y-n.y)<2){bd=d;bestN=n;}}
   if(!it&&bestN)it='npc:'+bestN.id;
   let bestP=null;

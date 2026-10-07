@@ -22,6 +22,8 @@ const files = {
   '/GLTFLoader.js': { file: 'GLTFLoader.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=604800' },
   '/SkeletonUtils.js': { file: 'SkeletonUtils.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=604800' },
 };
+// 미리 구운 NPC 모델 (public/npcbake/*.json)
+try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'npcbake'))) if (/^[a-z0-9_]+\.json$/.test(fn)) files['/npcbake/' + fn] = { file: 'npcbake/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; } catch (e) {}
 for (const f of Object.values(files)) {
   f.body = fs.readFileSync(path.join(PUBLIC, f.file));
   f.gz = zlib.gzipSync(f.body);
