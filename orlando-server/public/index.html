@@ -2508,7 +2508,7 @@ function buildAnimeNpc(o,g){
 /* ---------- 미리 구워 둔 NPC (npcbake/<id>.json) ----------
    옷·머리·자세가 다 입혀진 완성 모델을 게임이 시작된 뒤 뒤에서 하나씩 불러와,
    그 자리의 임시 NPC 모습과 바꿔 끼운다. 가까운 NPC부터 먼저 불러온다. */
-const NPCBAKE={dir:'npcbake/',pending:[],busy:0,done:new Map()};
+const NPCBAKE={ver:'2',dir:'npcbake/',pending:[],busy:0,done:new Map()};
 function _b64u8(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
 function _bakedGeo(g){const n=g.n,q=new Uint16Array(_b64u8(g.p).buffer),P=new Float32Array(n*3);
   for(let i=0;i<n;i++)for(let k=0;k<3;k++)P[i*3+k]=g.mn[k]+q[i*3+k]/65535*(g.mx[k]-g.mn[k]);
@@ -2542,7 +2542,7 @@ function _swapBaked(mesh,M,key){const u=mesh.userData;const k=NPC_TALL[key]||1;M
   u.baked={open:M.open,closed:M.closed};u.outlines=M.outlines;u.head=u.head||new THREE.Object3D();u.lids=[];u.face=null;u.up=u.body=u.armL=null;
   if(u.marker){u.marker.position.y=M.height+.35;u.markerY=M.height+.35;}}
 function npcBakeKey(id){return id==='elis_v'?'elis':id;}
-function npcBakeData(key){if(!NPCBAKE.done.has(key))NPCBAKE.done.set(key,fetch(NPCBAKE.dir+key+'.json').then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}));return NPCBAKE.done.get(key);}
+function npcBakeData(key){if(!NPCBAKE.done.has(key))NPCBAKE.done.set(key,fetch(NPCBAKE.dir+key+'.json?v='+NPCBAKE.ver).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}));return NPCBAKE.done.get(key);}
 function npcBakeRequest(key,mesh){NPCBAKE.pending.push({key,mesh});_npcBakePump();}
 function _npcBakePump(){if(NPCBAKE.busy>=2||!NPCBAKE.pending.length)return;
   // 플레이어에게 가까운 것부터
@@ -4176,7 +4176,7 @@ function floorAt(x,z,y){
   const win=(cs)=>cs.map(c=>({c,w:1.2,y0:1.0,y1:2.15,glass:true}));
   // 층 바닥: 계단 구멍을 피해서 여러 조각으로
   // 계단 자리: S1 z∈[-hd+.1,-hd+2.1], S2 z∈[-hd+2.1,-hd+4.1], 계단은 x∈[-6,1]. 지하 계단 BH z∈[-3.6,-1.6], x∈[-5.5,.5]
-  const S1=[-hd+.15,-hd+2.1],S2=[-hd+2.1,-hd+4.1],SX=[-6,1],BH=[-3.6,-1.6],BX=[-5.5,.5];
+  const S1=[-hd+.15,-hd+2.1],S2=[-hd+2.1,-hd+4.1],SX=[-6,1],BH=[-3.6,-1.1],BX=[-6,-1.5];
   const holes=[[BH,BX],[S1,SX],[S2,SX],[S1,SX]];
   for(let f=0;f<=NF;f++){const fy=f*FH;
     const rects=[],[H,HX]=holes[f];
@@ -4193,8 +4193,6 @@ function floorAt(x,z,y){
     for(let i=0;i<n;i++){const t=(i+.5)/n,x=dir>0?sx[0]+run*t:sx[1]-run*t,h=fromY+FH*(i+1)/n;
       box(run/n+.02,h-fromY-.06,strip[1]-strip[0]-.06,solid?trim:wood,x,fromY+(h-fromY-.06)/2,(strip[0]+strip[1])/2);
       box(run/n+.06,.07,strip[1]-strip[0]-.02,dark,x,h-.035,(strip[0]+strip[1])/2);}
-    // 옆판 (바깥쪽)
-    for(const zz of [strip[0]+.02,strip[1]-.02]){const pn=box(Math.hypot(run,FH)+.1,.12,.05,dark,(sx[0]+sx[1])/2,fromY+FH/2+.04,zz);pn.rotation.z=dir*Math.atan2(FH,run);}
     SURFACES.push({x0:CX+sx[0],x1:CX+sx[1],z0:CZ+strip[0],z1:CZ+strip[1],ramp:'x',ya:Y0+(dir>0?fromY:fromY+FH),yb:Y0+(dir>0?fromY+FH:fromY)});};
   stair(S1,0,1);stair(S2,FH,-1);stair(S1,FH*2,1);
   // 바깥벽 (층마다): 앞벽(z=+hd) 1층에 문
@@ -4227,13 +4225,13 @@ function floorAt(x,z,y){
     const fin=new THREE.Mesh(new THREE.SphereGeometry(.09,8,6),gold);fin.position.set(x,RY+3.95,z);g.add(fin);
     for(const a of [0,Math.PI/2,Math.PI,-Math.PI/2]){const wx=x+Math.sin(a)*.73,wz=z+Math.cos(a)*.73;const w=box(.22,.5,.22,dark,wx,RY+1.35,wz);w.rotation.y=a;}}
   // 계단 구멍 난간 (층마다 떨어지지 않게)
-  const rail=(x0,z0,x1,z1,fy)=>{const L=Math.hypot(x1-x0,z1-z0);const o=box(Math.abs(x1-x0)||.08,.08,Math.abs(z1-z0)||.08,wood,(x0+x1)/2,fy+.95,(z0+z1)/2);
+  const rail=(x0,z0,x1,z1,fy,ox=0,oz=0)=>{const L=Math.hypot(x1-x0,z1-z0);const o=box(Math.abs(x1-x0)||.08,.08,Math.abs(z1-z0)||.08,wood,(x0+x1)/2,fy+.95,(z0+z1)/2);
     for(let i=0;i<=Math.ceil(L/.6);i++){const t=i/Math.ceil(L/.6);box(.05,.95,.05,dark,x0+(x1-x0)*t,fy+.47,z0+(z1-z0)*t);}
-    wallCol(x0,z0,x1,z1,fy-.3,fy+2.6);};
+    wallCol(x0+ox,z0+oz,x1+ox,z1+oz,fy-.3,fy+2.6);};
   rail(SX[0],S1[1],SX[1]-.2,S1[1],FH);rail(SX[0],S1[0],SX[0],S1[1],FH);          // 2층: S1 구멍
   rail(SX[0]+.4,S1[1],SX[1],S1[1],FH*2);rail(SX[0],S2[1],SX[1],S2[1],FH*2);rail(SX[1],S2[0],SX[1],S2[1],FH*2); // 3층: S2 구멍
   rail(SX[0],S1[1],SX[1]-.2,S1[1],FH*3);rail(SX[0],S1[0],SX[0],S1[1],FH*3);      // 옥상
-  rail(BX[0],BH[1],BX[1]-.15,BH[1],0);rail(BX[0],BH[0],BX[0],BH[1],0);rail(BX[0],BH[0],BX[1]-.15,BH[0],0);   // 1층: 지하 계단 구멍 (오른쪽 끝이 입구)
+  rail(BX[0],BH[1],BX[1]-.15,BH[1],0,0,.3);rail(BX[0],BH[0],BX[0],BH[1],0,-.3,0);rail(BX[0],BH[0],BX[1]-.15,BH[0],0,0,-.3);   // 1층: 지하 계단 구멍 (오른쪽 끝이 입구)
   // 문: 기둥 두 개와 세모 지붕(박공), 계단 두 단, 활짝 열린 문짝
   for(const x of [-1.55,1.55]){cyl(.17,.2,3.05,stone,x,1.52,hd+1.05,12);cyl(.26,.26,.18,stone2,x,.09,hd+1.05,12);cyl(.26,.22,.18,stone2,x,3.0,hd+1.05,12);colliders.push({x:CX+x,z:CZ+hd+1.05,r:.25});}
   box(3.7,.32,1.4,trim,0,3.25,hd+.6);
@@ -4268,7 +4266,7 @@ function floorAt(x,z,y){
   /* 안쪽 꾸미기 */
   const books=[0x8a2a2a,0x2a4a8a,0x3a6a3a,0x8a6a2a,0x5a3a6a,0x2a2a2a,0x7a5a3a];
   const shelf=(x,z,ry,fy,par=g)=>{const s=new THREE.Group();s.position.set(x,fy,z);s.rotation.y=ry;par.add(s);
-    box(2.2,2.5,.5,dark,0,1.25,0,s);box(2.4,.12,.6,wood,0,2.53,0,s);box(2.3,.14,.55,wood,0,.07,0,s);for(let r=0;r<4;r++){box(2.1,.06,.45,wood,0,.3+r*.55,.02,s);
+    box(2.2,2.5,.06,dark,0,1.25,-.22,s);for(const a of [-1.07,1.07])box(.07,2.5,.5,wood,a,1.25,0,s);box(2.4,.12,.6,wood,0,2.53,0,s);box(2.3,.14,.55,wood,0,.07,0,s);for(let r=0;r<4;r++){box(2.1,.06,.45,wood,0,.3+r*.55,.02,s);
       for(let k=0;k<9;k++){if((k*5+r*3)%11===0)continue;const tilt=(k*3+r)%7===0;const b=box(.17,.36+((k*7+r)%3)*.05,.3,mat(books[(k+r*2)%books.length]),-.88+k*.22,.52+r*.55,.06,s);b.castShadow=false;if(tilt){b.rotation.z=.25;b.position.x+=.03;}}}};
   const table=(x,z,fy,w=1.8,d=1)=>{box(w,.1,d,wood,x,fy+.8,z);[[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([a,b])=>box(.08,.8,.08,dark,x+a*(w/2-.1),fy+.4,z+b*(d/2-.1)));};
   const candle=(x,z,y)=>{box(.06,.18,.06,waxM,x,y+.09,z);const f=box(.04,.07,.04,flameM,x,y+.22,z);f.castShadow=false;};
@@ -4295,47 +4293,12 @@ function floorAt(x,z,y){
   // 옥상: 망원경과 의자
   {const t=new THREE.Group();t.position.set(4,RY,2);g.add(t);box(.08,1.1,.08,dark,0,.55,0,t);const tube=new THREE.Mesh(new THREE.CylinderGeometry(.09,.13,1.3,10),gold);tube.position.set(0,1.25,.3);tube.rotation.x=-1.1;t.add(tube);}
   box(1.6,.45,.5,wood,-2,RY+.22,3.6);
-  /* ---------- 지하: 오래된 서고와 봉인된 문 ----------
-     땅을 파낸 자리 안쪽(가장자리 2m는 남긴다)에 돌방을 만든다. 1층 계단 구멍으로 내려간다. */
-  const BY=-FH,IX=5.7,IZ=3.7;
-  box(IX*2,.3,IZ*2,cellar,0,BY-.15,0);SURFACES.push({x0:CX-IX,x1:CX+IX,z0:CZ-IZ,z1:CZ+IZ,y:Y0+BY});
-  wallFace('x',IZ+.15,-IX-.3,IX+.3,BY,[],.3,-1,FH,cellar);wallFace('x',-IZ-.15,-IX-.3,IX+.3,BY,[],.3,1,FH,cellar);
-  wallFace('z',-IX-.15,-IZ,IZ,BY,[],.3,1,FH,cellar);wallFace('z',IX+.15,-IZ,IZ,BY,[],.3,-1,FH,cellar);
-  wallCol(-IX,IZ,IX,IZ,BY-.4,-.3);wallCol(-IX,-IZ,IX,-IZ,BY-.4,-.3);wallCol(-IX,-IZ,-IX,IZ,BY-.4,-.3);wallCol(IX,-IZ,IX,IZ,BY-.4,-.3);
-  // 계단: 1층에서 오른쪽(+x) 끝으로 들어가 왼쪽으로 내려간다 (돌 계단)
-  stair(BH,BY,1,BX,true,14);
-  // 계단 옆 난간 (지하 쪽)
-  {const x0=BX[0],x1=BX[1];for(let i=0;i<=6;i++){const t=i/6,x=x0+(x1-x0)*t,h=BY+FH*t;box(.05,.9,.05,dark,x,h+.45,BH[1]);}
-    const r=box(Math.hypot(x1-x0,FH),.07,.07,wood,(x0+x1)/2,BY+FH/2+.92,BH[1]);r.rotation.z=Math.atan2(FH,x1-x0);
-    for(let i=0;i<=14;i++){const x=x0+(x1-x0)*i/14;colliders.push({x:CX+x,z:CZ+BH[1]+.12,r:.18,y0:Y0+BY-.3,y1:Y0-.3,bld:true});}}
-  // 천장 들보와 벽기둥
-  for(const x of [-3.8,-1.3,1.2,3.7]){box(.3,.3,IZ*2,dark,x,-.4,0);for(const z of [-IZ+.15,IZ-.15])box(.4,FH-.3,.3,stone2,x,BY+(FH-.3)/2,z);}
-  // 바닥 가운데의 빛나는 문양 (1층 문양과 같다)
-  disc(2.4,1.3,BY+.03,1.7,runeTex(null,'#9ad7ff','#9ad7ff'),1.2);
-  // 봉인된 둥근 돌문 (동쪽 벽)
-  {const dg=new THREE.Group();dg.position.set(IX-.02,BY+1.55,.6);dg.rotation.y=-Math.PI/2;g.add(dg);
-    const frame=new THREE.Mesh(new THREE.TorusGeometry(1.35,.16,8,32),stone2);dg.add(frame);
-    const slab=new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.3,.18,32),cellar);slab.rotation.x=Math.PI/2;slab.position.z=-.02;dg.add(slab);
-    const rm=new THREE.Mesh(new THREE.CircleGeometry(1.15,40),new THREE.MeshStandardMaterial({map:runeTex(null,'#9ad7ff','#9ad7ff'),transparent:true,emissive:0xffffff,emissiveMap:runeTex(null,'#9ad7ff','#9ad7ff'),emissiveIntensity:.9,depthWrite:false}));rm.position.z=.08;dg.add(rm);
-    for(const s of [-1,1]){const ch=new THREE.Mesh(new THREE.TorusGeometry(.12,.03,6,12),dark);ch.position.set(s*1.5,0,.05);dg.add(ch);}
-    box(.3,.08,3.2,stone2,IX-.15,BY+.04,.6);}
-  // 두루마리 선반·상자·통·책상
-  const scrollRack=(x,z,ry)=>{const s=new THREE.Group();s.position.set(x,BY,z);s.rotation.y=ry;g.add(s);box(1.8,2.1,.45,dark,0,1.05,0,s);
-    for(let r=0;r<4;r++)for(let k=0;k<6;k++){box(.25,.04,.38,wood,-.75+k*.3,.3+r*.48,0,s);const sc=cyl(.06,.06,.36,waxM,-.75+k*.3,.37+r*.48,.02,8,s);sc.rotation.x=Math.PI/2;sc.material=mat([0xe8dcc0,0xd8c8a0,0xc8b890][(k+r)%3]);}};
-  scrollRack(-4.6,IZ-.3,Math.PI);scrollRack(-2.4,IZ-.3,Math.PI);scrollRack(-IX+.3,1.2,Math.PI/2);
-  for(const [x,z,s] of [[4.6,-3,.6],[3.9,-3.1,.45],[4.7,-2.3,.5]]){const c=box(s,s,s,wood,x,BY+s/2,z);c.rotation.y=x*1.3;}
-  for(const [x,z] of [[-IX+.5,-.8],[-IX+.5,-1.5]]){cyl(.3,.27,.75,wood,x,BY+.38,z,12);cyl(.31,.31,.05,dark,x,BY+.6,z,12);cyl(.31,.31,.05,dark,x,BY+.15,z,12);}
-  table(0,2.4,BY,1.6,.9);{const bk=box(.5,.04,.36,mat(0xe8dcc0),-.2,BY+.87,2.4);bk.rotation.y=.2;}candle(.5,2.3,BY+.85);
-  // 촛대와 불빛 (빛은 가까울 때만 켜진다)
-  for(const [x,z] of [[-1.3,-IZ+.45],[3.7,IZ-.45],[-3.8,IZ-.45]]){cyl(.03,.05,1.3,dark,x,BY+.65,z,6);cyl(.12,.08,.06,gold,x,BY+1.3,z,8);candle(x,z,BY+1.33);
-    const L=new THREE.PointLight(0xffb060,1.1,9,1.6);L.position.set(CX+x,Y0+BY+1.7,CZ+z);scene.add(L);}
-  {const L=new THREE.PointLight(0x9ad7ff,.9,8,1.6);L.position.set(CX+2.4,Y0+BY+.8,CZ+1.3);scene.add(L);}
   /* --- 빈 곳 채우기: 층마다 가구와 소품 --- */
-  const colBox=(x,z,w,d,fy)=>{const n=Math.max(1,Math.round(Math.max(w,d)/.8));for(let i=0;i<n;i++){const t=(i+.5)/n-.5;colliders.push({x:CX+x+(w>=d?w*t:0),z:CZ+z+(w<d?d*t:0),r:Math.min(w,d)/2+.15,y0:Y0+fy-.4,y1:Y0+fy+2,bld:true});}};
+  const colBox=(x,z,w,d,fy)=>{const n=Math.max(1,Math.round(Math.max(w,d)/.8));for(let i=0;i<n;i++){const t=(i+.5)/n-.5;colliders.push({x:CX+x+(w>=d?w*t:0),z:CZ+z+(w<d?d*t:0),r:Math.min(w,d)/2,y0:Y0+fy-.4,y1:Y0+fy+2,bld:true});}};
   const chair=(x,z,fy,ry)=>{const c=new THREE.Group();c.position.set(x,fy,z);c.rotation.y=ry;g.add(c);box(.5,.06,.5,wood,0,.48,0,c);box(.5,.6,.06,wood,0,.8,-.22,c);
     for(const [a,b] of [[-.2,-.2],[.2,-.2],[-.2,.2],[.2,.2]])box(.05,.48,.05,dark,a,.24,b,c);};
   const armchair=(x,z,fy,ry,col)=>{const c=new THREE.Group();c.position.set(x,fy,z);c.rotation.y=ry;g.add(c);const cm=mat(col);box(.8,.4,.75,cm,0,.3,0,c);box(.8,.75,.18,cm,0,.75,-.3,c);for(const a of [-.36,.36])box(.12,.3,.7,cm,a,.6,0,c);};
-  const shelfFree=(x,z,ry,fy)=>{shelf(x,z,ry,fy);colBox(x,z,ry?0.6:2.3,ry?2.3:.6,fy);};
+  const shelfFree=(x,z,ry,fy)=>{const nx=Math.sin(ry)*.26,nz=Math.cos(ry)*.26;shelf(x+nx,z+nz,ry,fy);shelf(x-nx,z-nz,ry+Math.PI,fy);colBox(x,z,ry?1.1:2.3,ry?2.3:1.1,fy);};
   const plant=(x,z,fy)=>{cyl(.22,.16,.4,mat(0x9a5a3a),x,fy+.2,z,10);const b=new THREE.Mesh(new THREE.IcosahedronGeometry(.38,0),mat(0x4a7a3a));b.position.set(x,fy+.75,z);b.scale.y=1.2;b.castShadow=true;g.add(b);};
   const candelabra=(x,z,fy)=>{cyl(.03,.05,1.4,dark,x,fy+.7,z,6);cyl(.16,.2,.05,dark,x,fy+.03,z,8);for(const [dx,dz] of [[0,0],[.12,0],[-.12,0]]){box(.04,.03,.04,gold,x+dx,fy+1.4,z+dz);candle(x+dx,z+dz,fy+1.41);}};
   const chest=(x,z,fy,ry)=>{const c=new THREE.Group();c.position.set(x,fy,z);c.rotation.y=ry;g.add(c);box(.9,.5,.55,wood,0,.25,0,c);const lid=new THREE.Mesh(new THREE.CylinderGeometry(.28,.28,.9,10,1,false,0,Math.PI),wood);lid.rotation.z=Math.PI/2;lid.position.y=.5;c.add(lid);
@@ -4353,7 +4316,7 @@ function floorAt(x,z,y){
   {box(2.4,.95,.6,wood,-3.6,.47,3.4);box(2.5,.06,.7,dark,-3.6,.97,3.4);box(.6,.95,1.2,wood,-4.5,.47,2.5);colBox(-3.6,3.4,2.4,.6,0);candle(-3,3.4,1);box(.3,.05,.22,mat(0xe8dcc0),-3.9,1.02,3.4);}
   display(-6.2,-.4,0);display(-6.2,1.0+1.5,0);
   for(const x of [-2.1,2.1])plant(x,5.2,0);bench(-4.8,5.4,0,Math.PI);bench(4.8,5.4,0,Math.PI);
-  candelabra(-1.2,-.9,0);candelabra(6.9,5.2,0);
+  candelabra(-.4,.5,0);candelabra(6.9,5.2,0);
   // 2층: 도면 서랍장, 작업 책상, 벽 지도, 상자
   for(const x of [4.4,6.6]){box(1.9,1.0,.7,wood,x,FH+.5,-5.45);for(let r=0;r<4;r++)box(1.8,.02,.02,dark,x,FH+.2+r*.22,-5.09);colBox(x,-5.45,1.9,.7,FH);}
   wallMap(5.5,-5.82,FH+2,0,2.6,1.3);wallMap(-7.83,3.8,FH+1.9,Math.PI/2,1.8,1.2);
@@ -4368,8 +4331,55 @@ function floorAt(x,z,y){
   {box(2,.35,1,wood,5.6,FH*2+.2,4.8);box(1.9,.15,.9,mat(0xd8d0c0),5.6,FH*2+.42,4.8);box(.5,.12,.7,mat(0xf0e8d8),4.85,FH*2+.55,4.8);colBox(5.6,4.8,2,1,FH*2);
     const cur=new THREE.Mesh(new THREE.PlaneGeometry(2.4,2.6),mat(0x5a3a6a,{side:THREE.DoubleSide}));cur.position.set(5.6,FH*2+1.4,3.9);g.add(cur);box(2.6,.05,.05,dark,5.6,FH*2+2.75,3.9);}
   shelfFree(3,-.6,0,FH*2);chest(1,-.6,FH*2,0);candelabra(-6.9,-.3,FH*2);plant(-1,5.3,FH*2);
-  // 지하: 서가 더, 탁자 주변 의자
-  scrollRack(-.2,IZ-.3,Math.PI);chair(0,1.7,BY,0);chair(.9,2.4,BY,-Math.PI/2);chest(-4.6,-3.1,BY,0);
+  /* ---------- 지하: 계단 홀 + 복도 + 방 셋 (기록 서고 · 필사실 · 창고) ----------
+     땅을 파낸 자리 안쪽(가장자리 1.6m는 남긴다)에 돌방을 만든다. 1층 뒤쪽 계단 구멍으로 내려간다. */
+  const BY=-FH,IX=6.4,IZ=4.4;
+  box(IX*2,.3,IZ*2,cellar,0,BY-.15,0);
+  SURFACES.push({x0:CX-hw,x1:CX+hw,z0:CZ-hd,z1:CZ+hd,y:Y0+BY});   // 혹시 벽 틈으로 빠져도 지하 바닥에서 멈춘다
+  const bWall=(axis,fixed,from,to,doors,out)=>{wallFace(axis,fixed,from,to,BY,doors.map(c=>({c,w:1.9,y0:0,y1:2.45})),.28,out,FH,cellar);
+    for(const c of doors){if(axis==='x'){box(.2,2.6,.36,stone2,c-1.05,BY+1.3,fixed);box(.2,2.6,.36,stone2,c+1.05,BY+1.3,fixed);box(2.3,.22,.36,stone2,c,BY+2.55,fixed);}
+      else{box(.36,2.6,.2,stone2,fixed,BY+1.3,c-1.05);box(.36,2.6,.2,stone2,fixed,BY+1.3,c+1.05);box(.36,.22,2.3,stone2,fixed,BY+2.55,c);}}
+    if(axis==='x')wallCol(from,fixed,to,fixed,BY-.4,-.3,doors.map(c=>[c-.95,c+.95]));else wallCol(fixed,from,fixed,to,BY-.4,-.3,doors.map(c=>[c-.95,c+.95]));};
+  // 바깥 돌벽
+  bWall('x',IZ+.14,-IX-.28,IX+.28,[],-1);bWall('x',-IZ-.14,-IX-.28,IX+.28,[],1);bWall('z',-IX-.14,-IZ,IZ,[],1);bWall('z',IX+.14,-IZ,IZ,[],-1);
+  // 안쪽 칸막이: 홀(x<-1) | 복도(z -1.2~1.2) | 북쪽 서고, 남서 필사실, 남동 창고
+  bWall('z',-1,-IZ,-1.2,[],1);bWall('z',-1,1.2,IZ,[],1);
+  bWall('x',-1.2,-1,IX,[2.4],1);bWall('x',1.2,-1,IX,[.8,4.6],-1);bWall('z',2.7,1.2,IZ,[],1);
+  // 계단: 1층 계단 구멍(오른쪽 끝)에서 들어와 서쪽으로 내려간다
+  stair(BH,BY,1,BX,true,14);
+  {const x0=BX[0],x1=BX[1];for(let i=0;i<=5;i++){const t=i/5,x=x0+(x1-x0)*t,h=BY+FH*t;box(.05,.9,.05,dark,x,h+.45,BH[1]+.05);}
+    const r=box(Math.hypot(x1-x0,FH),.07,.07,wood,(x0+x1)/2,BY+FH/2+.92,BH[1]+.05);r.rotation.z=Math.atan2(FH,x1-x0);
+    for(let i=0;i<=10;i++){const x=x0+1.2+(x1-x0-1.2)*i/10;colliders.push({x:CX+x,z:CZ+BH[1]+.3,r:.16,y0:Y0+BY+(x-x0)/(x1-x0)*FH-.6,y1:Y0+BY+(x-x0)/(x1-x0)*FH+1.2,bld:true});}}
+  // 천장 들보
+  for(const x of [-4.2,-1,2.7,5.2])box(.28,.26,IZ*2,dark,x,-.38,0);box(IX*2,.26,.28,dark,0,-.38,-1.2);box(IX*2,.26,.28,dark,0,-.38,1.2);
+  // 벽 촛대 (불빛은 가까울 때만 켜진다)
+  const sconce=(x,z,ry,light)=>{const s=new THREE.Group();s.position.set(x,BY+1.9,z);s.rotation.y=ry;g.add(s);box(.12,.3,.06,dark,0,0,0,s);box(.06,.06,.2,dark,0,-.08,.1,s);box(.06,.16,.06,waxM,0,.02,.2,s);const f=box(.05,.08,.05,flameM,0,.14,.2,s);f.castShadow=false;
+    if(light){const L=new THREE.PointLight(0xffb060,1.15,9,1.6);s.updateMatrixWorld(true);const p=new THREE.Vector3(0,.3,.35).applyMatrix4(s.matrix);L.position.set(CX+p.x,Y0+p.y,CZ+p.z);scene.add(L);}};
+  // 두루마리 선반
+  const scrollRack=(x,z,ry)=>{const s=new THREE.Group();s.position.set(x,BY,z);s.rotation.y=ry;g.add(s);box(1.8,2.1,.05,dark,0,1.05,-.2,s);for(const a of [-.88,.88])box(.06,2.1,.45,wood,a,1.05,0,s);box(1.9,.08,.5,wood,0,2.12,0,s);
+    for(let r=0;r<4;r++)for(let k=0;k<6;k++){box(.25,.04,.38,wood,-.75+k*.3,.3+r*.48,0,s);const sc=cyl(.06,.06,.36,waxM,-.75+k*.3,.37+r*.48,.02,8,s);sc.rotation.x=Math.PI/2;sc.material=mat([0xe8dcc0,0xd8c8a0,0xc8b890][(k+r)%3]);}
+    colBox(x,z,ry%Math.PI?0.5:1.8,ry%Math.PI?1.8:.5,BY);};
+  const crate=(x,z,s,ry=0)=>{const c=box(s,s,s,wood,x,BY+s/2,z);c.rotation.y=ry;box(s+.02,.06,s+.02,dark,x,BY+s*.8,z).rotation.y=ry;colliders.push({x:CX+x,z:CZ+z,r:s*.5,y0:Y0+BY-.4,y1:Y0+BY+2,bld:true});};
+  const barrel=(x,z)=>{cyl(.3,.27,.75,wood,x,BY+.38,z,12);cyl(.31,.31,.05,dark,x,BY+.6,z,12);cyl(.31,.31,.05,dark,x,BY+.15,z,12);colliders.push({x:CX+x,z:CZ+z,r:.3,y0:Y0+BY-.4,y1:Y0+BY+2,bld:true});};
+  // 계단 홀: 지키는 사람의 책상, 게시판, 상자
+  table(-3.6,2.9,BY,1.4,.8);colBox(-3.6,2.9,1.4,.8,BY);chair(-3.6,3.6,BY,Math.PI);candle(-3.3,2.9,BY+.85);{const b=box(.4,.03,.3,mat(0xe8dcc0),-3.9,BY+.86,2.9);b.rotation.y=.3;}
+  {const nb=box(1.4,1,.06,wood,-IX+.05,BY+1.6,.3);nb.rotation.y=Math.PI/2;for(const [dz,dy] of [[-.3,.15],[.25,-.1],[.1,.25]]){const pp=box(.03,.32,.26,mat(0xe8dcc0),-IX+.1,BY+1.6+dy,.3+dz);}}
+  crate(-5.7,3.8,.6,.3);crate(-5.05,3.85,.5,.8);barrel(-5.8,2.9);sconce(-IX+.02,-.6,Math.PI/2,true);
+  // 복도: 끝에 무거운 쇠문 (닫혀 있다)
+  {const dx=IX-.02;box(.12,2.5,1.6,mat(0x4a4e56,{metalness:.5,roughness:.5}),dx,BY+1.25,0);for(const y of [.5,1.25,2])box(.16,.08,1.62,dark,dx-.02,BY+y,0);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(.12,.025,6,14),gold);ring.position.set(dx-.1,BY+1.2,.45);ring.rotation.y=Math.PI/2;g.add(ring);box(.3,2.7,.25,stone2,dx,BY+1.35,-.92);box(.3,2.7,.25,stone2,dx,BY+1.35,.92);box(.3,.25,2.1,stone2,dx,BY+2.6,0);}
+  sconce(1.2,-1.06,0,true);sconce(4.6,1.06,Math.PI,false);
+  // 북쪽 방: 기록 서고 (두루마리 선반이 줄지어 있다)
+  for(const x of [0,2,4.6])scrollRack(x,-IZ+.3,0);scrollRack(IX-.3,-2.8,-Math.PI/2);
+  table(2.4,-2.6,BY,1.6,.8);colBox(2.4,-2.6,1.6,.8,BY);chair(2.4,-1.95,BY,Math.PI);candle(2,-2.6,BY+.85);sconce(-.94,-2.8,Math.PI/2,true);
+  // 남서쪽 방: 필사실 (책상과 책장)
+  table(.9,3.1,BY,1.8,.9);colBox(.9,3.1,1.8,.9,BY);chair(.9,2.4,BY,0);candle(.4,3.1,BY+.85);candle(1.4,3.2,BY+.85);
+  {const b1=box(.5,.04,.36,mat(0xe8dcc0),.9,BY+.87,3);b1.rotation.y=.15;box(.06,.1,.06,mat(0x1a1a2a),1.3,BY+.9,2.85);}
+  shelf(-.65,3.2,Math.PI/2,BY);colBox(-.65,3.2,.5,2.2,BY);sconce(2.64,3.1,-Math.PI/2,true);
+  // 남동쪽 방: 창고 (상자·통·궤짝)
+  crate(5.6,3.7,.7,.2);crate(4.9,3.8,.55,.9);crate(5.7,2.9,.5,.5);crate(5.62,3.72+.0,.4,.6);barrel(3.4,3.8);barrel(4.05,3.85);chest(3.6,2,BY,Math.PI/2);
+  // 계단 아래 벽감 등불
+  {const L=new THREE.PointLight(0xffb060,.8,7,1.6);L.position.set(CX-4,Y0+BY+1.8,CZ+.8);scene.add(L);}
   // 땅을 판 자리가 바깥에서 보이지 않게 벽을 땅속까지 내린다
   box(W+.3,6,.3,cellar,0,-3,hd);box(W+.3,6,.3,cellar,0,-3,-hd);box(.3,6,D+.3,cellar,hw,-3,0);box(.3,6,D+.3,cellar,-hw,-3,0);
   // 모든 벽·바닥에 그림자
@@ -6546,7 +6556,8 @@ function updatePlayer(dt){
   const onGround=pos.y<=g0+.02&&vy<=0;
   if(P.dash){
     const D=P.dash,step=D.dist/D.dur*dt;
-    pos.x+=D.f.x*step;pos.z+=D.f.z*step;pvel.x=D.f.x*12;pvel.z=D.f.z*12;
+    // 빠르게 움직여도 벽을 뚫지 않게 잘게 나눠 움직이며 밀어낸다
+    {const ns=Math.max(1,Math.ceil(step/.18));for(let i=0;i<ns;i++){pos.x+=D.f.x*step/ns;pos.z+=D.f.z*step/ns;pushOut(pos,.5);}}pvel.x=D.f.x*12;pvel.z=D.f.z*12;
     for(const m of alive()){if(D.hit.has(m))continue;if(Math.hypot(m.mesh.position.x-pos.x,m.mesh.position.z-pos.z)<1.6+m.r){D.hit.add(m);damageMonster(m,D.mult,D.opt);spawnFx(0xffe0b0,mCenter(m),.9,.25);}}
     if(P.dashFx){const q=player.position;for(let k=0;k<3;k++)VFX.emit(k%2,q.x+(Math.random()-.5)*.6,q.y+.4+Math.random()*1.2,q.z+(Math.random()-.5)*.6,0,.4,0,P.dashFx,.4,0,1);}
     D.t-=dt;if(D.t<=0){P.dash=null;P.dashFx=null;}moving=2;
@@ -6565,7 +6576,7 @@ function updatePlayer(dt){
     if(dl<=stepA){pvel.x=wx;pvel.z=wz;}else{pvel.x+=dvx/dl*stepA;pvel.z+=dvz/dl*stepA;}
     // 가파른 비탈에서는 미끄러진다
     const gl=Math.hypot(gx,gz);if(onGround&&gl>.9){pvel.x-=gx/gl*(gl-.9)*18*dt;pvel.z-=gz/gl*(gl-.9)*18*dt;}
-    pos.x+=pvel.x*dt;pos.z+=pvel.z*dt;
+    {const st=Math.hypot(pvel.x,pvel.z)*dt,ns=Math.max(1,Math.ceil(st/.25));for(let i=0;i<ns;i++){pos.x+=pvel.x*dt/ns;pos.z+=pvel.z*dt/ns;if(ns>1)pushOut(pos,.5);}}
     const hs=Math.hypot(pvel.x,pvel.z);moving=hs>.4?hs/7:0;
   }
   const bx=pos.x,bz=pos.z;
