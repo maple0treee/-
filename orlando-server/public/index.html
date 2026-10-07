@@ -823,7 +823,7 @@ body.talking #buffBar{visibility:hidden}
     road: ['dog', 'bandit'], waste: ['scorpion', 'bandit', 'sandslime'], snow: ['whitewolf', 'yeti', 'iceslime'],
     grave: ['ghoul', 'wraith', 'boneknight'], volcano: ['fireslime', 'lavagiant', 'salamander'], abyss: ['voidslime', 'shadowwolf', 'fallen'],
   };
-  const ZONE_COUNT = { forest: 10, plains: 9, swamp: 8, ruins: 7, road: 8, waste: 17, snow: 15, grave: 15, volcano: 15, abyss: 20 }; // 큰 지역은 1.5배
+  const ZONE_COUNT = { forest: 14, plains: 13, swamp: 12, ruins: 10, road: 10, waste: 22, snow: 20, grave: 20, volcano: 20, abyss: 26 }; // 큰 지역은 1.5배
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
     const d2 = Math.hypot(x - C2.x, z - C2.z);
@@ -3674,6 +3674,18 @@ function flushHouses(){
 /* ---------- 도시: 성벽, 건물, 광장, 그리고 말을 걸 수 있는 사람들 ---------- */
 const NPCS=[];
 const shade2=(c,k)=>k>1?new THREE.Color(c).lerp(new THREE.Color(0xfff4dc),k-1).getHex():new THREE.Color(c).multiplyScalar(k).getHex();
+// 옷 주름: 회전체의 가장자리를 물결치게 (아래로 갈수록 깊게)
+function npcFolds(mesh,n,amp,y0,y1){const P=mesh.geometry.attributes.position;
+  for(let i=0;i<P.count;i++){const x=P.getX(i),y=P.getY(i),z=P.getZ(i),r=Math.hypot(x,z);if(r<1e-4)continue;const a=Math.atan2(z,x),k=Math.max(0,Math.min(1,(y1-y)/(y1-y0)));
+    const f=1+amp*k*Math.sin(a*n);P.setX(i,x*f);P.setZ(i,z*f);}
+  mesh.geometry.computeVertexNormals();return mesh;}
+// 살아 있는 듯한 움직임: 숨쉬기, 고개 돌리기, 눈 깜박이기, 팔 흔들기
+function animNpc(g,t,dt){const u=g.userData;if(!u.up)return;const ph=u.ph||0;
+  const b=Math.sin(t*1.7+ph);u.up.scale.set(1+.012*b,1+.02*b,1+.012*b);
+  u.head.rotation.y=Math.sin(t*.37+ph)*.16+Math.sin(t*.13+ph*2)*.1;u.head.rotation.z=Math.sin(t*.53+ph)*.045;u.head.rotation.x=Math.sin(t*.29+ph)*.04;
+  u.blinkT=(u.blinkT??(2+Math.random()*3))-dt;let lid=.04;if(u.blinkT<0){const k=-u.blinkT/.14;lid=k<1?Math.sin(k*Math.PI):.04;if(k>=1)u.blinkT=2+Math.random()*4;}
+  for(const L of u.lids)L.scale.y=lid;
+  if(u.armL){u.armL.rotation.x=Math.sin(t*1.1+ph)*.04;u.armR.rotation.x=Math.sin(t*1.1+ph+1.3)*.04;}}
 function makeNpcMesh(o){
   // 사람: 다리(바지+장화) 또는 긴 치마, 잘록한 몸통, 소매와 손, 둥근 얼굴(볼·눈·눈썹·코·입), 머리 모양
   const g=new THREE.Group();
@@ -3686,8 +3698,8 @@ function makeNpcMesh(o){
   const skirt=!!(o.long||o.skirt);
   if(skirt){
     // 긴 치마: 허리에서 발목까지 부드럽게 퍼지고, 밑단에 띠
-    A(lathe([[.2,1.14],[.24,1.0],[.31,.72],[.38,.42],[W*.78,.12],[W*.8,.06],[0,.06]],20,robeM));
-    A(lathe([[W*.8,.05],[W*.83,.09],[W*.82,.15],[W*.79,.15]],20,trimM));
+    npcFolds(A(lathe([[.2,1.14],[.24,1.0],[.31,.72],[.38,.42],[W*.78,.12],[W*.8,.06],[0,.06]],48,robeM)),9,.07,1.1,.06);
+    npcFolds(A(lathe([[W*.8,.05],[W*.83,.09],[W*.82,.15],[W*.79,.15]],48,trimM)),9,.07,1.1,.06);
     [-.08,.08].forEach(x=>{const s=A(new THREE.Mesh(new THREE.SphereGeometry(.07,10,8,0,Math.PI*2,0,Math.PI/2),bootM),x,.02,W*.55);s.scale.set(1,.7,1.5);});
   }else{
     // 다리: 바지 + 무릎 아래 장화(접은 단, 둥근 앞코)
@@ -3697,10 +3709,11 @@ function makeNpcMesh(o){
       A(new THREE.Mesh(new THREE.CylinderGeometry(.085,.08,.38,10),bootM),x,.38,0);
       A(new THREE.Mesh(new THREE.CylinderGeometry(.1,.095,.08,10),mat(shade2(o.boots||0x3a2618,1.25))),x,.57,0);
       const ft=A(new THREE.Mesh(new THREE.SphereGeometry(.085,10,8),bootM),x,.07,.07);ft.scale.set(1,.6,1.7);
-      A(new THREE.Mesh(new THREE.CylinderGeometry(.088,.09,.06,10),bootM),x,.04,0);});
+      A(new THREE.Mesh(new THREE.CylinderGeometry(.088,.09,.06,10),bootM),x,.04,0);
+      for(let k=0;k<3;k++)A(new THREE.Mesh(new THREE.BoxGeometry(.06,.012,.01),mat(0xc8b080)),x,.24+k*.08,.083,0,0,(k%2?.3:-.3));});
     // 튜닉 자락: 허리 아래로 짧게 퍼진다 (앞이 살짝 트임)
-    A(lathe([[.22,1.14],[.25,1.04],[W*.55,.86],[W*.6,.78],[0,.78]],18,robeM)).scale.z=.85;
-    A(lathe([[W*.6,.775],[W*.62,.8],[W*.6,.83],[W*.57,.8]],18,trimM)).scale.z=.85;
+    npcFolds(A(lathe([[.22,1.14],[.25,1.04],[W*.55,.86],[W*.6,.78],[0,.78]],40,robeM)),7,.06,1.1,.78).scale.z=.85;
+    npcFolds(A(lathe([[W*.6,.775],[W*.62,.8],[W*.6,.83],[W*.57,.8]],40,trimM)),7,.06,1.1,.78).scale.z=.85;
   }
   // 몸통: 허리는 잘록하고 가슴·어깨는 넓게
   {const tb=A(lathe([[.2,1.1],[.22,1.18],[.25,1.32],[.27,1.44],[.25,1.52],[.18,1.57],[.08,1.6],[0,1.6]],18,topM));tb.scale.z=.78;}
@@ -3723,13 +3736,16 @@ function makeNpcMesh(o){
   const head=A(new THREE.Mesh(new THREE.SphereGeometry(.22,18,14),skinM),0,1.8,0);head.scale.set(1,1.04,.96);
   [-1,1].forEach(sd=>{const e=A(new THREE.Mesh(new THREE.SphereGeometry(.042,8,6),skinM),sd*.215,1.79,0);e.scale.set(.5,1,.8);
     const ck=A(new THREE.Mesh(new THREE.SphereGeometry(.045,8,6),mat(0xf0908a,{transparent:true,opacity:.45,flatShading:false})),sd*.12,1.74,.18);ck.scale.set(1,.6,.4);});
+  const lids=[];
   // 얼굴: 큰 눈(흰자·눈동자·빛), 눈썹, 코, 웃는 입
   {const browC=o.beard||o.hatC||0x3a2a1a,eyeC=o.eyeC||0x2a1d14;
     [-1,1].forEach(sd=>{const x=sd*.08;
       const wh=A(new THREE.Mesh(new THREE.SphereGeometry(.04,10,8),mat(0xfaf6ef,{flatShading:false})),x,1.81,.18);wh.scale.set(.9,1.1,.5);
       const pu=A(new THREE.Mesh(new THREE.SphereGeometry(.028,10,8),mat(eyeC,{flatShading:false})),x,1.808,.2);pu.scale.set(.9,1.15,.5);
       A(new THREE.Mesh(new THREE.SphereGeometry(.009,6,4),mat(0xffffff,{emissive:0xffffff,emissiveIntensity:.6})),x+.01,1.82,.214);
-      A(new THREE.Mesh(new THREE.BoxGeometry(.07,.015,.02),mat(browC)),x,1.865,.195,0,0,-sd*.1);});
+      A(new THREE.Mesh(new THREE.BoxGeometry(.07,.015,.02),mat(browC)),x,1.865,.195,0,0,-sd*.1);
+      A(new THREE.Mesh(new THREE.BoxGeometry(.06,.01,.012),mat(0x2a1d14)),x,1.848,.205,0,0,-sd*.08);
+      const lid=new THREE.Mesh(new THREE.SphereGeometry(.043,10,8),skinM);lid.position.set(x,1.83,.183);lid.scale.set(.95,.04,.55);g.add(lid);lids.push(lid);});
     const ns=A(new THREE.Mesh(new THREE.SphereGeometry(.022,8,6),mat(shade2(SK,.92),{flatShading:false})),0,1.765,.215);ns.scale.set(1,.8,.9);
     if(!o.beard)A(new THREE.Mesh(new THREE.TorusGeometry(.03,.007,4,10,Math.PI),mat(0x9a4a3a)),0,1.715,.205,0,0,Math.PI);}
   // 머리카락
@@ -3740,7 +3756,11 @@ function makeNpcMesh(o){
     // 앞머리: 몇 갈래로 이마를 덮는다
     for(let k=0;k<5;k++){const x=-.12+k*.06,f=A(new THREE.Mesh(new THREE.SphereGeometry(.055,8,6),hairM),x,1.93-Math.abs(x)*.25,.15-Math.abs(x)*.25);f.scale.set(1,.6,.7);}
     [-1,1].forEach(sd=>{const s=A(new THREE.Mesh(new THREE.SphereGeometry(.07,8,6),hairM),sd*.19,1.76,.03);s.scale.set(.6,1.3,.8);});
-    if(o.long){const lh=A(lathe([[.2,1.82],[.23,1.7],[.24,1.5],[.22,1.36],[.17,1.3],[0,1.3]],14,hairM),0,0,-.08);lh.scale.z=.6;}
+    if(o.long){const lh=A(lathe([[.2,1.82],[.23,1.7],[.24,1.5],[.22,1.36],[.17,1.3],[0,1.3]],24,hairM),0,0,-.08);lh.scale.z=.6;npcFolds(lh,11,.08,1.8,1.3);
+      // 어깨 앞으로 흘러내린 머리 가닥
+      [-1,1].forEach(sd=>{for(let k=0;k<3;k++){const st=A(new THREE.Mesh(new THREE.SphereGeometry(.06-k*.008,8,6),hairM),sd*(.19+k*.015),1.66-k*.12,.02-k*.01);st.scale.set(.75,1.6,.75);}});}
+    // 정수리 가르마와 머리결 몇 줄
+    for(let k=0;k<4;k++){const st=A(new THREE.Mesh(new THREE.TorusGeometry(.2-k*.01,.008,4,16,Math.PI*.7),mat(shade2(o.hatC||0x4a3322,.8))),0,1.83+k*.03,-.04);st.rotation.set(Math.PI/2-.4,0,Math.PI*.15+k*.4);}
   }
     {const P2=o.prop;
     if(P2==='sword'){const b=new THREE.Group();{const bl=taperedBlade(.04,0,.95,.18,.03,mat(0xcfd3d8,{metalness:.6,roughness:.3}));bl.rotation.z=Math.PI;bl.position.y=.57;b.add(bl);}
@@ -3787,12 +3807,21 @@ function makeNpcMesh(o){
   if(o.staff){const s=A(new THREE.Mesh(new THREE.CylinderGeometry(.03,.04,2.1,8),mat(0x5a3d22)),.45,1.05,.1);
     A(new THREE.Mesh(new THREE.TorusGeometry(.09,.02,6,12),mat(0xc9a050,{metalness:.6})),.45,2.08,.1);
     A(new THREE.Mesh(new THREE.OctahedronGeometry(.11,0),mat(o.staff,{emissive:o.staff,emissiveIntensity:1.2})),.45,2.2,.1);}
+  // 위몸(허리 위)과 머리를 따로 묶어서 숨쉬기·고개 움직임을 준다
+  {const up=new THREE.Group();up.position.y=1.1;const head=new THREE.Group();head.position.y=.52;up.add(head);
+    const armL=new THREE.Group(),armR=new THREE.Group();armL.position.set(.27,.4,0);armR.position.set(-.27,.4,0);up.add(armL,armR);
+    for(const c of g.children.slice()){const y=c.position.y,ax=Math.abs(c.position.x);
+      if(y>1.62&&ax<.5){g.remove(c);c.position.y-=1.62;head.add(c);}
+      else if(y>.95&&y<1.56&&ax>.26&&ax<.42&&c.position.z<.2){g.remove(c);const A2=c.position.x>0?armL:armR;c.position.x-=A2.position.x;c.position.y-=1.5;A2.add(c);}
+      else if(y>1.08){g.remove(c);c.position.y-=1.1;up.add(c);}}
+    g.add(up);g.userData.up=up;g.userData.head=head;g.userData.lids=lids;g.userData.armL=armL;g.userData.armR=armR;g.userData.ph=Math.random()*10;}
   if(o.small)g.scale.setScalar(.7);
   // 머리 위 표시
   const mk=new THREE.Mesh(new THREE.OctahedronGeometry(.16,0),mat(0xf0c95f,{emissive:0xb08a20,emissiveIntensity:.8}));mk.position.y=(o.small?2.2:2.6);mk.userData.marker=true;g.add(mk);
   g.userData.marker=mk;
-  g.traverse(m=>{if(m.isMesh)m.castShadow=true;});
   mergeRigid(g);
+  // 그림자는 큰 조각만 (가볍게)
+  g.traverse(m=>{if(m.isMesh){if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();m.castShadow=m.geometry.boundingSphere.radius>.14;}});
   return g;
 }
 function addNpc(o){
@@ -6241,19 +6270,19 @@ function updateWorld(dt){
   // 스승과 상인
   let it=null;
   if(mentor){
-    mentor.userData.marker.rotation.y+=dt*2;mentor.userData.marker.position.y=2.9+Math.sin(tAll*2)*.12;
+    animNpc(mentor,tAll,dt);    mentor.userData.marker.rotation.y+=dt*2;mentor.userData.marker.position.y=2.9+Math.sin(tAll*2)*.12;
     if(Math.hypot(player.position.x-mentor.position.x,player.position.z-mentor.position.z)<3.2)it='mentor';
   }
   const md=Math.hypot(player.position.x-MERCHANT_POS.x,player.position.z-MERCHANT_POS.z);
   easeFacing(dt);
-  merchant.userData.sign.rotation.y+=dt*1.2;
+  merchant.userData.sign.rotation.y+=dt*1.2;if(md<30)animNpc(merchant.userData.npc,tAll,dt);
   if(!it&&md<3.8)it='shop';
   if(!it&&Math.hypot(player.position.x-DOOR_IN.x,player.position.z-DOOR_IN.z)<2.8)it='door_in';
   if(!it&&Math.hypot(player.position.x-DOOR_OUT.x,player.position.z-DOOR_OUT.z)<2.6)it='door_out';
   // 사람들: 머리 위 표시가 돈다 (말을 걸 때만 쳐다본다)
   let bestN=null,bd=3.3;
   for(const n of NPCS){const d=Math.hypot(player.position.x-n.x,player.position.z-n.z);
-    if(d<30){n.mesh.userData.marker.rotation.y+=dt*2;n.mesh.userData.marker.position.y=(n.look.small?2.2:2.6)+Math.sin(tAll*2+n.x)*.08;}
+    if(d<30){animNpc(n.mesh,tAll,dt);n.mesh.userData.marker.rotation.y+=dt*2;n.mesh.userData.marker.position.y=(n.look.small?2.2:2.6)+Math.sin(tAll*2+n.x)*.08;}
     if(d<bd&&Math.abs(player.position.y-n.y)<2){bd=d;bestN=n;}}
   if(!it&&bestN)it='npc:'+bestN.id;
   let bestP=null;
