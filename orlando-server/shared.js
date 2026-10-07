@@ -109,16 +109,18 @@
     // 심연 끝
     reddragon:{ name: '붉은 용 이그니스', lv: 100, fixed: { hp: 450000, atk: 900, def: 60, exp: 80000 }, gold: 80000, build: 'dragon', color: 0xa8231a, scale: 1, dragon: true },
   };
+  const HP_MUL = 1.6, EXP_MUL = 1.25;
   function monStats(ty, lv) {
     const D = MON[ty];
-    if (D.fixed) return { ...D.fixed, lv: D.lv };
+    // 모든 몬스터: HP 1.6배, 대신 경험치 1.25배
+    if (D.fixed) return { ...D.fixed, hp: Math.round(D.fixed.hp * HP_MUL), exp: Math.round(D.fixed.exp * EXP_MUL), lv: D.lv };
     const L = lv;
     return {
       lv: L,
-      hp: Math.round((12 * Math.pow(L, 1.25) + 15) * (D.hpM || 1)),
+      hp: Math.round((12 * Math.pow(L, 1.25) + 15) * (D.hpM || 1) * HP_MUL),
       atk: Math.round((5 + 2.4 * Math.pow(L, 1.1)) * (D.atkM || 1)),
       def: Math.round(L * 0.9 * (D.defM || 1)),
-      exp: Math.round(6 * Math.pow(L, 1.3) * (0.5 + 0.5 * (D.hpM || 1))),
+      exp: Math.round(6 * Math.pow(L, 1.3) * (0.5 + 0.5 * (D.hpM || 1)) * EXP_MUL),
     };
   }
   const ZONE_MON = {
