@@ -2508,7 +2508,7 @@ function buildAnimeNpc(o,g){
 /* ---------- 미리 구워 둔 NPC (npcbake/<id>.json) ----------
    옷·머리·자세가 다 입혀진 완성 모델을 게임이 시작된 뒤 뒤에서 하나씩 불러와,
    그 자리의 임시 NPC 모습과 바꿔 끼운다. 가까운 NPC부터 먼저 불러온다. */
-const NPCBAKE={ver:'2',dir:'npcbake/',pending:[],busy:0,done:new Map()};
+const NPCBAKE={ver:'3',dir:'npcbake/',pending:[],busy:0,done:new Map()};
 function _b64u8(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
 function _bakedGeo(g){const n=g.n,q=new Uint16Array(_b64u8(g.p).buffer),P=new Float32Array(n*3);
   for(let i=0;i<n;i++)for(let k=0;k<3;k++)P[i*3+k]=g.mn[k]+q[i*3+k]/65535*(g.mx[k]-g.mn[k]);
@@ -2518,7 +2518,8 @@ function _bakedGeo(g){const n=g.n,q=new Uint16Array(_b64u8(g.p).buffer),P=new Fl
   if(g.c)geo.setAttribute('color',new THREE.BufferAttribute(_b64u8(g.c),3,true));
   const ib=_b64u8(g.i);geo.setIndex(new THREE.BufferAttribute(g.i32?new Uint32Array(ib.buffer):new Uint16Array(ib.buffer),1));
   geo.computeBoundingSphere();return geo;}
-function _bakedModel(d){
+const NPC_DIM={knight:.72};
+function _bakedModel(d,key){const dim=NPC_DIM[key]||1;
   const G=new THREE.Group(),open=[],closed=[],outlines=[];let tex=null;
   // 그림은 주소(data:)를 거치지 않고 바이트에서 바로 푼다 (일부 환경은 data: 이미지를 막는다)
   let ready=Promise.resolve();
@@ -2527,15 +2528,15 @@ function _bakedModel(d){
     const fb=()=>new Promise(res=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>res(null);im.src=URL.createObjectURL(blob);});
     ready=(window.createImageBitmap?createImageBitmap(blob).catch(fb):fb()).then(img=>{if(img){tex.image=img;tex.needsUpdate=true;}});}
   for(const g of d.groups){const geo=_bakedGeo(g);let m;
-    if(g.kind==='t')m=new THREE.MeshToonMaterial({map:tex,color:new THREE.Color(.8,.8,.8),gradientMap:animeGrad(),side:THREE.DoubleSide,
+    if(g.kind==='t')m=new THREE.MeshToonMaterial({map:tex,color:new THREE.Color(.8*dim,.8*dim,.8*dim),gradientMap:animeGrad(),side:THREE.DoubleSide,
       alphaTest:g.alpha==='mask'?.5:0,transparent:g.alpha==='blend',depthWrite:g.alpha!=='blend'});
-    else m=new THREE.MeshToonMaterial({vertexColors:true,color:new THREE.Color(.8,.8,.8),gradientMap:animeGrad()});
+    else m=new THREE.MeshToonMaterial({vertexColors:true,color:new THREE.Color(.8*dim,.8*dim,.8*dim),gradientMap:animeGrad()});
     const mesh=new THREE.Mesh(geo,m);mesh.castShadow=g.face==='b';G.add(mesh);
     if(g.face==='open')open.push(mesh);if(g.face==='closed'){closed.push(mesh);mesh.visible=false;}
     if(g.face==='b'&&g.alpha==='opaque'){const ol=new THREE.Mesh(geo,animeOutline());G.add(ol);outlines.push(ol);}}
   return {G,open,closed,outlines,height:d.height,ready};}
 // NPC 메시(그룹) 하나를 구운 모델로 바꾼다. 머리 위 표시는 남긴다.
-const NPC_TALL={bron:1.05,kyle:1.12,rowen:1.14,lian:1.1,bern:1.1,stranger:1.12,merchant:1.08,elis:1.05,marta:1.04,hanna:1.03,mina:1.04,sera:1.04,orwen:1.04,mentor:1.04};
+const NPC_TALL={knight:1.14,bron:1.05,kyle:1.12,rowen:1.14,lian:1.1,bern:1.1,stranger:1.12,merchant:1.08,elis:1.05,marta:1.04,hanna:1.03,mina:1.04,sera:1.04,orwen:1.04,mentor:1.04};
 function _swapBaked(mesh,M,key){const u=mesh.userData;const k=NPC_TALL[key]||1;M.G.scale.setScalar(k);M.height*=k;
   for(const c of [...mesh.children])if(c!==u.marker)mesh.remove(c);
   mesh.scale.setScalar(1);mesh.add(M.G);(NPCBAKE.models=NPCBAKE.models||{})[key]={G:M.G,r:M.ready,h:M.height-.04,ci:M.closed.map(m=>M.G.children.indexOf(m)),oi:M.open.map(m=>M.G.children.indexOf(m))};
@@ -2549,7 +2550,7 @@ function _npcBakePump(){if(NPCBAKE.busy>=2||!NPCBAKE.pending.length)return;
   let pp=null;try{pp=player&&player.position;}catch(e){}
   if(pp)NPCBAKE.pending.sort((a,b)=>a.mesh.position.distanceToSquared(pp)-b.mesh.position.distanceToSquared(pp));
   const job=NPCBAKE.pending.shift();NPCBAKE.busy++;
-  const go=d=>{try{_swapBaked(job.mesh,_bakedModel(d),job.key);}catch(e){console.warn('npc bake',job.key,e);}NPCBAKE.busy--;setTimeout(_npcBakePump,30);};
+  const go=d=>{try{_swapBaked(job.mesh,_bakedModel(d,job.key),job.key);}catch(e){console.warn('npc bake',job.key,e);}NPCBAKE.busy--;setTimeout(_npcBakePump,30);};
   if(NPCBAKE.done.has(job.key)){NPCBAKE.done.get(job.key).then(go,()=>{NPCBAKE.busy--;_npcBakePump();});return;}
   const pr=npcBakeData(job.key);
   pr.then(go,e=>{console.warn('npc bake load',job.key,e);NPCBAKE.busy--;_npcBakePump();});}
@@ -4176,7 +4177,7 @@ function floorAt(x,z,y){
   const win=(cs)=>cs.map(c=>({c,w:1.2,y0:1.0,y1:2.15,glass:true}));
   // 층 바닥: 계단 구멍을 피해서 여러 조각으로
   // 계단 자리: S1 z∈[-hd+.1,-hd+2.1], S2 z∈[-hd+2.1,-hd+4.1], 계단은 x∈[-6,1]. 지하 계단 BH z∈[-3.6,-1.6], x∈[-5.5,.5]
-  const S1=[-hd+.15,-hd+2.1],S2=[-hd+2.1,-hd+4.1],SX=[-6,1],BH=[-3.6,-1.1],BX=[-6,-1.5];
+  const S1=[-hd+.15,-hd+2.1],S2=[-hd+2.1,-hd+4.1],SX=[-6,1],BH=[-3.6,-1.1],BX=[-4.9,-1.5];
   const holes=[[BH,BX],[S1,SX],[S2,SX],[S1,SX]];
   for(let f=0;f<=NF;f++){const fy=f*FH;
     const rects=[],[H,HX]=holes[f];
@@ -4354,7 +4355,7 @@ chair(3.6,2.5-.75,0,0);chair(3.6,3.25,0,Math.PI);chair(2.4,3.25,0,Math.PI);
   stair(BH,BY,1,BX,true,14);
   {const x0=BX[0],x1=BX[1];for(let i=0;i<=5;i++){const t=i/5,x=x0+(x1-x0)*t,h=BY+FH*t;box(.05,.9,.05,dark,x,h+.45,BH[1]+.05);}
     const r=box(Math.hypot(x1-x0,FH),.07,.07,wood,(x0+x1)/2,BY+FH/2+.92,BH[1]+.05);r.rotation.z=Math.atan2(FH,x1-x0);
-    for(let i=0;i<=10;i++){const x=x0+1.2+(x1-x0-1.2)*i/10;colliders.push({x:CX+x,z:CZ+BH[1]+.3,r:.16,y0:Y0+BY+(x-x0)/(x1-x0)*FH-.6,y1:Y0+BY+(x-x0)/(x1-x0)*FH+1.2,bld:true});}}
+    for(let i=0;i<=8;i++){const x=x0+1.1+(x1-x0-1.1)*i/8;colliders.push({x:CX+x,z:CZ+BH[1]+.3,r:.16,y0:Y0+BY+(x-x0)/(x1-x0)*FH-.6,y1:Y0+BY+(x-x0)/(x1-x0)*FH+1.2,bld:true});}}
   // 천장 들보
   for(const x of [-4.2,-1,2.7,5.2])box(.28,.26,IZ*2,dark,x,-.38,0);box(IX*2,.26,.28,dark,0,-.38,-1.2);box(IX*2,.26,.28,dark,0,-.38,1.2);
   // 벽 촛대 (불빛은 가까울 때만 켜진다)
@@ -4389,7 +4390,7 @@ chair(3.6,2.5-.75,0,0);chair(3.6,3.25,0,Math.PI);chair(2.4,3.25,0,Math.PI);
     const sh=new THREE.Mesh(new THREE.SphereGeometry(.16,10,8,0,Math.PI*2,0,Math.PI/2),mat(0x9aa2ac,{metalness:.6,roughness:.35}));sh.position.set(3.25,BY+.08,2.25);sh.rotation.x=-.4;g.add(sh);
     const sw=new THREE.Group();sw.position.set(2.85,BY,4.15);sw.rotation.z=-.22;g.add(sw);box(.05,.95,.012,mat(0xd8dee6,{metalness:.6,roughness:.3}),0,.6,0,sw);box(.22,.04,.05,gold,0,1.08,0,sw);box(.04,.2,.04,dark,0,1.2,0,sw);
     cyl(.2,.16,.18,wood,4.75,BY+.09,3.85,10);for(let k=0;k<3;k++){const r=cyl(.05,.05,.12,mat(0xf0ece4),4.7+k*.05,BY+.22,3.82,8);r.rotation.z=Math.PI/2;}}
-  sconce(IX-.02,3.2,-Math.PI/2,true);
+  sconce(IX-.02,3.2,-Math.PI/2,false);
   // 계단 아래 벽감 등불
   {const L=new THREE.PointLight(0xffb060,.8,7,1.6);L.position.set(CX-4,Y0+BY+1.8,CZ+.8);scene.add(L);}
   // 땅을 판 자리가 바깥에서 보이지 않게 벽을 땅속까지 내린다
@@ -5626,7 +5627,7 @@ function drawPortrait(n){
     // 새 모델이 준비되기 전에는 빈 초상화 (옛 모델이 잠깐 보이지 않게)
     while(portraitScene.children.length>3)portraitScene.remove(portraitScene.children[3]);portraitR.render(portraitScene,portraitCam);
     const cached=NPCBAKE.models&&NPCBAKE.models[npcBakeKey(n.id)];if(cached){drawPortrait.cur=n;const G=cached.G.clone();G.traverse(o=>{if(o.material===animeOutline())o.visible=false;});for(const i of cached.ci)G.children[i].visible=false;for(const i of cached.oi)G.children[i].visible=true;cached.r.then(()=>{if(drawPortrait.cur===n)show(G,cached.h);});return;}
-    drawPortrait.cur=n;npcBakeData(npcBakeKey(n.id)).then(d=>{if(drawPortrait.cur!==n)return;const key=npcBakeKey(n.id),M=_bakedModel(d),k=NPC_TALL[key]||1;M.G.scale.setScalar(k);
+    drawPortrait.cur=n;npcBakeData(npcBakeKey(n.id)).then(d=>{if(drawPortrait.cur!==n)return;const key=npcBakeKey(n.id),M=_bakedModel(d,key),k=NPC_TALL[key]||1;M.G.scale.setScalar(k);
       M.ready.then(()=>{if(drawPortrait.cur===n)show(M.G,M.height*k-.04);});},()=>{});
   }catch(e){}
 }
