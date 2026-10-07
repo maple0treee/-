@@ -5009,7 +5009,7 @@ function renderTrade(){
   $('#trOk').disabled=!(trade.myLock&&trade.theirLock)||trade.myOk;
   $('#trOk').textContent=trade.myOk?'상대 기다리는 중…':'교환하기';
 }
-/* ---------- 이레네: 호감도와 갈래 대화, 목소리 ----------
+/* ---------- 이레네: 호감도와 갈래 대화 ----------
    호감도(-50~100)에 따라 말투와 할 수 있는 이야기가 달라진다. 선택지에 따라 호감도가 오르내리고, 몇몇 선택은 기억되어 뒤의 대화에 이어진다. */
 const IR_TIERS=[[-999,'냉담'],[-15,'경계'],[15,'서먹함'],[35,'편안함'],[60,'신뢰'],[85,'전우']];
 const irState=()=>{P.got=P.got||{};const s=P.got.irene=P.got.irene||{a:0,done:{},f:{},tier:1};s.done=s.done||{};s.f=s.f||{};return s;};
@@ -5191,34 +5191,11 @@ function irGain(d,quiet){
   if(!quiet)irPop(d);if(after!==before)s.pend=after>before?'up':'down';irAffUi(npcCur);save();
 }
 
-/* ---------- 목소리 (브라우저 음성 합성) ---------- */
-const IRV={on:true,voice:null,ok:false};
-try{IRV.on=localStorage.getItem('orlando3d.irVoice')!=='0';}catch(e){}
-function irPickVoice(){
-  try{if(!window.speechSynthesis)return null;const vs=speechSynthesis.getVoices().filter(v=>/^ko/i.test(v.lang));if(!vs.length)return null;
-    // 여성 목소리를 먼저 고른다 (기기마다 이름이 다르다)
-    const fem=/sunhi|heami|yuna|sora|jimin|seoyeon|female|여성|google 한국|ko-kr-standard-a|ko-kr-wavenet-a|ko-kr-neural2-a/i;
-    return vs.find(v=>fem.test(v.name)&&/natural|online|neural/i.test(v.name))||vs.find(v=>fem.test(v.name))||vs[0];}catch(e){return null;}
-}
-try{if(window.speechSynthesis){IRV.voice=irPickVoice();speechSynthesis.onvoiceschanged=()=>{IRV.voice=irPickVoice();};}}catch(e){}
-function irCanSpeak(){return IRV.on&&!!window.speechSynthesis&&!!(IRV.voice||(IRV.voice=irPickVoice()));}
-function irSpeak(text){
-  try{speechSynthesis.cancel();if(!irCanSpeak())return false;
-    // 괄호 속 행동 묘사는 읽지 않고, 말줄임표는 짧게 쉰다
-    let t=text.replace(/\([^)]*\)/g,' ').replace(/…+/g,', ').replace(/\s+/g,' ').trim();
-    if(!t.replace(/[,.\s!?]/g,''))return true;
-    const u=new SpeechSynthesisUtterance(t);u.voice=IRV.voice;u.lang=IRV.voice.lang;
-    // 호감이 낮으면 낮고 차갑게, 높으면 조금 밝고 부드럽게
-    const tr=irTier(irState().a);u.pitch=[.82,.92,.98,1.05,1.1,1.14][tr];u.rate=[.86,.92,.96,1,1.02,1.02][tr];u.volume=Math.min(1,(typeof SFX!=='undefined'&&SFX.vol!=null?SFX.vol:1)*1.2+.2);
-    speechSynthesis.speak(u);return true;}catch(e){return false;}
-}
-function irStop(){try{window.speechSynthesis&&speechSynthesis.cancel();}catch(e){}}
-
 /* ---------- 대화 흐름 ---------- */
 function irActs(){
   const s=irState(),t=irTier(s.a);
   if(t===0)return [['사과하기','ir:apology'],['선물하기','ir:gift']];
-  return [['대화하기','ir:topics'],['안부 묻기','ir:small'],['선물하기','ir:gift'],[IRV.on?'🔊 목소리 끄기':'🔇 목소리 켜기','ir:voice']];
+  return [['대화하기','ir:topics'],['안부 묻기','ir:small'],['선물하기','ir:gift']];
 }
 function irSay(text,extra){const n=npcCur;n.acts=irActs();n.noTalk=1;renderNpc(irFmt(text),extra);}
 function irPages(pages,then){const n=npcCur;n.acts=irActs();n.noTalk=1;
@@ -5267,9 +5244,6 @@ function ireneAct(a){
   if(a==='small'){
     let gain=0;if(!s.sm||Date.now()-s.sm>IR_SMALL_COOL){s.sm=Date.now();gain=1;}
     irSay(pick(IR_SMALL[Math.max(1,t)]));if(gain)irGain(1);return;}
-  if(a==='voice'){IRV.on=!IRV.on;try{localStorage.setItem('orlando3d.irVoice',IRV.on?'1':'0');}catch(e){}
-    if(IRV.on&&!irCanSpeak()){irSay('(이 기기에서는 한국어 음성을 찾지 못했어요. 브라우저나 기기 설정에서 한국어 음성을 설치하면 들을 수 있어요.)');return;}
-    irSay(IRV.on?'…목소리, 잘 들려?':'(목소리를 껐다)');return;}
   if(a==='gift'){
     const have=Object.keys(IR_GIFT).filter(id=>P.bag.some(e=>e.id===id&&e.n>0));
     if(!have.length){irSay(t<=1?'…줄 게 없으면 굳이 애쓰지 않아도 돼.':'마음만으로도 충분해, {n}.');return;}
@@ -5927,8 +5901,8 @@ let typeT=null,typing=false,typeDone=null;
 function typeText(el,text,done){
   clearInterval(typeT);el.textContent='';typing=true;typeDone=done;const t0=performance.now();
   $('#npcNext').hidden=true;$('#npcNext').classList.remove('pg');
-  const spoke=npcCur&&npcCur.id==='knight'&&irSpeak(text);let lastK=0;const voice=npcCur?.7+([...String(npcCur.id||'')].reduce((a,c)=>a+c.charCodeAt(0),0)%9)*.12:1;
-  typeT=setInterval(()=>{const k=Math.floor((performance.now()-t0)/22);el.textContent=text.slice(0,k);if(!spoke&&k-lastK>=3&&k<text.length){lastK=k;if(text[k]&&text[k]!==' ')sfx('talk',null,.6,voice*(.95+Math.random()*.1));}if(k>=text.length)finishTyping(text);},30);
+  let lastK=0;const voice=npcCur?.7+([...String(npcCur.id||'')].reduce((a,c)=>a+c.charCodeAt(0),0)%9)*.12:1;
+  typeT=setInterval(()=>{const k=Math.floor((performance.now()-t0)/22);el.textContent=text.slice(0,k);if(k-lastK>=3&&k<text.length){lastK=k;if(text[k]&&text[k]!==' ')sfx('talk',null,.6,voice*(.95+Math.random()*.1));}if(k>=text.length)finishTyping(text);},30);
   el.dataset.full=text;
 }
 function finishTyping(text){
@@ -5943,7 +5917,7 @@ function openNpc(n){
   if(n.id==='knight'){ireneOpen(n);return;}
   renderNpc(n.lines[n.li%n.lines.length]);
 }
-function closeNpc(){clearInterval(typeT);irStop();typing=false;npcPageNext=null;if(viewModel)viewModel.visible=true;$('#npc').hidden=true;$('#npcChoices').hidden=true;document.body.classList.remove('talking');mode='world';syncLockTip();relock();focusGame();}
+function closeNpc(){clearInterval(typeT);typing=false;npcPageNext=null;if(viewModel)viewModel.visible=true;$('#npc').hidden=true;$('#npcChoices').hidden=true;document.body.classList.remove('talking');mode='world';syncLockTip();relock();focusGame();}
 $('#npcClose').onclick=e=>{e.stopPropagation();closeNpc();};
 addEventListener('keydown',e=>{if($('#npc').hidden)return;const c=codeOf(e);
   if(c==='Escape')closeNpc();
