@@ -2512,7 +2512,12 @@ function _bakedGeo(g){const n=g.n,q=new Uint16Array(_b64u8(g.p).buffer),P=new Fl
   geo.computeBoundingSphere();return geo;}
 function _bakedModel(d){
   const G=new THREE.Group(),open=[],closed=[],outlines=[];let tex=null;
-  if(d.atlas){const im=new Image();tex=new THREE.Texture(im);tex.flipY=false;tex.encoding=THREE.sRGBEncoding;tex.anisotropy=4;im.onload=()=>{tex.needsUpdate=true;};im.src=d.atlas;}
+  // 그림은 주소(data:)를 거치지 않고 바이트에서 바로 푼다 (일부 환경은 data: 이미지를 막는다)
+  let ready=Promise.resolve();
+  if(d.atlas){tex=new THREE.Texture();tex.flipY=false;tex.encoding=THREE.sRGBEncoding;tex.anisotropy=4;
+    const m=d.atlas.match(/^data:([^;]+);base64,(.*)$/);const blob=new Blob([_b64u8(m[2])],{type:m[1]});
+    const fb=()=>new Promise(res=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>res(null);im.src=URL.createObjectURL(blob);});
+    ready=(window.createImageBitmap?createImageBitmap(blob).catch(fb):fb()).then(img=>{if(img){tex.image=img;tex.needsUpdate=true;}});}
   for(const g of d.groups){const geo=_bakedGeo(g);let m;
     if(g.kind==='t')m=new THREE.MeshToonMaterial({map:tex,color:new THREE.Color(.8,.8,.8),gradientMap:animeGrad(),side:THREE.DoubleSide,
       alphaTest:g.alpha==='mask'?.5:0,transparent:g.alpha==='blend',depthWrite:g.alpha!=='blend'});
@@ -2520,9 +2525,10 @@ function _bakedModel(d){
     const mesh=new THREE.Mesh(geo,m);mesh.castShadow=g.face==='b';G.add(mesh);
     if(g.face==='open')open.push(mesh);if(g.face==='closed'){closed.push(mesh);mesh.visible=false;}
     if(g.face==='b'&&g.alpha==='opaque'){const ol=new THREE.Mesh(geo,animeOutline());G.add(ol);outlines.push(ol);}}
-  return {G,open,closed,outlines,height:d.height};}
+  return {G,open,closed,outlines,height:d.height,ready};}
 // NPC 메시(그룹) 하나를 구운 모델로 바꾼다. 머리 위 표시는 남긴다.
-function _swapBaked(mesh,M){const u=mesh.userData;
+const NPC_TALL={bron:1.12,kyle:1.12,rowen:1.14,lian:1.1,bern:1.1,stranger:1.12,merchant:1.08,elis:1.05,marta:1.04,hanna:1.03,mina:1.04,sera:1.04,orwen:1.04,mentor:1.04};
+function _swapBaked(mesh,M,key){const u=mesh.userData;const k=NPC_TALL[key]||1;M.G.scale.setScalar(k);M.height*=k;
   for(const c of [...mesh.children])if(c!==u.marker)mesh.remove(c);
   mesh.scale.setScalar(1);mesh.add(M.G);
   u.baked={open:M.open,closed:M.closed};u.outlines=M.outlines;u.head=u.head||new THREE.Object3D();u.lids=[];u.face=null;u.up=u.body=u.armL=null;
@@ -2535,7 +2541,7 @@ function _npcBakePump(){if(NPCBAKE.busy>=2||!NPCBAKE.pending.length)return;
   let pp=null;try{pp=player&&player.position;}catch(e){}
   if(pp)NPCBAKE.pending.sort((a,b)=>a.mesh.position.distanceToSquared(pp)-b.mesh.position.distanceToSquared(pp));
   const job=NPCBAKE.pending.shift();NPCBAKE.busy++;
-  const go=d=>{try{_swapBaked(job.mesh,_bakedModel(d));}catch(e){console.warn('npc bake',job.key,e);}NPCBAKE.busy--;setTimeout(_npcBakePump,30);};
+  const go=d=>{try{_swapBaked(job.mesh,_bakedModel(d),job.key);}catch(e){console.warn('npc bake',job.key,e);}NPCBAKE.busy--;setTimeout(_npcBakePump,30);};
   if(NPCBAKE.done.has(job.key)){NPCBAKE.done.get(job.key).then(go,()=>{NPCBAKE.busy--;_npcBakePump();});return;}
   const pr=npcBakeData(job.key);
   pr.then(go,e=>{console.warn('npc bake load',job.key,e);NPCBAKE.busy--;_npcBakePump();});}
@@ -5427,8 +5433,8 @@ function drawPortrait(n){
     const show=(m,h)=>{while(portraitScene.children.length>3)portraitScene.remove(portraitScene.children[3]);m.rotation.y=.35;portraitScene.add(m);
       portraitCam.position.set(.3*h/1.75,h-.02,2.1*h/1.75);portraitCam.lookAt(0,h-.2*h/1.75,0);portraitR.render(portraitScene,portraitCam);};
     const m=makeNpcMesh(n.look);m.userData.marker.visible=false;show(m,(n.look.small?.7:1)*1.78);
-    drawPortrait.cur=n;npcBakeData(npcBakeKey(n.id)).then(d=>{if(drawPortrait.cur!==n)return;const M=_bakedModel(d);const im=M.G.children.find(c=>c.material&&c.material.map);
-      const go=()=>{if(drawPortrait.cur===n)show(M.G,M.height-.04);};const img=im&&im.material.map.image;if(img&&!img.complete)img.addEventListener('load',()=>setTimeout(go,0));else go();},()=>{});
+    drawPortrait.cur=n;npcBakeData(npcBakeKey(n.id)).then(d=>{if(drawPortrait.cur!==n)return;const key=npcBakeKey(n.id),M=_bakedModel(d),k=NPC_TALL[key]||1;M.G.scale.setScalar(k);
+      M.ready.then(()=>{if(drawPortrait.cur===n)show(M.G,M.height*k-.04);});},()=>{});
   }catch(e){}
 }
 let typeT=null,typing=false,typeDone=null;
