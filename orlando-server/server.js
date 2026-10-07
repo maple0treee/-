@@ -20,6 +20,7 @@ const files = {
   '/player.glb': { file: 'player.glb', type: 'model/gltf-binary', cache: 'public, max-age=604800' },
   '/three.min.js': { file: 'three.min.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=604800' },
   '/GLTFLoader.js': { file: 'GLTFLoader.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=604800' },
+  '/ads.txt': { file: 'ads.txt', type: 'text/plain; charset=utf-8', cache: 'public, max-age=86400' },
   '/SkeletonUtils.js': { file: 'SkeletonUtils.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=604800' },
 };
 // 미리 구운 NPC 모델 (public/npcbake/*.json)
