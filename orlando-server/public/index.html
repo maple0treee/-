@@ -4193,6 +4193,10 @@ function floorAt(x,z,y){
     for(let i=0;i<n;i++){const t=(i+.5)/n,x=dir>0?sx[0]+run*t:sx[1]-run*t,h=fromY+FH*(i+1)/n;
       box(run/n+.02,h-fromY-.06,strip[1]-strip[0]-.06,solid?trim:wood,x,fromY+(h-fromY-.06)/2,(strip[0]+strip[1])/2);
       box(run/n+.06,.07,strip[1]-strip[0]-.02,dark,x,h-.035,(strip[0]+strip[1])/2);}
+    // 계단은 아래층에서 옆으로 뚫고 들어갈 수 없다: 그 자리 계단 높이보다 낮은 사람만 막는다
+    {const hAt=x=>fromY+FH*(dir>0?(x-sx[0])/run:(sx[1]-x)/run);
+      for(const zz of [strip[0],strip[1]])for(let x=sx[0]+.2;x<=sx[1]-.1;x+=.4){const h=hAt(x);if(h-fromY<.55)continue;colliders.push({x:CX+x,z:CZ+zz,r:.2,y0:Y0+fromY-.4,y1:Y0+h-.55,bld:true});}
+      const xe=dir>0?sx[1]:sx[0];for(let z=strip[0];z<=strip[1]+.01;z+=.4)colliders.push({x:CX+xe,z:CZ+z,r:.2,y0:Y0+fromY-.4,y1:Y0+fromY+FH-.55,bld:true});}
     SURFACES.push({x0:CX+sx[0],x1:CX+sx[1],z0:CZ+strip[0],z1:CZ+strip[1],ramp:'x',ya:Y0+(dir>0?fromY:fromY+FH),yb:Y0+(dir>0?fromY+FH:fromY)});};
   stair(S1,0,1);stair(S2,FH,-1);stair(S1,FH*2,1);
   // 바깥벽 (층마다): 앞벽(z=+hd) 1층에 문
@@ -4294,7 +4298,8 @@ function floorAt(x,z,y){
   {const t=new THREE.Group();t.position.set(4,RY,2);g.add(t);box(.08,1.1,.08,dark,0,.55,0,t);const tube=new THREE.Mesh(new THREE.CylinderGeometry(.09,.13,1.3,10),gold);tube.position.set(0,1.25,.3);tube.rotation.x=-1.1;t.add(tube);}
   box(1.6,.45,.5,wood,-2,RY+.22,3.6);
   /* --- 빈 곳 채우기: 층마다 가구와 소품 --- */
-  const colBox=(x,z,w,d,fy)=>{const n=Math.max(1,Math.round(Math.max(w,d)/.8));for(let i=0;i<n;i++){const t=(i+.5)/n-.5;colliders.push({x:CX+x+(w>=d?w*t:0),z:CZ+z+(w<d?d*t:0),r:Math.min(w,d)/2,y0:Y0+fy-.4,y1:Y0+fy+2,bld:true});}};
+  const colBox=(x,z,w,d,fy)=>{return; // 가구는 지나갈 수 있다
+    const n=Math.max(1,Math.round(Math.max(w,d)/.8));for(let i=0;i<n;i++){const t=(i+.5)/n-.5;colliders.push({x:CX+x+(w>=d?w*t:0),z:CZ+z+(w<d?d*t:0),r:Math.min(w,d)/2,y0:Y0+fy-.4,y1:Y0+fy+2,bld:true});}};
   const chair=(x,z,fy,ry)=>{const c=new THREE.Group();c.position.set(x,fy,z);c.rotation.y=ry;g.add(c);box(.5,.06,.5,wood,0,.48,0,c);box(.5,.6,.06,wood,0,.8,-.22,c);
     for(const [a,b] of [[-.2,-.2],[.2,-.2],[-.2,.2],[.2,.2]])box(.05,.48,.05,dark,a,.24,b,c);};
   const armchair=(x,z,fy,ry,col)=>{const c=new THREE.Group();c.position.set(x,fy,z);c.rotation.y=ry;g.add(c);const cm=mat(col);box(.8,.4,.75,cm,0,.3,0,c);box(.8,.75,.18,cm,0,.75,-.3,c);for(const a of [-.36,.36])box(.12,.3,.7,cm,a,.6,0,c);};
@@ -4359,8 +4364,8 @@ function floorAt(x,z,y){
   const scrollRack=(x,z,ry)=>{const s=new THREE.Group();s.position.set(x,BY,z);s.rotation.y=ry;g.add(s);box(1.8,2.1,.05,dark,0,1.05,-.2,s);for(const a of [-.88,.88])box(.06,2.1,.45,wood,a,1.05,0,s);box(1.9,.08,.5,wood,0,2.12,0,s);
     for(let r=0;r<4;r++)for(let k=0;k<6;k++){box(.25,.04,.38,wood,-.75+k*.3,.3+r*.48,0,s);const sc=cyl(.06,.06,.36,waxM,-.75+k*.3,.37+r*.48,.02,8,s);sc.rotation.x=Math.PI/2;sc.material=mat([0xe8dcc0,0xd8c8a0,0xc8b890][(k+r)%3]);}
     colBox(x,z,ry%Math.PI?0.5:1.8,ry%Math.PI?1.8:.5,BY);};
-  const crate=(x,z,s,ry=0)=>{const c=box(s,s,s,wood,x,BY+s/2,z);c.rotation.y=ry;box(s+.02,.06,s+.02,dark,x,BY+s*.8,z).rotation.y=ry;colliders.push({x:CX+x,z:CZ+z,r:s*.5,y0:Y0+BY-.4,y1:Y0+BY+2,bld:true});};
-  const barrel=(x,z)=>{cyl(.3,.27,.75,wood,x,BY+.38,z,12);cyl(.31,.31,.05,dark,x,BY+.6,z,12);cyl(.31,.31,.05,dark,x,BY+.15,z,12);colliders.push({x:CX+x,z:CZ+z,r:.3,y0:Y0+BY-.4,y1:Y0+BY+2,bld:true});};
+  const crate=(x,z,s,ry=0)=>{const c=box(s,s,s,wood,x,BY+s/2,z);c.rotation.y=ry;box(s+.02,.06,s+.02,dark,x,BY+s*.8,z).rotation.y=ry;};
+  const barrel=(x,z)=>{cyl(.3,.27,.75,wood,x,BY+.38,z,12);cyl(.31,.31,.05,dark,x,BY+.6,z,12);cyl(.31,.31,.05,dark,x,BY+.15,z,12);};
   // 계단 홀: 지키는 사람의 책상, 게시판, 상자
   table(-3.6,2.9,BY,1.4,.8);colBox(-3.6,2.9,1.4,.8,BY);chair(-3.6,3.6,BY,Math.PI);candle(-3.3,2.9,BY+.85);{const b=box(.4,.03,.3,mat(0xe8dcc0),-3.9,BY+.86,2.9);b.rotation.y=.3;}
   {const nb=box(1.4,1,.06,wood,-IX+.05,BY+1.6,.3);nb.rotation.y=Math.PI/2;for(const [dz,dy] of [[-.3,.15],[.25,-.1],[.1,.25]]){const pp=box(.03,.32,.26,mat(0xe8dcc0),-IX+.1,BY+1.6+dy,.3+dz);}}
@@ -5365,7 +5370,7 @@ function renderChars(){
     row.append(b,d);box.appendChild(row);
   }
 }
-function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,quick:P.quick,home:P.home,sp:P.sp,skills:P.skills,slots:P.slots,x:player.position.x,z:player.position.z,mentorReady:P.mentorReady,got:P.got,skv:P.skv,advSp:P.advSp}:null;}
+function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,quick:P.quick,home:P.home,sp:P.sp,skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mentorReady:P.mentorReady,got:P.got,skv:P.skv,advSp:P.advSp}:null;}
 function save(){const s=snapshotP();if(!s)return;const list=loadChars();const i=list.findIndex(c=>c.id===s.id);if(i>=0)list[i]=s;else list.push(s);storeChars(list);}
 
 /* ---------- 메뉴 ---------- */
@@ -5427,7 +5432,8 @@ function startGame(data){
   computeStats(P);
   if(player)scene.remove(player);
   player=makePlayerMesh(P.job,gearOf(P));player.visible=false;
-  player.position.set(data.x??0,0,data.z??8);player.position.y=heightAt(player.position.x,player.position.z);
+  // 저장된 높이를 기준으로 그 층 바닥에 세운다 (기록관 안에서 끝냈다면 땅속이 아니라 그 층에)
+  player.position.set(data.x??0,0,data.z??8);{const x=player.position.x,z=player.position.z,base=isFinite(data.y)?data.y:(x>=120?height2Raw(x,z):heightAt(x,z));player.position.y=floorAt(x,z,base+.3);}
   scene.add(player);setViewModel(P.job);
   cam.yaw=0;cam.pitch=0;
   $('#start').hidden=true;$('#hud').hidden=false;
