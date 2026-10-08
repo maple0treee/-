@@ -207,6 +207,14 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 #skills h2{margin:0;font-family:var(--f-display);font-weight:400;font-size:28px}
 #skills .sp{font-size:14px;color:var(--brass)}
 #skills h4{margin:6px 0 0;font-size:12px;font-weight:400;color:var(--dim);letter-spacing:.16em}
+.sktabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:8px}
+.sktabs button{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:72px;padding:6px 12px;border:1px solid var(--line);border-radius:6px 6px 0 0;background:#2a2219;color:var(--parch);cursor:pointer}
+.sktabs button small{font-size:10.5px;color:var(--dim);letter-spacing:.1em}
+.sktabs button b{font-size:13.5px;font-weight:600}
+.sktabs button[aria-pressed="true"]{background:#3d3122;border-color:var(--brass);box-shadow:inset 0 -2px 0 var(--brass)}
+.sktabs button.past b{color:var(--dim)}
+.sk.past{opacity:.6}
+.sk.past .learn{background:transparent;border-color:var(--line);color:var(--dim)}
 .sk-list{display:grid;gap:8px}
 .sk{display:grid;grid-template-columns:1fr auto;gap:6px 12px;padding:12px;border:1px solid var(--line);border-radius:6px;background:#2a2219;min-width:0}
 .sk.locked{opacity:.5}
@@ -6418,7 +6426,7 @@ function renderChars(){
     row.append(b,d);box.appendChild(row);
   }
 }
-function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,quick:P.quick,home:P.home,sp:P.sp,skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mentorReady:P.mentorReady,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap)}:null;}
+function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:P.sp,skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mentorReady:P.mentorReady,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap)}:null;}
 function save(){const s=snapshotP();if(!s)return;const list=loadChars();const i=list.findIndex(c=>c.id===s.id);if(i>=0)list[i]=s;else list.push(s);storeChars(list);}
 
 /* ---------- 메뉴 ---------- */
@@ -6477,7 +6485,7 @@ function startGameNow(data){
   while(P.slots.length<NSK)P.slots.push(null);P.sp=data.sp??P.lv;
   // 바뀐 스킬: 지금 직업에 없는 스킬은 SP를 돌려주고 칸에서 뺀다
   if(data.skv!==SKILL_VER){fixSkills('스킬이 새로 바뀌어');}P.skv=SKILL_VER;
-  P.advSp={...(data.advSp||{})};grantAdvSp();
+  P.advSp={...(data.advSp||{})};P.pastSkills={...(data.pastSkills||{})};grantAdvSp();
   // 직업에 맞지 않는 장비는 가방으로
   for(const s of ['weapon','sub']){const id=P.equip[s];if(id&&!canWear(id,P.job)){P.bag.push(bagGear(id,P.enh[s]));P.equip[s]=null;P.enh[s]=0;}}
   // 직업 전용 장비 지급 (처음 한 번)
@@ -6505,36 +6513,40 @@ function startGameNow(data){
 function openSkills(){if(mode!=='world')return;mode='dialog';unlockPointer();syncLockTip();renderSkills();$('#skills').hidden=false;}
 function closeSkills(){$('#skills').hidden=true;mode='world';canvas.focus();syncLockTip();relock();}
 $('#skClose').onclick=closeSkills;
+let skTab=null;
 function renderSkills(){
   $('#skTitle').textContent=`${JOBS[P.job].name}의 스킬`;$('#skSp').textContent=`SP ${P.sp}`;
   const body=$('#skBody');body.innerHTML='';
-  const chain=jobChain(P.job);if(NO_BASE[P.job])chain.shift();
-  const groups=chain.map(j=>[JOBS[j].name,SKILLS[j]]);
-  for(const [title,list] of groups){
-    const h=document.createElement('h4');h.textContent=title;body.appendChild(h);
-    const wrap=document.createElement('div');wrap.className='sk-list';body.appendChild(wrap);
-    for(const S of list){
-      const lvl=P.skills[S.id]||0,locked=P.lv<skReq(S);
-      const card=document.createElement('div');card.className='sk'+(locked?' locked':'');
-      const nm=document.createElement('div');nm.className='nm';
-      const b=document.createElement('b');b.textContent=S.name;
-      const meta=document.createElement('span');meta.textContent=`${skReq(S)>1?`Lv ${S.req} 필요 · `:''}MP ${S.mp} · 재사용 ${S.cd}초`;
-      const pips=document.createElement('span');pips.className='pips';pips.textContent='●'.repeat(lvl)+'○'.repeat(SKILL_MAX-lvl);
-      nm.append(b,meta,pips);
-      const btn=document.createElement('button');btn.className='learn';btn.type='button';
-      btn.textContent=lvl===0?'배우기':lvl>=SKILL_MAX?'최대':'강화';
-      btn.disabled=locked||lvl>=SKILL_MAX||P.sp<1;
-      btn.onclick=()=>learn(S.id);
-      const p=document.createElement('p');p.textContent=S.desc+(lvl>1?` (강화 +${(lvl-1)*25}%)`:'');
-      card.append(nm,btn,p);
-      if(lvl>0&&S.type!=='passive'){
-        const bind=document.createElement('div');bind.className='bind';bind.append('등록:');
-        SLOT_KEYS.forEach((k,i)=>{const bb=document.createElement('button');bb.type='button';bb.textContent=k;bb.setAttribute('aria-pressed',P.slots[i]===S.id);
-          bb.onclick=()=>{const cur=P.slots.indexOf(S.id);if(cur>=0)P.slots[cur]=null;if(cur!==i)P.slots[i]=S.id;renderSkills();save();};bind.appendChild(bb);});
-        card.appendChild(bind);
-      }
-      wrap.appendChild(card);
+  // 메이플처럼 차수별 탭: 1차·2차·3차… 전직 전에 배운 스킬도 정리해서 본다
+  const full=jobChain(P.job),usable=new Set(treeOf(P.job).map(s=>s.id));
+  if(!skTab||!full.includes(skTab))skTab=P.job;
+  const tabs=document.createElement('div');tabs.className='sktabs';body.appendChild(tabs);
+  full.forEach((j,k)=>{const b=document.createElement('button');b.type='button';b.setAttribute('aria-pressed',j===skTab);
+    const t=document.createElement('small');t.textContent=`${k+1}차`;const n=document.createElement('b');n.textContent=JOBS[j].name;b.append(t,n);
+    if(!SKILLS[j].some(s=>usable.has(s.id)))b.classList.add('past');
+    b.onclick=()=>{skTab=j;renderSkills();};tabs.appendChild(b);});
+  const list=SKILLS[skTab]||[];const past=!list.some(s=>usable.has(s.id));
+  const wrap=document.createElement('div');wrap.className='sk-list';body.appendChild(wrap);
+  for(const S of list){
+    const lvl=past?(P.pastSkills&&P.pastSkills[S.id]||0):(P.skills[S.id]||0),locked=P.lv<skReq(S);
+    const card=document.createElement('div');card.className='sk'+(locked?' locked':'')+(past?' past':'');
+    const nm=document.createElement('div');nm.className='nm';
+    const b=document.createElement('b');b.textContent=S.name;
+    const meta=document.createElement('span');meta.textContent=S.type==='passive'?'패시브':`MP ${S.mp} · 재사용 ${S.cd}초`;
+    const pips=document.createElement('span');pips.className='pips';pips.textContent='●'.repeat(lvl)+'○'.repeat(SKILL_MAX-lvl);
+    nm.append(b,meta,pips);
+    const btn=document.createElement('button');btn.className='learn';btn.type='button';
+    if(past){btn.textContent=lvl?`${lvl}단계`:'—';btn.disabled=true;}
+    else{btn.textContent=lvl===0?'배우기':lvl>=SKILL_MAX?'최대':'강화';btn.disabled=locked||lvl>=SKILL_MAX||P.sp<1;btn.onclick=()=>learn(S.id);}
+    const p=document.createElement('p');p.textContent=S.desc+(lvl>1?` (강화 +${(lvl-1)*25}%)`:'');
+    card.append(nm,btn,p);
+    if(!past&&lvl>0&&S.type!=='passive'){
+      const bind=document.createElement('div');bind.className='bind';bind.append('등록:');
+      SLOT_KEYS.forEach((k,i)=>{const bb=document.createElement('button');bb.type='button';bb.textContent=k;bb.setAttribute('aria-pressed',P.slots[i]===S.id);
+        bb.onclick=()=>{const cur=P.slots.indexOf(S.id);if(cur>=0)P.slots[cur]=null;if(cur!==i)P.slots[i]=S.id;renderSkills();save();};bind.appendChild(bb);});
+      card.appendChild(bind);
     }
+    wrap.appendChild(card);
   }
 }
 function learn(id){
@@ -7264,7 +7276,9 @@ function setQuick(i,id){if(!ITEMS[id]||ITEMS[id].kind!=='use')return;const cur=P
 // 지금 직업에 없는 스킬은 SP를 돌려주고 칸에서 뺀다
 const SKILL_VER=3;
 function fixSkills(why){const valid=new Set(treeOf(P.job).map(s=>s.id));let back=0;
-  for(const id in P.skills)if(!valid.has(id)){back+=P.skills[id]||0;delete P.skills[id];}
+  // 전직하며 내려놓은 스킬은 몇 단계였는지 기록해 둔다 (스킬창의 지난 직업 탭에서 본다)
+  const inChain=new Set(jobChain(P.job).flatMap(j=>SKILLS[j].map(s=>s.id)));P.pastSkills=P.pastSkills||{};
+  for(const id in P.skills)if(!valid.has(id)){if(inChain.has(id))P.pastSkills[id]=P.skills[id];back+=P.skills[id]||0;delete P.skills[id];}
   P.slots=P.slots.map(id=>id&&valid.has(id)&&P.skills[id]?id:null);
   if(back){P.sp+=back;setTimeout(()=>log(`${why} SP ${back}을(를) 돌려받았다. 스킬창(K)에서 다시 배우자.`,'sys'),600);}}
 function bagGear(id,enh){return enh>0?{id,n:1,enh:enh|0}:{id,n:1};}
