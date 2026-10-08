@@ -8,9 +8,10 @@ const path = require('path');
 const zlib = require('zlib');
 const { WebSocketServer } = require('ws');
 const createSim = require('./sim.js');
+const OR = require('./shared.js');
 
 const PORT = process.env.PORT || 3000;
-const VERSION = 8; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
+const VERSION = 9; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
 const PUBLIC = path.join(__dirname, 'public');
 
 // 파일을 미리 읽어 두고(압축본 포함) 바로 보내 준다
@@ -80,6 +81,22 @@ try { cols = JSON.parse(fs.readFileSync(path.join(__dirname, 'colliders.json'), 
 const sim = createSim({ cols });
 setInterval(() => sim.tick(), sim.TICK * 1000);
 
+// 의뢰 게시판: 모든 사람이 같은 게시판을 본다. 누가 포스터를 떼어 가면 다른 사람 게시판에서도 사라진다
+const boards = { parbos: [], harena: [] };
+let bseq = 0;
+const newPoster = (b) => OR.makePoster(b, Math.random, 'q' + (++bseq).toString(36) + Math.random().toString(36).slice(2, 5));
+for (const b in boards) while (boards[b].length < OR.BOARD_CAP[b]) boards[b].push(newPoster(b));
+setInterval(() => {
+  const now = Date.now();
+  for (const b in boards) {
+    let changed = false;
+    const keep = boards[b].filter((p) => now - p.at < 45 * 60 * 1000);   // 오래된 포스터는 바람에 날아간다
+    if (keep.length !== boards[b].length) { boards[b] = keep; changed = true; }
+    for (let k = 0; k < 2 && boards[b].length < OR.BOARD_CAP[b]; k++) { boards[b].push(newPoster(b)); changed = true; }
+    if (changed) broadcast({ t: 'board', d: { b, list: boards[b] } });
+  }
+}, 60 * 1000);
+
 wss.on('connection', (ws) => {
   const id = 'p' + (++counter).toString(36) + Math.random().toString(36).slice(2, 6);
   ws.id = id; ws.pres = {}; ws.alive = true; ws.budget = 60; ws.chatAt = 0;
@@ -115,6 +132,14 @@ wss.on('connection', (ws) => {
       try { body = JSON.stringify(m.d); } catch { return; }
       if (body.length > 4000) return;
       send(to, { t: 'dm', from: id, d: m.d });
+    } else if (m.t === 'board' && m.d && boards[m.d.b]) {
+      send(ws, { t: 'board', d: { b: m.d.b, list: boards[m.d.b] } });
+    } else if (m.t === 'btake' && m.d && boards[m.d.b]) {
+      const L = boards[m.d.b], i = L.findIndex((p) => p.id === m.d.id);
+      if (i < 0) { send(ws, { t: 'btook', d: { ok: 0, id: m.d.id } }); return; }
+      const [p] = L.splice(i, 1);
+      send(ws, { t: 'btook', d: { ok: 1, id: p.id, p } });
+      broadcast({ t: 'board', d: { b: m.d.b, list: L } });
     } else if (m.t === 'chat' && m.d && typeof m.d === 'object') {
       const now = Date.now();
       if (now - ws.chatAt < 700) return; // 도배 방지

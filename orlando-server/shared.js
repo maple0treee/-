@@ -82,21 +82,21 @@
     // 길
     dog:      { name: '들개', lv: 12, build: 'quad', color: 0x7a5a3a, hpM: 0.8, atkM: 1 },
     bandit:   { name: '산적', lv: 16, build: 'biped', color: 0x6b4a2e, hpM: 1, atkM: 1.05, sword: true },
-    // 서쪽 황야 (Lv 15–20)
-    jackal:   { name: '자칼', lv: 15, build: 'quad', color: 0xa88a5a, hpM: 0.85, atkM: 1 },
-    sandslime:{ name: '모래 슬라임', lv: 18, build: 'slime', color: 0xc9a46a, hpM: 1.2, atkM: 0.9, scale: 1.3 },
-    // 북쪽 황야 (Lv 20–28)
-    hyena:    { name: '하이에나', lv: 21, build: 'quad', color: 0x8a7a5a, hpM: 0.95, atkM: 1.1, scale: 1.05 },
-    rockslime:{ name: '바위 슬라임', lv: 24, build: 'slime', color: 0x8a8478, hpM: 1.4, atkM: 0.95, scale: 1.4 },
-    nomad:    { name: '황야 약탈자', lv: 27, build: 'biped', color: 0x5a4a3a, hpM: 1.05, atkM: 1.15, sword: true },
-    // 남쪽 황야 (Lv 26–34)
-    scorpion: { name: '전갈', lv: 29, build: 'quad', color: 0xb07a3a, hpM: 1.1, atkM: 1.1, tail: true, scale: 1.1 },
-    salamander:{ name: '불도마뱀', lv: 31, build: 'biped', color: 0xb8402a, hpM: 1.1, atkM: 1.2, tail: true },
-    duneogre: { name: '모래 오우거', lv: 33, build: 'biped', color: 0xa08060, hpM: 1.6, atkM: 1.2, scale: 1.7, club: true },
-    // 동쪽 황야 (Lv 32–40)
-    redlizard:{ name: '붉은 리자드맨', lv: 35, build: 'biped', color: 0x9a4a32, hpM: 1.1, atkM: 1.2, tail: true, sword: true },
-    emberslime:{ name: '불씨 슬라임', lv: 37, build: 'slime', color: 0xd8702a, hpM: 1.1, atkM: 1.2, scale: 1.4, glow: 0xff5a10 },
-    redgiant: { name: '붉은 바위 거인', lv: 39, build: 'biped', color: 0x7a3a2a, hpM: 1.8, atkM: 1.25, scale: 2.1, club: true },
+    // 서쪽 황야 (Lv 20–30)
+    jackal:   { name: '자칼', lv: 22, build: 'quad', color: 0xa88a5a, hpM: 0.85, atkM: 1 },
+    sandslime:{ name: '모래 슬라임', lv: 27, build: 'slime', color: 0xc9a46a, hpM: 1.2, atkM: 0.9, scale: 1.3 },
+    // 북쪽 황야 (Lv 28–40)
+    hyena:    { name: '하이에나', lv: 31, build: 'quad', color: 0x8a7a5a, hpM: 0.95, atkM: 1.1, scale: 1.05 },
+    rockslime:{ name: '바위 슬라임', lv: 35, build: 'slime', color: 0x8a8478, hpM: 1.4, atkM: 0.95, scale: 1.4 },
+    nomad:    { name: '황야 약탈자', lv: 39, build: 'biped', color: 0x5a4a3a, hpM: 1.05, atkM: 1.15, sword: true },
+    // 남쪽 황야 (Lv 38–50)
+    scorpion: { name: '전갈', lv: 42, build: 'quad', color: 0xb07a3a, hpM: 1.1, atkM: 1.1, tail: true, scale: 1.1 },
+    salamander:{ name: '불도마뱀', lv: 45, build: 'biped', color: 0xb8402a, hpM: 1.1, atkM: 1.2, tail: true },
+    duneogre: { name: '모래 오우거', lv: 49, build: 'biped', color: 0xa08060, hpM: 1.6, atkM: 1.2, scale: 1.7, club: true },
+    // 동쪽 황야 (Lv 48–60)
+    redlizard:{ name: '붉은 리자드맨', lv: 52, build: 'biped', color: 0x9a4a32, hpM: 1.1, atkM: 1.2, tail: true, sword: true },
+    emberslime:{ name: '불씨 슬라임', lv: 56, build: 'slime', color: 0xd8702a, hpM: 1.1, atkM: 1.2, scale: 1.4, glow: 0xff5a10 },
+    redgiant: { name: '붉은 바위 거인', lv: 59, build: 'biped', color: 0x7a3a2a, hpM: 1.8, atkM: 1.25, scale: 2.1, club: true },
     // 석굴
     kingslime:{ name: '킹 슬라임', lv: 20, fixed: { hp: 16000, atk: 70, def: 14, exp: 4500 }, gold: 1500, build: 'slime', color: 0x56c860, scale: 4.2, boss: true },
     slimelet: { name: '킹 슬라임 조각', lv: 18, build: 'slime', color: 0x7fe07a, hpM: 0.5, atkM: 0.8, scale: 1.1 },
@@ -129,15 +129,30 @@
     const f = (a, b, lo, hi) => Math.round(lo + (hi - lo) * clampN((d2 - a) / (b - a), 0, 1));
     switch (zone) {
       case 'road': return 12 + Math.round(clampN((x - ROAD.x0) / (ROAD.x1 - ROAD.x0), 0, 1) * 4);
-      case 'wwest': return f(138, TOWN_R, 15, 20);   // 길에서 들어오는 쪽이 약하다
-      case 'wnorth': return f(TOWN_R, 138, 20, 28);
-      case 'wsouth': return f(TOWN_R, 138, 26, 34);
-      case 'weast': return f(TOWN_R, 138, 32, 40);
+      case 'wwest': return f(138, TOWN_R, 20, 30);   // 길에서 들어오는 쪽이 약하다
+      case 'wnorth': return f(TOWN_R, 138, 28, 40);
+      case 'wsouth': return f(TOWN_R, 138, 38, 50);
+      case 'weast': return f(TOWN_R, 138, 48, 60);
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 4], plains: [4, 7], swamp: [7, 11], ruins: [11, 15], dungeon: [18, 22], road: [12, 16], town: [0, 0], wwest: [15, 20], wnorth: [20, 28], wsouth: [26, 34], weast: [32, 40] };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 4], plains: [4, 7], swamp: [7, 11], ruins: [11, 15], dungeon: [18, 22], road: [12, 16], town: [0, 0], wwest: [20, 30], wnorth: [28, 40], wsouth: [38, 50], weast: [48, 60] };
 
-  const api = { R1, C2, R2, ROAD, TOWN_R, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm };
+  // ---------- 의뢰 게시판 포스터 ----------
+  // 파르보스 게시판: Lv 1–20 / 하레나 게시판: Lv 20–60. 서버(또는 혼자 할 때는 내 게임)가 만들어 모두에게 같은 게시판을 보여 준다
+  const BOARD_CAP = { parbos: 12, harena: 28 };
+  const BOARD_ZONES = { parbos: ['forest', 'plains', 'swamp', 'ruins', 'road'], harena: ['wwest', 'wnorth', 'wsouth', 'weast'] };
+  const GIVERS = ['방앗간 주인 헬가', '양치기 도란', '약초꾼 세이', '대장장이 견습생 핀', '상인 조합장 오브리', '여관 단골 크로스', '순례자 이나', '역참지기 마렉', '광부 브룩', '사냥꾼 리사', '경비병 토비', '기록관 서기 엘름', '행상인 니코', '우물지기 할멈', '목수 바일'];
+  const WHY = ['길목을 막고 있어 짐마차가 지나가질 못합니다.', '밤마다 가축 우리를 노립니다.', '우물가까지 내려와 아이들이 무서워해요.', '상단 호위가 벌써 둘이나 다쳤습니다.', '약초밭을 엉망으로 만들어 놓았어요.', '순례길이 끊겨 기도하러 갈 수가 없습니다.', '수가 부쩍 늘었다는 소문이 돕니다.', '광산 입구 근처에 굴을 팠다고 합니다.', '여행자들이 짐을 버리고 도망쳐 왔어요.'];
+  function makePoster(board, rnd, id) {
+    const zs = BOARD_ZONES[board]; const zone = zs[Math.floor(rnd() * zs.length)];
+    const L = ZONE_LEVELS[zone]; const tys = [...new Set(ZONE_MON[zone])]; const ty = tys[Math.floor(rnd() * tys.length)];
+    const lv = MON[ty].fixed ? MON[ty].lv : Math.round(L[0] + rnd() * (L[1] - L[0]));
+    const need = 6 + Math.floor(rnd() * (board === 'harena' ? 12 : 7));
+    const st = monStats(ty, lv), rare = rnd() < 0.12;
+    return { id, board, ty, zone, lv, need, exp: Math.round(st.exp * need * (rare ? 0.9 : 0.6)), gold: Math.round(lv * need * (rare ? 10 : 6)), rare: rare ? 1 : 0,
+      giver: GIVERS[Math.floor(rnd() * GIVERS.length)], why: WHY[Math.floor(rnd() * WHY.length)], at: Date.now() };
+  }
+  const api = { R1, C2, R2, ROAD, TOWN_R, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
