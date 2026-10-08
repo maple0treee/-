@@ -3191,8 +3191,8 @@ function makeShield(kind='buckler',tier=0){
       const sp=new THREE.Mesh(new THREE.ConeGeometry(.035,.12,8),tier>=6?mat(gemC,{emissive:gemC,emissiveIntensity:.9}):iron);sp.rotation.x=Math.PI/2;sp.position.set(0,0,.19);g.add(sp);}
     // 뒷면: 가죽 팔띠 두 줄(금빛 버클) + 손잡이 막대와 받침
     for(const y of [.18,-.14]){add(new THREE.Mesh(new THREE.BoxGeometry(.42,.06,.02),lea),0,y,-.06);add(new THREE.Mesh(new THREE.BoxGeometry(.05,.075,.03),gold),-.12,y,-.07);}
-    add(new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,.22,8),lea),.05,.02,-.13);
-    for(const y of [.11,-.07])add(new THREE.Mesh(new THREE.BoxGeometry(.03,.03,.09),dark),.05,y,-.09);
+    add(new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,.22,8),lea),.05,.02,-.095);
+    for(const y of [.11,-.07])add(new THREE.Mesh(new THREE.BoxGeometry(.03,.03,.05),dark),.05,y,-.075);
   }else{
     const wood=[0x8a5a32,0x7a4e2a,0x946238].map(c=>mat(c,{roughness:.85})),iron=mat(0x5d636b,{metalness:.6,roughness:.4,flatShading:false});
     const W=.24,H=.62;
@@ -3218,7 +3218,7 @@ function makeShield(kind='buckler',tier=0){
   return g;
 }
 // 방패 손잡이 위치(방패 안 좌표). 손이 정확히 여기를 쥐도록 방패를 옮긴다
-const SHIELD_GRIP={buckler:new THREE.Vector3(0,-.06,-.1),tower:new THREE.Vector3(.05,.02,-.13)};
+const SHIELD_GRIP={buckler:new THREE.Vector3(0,-.06,-.1),tower:new THREE.Vector3(.05,.02,-.095)};
 function mountShield(sh,kind,scale,rotY=0){sh.scale.setScalar(scale);sh.rotation.set(0,rotY,0);
   sh.position.copy(SHIELD_GRIP[kind]).multiplyScalar(scale).applyAxisAngle(new THREE.Vector3(0,1,0),rotY).negate();}
 function kiteShield(){return makeShield('tower',0);}
@@ -3301,7 +3301,8 @@ function makeStickPlayer(job,gear){
 }
 /* 공격 동작: 직업(무기)마다 다른 열쇠 자세를 시간에 따라 섞는다
    값: [오른어깨x, 오른어깨z, 오른팔꿈치, 왼어깨x, 왼어깨z, 왼팔꿈치, 허리비틀기, 숙이기] */
-const STICK_IDLE={sword:[-.15,.14,-.35,-.1,-.14,-.35,0,0,0],shield:[-.15,.14,-.35,-.5,-.25,-1.2,0,0,0],dagger:[-.3,.1,-1.25,-.3,-.1,-1.25,0,0,0],
+let SHIELD_TW=.6;
+const STICK_IDLE={sword:[-.15,.14,-.35,-.1,-.14,-.35,0,0,0],shield:[-.15,.14,-.35,.3,-.08,-1.9,0,0,0],dagger:[-.3,.1,-1.25,-.3,-.1,-1.25,0,0,0],
   fist:[-.45,.12,-1.75,-.45,-.12,-1.75,0,.04,0],staff:[-.35,.12,-.5,-.1,-.14,-.3,0,0,0],bow:[-.12,.14,-.3,-.3,-.16,-.15,0,0,0]};
 const STICK_KEYS={
   sword:[[0,null],[.3,[-2.9,.55,-1.0,-.4,-.3,-.6,-.4,-.06,-.6]],[.55,[-.75,-.55,-.15,-.6,-.2,-.5,.5,.16,1.1]],[1,null]],
@@ -3340,8 +3341,10 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   // 걸을 때 팔 흔들기 (공격 중이 아닐 때만)
   const sw=atk?0:s*.6;
   S.AR.sh.rotation.set(q[0]+sw,0,q[1]+(air&&!atk?.4:0));S.AR.el.rotation.x=q[2]-k*.2;{const hr=q[8]||0,lh=S.style==='dagger'&&alt&&!(atk&&mo&&mo.k3);S.AR.hand.rotation.x=lh?0:hr;S.AL.hand.rotation.x=lh?hr:0;}
-  if(S.shield&&S.style==='sword'&&!(atk&&mo&&mo.k3)){q=q.slice();q[3]=-.45;q[4]=-.22;q[5]=-1.05;}
-  S.AL.sh.rotation.set(q[3]-(S.style==='bow'||S.shield?sw*.3:sw),0,q[4]-(air&&!atk?.4:0));S.AL.el.rotation.x=q[5];
+  if(S.shield&&S.style!=='shield'&&!(atk&&mo&&mo.k3)){q=q.slice();q[3]=.28;q[4]=-.1;q[5]=-1.86;}
+  // 방패를 든 팔: 위팔을 안으로 비틀어 아래팔이 몸 앞을 가로지르게 (방패가 몸에 붙는다)
+  const twL=S.shield&&!(atk&&mo&&mo.k3)?SHIELD_TW:0;
+  S.AL.sh.rotation.set(q[3]-(S.style==='bow'||S.shield?sw*.3:sw),twL,q[4]-(air&&!atk?.4:0));S.AL.el.rotation.x=q[5];
   S.upper.rotation.set(q[7]+k*.08,q[6],0);
   S.AR.hand.rotation.y=ex&&ex.wy?ex.wy:0;
   S.head.position.y=.88+Math.sin(t*2)*.012*(1-k);S.head.rotation.y=-q[6]*.6;
@@ -3349,7 +3352,7 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   if(S.style==='bow'){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.w.rotation.set(-lx,0,-S.AL.sh.rotation.z);
     if(S.nock)S.nock.visible=atk&&swing>.15&&swing<.6;
     if(S.nock&&S.nock.visible){const rx=S.AR.sh.rotation.x+S.AR.el.rotation.x;S.nock.rotation.set(-rx,0,0);}}
-  if(S.shield){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.shield.rotation.set(-lx,0,-S.AL.sh.rotation.z);}
+  if(S.shield){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.shield.rotation.set(-lx,-twL,-S.AL.sh.rotation.z);}
   if(S.style==='staff'){const rx=S.AR.sh.rotation.x+S.AR.el.rotation.x;S.w.rotation.set(-rx*.82,0,-S.AR.sh.rotation.z*.8);}
   // 앉기: 바닥에 엉덩이를 대고 무릎을 세워 앉는다 (공격하면 일어난다)
   const sk=mesh.userData.sitK||0;
