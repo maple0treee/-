@@ -389,7 +389,7 @@
       for (const m of [...monsters.values()]) {
         if (!players.some((c) => Math.hypot(c.pres.x - m.x, c.pres.z - m.z) < 75)) continue;
         active.push(m);
-        m.before = [m.x, m.z, m.ry, Math.round(m.hp), m.windup > 0 || !!(m.sk && !m.sk.done) || !!(m.sks && m.sks.length), m.stun > 0, !!m.dot, m.vuln > 0];
+        m.before = [m.x, m.z, m.ry, Math.round(m.hp), m.windup > 0 || !!(m.sk && !m.sk.done) || !!(m.sks && m.sks.length), m.stun > 0, !!m.dot, m.vuln > 0, m.air > 0];
         if (m.dot) {
           m.dot.acc += m.dot.dps * TICK; m.dot.t -= TICK;
           if (m.dot.acc >= 1) { const d = Math.floor(m.dot.acc); m.dot.acc -= d; hurt(m, d, null); if (!monsters.has(m.i)) continue; }
@@ -407,6 +407,7 @@
           continue;
         }
         m.stun = Math.max(0, m.stun - TICK);
+        if (m.air > 0) m.air -= TICK;
         const sx = m.x, sz = m.z; let want = 0;
         const homeD = Math.hypot(m.x - m.home.x, m.z - m.home.z);
         const dun = m.zone === 'dungeon';
@@ -485,10 +486,10 @@
       }
       for (const m of active) {
         if (!monsters.has(m.i)) continue;
-        const after = [m.x, m.z, m.ry, Math.round(m.hp), m.windup > 0 || !!(m.sk && !m.sk.done) || !!(m.sks && m.sks.length), m.stun > 0, !!m.dot, m.vuln > 0];
+        const after = [m.x, m.z, m.ry, Math.round(m.hp), m.windup > 0 || !!(m.sk && !m.sk.done) || !!(m.sks && m.sks.length), m.stun > 0, !!m.dot, m.vuln > 0, m.air > 0];
         if (m.dirty || after.some((v, k) => v !== m.before[k])) {
           m.dirty = false;
-          updates.push([m.i, r2(m.x), r2(m.z), r2(m.ry), Math.max(0, Math.round(m.hp)), (m.windup > 0 || (m.sk && !m.sk.done) || (m.sks && m.sks.length) ? 1 : 0) | (m.stun > 0 ? 2 : 0) | (m.dot ? 4 : 0) | (m.vuln > 0 ? 8 : 0)]);
+          updates.push([m.i, r2(m.x), r2(m.z), r2(m.ry), Math.max(0, Math.round(m.hp)), (m.windup > 0 || (m.sk && !m.sk.done) || (m.sks && m.sks.length) ? 1 : 0) | (m.stun > 0 ? 2 : 0) | (m.dot ? 4 : 0) | (m.vuln > 0 ? 8 : 0) | (m.air > 0 ? 16 : 0)]);
         }
       }
       if (updates.length) broadcast({ t: 'mu', u: updates });
@@ -511,7 +512,11 @@
         // 도발: 잠시 동안 이 사람만 노린다 · 밀치기: 맞은 방향으로 밀려난다 (보스·용은 꿈쩍 않는다)
         const tau = Number(d.tau);
         if (isFinite(tau) && tau > 0 && !m.dragon) { m.aggroOn = id; m.taunt = Math.min(tau, 5); }
-        if (Array.isArray(d.kb) && !m.boss && !m.dragon) { const kx = Number(d.kb[0]), kz = Number(d.kb[1]), l = Math.hypot(kx, kz); if (isFinite(l) && l > 0.01) { const s = Math.min(l, 8) / l; m.x += kx * s; m.z += kz * s; m.windup = 0; m.dirty = true; } }
+        if (Array.isArray(d.kb) && !m.boss && !m.dragon) { const kx = Number(d.kb[0]), kz = Number(d.kb[1]), l = Math.hypot(kx, kz); if (isFinite(l) && l > 0.01) { const s = Math.min(l, 18) / l; m.x += kx * s; m.z += kz * s; m.windup = 0; m.dirty = true; } }
+        // 띄우기: 잠깐 공중에 떠서 아무것도 못 한다 (-1이면 띄운 것을 거둔다)
+        const air = Number(d.air);
+        if (isFinite(air) && air > 0 && !m.boss && !m.dragon) { m.air = Math.min(air, 2); m.stun = Math.max(m.stun, m.air); m.windup = 0; m.dirty = true; }
+        else if (air < 0 && m.air > 0) { m.air = 0; m.dirty = true; }
         if (Array.isArray(d.dot)) { const dps = Number(d.dot[0]), t = Number(d.dot[1]); if (isFinite(dps) && isFinite(t) && dps > 0) m.dot = { dps: Math.min(dps, 3000), t: Math.min(t, 10), acc: 0 }; }
         hurt(m, Math.min(dmg, 60000), id);
       },
