@@ -122,7 +122,7 @@
     road: ['dog', 'bandit'],
     wwest: ['jackal', 'bandit', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'salamander', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 13, swamp: 12, ruins: 10, road: 10, wwest: 24, wnorth: 24, wsouth: 24, weast: 24 };
+  const ZONE_COUNT = { forest: 20, plains: 19, swamp: 17, ruins: 14, road: 14, wwest: 33, wnorth: 33, wsouth: 33, weast: 33 };
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
     const d2 = Math.hypot(x - C2.x, z - C2.z);
