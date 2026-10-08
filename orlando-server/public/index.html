@@ -1579,7 +1579,7 @@ const SKILLS={
     {id:'axechop',name:'머리찍기',req:60,mp:14,cd:6,type:'barb',mult:4.4,range:3.4,color:0xffa860,desc:'도끼를 머리 위로 들어 앞을 내려찍는다. 440% 피해. [도끼 돌리기 뒤] 내려찍은 뒤 도끼를 한 번 더 크게 휘둘러 앞쪽 넓은 범위에 400% 피해. [견인하기 뒤] 견인하기에 맞은 적에게 온 힘을 실어 1800% 단일 피해 (치명타 확률 +50%, 2초 기절)'},
     {id:'axespin',name:'도끼 돌리기',req:60,mp:12,cd:7,type:'barb',mult:2.2,radius:4.4,color:0xd8b080,desc:'도끼를 크게 한 바퀴 돌려 주변 원형 범위의 적에게 220% 피해'},
     {id:'tow',name:'견인하기',req:60,mp:12,cd:8,type:'barb',mult:1.6,range:14,color:0xc8d0dc,desc:'줄 달린 도끼를 던져 앞쪽 14m 안의 적 하나에 박고, 줄을 당겨 그 적에게 돌진한다. 160% 피해, 0.5초 기절'},
-    {id:'rage',name:'분노하기',req:60,mp:0,cd:25,type:'rage',dur:10,color:0xd83020,desc:'현재 HP의 15%를 잃는 대신 10초 동안 공격력 70%, 이동 속도 30%, 공격 속도 40% 증가'},
+    {id:'rage',name:'분노하기',req:60,mp:0,cd:25,type:'rage',dur:10,color:0xd83020,desc:'10초 동안 공격력 70%, 이동 속도 30%, 공격 속도 40% 증가. 대신 그동안 매초 최대 HP의 2%씩 HP가 닳는다 (HP 1 아래로는 내려가지 않음)'},
     {id:'madness',name:'광기의 분노',req:60,mp:0,cd:0,type:'passive',desc:'(지속) 잃은 HP의 비율만큼 모든 피해에 흡혈이 붙는다 (예: HP가 40% 줄었으면 준 피해의 40%를 회복)'}],
   guardian:[
     {id:'raise',name:'방패 올리기',req:30,mp:10,cd:7,type:'guard',dur:3,buff:{def:2.5},mult:1.2,color:0xbfd4ff,desc:'3초 동안 방패를 들어 방어력 150% 증가. 그동안 기본 공격은 쓸 수 없고, 다른 스킬을 쓰면 방패를 내린다. 방패를 든 나를 공격한 적은 120% 피해를 입는다. 3초 안에 다시 누르면 일찍 내린다 (재사용 대기는 방패를 내린 뒤부터)'},
@@ -7147,7 +7147,7 @@ function useSkillInner(i){
       let f=flatFwd();if(S.moveDir){const mv=moveDir();if(mv)f=mv;}const dd=S.ddur||.25;
       P.dash={t:dd,dur:dd,dist:S.dist,mult:S.mult*pw,opt,hit:new Set(),f,push:!!S.push};if(S.push)P.dashFx=S.color;if(S.moveDir)P.dashFx=0xdff4ff;}invuln=Math.max(invuln,.35);fxAt=player.position.clone().add(new THREE.Vector3(0,1,0));break;
     case 'barb':fxAt=barbSkill(S,id,pw,opt,bc);break;
-    case 'rage':{const lose=Math.round(P.hp*.15);P.hp=Math.max(1,P.hp-lose);floatText(`-${lose}`,innerWidth/2+rnd(-40,40),innerHeight*.62,'me');P.buffs.rage={v:1.7,t:S.dur*(1+.1*(pw-1)/.25)};flash('#d83020',.3);shakeT=Math.max(shakeT,.3);sfx('roar',null,1,.8);
+    case 'rage':{P.buffs.rage={v:1.7,t:S.dur*(1+.1*(pw-1)/.25)};flash('#d83020',.3);shakeT=Math.max(shakeT,.3);sfx('roar',null,1,.8);
       setTimeout(()=>{if(mode!=='world')return;const q=player.position.clone();VFX.shock(q,0xd83020,4,.5);VFX.aura(q,0xd83020,40,.9,1.6);VFX.burst(q.clone().setY(q.y+1.2),0xff5030,30,5,.6,{up:.4,mix:0xffd0a0});},300);updateHud();break;}
     case 'guard':{cds[id]=0;P.guardT=S.dur;P.guardRef=S.mult*pw;P.guardId=id;P.guardCd=S.cd;P.guardPop=0;
       setTimeout(()=>{if(mode!=='world'||!(P.guardT>0))return;const q=player.position,f=flatFwd(),at=new THREE.Vector3(q.x+f.x*.9,q.y,q.z+f.z*.9);
@@ -7833,7 +7833,7 @@ function updateWorld(dt){
   const z=zoneAt(player.position.x,player.position.z);setZone(z);
   // 재사용 대기
   {basicCd=Math.max(0,basicCd-dt*(P.buffs.rage?1.4:1));for(const k in cds)cds[k]=Math.max(0,cds[k]-dt);}
-  if(P.buffs.rage){P.rageFx=(P.rageFx||0)+dt;if(P.rageFx>.25){P.rageFx=0;const q=player.position;VFX.burst(new THREE.Vector3(q.x,q.y+1,q.z),0xd83020,3,1.2,.45,{up:.6});}}
+  if(P.buffs.rage){if(P.hp>1)P.hp=Math.max(1,P.hp-P.maxhp*.02*dt);P.rageFx=(P.rageFx||0)+dt;if(P.rageFx>.25){P.rageFx=0;const q=player.position;VFX.burst(new THREE.Vector3(q.x,q.y+1,q.z),0xd83020,3,1.2,.45,{up:.6});}}
   if(attackHeld)basicAttack();
   // 회복
   hurtT+=dt;
