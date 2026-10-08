@@ -3652,9 +3652,9 @@ function arrowMesh(){
   return g;
 }
 // gear: {helm,armor,boots,weapon} 각각 단계(없으면 -1)
-function gearOf(p){const t=s=>{const id=p&&p.equip&&p.equip[s];return id&&ITEMS[id]?ITEMS[id].tier:-1;};return{helm:t('helm'),armor:t('armor'),boots:t('boots'),weapon:t('weapon'),sub:t('sub')};}
-function gearCode(G){return [G.helm,G.armor,G.boots,G.weapon,G.sub??-1].join(',');}
-function parseGear(s){const a=String(s||'').split(',').map(v=>Math.max(-1,Math.min(10,Math.floor(Number(v))))).map(v=>isFinite(v)?v:-1);return{helm:a[0]??-1,armor:a[1]??-1,boots:a[2]??-1,weapon:a[3]??-1,sub:a[4]??-1};}
+function gearOf(p){const t=s=>{const id=p&&p.equip&&p.equip[s];return id&&ITEMS[id]?ITEMS[id].tier:-1;};return{helm:t('helm'),armor:t('armor'),boots:t('boots'),weapon:t('weapon'),sub:t('sub'),acc:t('acc')};}
+function gearCode(G){return [G.helm,G.armor,G.boots,G.weapon,G.sub??-1,G.acc??-1].join(',');}
+function parseGear(s){const a=String(s||'').split(',').map(v=>Math.max(-1,Math.min(10,Math.floor(Number(v))))).map(v=>isFinite(v)?v:-1);return{helm:a[0]??-1,armor:a[1]??-1,boots:a[2]??-1,weapon:a[3]??-1,sub:a[4]??-1,acc:a[5]??-1};}
 function makeStickPlayer(job,gear){
   const J=JOBS[job],G=gear||{helm:-1,armor:-1,boots:-1,weapon:-1},g=new THREE.Group(),mats=[];
   const M=(c,x)=>{const m=mat(c,x);mats.push(m);return m;};
@@ -3950,7 +3950,30 @@ function pmAttach(g,job,gear,ap){
   if(S.quiver){const ch=A.by('J_Bip_C_UpperChest')||A.by('J_Bip_C_Chest');A.root.updateMatrixWorld(true);const cp=new THREE.Vector3();ch.getWorldPosition(cp);
     const tgt=new THREE.Vector3(.06,.0,-.17).add(cp);ch.add(S.quiver);S.quiver.position.copy(ch.worldToLocal(tgt));const cq=new THREE.Quaternion();ch.getWorldQuaternion(cq);
     S.quiver.quaternion.copy(cq.invert()).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),-.45));const ws=new THREE.Vector3();ch.getWorldScale(ws);S.quiver.scale.set(1/ws.x,1/ws.y,1/ws.z);S.quiver.traverse(o=>keep.add(o));}
+  if((gear||{}).acc>=0)pmAccessory(A,gear.acc);
   g.userData.anime=A;return true;}
+// 장신구: 반지는 오른손 가운뎃손가락, 목걸이·부적·용의 심장은 목에 건다
+const ACC_KIND=['ring','neck','amulet','ring','neck','ring','amulet','neck','ring','amulet','heart'];
+function pmAccessory(A,t){const kind=ACC_KIND[Math.max(0,Math.min(10,t))];const col=t>=10?0xff3020:tierCol(Math.min(9,t));
+  const gold=new THREE.MeshStandardMaterial({color:t>=6?0xe8c060:0xc8ccd4,metalness:.85,roughness:.25});
+  const gem=new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:t>=4?.9:.4,metalness:.3,roughness:.2});
+  A.root.updateMatrixWorld(true);const R=A.root;
+  const put=(bone,m,local)=>{const b=A.by(bone);if(!b)return;const w=R.localToWorld(local.clone());b.updateMatrixWorld(true);m.position.copy(b.worldToLocal(w));
+    const bq=new THREE.Quaternion();b.getWorldQuaternion(bq);const rq=new THREE.Quaternion();R.getWorldQuaternion(rq);m.quaternion.premultiply(bq.invert().multiply(rq));b.add(m);};
+  const loc=n=>{const v=new THREE.Vector3();A.by(n).getWorldPosition(v);return R.worldToLocal(v);};
+  if(kind==='ring'){const hand=A.by('J_Bip_R_Middle1')?'J_Bip_R_Middle1':'J_Bip_R_Hand';const p=loc(hand);
+    const g=new THREE.Group();const band=new THREE.Mesh(new THREE.TorusGeometry(.011,.0035,6,14),gold);g.add(band);const s=new THREE.Mesh(new THREE.OctahedronGeometry(.008,0),gem);s.position.y=.012;g.add(s);
+    put(hand,g,p);return;}
+  const nk=A.by('J_Bip_C_Neck')?loc('J_Bip_C_Neck'):null;if(!nk)return;
+  const ch=A.by('J_Bip_C_UpperChest')?'J_Bip_C_UpperChest':'J_Bip_C_Chest';
+  const g=new THREE.Group();
+  const chain=new THREE.Mesh(new THREE.TorusGeometry(.078,.005,6,28),gold);chain.rotation.x=Math.PI/2-.75;chain.position.set(0,-.045,.03);g.add(chain);
+  let pend;
+  if(kind==='neck'){pend=new THREE.Mesh(new THREE.OctahedronGeometry(.017,0),gem);pend.scale.set(1,1.4,.6);}
+  else if(kind==='amulet'){pend=new THREE.Group();const plate=new THREE.Mesh(new THREE.BoxGeometry(.034,.046,.008),gold);pend.add(plate);const rune=new THREE.Mesh(new THREE.BoxGeometry(.018,.026,.01),gem);pend.add(rune);}
+  else{pend=new THREE.Mesh(new THREE.SphereGeometry(.024,12,10),gem);pend.scale.set(1,1.15,.7);const cage=new THREE.Mesh(new THREE.TorusGeometry(.025,.003,5,16),gold);pend.add(cage);}
+  pend.scale.multiplyScalar(1.3);pend.position.set(0,-.115,.112);g.add(pend);
+  put(ch,g,nk.clone());}
 /* ---- 1인칭: 3인칭과 같은 애니 몸의 팔을 화면에 보인다 ----
    손 위치(무기 묶음)는 기존 1인칭 열쇠 자세 그대로 두고, 어깨에서 그 손까지 팔을 두 마디 IK로 뻗는다 */
 function pmFPBuild(job,G,ap){
@@ -4094,14 +4117,16 @@ function verb3(v,o,style){
         k(t0+(t1-t0)*.4,{rx:-2.2,rz:.4,re:-1.4,lx:-1.3,lz:.25,le:-1.0,ln:-.25});
         k(t0+(t1-t0)*.8,{rx:-1.3,rz:-.3,re:-1.2,lx:-1.3,lz:.25,le:-1.0,ln:-.1});}
       break;
-    case 'hurl':           // 망치 자루를 두 손으로 낮게 끌어 몸을 웅크렸다가, 온몸으로 앞으로 퍼 올리듯 밀어 던진다
-      k(.24,{rx:-.6,rz:.55,re:-1.3,lx:-.6,lz:.75,le:-1.3,wr:1.2,cr:.5,ln:.25,tw:-.55});
-      k(.48,{rx:-1.75,rz:-.05,re:-.05,lx:-1.75,lz:.3,le:-.05,wr:1.0,cr:.1,ln:.55,tw:.35,lf:.06});
-      k(.85,{rx:-1.65,rz:0,re:-.1,lx:-1.65,lz:.3,le:-.1,wr:1.0,cr:.12,ln:.5,tw:.3});break;
-    case 'uplift':         // 망치를 바닥까지 낮췄다가, 아래에서 위로 힘껏 올려친다
-      k(.24,{rx:.35,rz:.35,re:-.25,lx:.25,lz:.55,le:-.3,wr:1.45,cr:.55,ln:.5,tw:-.3});
-      k(.46,{rx:-2.95,rz:.2,re:-.2,lx:-2.85,lz:.4,le:-.2,wr:-.2,cr:0,ln:-.35,tw:.2,lf:.14});
-      k(.85,{rx:-2.85,rz:.2,re:-.25,lx:-2.75,lz:.4,le:-.25,wr:-.2,cr:.02,ln:-.3,tw:.15});break;
+    case 'hurl':           // 두 손으로 망치를 머리 뒤로 크게 넘겼다가, 온몸을 실어 앞으로 내던진다
+      k(.22,{rx:-3.05,rz:.25,re:-1.1,lx:-3.0,lz:-.05,le:-1.1,wr:-.4,ln:-.4,cr:.15,tw:-.2});
+      k(.42,{rx:-1.35,rz:.05,re:-.05,lx:-1.35,lz:.2,le:-.05,wr:1.2,ln:.6,cr:.28,tw:.15});
+      k(.85,{rx:-1.2,rz:.1,re:-.1,lx:-1.2,lz:.25,le:-.1,wr:1.1,ln:.5,cr:.25,tw:.1});break;
+    case 'uplift':         // 몸을 낮춰 망치 머리를 앞쪽 땅에 대고, 아래에서 위로 힘껏 퍼 올려 머리 위까지 올려친다
+      k(.2,{rx:-.55,rz:.3,re:-.15,lx:-.6,lz:.55,le:-.2,wr:.7,cr:.6,ln:.55,tw:-.2});
+      k(.3,{rx:-.5,rz:.3,re:-.15,lx:-.55,lz:.55,le:-.2,wr:.75,cr:.62,ln:.58,tw:-.22});
+      k(.42,{rx:-1.6,rz:.2,re:-.05,lx:-1.6,lz:.45,le:-.05,wr:1.5,cr:.3,ln:.2,tw:0});
+      k(.55,{rx:-2.95,rz:.2,re:-.2,lx:-2.85,lz:.4,le:-.2,wr:.2,cr:0,ln:-.35,tw:.15,lf:.14});
+      k(.88,{rx:-2.85,rz:.2,re:-.25,lx:-2.75,lz:.4,le:-.25,wr:.2,cr:.02,ln:-.3,tw:.12});break;
     case 'quake':          // 망치를 머리 뒤로 높이 들고 뛰어오르듯 땅을 내려친다
       k(.32,{rx:-3.3,rz:.1,re:-1.6,lx:-3.1,lz:-.1,le:-1.4,ln:-.42,wr:-.8,lf:.22,tw:-.1});
       k(.5,{rx:-.3,re:-.05,lx:-.4,le:-.08,ln:.8,wr:1.4,cr:.6,lf:0,tw:.05});
@@ -6932,7 +6957,7 @@ function showPoster(p,src){const d=$('#boardDetail');d.innerHTML='';d.hidden=fal
   add('p','sign',`— ${p.giver}\n다 마치면 ${(boardGiver&&boardGiver.name)||'게시판 주인'}에게 알려 주세요.`);
   {const todo=add('div','todo');const h4=document.createElement('b');h4.textContent='할 일';todo.appendChild(h4);const ol=document.createElement('ol');todo.appendChild(ol);
     const li=t=>{const e=document.createElement('li');e.textContent=t;ol.appendChild(e);};
-    {const zn=ZONES[p.zone].name,c=zn.charCodeAt(zn.length-1)-0xac00,jj=c>=0&&c<11172?c%28:0;li(`${zn}${jj&&jj!==8?'으로':'로'} 간다`);}for(const g of qGoals(p))li(`${MON[g.ty].name} ${g.need}마리를 처치한다`);li(`${(boardGiver&&boardGiver.name)||'의뢰인'}에게 돌아가 보고한다`);}
+    for(const g of qGoals(p))li(`${MON[g.ty].name} ${g.need}마리를 처치한다`);}
   add('div','rw',`보상  EXP ${p.exp} · ${p.gold} 골드 · 장비${p.rare?' (한 단계 좋은 것)':''} · 포션`);
   if(P.quest)add('p','warn','이미 맡은 의뢰가 있다.');
   else if(p.lv>P.lv+5)add('p','warn','위험');
@@ -7450,7 +7475,7 @@ function renderInv(){
   let id=null,idx=null,eqSlot=null;
   if(invSel&&invSel.idx!=null&&P.bag[invSel.idx]){idx=invSel.idx;id=P.bag[idx].id;}
   else if(invSel&&invSel.eq&&P.equip[invSel.eq]){eqSlot=invSel.eq;id=P.equip[eqSlot];}
-  if(!id){const p=document.createElement('p');p.className='note';p.textContent='아이템을 누르면 정보가 보여요. 두 번 누르면 장비는 바로 장착되고, 소비 아이템은 비어 있는 1~3번 칸에 들어가요. 끌어다 놓아도 돼요.';dt.appendChild(p);return;}
+  if(!id)return;
   const I=ITEMS[id];
   const h=document.createElement('div');h.className='dh';
   const enhD=idx!=null?(P.bag[idx].enh||0):eqSlot?(P.enh[eqSlot]||0):0;
@@ -8016,22 +8041,24 @@ function barbSkill(S,id,pw,opt,bc){
     return null;}
   return null;}
 /* ---------- 파울러 ---------- */
-const fowlZones=[];
+const fowlZones=[];const m0pos=()=>player.position;
 function fowlSkill(S,id,pw,opt){
   const cone=(q,f,R,arc)=>alive().filter(m=>{const dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,dd=Math.hypot(dx,dz);if(dd>R+m.r)return false;return dd<1.2||(dx*f.x+dz*f.z)/dd>Math.cos(arc);});
   if(id==='hurl'){
-    // 밀 방향: 움직이던 방향 (가만히 있었거나 뒤로 가던 중이면 앞)
+    // 들고 있던 워해머를 실제로 던진다. 망치가 지나간 길의 적은 내가 움직이던 방향으로 밀려난다 (가만히 있었거나 뒤로 가던 중이면 앞)
     const f0=flatFwd(),sp=Math.hypot(pvel.x,pvel.z);let dir=f0;if(sp>1.5){const mx=pvel.x/sp,mz=pvel.z/sp;if(mx*f0.x+mz*f0.z>-.3)dir={x:mx,z:mz};}
-    setTimeout(()=>{if(mode!=='world')return;const q=player.position,f=flatFwd(),list=cone(q,f,S.range,1.05),K=7;
-      const fin=list.map(m=>({m,x:m.mesh.position.x+dir.x*K,z:m.mesh.position.z+dir.z*K}));
-      shared(()=>{for(const e of fin)damageMonster(e.m,S.mult*pw,{...opt,kb:[+(dir.x*K).toFixed(2),+(dir.z*K).toFixed(2)]});});
-      // 밀려난 적끼리, 또는 밀려난 자리에 있던 적과 부딪히면 추가 피해 + 기절
-      const bump=new Set();for(const a of fin){for(const b of fin)if(a!==b&&Math.hypot(a.x-b.x,a.z-b.z)<(a.m.r+b.m.r)*1.3){bump.add(a.m);bump.add(b.m);}
-        for(const m of alive())if(!list.includes(m)&&Math.hypot(m.mesh.position.x-a.x,m.mesh.position.z-a.z)<(a.m.r+m.r)*1.3){bump.add(a.m);bump.add(m);}}
-      if(bump.size)setTimeout(()=>{if(mode!=='world')return;shared(()=>{for(const m of bump)if(m.dying===null)damageMonster(m,1.5*pw,{...opt,stun:1.5});});
-        for(const m of bump){const p=m.mesh.position.clone();p.y+=.8;VFX.burst(p,0xffe0a0,12,4,.4,{mix:0xffffff});}sfx('heavy',q,1);shakeT=Math.max(shakeT,.3);},260);
-      const p=q.clone();p.y+=1.0;VFX.slash(p,cam.yaw,0xd8b080,{r:S.range*.9,arc:2.2,tilt:-.6,dur:.26,dir:1});dustPuffs({x:q.x+f.x*2,y:q.y,z:q.z+f.z*2},1.4,8);
-      shakeT=Math.max(shakeT,.25);sfx('swing2',q,1);if(list.length)sfx('slam',q,.9);},320);
+    setTimeout(()=>{if(mode!=='world')return;const q=player.position,f=flatFwd(),W=2.6,MAX=9;
+      const list=alive().filter(m=>{const dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,u=dx*f.x+dz*f.z,v=Math.abs(dx*f.z-dz*f.x);return u>-.3&&u<MAX+m.r&&v<W/2+m.r;});
+      const far=list.length?Math.min(MAX,list.reduce((a,m)=>Math.max(a,Math.hypot(m.mesh.position.x-q.x,m.mesh.position.z-q.z)),2)+.5):MAX*.8;
+      sfx('throw',q,1);
+      axeThrowFx(f,far,()=>{if(mode!=='world')return;const K=7;
+        const fin=list.filter(m=>m.dying===null).map(m=>({m,x:m.mesh.position.x+dir.x*K,z:m.mesh.position.z+dir.z*K}));
+        shared(()=>{for(const e of fin)damageMonster(e.m,S.mult*pw,{...opt,kb:[+(dir.x*K).toFixed(2),+(dir.z*K).toFixed(2)]});});
+        const bump=new Set();for(const a of fin){for(const b of fin)if(a!==b&&Math.hypot(a.x-b.x,a.z-b.z)<(a.m.r+b.m.r)*1.3){bump.add(a.m);bump.add(b.m);}
+          for(const m of alive())if(!list.includes(m)&&Math.hypot(m.mesh.position.x-a.x,m.mesh.position.z-a.z)<(a.m.r+m.r)*1.3){bump.add(a.m);bump.add(m);}}
+        if(bump.size)setTimeout(()=>{if(mode!=='world')return;shared(()=>{for(const m of bump)if(m.dying===null)damageMonster(m,1.5*pw,{...opt,stun:1.5});});
+          for(const m of bump){const p=m.mesh.position.clone();p.y+=.8;VFX.burst(p,0xffe0a0,12,4,.4,{mix:0xffffff});}sfx('heavy',m0pos(),1);shakeT=Math.max(shakeT,.3);},260);
+        if(fin.length){sfx('slam',fin[0].m.mesh.position,.9);shakeT=Math.max(shakeT,.22);}},'fowler',true);},300);
     return null;}
   if(id==='uplift'){
     setTimeout(()=>{if(mode!=='world')return;const q=player.position,f=flatFwd(),list=cone(q,f,S.range,1.0);
@@ -8075,12 +8102,13 @@ function rockDebris(at,R,n){const m1=mat(0x6a5640),m2=mat(0x8a7458);for(let k=0;
   const a=Math.random()*6.28,r=Math.random()*R;m.position.set(at.x+Math.cos(a)*r,floorAt(at.x,at.z,at.y+.5)+.1,at.z+Math.sin(a)*r);scene.add(m);
   barbFx.push({g:m,t:0,life:.9+Math.random()*.3,kind:'rock',v:new THREE.Vector3(Math.cos(a)*(1+Math.random()*2),3.5+Math.random()*3,Math.sin(a)*(1+Math.random()*2)),w:new THREE.Vector3(Math.random()*9,Math.random()*9,0)});}}
 // 끌어오기: 손에서 사슬 달린 도끼가 날아갔다가, 걸린 적과 함께 땅을 긁으며 되돌아온다
-function axeThrowFx(ff,far,onHook){const T=P?gearOf(P).weapon:-1;const axe=stickWeapon('sword','barbarian',T);axe.rotation.x=Math.PI/2;const holder=new THREE.Group();holder.add(axe);scene.add(holder);
+function axeThrowFx(ff,far,onHook,job='barbarian',fly=false){const T=P?gearOf(P).weapon:-1;const axe=stickWeapon('sword',job,T);axe.rotation.x=Math.PI/2;const holder=new THREE.Group();holder.add(axe);scene.add(holder);
   // 손에 든 도끼는 날아가는 동안 숨긴다
   const held=[];const A=player&&player.userData.anime;if(A)for(const [W] of A.hold)if(W){W.visible=false;held.push(W);}if(viewModel&&viewModel.userData.R)for(const c of viewModel.userData.R.children)if(c.type==='Group'&&c.visible){c.visible=false;held.push(c);}
   const chain=new THREE.Group();scene.add(chain);const links=[];const lm=mat(0x4a4e56,{metalness:.8,roughness:.3});const lg=new THREE.CylinderGeometry(.016,.016,1,6);lg.translate(0,.5,0);lg.rotateX(Math.PI/2);
   const rope=new THREE.Mesh(lg,lm);chain.add(rope);links.push(rope);
-  barbFx.push({kind:'throw',holder,chain,links,lg,t:0,out:.17,back:.22,far,ff:{x:ff.x,z:ff.z},hooked:false,onHook,held});}
+  if(fly)rope.visible=false;
+  barbFx.push({kind:'throw',holder,chain,links,lg,t:0,out:fly?.26:.17,back:fly?.3:.22,far,ff:{x:ff.x,z:ff.z},hooked:false,onHook,held,fly});}
 function updateBarbFx(dt){
   for(let i=barbFx.length-1;i>=0;i--){const e=barbFx[i];e.t+=dt;
     if(e.kind==='crack'){const k=e.t/e.life;e.glow.opacity=k<.1?k/.1*.6:Math.max(0,.6*(1-(k-.1)/.35));e.dark.opacity=k<.6?.9:Math.max(0,.9*(1-(k-.6)/.4));
@@ -8095,9 +8123,9 @@ function updateBarbFx(dt){
       else{if(!e.hooked){e.hooked=true;e.onHook();}const k=Math.min(1,(e.t-e.out)/e.back);d=e.far*(1-k*k);}
       const hx=q.x+e.ff.x*Math.max(.6,d),hz=q.z+e.ff.z*Math.max(.6,d),gy=floorAt(hx,hz,q.y+1)+.25;
       // 날아갈 때는 손 높이에서 살짝 포물선, 돌아올 때는 땅을 긁는다
-      const hy=e.t<e.out?hand.y+Math.sin(e.t/e.out*Math.PI)*.4-(e.t/e.out)*(hand.y-gy):gy;
-      e.holder.position.set(hx,hy,hz);e.holder.rotation.set(0,Math.atan2(e.ff.x,e.ff.z),0);if(e.t<e.out)e.holder.children[0].rotation.z-=dt*28;
-      if(e.t>=e.out&&Math.random()<.35)dustPuffs({x:hx,y:gy,z:hz},.35,1);
+      const hy=e.fly?hand.y+Math.sin((e.t<e.out?e.t/e.out:(e.t-e.out)/e.back)*Math.PI)*.5:e.t<e.out?hand.y+Math.sin(e.t/e.out*Math.PI)*.4-(e.t/e.out)*(hand.y-gy):gy;
+      e.holder.position.set(hx,hy,hz);e.holder.rotation.set(0,Math.atan2(e.ff.x,e.ff.z),0);if(e.t<e.out||e.fly)e.holder.children[0].rotation.z-=dt*(e.fly?20:28);
+      if(!e.fly&&e.t>=e.out&&Math.random()<.35)dustPuffs({x:hx,y:gy,z:hz},.35,1);
       // 사슬: 손에서 도끼까지 고리를 늘어놓는다
       const A=hand,B=e.holder.position,rope=e.links[0];rope.position.copy(A);rope.lookAt(B);rope.scale.set(1,1,Math.max(.01,A.distanceTo(B)));
       if(e.t>=e.out+e.back){scene.remove(e.holder);scene.remove(e.chain);e.lg.dispose();for(const W of e.held||[])W.visible=true;barbFx.splice(i,1);}}}}
