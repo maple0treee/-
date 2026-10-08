@@ -24,6 +24,8 @@ const files = {
   '/SkeletonUtils.js': { file: 'SkeletonUtils.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=604800' },
 };
 // 미리 구운 NPC 모델 (public/npcbake/*.json)
+// 플레이어 애니 모델 (public/pmodel/*.json)
+try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'pmodel'))) if (/^[a-z0-9_]+\.json$/.test(fn)) files['/pmodel/' + fn] = { file: 'pmodel/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; } catch (e) {}
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'npcbake'))) if (/^[a-z0-9_]+\.json$/.test(fn)) files['/npcbake/' + fn] = { file: 'npcbake/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; } catch (e) {}
 for (const f of Object.values(files)) {
   f.body = fs.readFileSync(path.join(PUBLIC, f.file));
@@ -68,6 +70,7 @@ function cleanPresence(d) {
     g: typeof d.g === 'string' && /^[-0-9,]{0,24}$/.test(d.g) ? d.g : '',
     st: d.st ? 1 : 0,
     mo: typeof d.mo === 'string' && /^[a-z0-9]{0,16}$/.test(d.mo) ? d.mo : '',
+    ap: typeof d.ap === 'string' && /^[mf],[0-9a-f]{6},[0-9a-f]{6}$/.test(d.ap) ? d.ap : '',
   };
 }
 
