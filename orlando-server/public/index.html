@@ -1604,7 +1604,7 @@ const SKILLS={
     {id:'sprint',name:'질주',req:2,mp:6,cd:12,type:'buff',buff:{speed:1.6},dur:5,desc:'5초 동안 이동 속도 60% 증가'},
     {id:'poison',name:'독 단검',req:4,mp:8,cd:6,type:'proj',mult:1,dot:[.5,5],speed:28,size:.14,color:0x9be05a,desc:'단검을 던져 100% 피해, 5초 동안 중독'}],
   thief:[
-    {id:'reap',name:'처형',req:30,mp:10,cd:6,type:'loot',mult:2.6,range:2.8,color:0xe04040,desc:'단검으로 앞의 적 하나를 깊이 찌른 뒤 비틀어 뽑는다. 260% 피해. HP가 25% 미만인 적에게는 피해 2.5배'},
+    {id:'reap',name:'처형',req:30,mp:10,cd:6,type:'loot',mult:2.6,range:2.8,color:0xe04040,desc:'쿠크리로 앞의 적 하나를 깊이 찌른다. 260% 피해. HP가 25% 미만인 적에게는 피해 2.5배'},
     {id:'snare',name:'그물 던지기',req:32,mp:12,cd:10,type:'loot',mult:.6,range:17,radius:3.2,stun:3,color:0xc8b080,desc:'그물을 던져 떨어진 자리의 적들을 3초 동안 묶는다. 60% 피해'},
     {id:'quaff',name:'포션 마시기',req:35,mp:0,cd:20,type:'loot',dur:8,buff:{atk:1.3,speed:1.3},color:0xff6a6a,desc:'가진 포션 하나를 단숨에 들이켠다. 포션 효과가 2.5배가 되고, 8초 동안 공격력과 이동 속도 30% 증가'}],
   assassin:[
@@ -3945,10 +3945,24 @@ function pmAttach(g,job,gear,ap){
   if(S.quiver){const ch=A.by('J_Bip_C_UpperChest')||A.by('J_Bip_C_Chest');A.root.updateMatrixWorld(true);const cp=new THREE.Vector3();ch.getWorldPosition(cp);
     const tgt=new THREE.Vector3(.06,.0,-.17).add(cp);ch.add(S.quiver);S.quiver.position.copy(ch.worldToLocal(tgt));const cq=new THREE.Quaternion();ch.getWorldQuaternion(cq);
     S.quiver.quaternion.copy(cq.invert()).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),-.45));const ws=new THREE.Vector3();ch.getWorldScale(ws);S.quiver.scale.set(1/ws.x,1/ws.y,1/ws.z);S.quiver.traverse(o=>keep.add(o));}
+  {const held=new Set(A.hold.filter(h=>h[0]).map(h=>h[2]));for(const sd of ['L','R'])pmFingers(A,sd,held.has(sd)?'tight':'open');}
   if((gear||{}).acc>=0)pmAccessory(A,gear.acc);
   g.userData.anime=A;return true;}
 // 장신구: 반지는 오른손 가운뎃손가락, 목걸이·부적·용의 심장은 목에 건다
 const ACC_KIND=['ring','neck','amulet','ring','neck','ring','amulet','neck','ring','amulet','heart'];
+// 손가락: 무기를 쥔 손은 손잡이를 꽉 감아쥐고, 빈손은 힘을 빼 살짝 편다 (구운 주먹 자세에서 더 감거나 푼다)
+function pmFingers(A,sd,mode){const gi=A.grip&&A.grip[sd],H=A.by('J_Bip_'+sd+'_Hand');if(!gi||!H)return;
+  A.bones.forEach((b,i)=>{b.position.copy(A.rest[i].p);b.quaternion.copy(A.rest[i].q);});A.root.updateMatrixWorld(true);
+  const c=new THREE.Vector3().fromArray(gi.c).applyMatrix4(H.matrixWorld);const hq=new THREE.Quaternion();H.getWorldQuaternion(hq);const ax=new THREE.Vector3().fromArray(gi.a).applyQuaternion(hq).normalize();
+  const W=n=>{const v=new THREE.Vector3();A.by(n).getWorldPosition(v);return v;};
+  const rotW=(b,ang)=>{const pw=new THREE.Quaternion();b.parent.getWorldQuaternion(pw);const d=new THREE.Quaternion().setFromAxisAngle(ax,ang);b.quaternion.premultiply(pw.clone().invert().multiply(d).multiply(pw));b.updateMatrixWorld(true);};
+  const AMT=mode==='tight'?[0,.32,.38,.3]:[0,-.95,-1.0,-.7];
+  for(const F of ['Index','Middle','Ring','Little'])for(let k=1;k<=3;k++){const nm='J_Bip_'+sd+'_'+F+k,b=A.by(nm);if(!b)continue;
+    const tip=()=>k<3?W('J_Bip_'+sd+'_'+F+(k+1)):W('J_Bip_'+sd+'_'+F+'3').multiplyScalar(2).sub(W('J_Bip_'+sd+'_'+F+'2'));
+    const q0=b.quaternion.clone();rotW(b,.2);const d1=tip().distanceTo(c);b.quaternion.copy(q0);rotW(b,-.2);const d2=tip().distanceTo(c);b.quaternion.copy(q0);b.updateMatrixWorld(true);
+    const sg=d1<d2?1:-1;rotW(b,sg*AMT[k]);}
+  if(mode!=='tight'){const t1=A.by('J_Bip_'+sd+'_Thumb2');if(t1){const q=t1.quaternion.clone();t1.quaternion.slerp(new THREE.Quaternion(),.35);}}
+  A.bones.forEach((b,i)=>{if(/_(Index|Middle|Ring|Little|Thumb)\d/.test(b.name))A.rest[i].q.copy(b.quaternion);});}
 function pmAccessory(A,t){const kind=ACC_KIND[Math.max(0,Math.min(10,t))];const col=t>=10?0xff3020:tierCol(Math.min(9,t));
   const gold=new THREE.MeshStandardMaterial({color:t>=6?0xe8c060:0xc8ccd4,metalness:.85,roughness:.25});
   const gem=new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:t>=4?.9:.4,metalness:.3,roughness:.2});
@@ -4172,13 +4186,11 @@ function verb3(v,o,style){
       k(.34,{rx:-2.2,rz:.1,re:-1.3,lx:-2.05,lz:-.05,le:-1.1,ln:-.1,wr:0,tw:-.05});
       k(.52,{rx:-.6,re:-.1,lx:-.7,le:-.12,ln:.45,wr:1.3,cr:.35,tw:.03});
       k(.9,{rx:-.62,re:-.1,lx:-.72,le:-.12,ln:.42,wr:1.28,cr:.32});break;
-    case 'reap':           // 쿠크리 끝을 앞으로 겨눠 허리춤에 당겼다가, 왼손으로 적을 붙잡고 몸을 실어 깊숙이 찔러 넣은 뒤 90도 비틀어 위로 찢듯 뽑아낸다
-      k(.15,{rx:-.2,rz:.25,re:-2.1,wr:.2,tw:-.45,ln:-.05,cr:.22,lx:-.7,lz:-.1,le:-1.1});
-      k(.3,{rx:-1.45,rz:0,re:-.05,wr:.25,tw:.4,ln:.45,cr:.3,lx:-1.15,lz:-.05,le:-.5});
-      k(.42,{rx:-1.45,rz:0,re:-.05,wr:.25,tw:.42,ln:.47,cr:.32,lx:-1.15,lz:-.05,le:-.5,wy:-1.57});
-      k(.54,{rx:-1.43,rz:0,re:-.08,wr:.25,tw:.4,ln:.47,cr:.32,lx:-1.15,lz:-.05,le:-.5,wy:-1.57});
-      k(.7,{rx:-.95,rz:.15,re:-1.5,wr:-.35,tw:-.25,ln:.15,cr:.18,lx:-1.1,lz:-.05,le:-.4,wy:-1.57});
-      k(.9,{rx:-.5,rz:.12,re:-1.4,wr:0,tw:-.15,ln:.05,cr:.1,wy:-.4});break;
+    case 'reap':           // 쿠크리 끝을 앞으로 겨눠 허리춤에 당겼다가, 왼손으로 적을 붙잡고 몸을 실어 곧게 깊숙이 찔러 넣는다
+      k(.18,{rx:-.2,rz:.25,re:-2.1,wr:.2,tw:-.5,ln:-.05,cr:.22,lx:-.7,lz:-.1,le:-1.1});
+      k(.36,{rx:-1.5,rz:0,re:0,wr:.15,tw:.45,ln:.5,cr:.32,lx:-1.15,lz:-.05,le:-.5});
+      k(.7,{rx:-1.48,rz:0,re:-.02,wr:.15,tw:.45,ln:.5,cr:.32,lx:-1.15,lz:-.05,le:-.5});
+      k(.9,{rx:-.7,rz:.15,re:-1.4,wr:.1,tw:-.1,ln:.15,cr:.15});break;
     case 'snare':          // 왼손으로 그물을 어깨 뒤로 감았다가 앞으로 펼쳐 던진다
       k(.25,{lx:-1.9,lz:-.6,le:-1.3,tw:-.55,ln:-.1,rx:-.5,re:-1.3});
       k(.45,{lx:-1.35,lz:.25,le:-.1,tw:.5,ln:.3,cr:.15,rx:-.4,re:-1.4});
@@ -4395,9 +4407,8 @@ function verbFP(v,o,style){
       r(.52,{x:.04,y:-.45,z:-.68,rx:-.9});l(.52,{x:-.06,y:-.47,z:-.66,rx:-.86});
       r(.88,{x:.04,y:-.44,z:-.67,rx:-.88});l(.88,{x:-.06,y:-.46,z:-.65,rx:-.84});break;
     case 'reap':
-      r(.15,{x:.3,y:-.42,z:-.3,rx:-.4});r(.3,{x:.05,y:-.26,z:-.9,rx:-1.1});r(.42,{x:.05,y:-.26,z:-.9,rx:-1.1,rz:-1.57});r(.54,{x:.05,y:-.27,z:-.88,rx:-1.1,rz:-1.57});
-      r(.7,{x:.25,y:-.22,z:-.5,rx:-.5,rz:-1.4});
-      l(.3,{x:-.2,y:-.3,z:-.8});l(.6,{x:-.25,y:-.32,z:-.75});break;
+      r(.18,{x:.32,y:-.42,z:-.25,rx:-.4});r(.36,{x:.05,y:-.26,z:-1.0,rx:-1.1});r(.7,{x:.05,y:-.26,z:-.98,rx:-1.1});r(.9,{x:.25,y:-.3,z:-.55,rx:-.4});
+      l(.36,{x:-.2,y:-.3,z:-.8});l(.7,{x:-.22,y:-.31,z:-.78});break;
     case 'snare':
       l(.25,{x:-.45,y:.1,z:-.2});l(.45,{x:-.1,y:-.05,z:-.95});l(.85,{x:-.12,y:-.2,z:-.85});break;
     case 'quaff':
@@ -6200,7 +6211,7 @@ function makeViewModel(job){
   else if(style==='sword'){const w=stickWeapon(style,job,G.weapon);w.rotation.set(-.5,0,-.12);w.scale.setScalar(job==='barbarian'||job==='fowler'?.6:.85);if(job==='barbarian'||job==='fowler')w.position.y=-.08;R.add(w);
     if((G.sub??-1)>=0){L.visible=true;u.hasL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
   else if(style==='shield'){R.visible=false;u.noR=true;L.visible=true;u.hasL=true;const sh=makeShield('tower',G.weapon);mountShield(sh,'tower',.82,Math.PI-.35);const sg=new THREE.Group();sg.add(sh);L.add(sg);u.shieldG=sg;}
-  else if(style==='dagger'){(ONE_DAGGER[job]?[R]:[R,L]).forEach((h,k)=>{let w=stickWeapon('dagger',job,G.weapon);if(job==='thief'){const g=new THREE.Group();w.rotation.y=Math.PI/2;g.add(w);w=g;}w.rotation.set(-.6,0,k?.22:-.22);w.scale.setScalar(.95);h.add(w);});L.visible=!ONE_DAGGER[job];if(ONE_DAGGER[job])u.oneD=1;}
+  else if(style==='dagger'){(ONE_DAGGER[job]?[R]:[R,L]).forEach((h,k)=>{let w=stickWeapon('dagger',job,G.weapon);if(job==='thief'){const g=new THREE.Group();w.rotation.y=Math.PI/2;g.add(w);w=g;}w.rotation.set(-.45,0,k?.55:-.55);w.scale.setScalar(.95);h.add(w);});L.visible=!ONE_DAGGER[job];if(ONE_DAGGER[job])u.oneD=1;}
   else if(style==='staff'){const w=stickWeapon('staff',job,G.weapon);w.scale.setScalar(.62);w.position.y=-.1;w.rotation.set(-.12,0,-.08);R.add(w);u.orb=w.userData.orb;u.ring=w.userData.ring;L.visible=true;}
   else if(style==='bow'){const w=stickWeapon('bow',job,G.weapon);w.rotation.set(0,Math.PI,0);w.scale.setScalar(.52);L.add(w);L.visible=true;
     const a=arrowMesh();a.rotation.y=Math.PI;a.visible=false;R.add(a);u.arrow=a;}
@@ -6210,7 +6221,8 @@ function makeViewModel(job){
   root.userData=u;
   // 3인칭과 같은 애니 몸의 팔: 손 묶음(무기)은 그대로 두고 팔·주먹만 바꾼다
   if(P&&P.ap&&PM.data[P.ap.g]){try{const A=pmFPBuild(job,Gq,P.ap);if(A){root.add(A.root);u.A=A;
-    for(const h of [R,L]){for(const m of h.userData.skin)m.visible=false;h.userData.arm.visible=false;h.userData.wpn=h.children.find(c=>!h.userData.skin.includes(c)&&c.visible!==false)||null;}}}catch(e){console.warn(e);}}
+    for(const h of [R,L]){for(const m of h.userData.skin)m.visible=false;h.userData.arm.visible=false;h.userData.wpn=h.children.find(c=>!h.userData.skin.includes(c)&&c.visible!==false)||null;}
+    pmFingers(A,A.fp.side.R,R.userData.wpn?'tight':'open');pmFingers(A,A.fp.side.L,L.userData.wpn?'tight':'open');}}catch(e){console.warn(e);}}
   return root;
 }
 function setViewModel(job){if(viewModel)camera.remove(viewModel);viewModel=makeViewModel(job);camera.add(viewModel);}
@@ -8173,8 +8185,7 @@ function lootSkill(S,id,pw,opt){
   const q0=player.position;
   if(id==='reap'){const tg=frontTarget(S.range);
     setTimeout(()=>{if(mode!=='world')return;const m=tg&&tg.dying===null?tg:frontTarget(S.range);if(!m)return;
-      shared(()=>damageMonster(m,S.mult*pw,{...opt,exec25:true}));sfx('hit3',m.mesh.position,1);const c=mCenter(m);VFX.burst(c,0xc02020,10,2.5,.3,{mix:0x601010});
-      setTimeout(()=>{if(mode!=='world')return;const c2=mCenter(m);VFX.burst(c2,0xd02020,22,4.5,.45,{mix:0x701010,up:.3,grav:6});spawnFx(0xd02020,c2,.9,.3);sfx('heavy',c2,.6);shakeT=Math.max(shakeT,.12);},230);},200);
+      shared(()=>damageMonster(m,S.mult*pw,{...opt,exec25:true}));sfx('hit3',m.mesh.position,1);const c=mCenter(m);VFX.burst(c,0xd02020,22,4.5,.45,{mix:0x701010,up:.3,grav:6});spawnFx(0xd02020,c,.9,.3);shakeT=Math.max(shakeT,.12);},240);
     const f=flatFwd();return q0.clone().add(new THREE.Vector3(f.x*1.6,1.2,f.z*1.6));}
   if(id==='snare'){const f=flatFwd();const tg=frontTarget(S.range,.75);let pt;
     if(tg)pt=tg.mesh.position.clone();else pt=new THREE.Vector3(q0.x+f.x*S.range*.7,0,q0.z+f.z*S.range*.7);pt.y=heightAt(pt.x,pt.z);
