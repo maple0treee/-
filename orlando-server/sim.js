@@ -508,7 +508,7 @@
         if (m.boss && !inRotunda(c.pres)) return;
         if (m.dragon && !inLair(c.pres)) return;
         const st = Number(d.st);
-        if (isFinite(st) && st > 0) m.stun = Math.max(m.stun, Math.min(st, 4) * (m.boss ? 0.25 : m.dragon ? 0 : 1));
+        if (isFinite(st) && st > 0) m.stun = Math.max(m.stun, Math.min(st, 8) * (m.boss ? 0.25 : m.dragon ? 0 : 1));
         // 도발: 잠시 동안 이 사람만 노린다 · 밀치기: 맞은 방향으로 밀려난다 (보스·용은 꿈쩍 않는다)
         const tau = Number(d.tau);
         if (isFinite(tau) && tau > 0 && !m.dragon) { m.aggroOn = id; m.taunt = Math.min(tau, 5); }
