@@ -1560,8 +1560,8 @@ const JOBS={
   barbarian:{name:'워리어',from:'swordsman',tier:2,bonus:[70,9,3,15],color:0x8a3a1e,weapon:'sword',noun:'도끼',crit:.1,pitch:'검을 내려놓고 커다란 도끼를 든다. 내려찍고, 땅을 구르고, 끌어온다. 이어 쓰면 기술이 바뀌고, 피를 볼수록 살아난다. 일반 공격을 맞힐 때마다 스킬 재사용 대기가 0.7초씩 줄어든다.'},
   guardian:{name:'방패병',from:'warrior',adv:['fowler'],bonus:[50,1,6,10],color:0x5f6f86,weapon:'shield',crit:.06,pitch:'큰 방패 하나로 버티고, 밀치고, 뛰어올라 내려찍는다. 공격은 느리지만 최대 HP가 곧 힘이 된다.'},
   fowler:{name:'파울러',from:'guardian',tier:2,bonus:[90,8,5,15],color:0x6a5440,weapon:'sword',noun:'망치',crit:.08,pitch:'방패를 내려놓고 커다란 워해머를 든다. 던지고, 띄우고, 땅을 흔들고, 멈추지 않고 돌진한다.'},
-  thief:{name:'약탈자',from:'rogue',bonus:[25,4,2,10],color:0x5a4a2f,weapon:'dagger',crit:.2,pitch:'단검 한 자루와 그물, 그리고 허리춤의 포션. 붙잡고, 들이켜고, 끝장낸다.'},
-  assassin:{name:'암살자',from:'rogue',bonus:[10,6,1,10],color:0x2b2633,weapon:'dagger',crit:.28,pitch:'수리검으로 표식을 새기고, 땅을 깨우며 파고들어, 거꾸로 쥔 단검으로 끝낸다.'},
+  thief:{name:'약탈자',from:'rogue',aspd:1.45,bmul:1.9,bonus:[25,4,2,10],color:0x5a4a2f,weapon:'dagger',crit:.2,pitch:'단검 한 자루와 그물, 그리고 허리춤의 포션. 붙잡고, 들이켜고, 끝장낸다.'},
+  assassin:{name:'암살자',from:'rogue',aspd:.72,spd:.18,hpMul:.75,bonus:[10,6,1,10],color:0x2b2633,weapon:'dagger',crit:.28,pitch:'수리검으로 표식을 새기고, 땅을 깨우며 파고들어, 거꾸로 쥔 단검으로 끝낸다.'},
   cleric:{name:'성직자',from:'mage',bonus:[35,2,3,20],color:0xd7cfb6,weapon:'staff',crit:.06,pitch:'빛으로 상처를 닫고 적을 태운다. 오래 버티는 마법.'},
   wizard:{name:'메이지',from:'mage',bonus:[10,7,1,25],color:0x4b2f7a,weapon:'staff',crit:.1,pitch:'번개와 눈보라, 그리고 메테오. 순수한 파괴의 마법.'},
   hunter:{name:'사냥꾼',from:'archer',bonus:[25,3,3,10],color:0x5b4a2c,weapon:'bow',crit:.12,pitch:'덫과 독화살로 짐승을 몰아간다.'},
@@ -1751,7 +1751,8 @@ function computeStats(P){
   P.atk=Math.round(b.atk+b.grow[1]*(P.lv-1)+bon[1]);
   P.def=Math.round(b.def+b.grow[2]*(P.lv-1)+bon[2]);
   P.maxmp=Math.round(b.mp+b.grow[3]*(P.lv-1)+bon[3]);
-  P.critBonus=0;P.spdBonus=0;
+  if(a.hpMul)P.maxhp=Math.round(P.maxhp*a.hpMul);
+  P.critBonus=0;P.spdBonus=a.spd||0;
   if(P.equip)for(const s in P.equip){const id=P.equip[s];if(!id||!ITEMS[id])continue;const st=gearStats(id,(P.enh||{})[s]);
     P.atk+=st.atk||0;P.def+=st.def||0;P.maxhp+=st.hp||0;P.maxmp+=st.mp||0;P.critBonus+=st.crit||0;P.spdBonus+=st.spd||0;}
   P.hp=Math.min(P.hp??P.maxhp,P.maxhp);P.mp=Math.min(P.mp??P.maxmp,P.maxmp);
@@ -3708,7 +3709,7 @@ function makeStickPlayer(job,gear){
     if(style==='sword'&&(G.sub??-1)>=0){const sh=new THREE.Group();const S2=makeShield('buckler',G.sub);mountShield(S2,'buckler',.8);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;}}
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   const bodyG=new THREE.Group();while(g.children.length)bodyG.add(g.children[0]);g.add(bodyG);
-  g.userData={mats,stick:{L,R,AL,AR,upper,torso,head,style,w,w2,shield,nock,body:bodyG,one:!!ONE_DAGGER[job]},weapon:w,head,torso};
+  g.userData={mats,stick:{L,R,AL,AR,upper,torso,head,style,w,w2,shield,nock,body:bodyG,one:!!ONE_DAGGER[job],fwd:job==='thief'},weapon:w,head,torso};
   return g;
 }
 /* 공격 동작: 직업(무기)마다 다른 열쇠 자세를 시간에 따라 섞는다
@@ -3744,6 +3745,8 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   if(atk&&mo&&mo.k3){const idle=STICK_IDLE[S.style]||STICK_IDLE.sword,io={};M3.forEach((n,i)=>io[n]=i<9?idle[i]:0);
     const v=blendKeys(mo.k3,swing,io,M3);q=v.slice(0,9);ex={sp:v[9],lf:v[10],cr:v[11],wy:v[12],kr:v[13]};}
   else q=stickPose(S.style,atk?swing:1,alt);
+  // 약탈자: 단검 날이 늘 앞을 향하게 쥔다
+  if(S.fwd){q=q.slice();if(atk&&mo&&mo.k3)q[8]=(q[8]||0)+1.5;else q[8]=Math.max(q[8]||0,1.5);}
   // 몸 전체: 회전, 뜨기, 웅크리기
   {const sp=ex?ex.sp:0,lf=ex?Math.max(0,ex.lf):0,cr=ex?ex.cr:0;
     S.body.rotation.y=sp;S.body.position.y=lf-cr*.32;
@@ -4039,7 +4042,7 @@ const MOTION_OF={
   // 도적 · 도둑 · 어쌔신
   ambush:{v:'thrust',dur:.4},sprint:{v:'ready',dur:.6},poison:{v:'throw',dur:.5},
   reap:{v:'reap',dur:.65},snare:{v:'snare',dur:.6},quaff:{v:'quaff',dur:1.0},
-  shuriken:{v:'shuriken',dur:.45},quakedash:{v:'dash',dur:.5,a:1.3},deepstab:{v:'deepstab',dur:.75},
+  shuriken:{v:'shuriken',dur:.45},quakedash:{v:'dash',dur:.5,a:1.3},deepstab:{v:'deepstab',dur:.85},
   // 마법사 · 성직자 · 메이지
   fireball:{v:'cast',dur:.5},frost:{v:'cast',dur:.4,sd:-1,a:.8},ring:{v:'castdown',dur:.6},healing:{v:'pray',dur:.8},holy:{v:'castup',dur:.7},bless:{v:'pray',dur:.6,a:.75,sd:-1},
   bolt:{v:'cast',dur:.35,a:1.35},blizzard:{v:'channel',dur:.95,sd:-1},meteor:{v:'castup',j:.25,dur:1.0,a:1.2},
@@ -4187,12 +4190,14 @@ function verb3(v,o,style){
       k(.25,{lx:-1.2,lz:.6,le:-1.8,tw:-.35,rx:-.4,re:-1.4});
       k(.45,{lx:-1.5,lz:-.4,le:-.05,tw:.35,ln:.15,rx:-.4,re:-1.4});
       k(.8,{lx:-1.4,lz:-.35,le:-.1,tw:.3,ln:.12,rx:-.4,re:-1.4});break;
-    case 'deepstab':       // 단검을 위로 던져 공중에서 돌린 뒤 거꾸로 잡고, 몸을 실어 아래로 깊게 찍는다
-      k(.12,{rx:-1.0,re:-1.7,wr:0,tw:-.2,cr:.1});
-      k(.3,{rx:-2.5,re:-.6,wr:3.14,ln:-.15,tw:-.2,lx:-1.0,le:-1.0,lf:.06});
-      k(.4,{rx:-2.7,re:-.5,wr:3.14,ln:-.2,lf:.1,tw:-.3,lx:-1.1,le:-.9});
-      k(.55,{rx:-.7,re:-.15,wr:3.14,ln:.5,cr:.35,tw:.35,lf:0,lx:-.6,le:-.8});
-      k(.85,{rx:-.75,re:-.2,wr:3.14,ln:.45,cr:.3,tw:.3,lx:-.6,le:-.8});break;
+    case 'deepstab':       // 단검을 위로 튕겨 올려 잠깐 공중에 띄우고, 떨어지는 단검을 거꾸로 낚아채 몸을 실어 아래로 깊게 찍는다
+      k(.08,{rx:-1.0,re:-1.7,wr:0,tw:-.2,cr:.1});
+      k(.15,{rx:-1.75,re:-.8,wr:-.4,ln:-.05,tw:-.15});
+      k(.28,{rx:-1.2,re:-1.3,wr:0,ln:-.15,lx:-.9,le:-1.0,tw:-.2});
+      k(.42,{rx:-2.75,re:-.3,wr:3.14,ln:-.25,lf:.1,tw:-.3,lx:-1.0,le:-.9});
+      k(.47,{rx:-2.75,re:-.3,wr:3.14,ln:-.22,lf:.1,tw:-.3,lx:-1.0,le:-.9});
+      k(.6,{rx:-.7,re:-.15,wr:3.14,ln:.5,cr:.35,tw:.35,lf:0,lx:-.6,le:-.8});
+      k(.88,{rx:-.75,re:-.2,wr:3.14,ln:.45,cr:.3,tw:.3,lx:-.6,le:-.8});break;
     case 'axebasic':       // 두 손으로 도끼를 어깨 위로 올렸다가 대각선으로 내려친다 (번갈아 반대쪽)
       k(.36,{rx:-2.7,rz:.55*sd,re:-1.0,lx:-2.5,lz:.25*sd,le:-1.2,wr:-.5,tw:-.55*sd,ln:-.15,cr:.12});
       k(.52,{rx:-.75,rz:-.45*sd,re:-.15,lx:-.85,lz:.35*sd,le:-.25,wr:1.1,tw:.55*sd,ln:.35,cr:.25});
@@ -4390,7 +4395,8 @@ function verbFP(v,o,style){
     case 'shuriken':
       l(.25,{x:.05,y:-.25,z:-.4,ry:.6});l(.45,{x:-.25,y:-.15,z:-.95,ry:-.4});l(.8,{x:-.3,y:-.2,z:-.85});break;
     case 'deepstab':
-      r(.12,{x:.3,y:-.3,z:-.45,rx:.4});r(.3,{x:.18,y:.25,z:-.5,rx:2.6});r(.4,{x:.15,y:.3,z:-.55,rx:3.0});r(.55,{x:.05,y:-.35,z:-.85,rx:3.3});r(.85,{x:.08,y:-.35,z:-.8,rx:3.2});break;
+      r(.08,{x:.25,y:-.3,z:-.5,rx:.3});r(.15,{x:.2,y:-.05,z:-.55,rx:.8});r(.28,{x:.22,y:-.28,z:-.55,rx:.2});r(.42,{x:.15,y:.28,z:-.55,rx:3.0});
+      r(.6,{x:.05,y:-.35,z:-.85,rx:3.3});r(.88,{x:.08,y:-.35,z:-.8,rx:3.2});break;
     case 'axebasic':
       r(.36,{x:.3*sd,y:.22,z:-.3,rx:1.3,rz:-.5*sd});l(.36,{x:.18*sd,y:.16,z:-.32});
       r(.52,{x:-.22*sd,y:-.42,z:-.68,rx:-.9,rz:.6*sd});l(.52,{x:-.3*sd,y:-.44,z:-.62});
@@ -6134,7 +6140,7 @@ function animBiped(mesh,speed,t){
 /* ---------- 1인칭 손 ---------- */
 let viewModel=null;
 const SWING_SPD={sword:2.1,shield:.95,dagger:2.8,staff:1.85,bow:1.8};
-const swingSpd=job=>P&&!P.equip.weapon?2.6:job==='swordsman'||job==='swordmaster'?(job==='swordsman'?2.4:2.7)*(1+famLv()*.05*(P&&P.buffs.fam?P.famN||0:0)):SWING_SPD[JOBS[job]?(JOBS[job].weapon):'sword']||2;
+const swingSpd=job=>P&&!P.equip.weapon?2.6:JOBS[job]&&JOBS[job].aspd?SWING_SPD.dagger/JOBS[job].aspd:job==='swordsman'||job==='swordmaster'?(job==='swordsman'?2.4:2.7)*(1+famLv()*.05*(P&&P.buffs.fam?P.famN||0:0)):SWING_SPD[JOBS[job]?(JOBS[job].weapon):'sword']||2;
 function fpHand(side,root,skinC=0xf6dccb,sleeveC=0x24201c){
   const g=new THREE.Group();
   // 주먹: 손등이 조금 넓은 둥근 주먹 + 엄지
@@ -7242,7 +7248,7 @@ function basicAttackInner(){
   if(!P.equip.weapon){  // 맨손: 모든 직업이 같다
     basicCd=BASIC.fist.cd;swingT=0;swingN++;myMo=null;myMoId='';sfx('punch');
     setTimeout(()=>{if(mode!=='world'||!P)return;shared(()=>singleHit(BASIC.fist.range,BASIC.fist.mult,{color:0xffe8c8}));const f=flatFwd(),q=player.position;VFX.burst(new THREE.Vector3(q.x+f.x*1.3,q.y+1.3,q.z+f.z*1.3),0xffe8c8,8,2.5,.25,{up:.1});},90);return;}
-  const B=BASIC[JOBS[P.job].weapon];basicCd=B.cd*(P.job==='swordsman'?.86:P.job==='swordmaster'?.75:1)/(1+famLv()*.05*(P.famN||0));swingT=0;swingN++;myMo=null;myMoId='';if(/^(warrior|swordsman|swordmaster|barbarian)$/.test(P.job)&&P.equip.weapon)sfx('w_swing');else sfxWeapon(JOBS[P.job].weapon);
+  const B=BASIC[JOBS[P.job].weapon];basicCd=B.cd*(P.job==='swordsman'?.86:P.job==='swordmaster'?.75:1)*(P.equip.weapon&&JOBS[P.job].aspd||1)/(1+famLv()*.05*(P.famN||0));swingT=0;swingN++;myMo=null;myMoId='';if(/^(warrior|swordsman|swordmaster|barbarian)$/.test(P.job)&&P.equip.weapon)sfx('w_swing');else sfxWeapon(JOBS[P.job].weapon);
   // 방패병: 크게 휘둘러서, 방패가 앞으로 나가는 순간(약 0.5초 뒤)에 맞는다
   if(B.kind==='melee'&&P.job==='fowler'){const now=performance.now();fowlN=now-fowlAt<1300?(fowlN%3)+1:1;fowlAt=now;const st=fowlN,sw=swingN;
     basicCd=st===3?1.15:.8;myMoId='hb'+st;myMo=motionFor('sword',myMoId);
@@ -7259,7 +7265,7 @@ function basicAttackInner(){
       if(n){shakeT=Math.max(shakeT,.07);sfx('heavy',q,.6);}},300);return;}
   if(B.kind==='melee'&&JOBS[P.job].weapon==='shield'){const sw=swingN;setTimeout(()=>{if(mode!=='world'||!P||swingN!==sw)return;const n=shared(()=>meleeHit(B.range,B.mult,{color:0xffffff}));
       const q=player.position,f=flatFwd();if(n)shakeT=Math.max(shakeT,.08);VFX.burst(new THREE.Vector3(q.x+f.x*1.6,q.y+1.1,q.z+f.z*1.6),0xdde8ff,n?16:8,n?4:2.5,.35,{mix:0xffffff});sfx(n?'block':'swing2',null,.7);slashFx(player.position,cam.yaw,'shield',null,sw%2===1);},520);return;}
-  if(B.kind==='melee'){const nHit=meleeHit(B.range,B.mult,{color:0xffffff});
+  if(B.kind==='melee'){const nHit=meleeHit(B.range,B.mult*(JOBS[P.job].bmul||1),{color:0xffffff});
     // 익숙한 감각: 적중했을 때만 쌓인다
     if(nHit>0&&P.skills.familiar){P.famN=Math.min(5,(P.famN||0)+1);P.buffs.fam={v:P.famN,t:4,max:4};}
    slashFx(player.position,cam.yaw,JOBS[P.job].weapon,null,swingN%2===1);}
@@ -8160,10 +8166,11 @@ function lootSkill(S,id,pw,opt){
         if(e.t>fl+hold){mat.opacity=Math.max(0,1-(e.t-fl-hold)/.4);if(e.t>fl+hold+.4)return false;}}});},270);
     return pt.clone().setY(pt.y+.5);}
   if(id==='quaff'){const pid=pickPotion();if(!pid)return null;const I=ITEMS[pid];const {g:bot,col}=bottleMesh(pid);
-    // 3인칭: 입 앞으로 / 1인칭: 왼손에
-    scene.add(bot);let fpB=null;if(viewModel&&viewModel.userData&&viewModel.userData.L){fpB=bottleMesh(pid).g;fpB.scale.setScalar(1.4);fpB.rotation.z=.6;viewModel.userData.L.add(fpB);viewModel.userData.L.visible=true;}
-    rogueFx.push({t:0,o:bot,up:(e)=>{const q=player.position,f=flatFwd(),k=Math.min(1,e.t/.35);bot.position.set(q.x+f.x*(.45-.2*k)-f.z*.18,q.y+1.1+.45*k,q.z+f.z*(.45-.2*k)+f.x*.18);bot.rotation.set(-f.z*k*2.2,0,f.x*k*2.2);
-      if(e.t>.85){if(fpB&&fpB.parent)fpB.parent.remove(fpB);return false;}}});
+    // 3인칭은 몸의 왼손에, 1인칭은 화면의 왼손에 하나씩만 든다
+    const An=player.userData&&player.userData.anime,lh=An&&An.hold&&An.hold[1]?An.hold[1][1]:(player.userData.stick?player.userData.stick.AL.hand:null);
+    if(lh){bot.position.set(0,-.02,.06);bot.rotation.x=Math.PI;lh.add(bot);}
+    let fpB=null;if(viewModel&&viewModel.userData&&viewModel.userData.L){fpB=bottleMesh(pid).g;fpB.scale.setScalar(1.4);fpB.rotation.z=.6;viewModel.userData.L.add(fpB);}
+    rogueFx.push({t:0,o:null,up:(e)=>{if(e.t>.95){if(bot.parent)bot.parent.remove(bot);if(fpB&&fpB.parent)fpB.parent.remove(fpB);return false;}}});
     setTimeout(()=>{if(mode!=='world'||!P)return;if(countOf(pid)<=0)return;removeItem(pid);sfx('potion');const m25=2.5;
       if(I.hp)heal(P.maxhp*I.hp*m25);if(I.mp){P.mp=Math.min(P.maxmp,P.mp+P.maxmp*I.mp*m25);}
       if(I.buff)for(const [k,v] of Object.entries(I.buff))P.buffs[k]={v:1+(v-1)*m25,t:I.dur};
@@ -8191,21 +8198,23 @@ function sinSkill(S,id,pw,opt){
     return q0.clone().add(new THREE.Vector3(0,1,0));}
   if(id==='deepstab'){flipDagger();
     setTimeout(()=>{if(mode!=='world')return;const m=frontTarget(S.range);if(!m)return;shared(()=>damageMonster(m,S.mult*pw,opt));const c=mCenter(m);
-      VFX.burst(c,0xb060ff,20,4,.4,{mix:0xffffff});VFX.burst(c,0xc02020,14,3,.4,{grav:6});sfx('hit3',c,1);shakeT=Math.max(shakeT,.14);},410);
+      VFX.burst(c,0xb060ff,20,4,.4,{mix:0xffffff});VFX.burst(c,0xc02020,14,3,.4,{grav:6});sfx('hit3',c,1);shakeT=Math.max(shakeT,.14);},510);
     const f=flatFwd();return q0.clone().add(new THREE.Vector3(f.x*1.6,1.1,f.z*1.6));}
   return null;}
-// 깊게 찌르기: 손에 든 단검을 잠깐 숨기고, 똑같은 단검이 손에서 위로 튀어 오르며 돌다가 다시 손으로 떨어진다
+// 깊게 찌르기: 손에서 튕겨 올린 단검이 잠깐 공중에 떠 돌다가, 위로 뻗은 손에 거꾸로 잡힌다
 function flipDagger(){
-  const A=player.userData&&player.userData.anime,hold=A&&A.hold?A.hold.find(h=>h[2]==='R')||A.hold[0]:null,px=hold?hold[1]:null;
-  const tier=gearOf(P).weapon;const w=stickWeapon('dagger',P.job,tier);w.scale.setScalar(A?(PM.scale[P.ap.g]||1.08):1);scene.add(w);
-  if(px)px.visible=false;
-  rogueFx.push({t:0,o:w,up:(e)=>{const T=e.t,D=.3;let hp=new THREE.Vector3();if(px){px.getWorldPosition(hp);}else{hp.copy(player.position);hp.y+=1.5;}
-    if(T>.08&&T<.08+D){const k=(T-.08)/D;w.visible=true;w.position.set(hp.x,hp.y+Math.sin(k*Math.PI)*.75,hp.z);w.rotation.set(k*Math.PI*3,player.rotation.y,0);}else w.visible=false;
-    if(T>=.08+D){if(px)px.visible=true;return false;}}});
-  // 1인칭
-  const u=viewModel&&viewModel.userData,wp=u&&u.R&&u.R.userData.wpn;if(wp){const fw=stickWeapon('dagger',P.job,tier);fw.scale.setScalar(.95);const base=new THREE.Group();base.add(fw);viewModel.add(base);
-    rogueFx.push({t:0,o:null,up:(e)=>{const T=e.t,D=.3;if(T>.08&&T<.08+D){const k=(T-.08)/D;wp.visible=false;base.visible=true;base.position.set(u.R.position.x,u.R.position.y+.15+Math.sin(k*Math.PI)*.45,u.R.position.z);fw.rotation.set(k*Math.PI*3,0,0);}
-      else base.visible=false;if(T>=.08+D){wp.visible=true;viewModel.remove(base);return false;}}});}}
+  const TR=.13,TC=.36;// 놓는 때, 잡는 때 (초)
+  const A=player.userData&&player.userData.anime,px=A&&A.hold&&A.hold[0]?A.hold[0][1]:(player.userData.stick?player.userData.stick.AR.hand:null);
+  const tier=gearOf(P).weapon;const w=stickWeapon('dagger',P.job,tier);w.rotation.order='YXZ';w.visible=false;scene.add(w);
+  const hpos=()=>{const v=new THREE.Vector3();if(px)px.getWorldPosition(v);else{v.copy(player.position);v.y+=1.4;}return v;};let s0=null;
+  rogueFx.push({t:0,o:w,up:(e)=>{const T=e.t;
+    if(T>=TR&&T<TC){if(!s0){s0=hpos();if(px)px.visible=false;}const k=(T-TR)/(TC-TR),h1=hpos(),top=Math.max(s0.y,h1.y)+.75;
+      w.visible=!cam.third?false:true;w.position.set(s0.x+(h1.x-s0.x)*k,s0.y+(h1.y-s0.y)*k+Math.sin(k*Math.PI)*(top-Math.max(s0.y,h1.y)),s0.z+(h1.z-s0.z)*k);w.rotation.set(k*Math.PI*2.5,cam.yaw,0);}
+    if(T>=TC){if(px)px.visible=true;return false;}}});
+  const u=viewModel&&viewModel.userData,wp=u&&u.R&&u.R.userData.wpn;if(wp){const fw=stickWeapon('dagger',P.job,tier);fw.scale.setScalar(.95);const base=new THREE.Group();base.add(fw);base.visible=false;viewModel.add(base);let f0=null;
+    rogueFx.push({t:0,o:null,up:(e)=>{const T=e.t;if(T>=TR&&T<TC){if(!f0)f0=u.R.position.clone();const k=(T-TR)/(TC-TR),p1=u.R.position;wp.visible=false;base.visible=true;
+        base.position.set(f0.x+(p1.x-f0.x)*k,f0.y+(p1.y-f0.y)*k+.12+Math.sin(k*Math.PI)*.5,f0.z+(p1.z-f0.z)*k);fw.rotation.set(-.6+k*Math.PI*2.5,0,0);}
+      if(T>=TC){wp.visible=true;viewModel.remove(base);return false;}}});}}
 /* ---------- 파울러 ---------- */
 const fowlZones=[];const m0pos=()=>player.position;
 function hurlTarget(S){const q0=player.position,f0=flatFwd();let tg=null,bd=1e9;
