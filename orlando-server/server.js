@@ -11,7 +11,7 @@ const createSim = require('./sim.js');
 const OR = require('./shared.js');
 
 const PORT = process.env.PORT || 3000;
-const VERSION = 9; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
+const VERSION = 10; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
 const PUBLIC = path.join(__dirname, 'public');
 
 // 파일을 미리 읽어 두고(압축본 포함) 바로 보내 준다
@@ -82,7 +82,7 @@ const sim = createSim({ cols });
 setInterval(() => sim.tick(), sim.TICK * 1000);
 
 // 의뢰 게시판: 모든 사람이 같은 게시판을 본다. 누가 포스터를 떼어 가면 다른 사람 게시판에서도 사라진다
-const boards = { parbos: [], harena: [] };
+const boards = {}; for (const k in OR.BOARDS) boards[k] = [];
 let bseq = 0;
 const newPoster = (b) => OR.makePoster(b, Math.random, 'q' + (++bseq).toString(36) + Math.random().toString(36).slice(2, 5));
 for (const b in boards) while (boards[b].length < OR.BOARD_CAP[b]) boards[b].push(newPoster(b));

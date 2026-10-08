@@ -139,20 +139,47 @@
   const ZONE_LEVELS = { village: [0, 0], forest: [1, 4], plains: [4, 7], swamp: [7, 11], ruins: [11, 15], dungeon: [18, 22], road: [12, 16], town: [0, 0], wwest: [20, 30], wnorth: [28, 40], wsouth: [38, 50], weast: [48, 60] };
 
   // ---------- 의뢰 게시판 포스터 ----------
-  // 파르보스 게시판: Lv 1–20 / 하레나 게시판: Lv 20–60. 서버(또는 혼자 할 때는 내 게임)가 만들어 모두에게 같은 게시판을 보여 준다
-  const BOARD_CAP = { parbos: 12, harena: 28 };
-  const BOARD_ZONES = { parbos: ['forest', 'plains', 'swamp', 'ruins', 'road'], harena: ['wwest', 'wnorth', 'wsouth', 'weast'] };
-  const GIVERS = ['방앗간 주인 헬가', '양치기 도란', '약초꾼 세이', '대장장이 견습생 핀', '상인 조합장 오브리', '여관 단골 크로스', '순례자 이나', '역참지기 마렉', '광부 브룩', '사냥꾼 리사', '경비병 토비', '기록관 서기 엘름', '행상인 니코', '우물지기 할멈', '목수 바일'];
-  const WHY = ['길목을 막고 있어 짐마차가 지나가질 못합니다.', '밤마다 가축 우리를 노립니다.', '우물가까지 내려와 아이들이 무서워해요.', '상단 호위가 벌써 둘이나 다쳤습니다.', '약초밭을 엉망으로 만들어 놓았어요.', '순례길이 끊겨 기도하러 갈 수가 없습니다.', '수가 부쩍 늘었다는 소문이 돕니다.', '광산 입구 근처에 굴을 팠다고 합니다.', '여행자들이 짐을 버리고 도망쳐 왔어요.'];
+  // 의뢰를 주는 NPC마다 게시판이 따로 있다. 포스터는 마을 사람(실제 NPC)이 이유를 적어 붙인 것
+  // {m}: 몬스터 이름, {z}: 지역 이름
+  const G = (n, r, why) => ({ n, r, why });
+  const BOARDS = {
+    marta: { title: '파르보스 의뢰 게시판', cap: 12, zones: ['forest', 'plains', 'swamp', 'ruins', 'road'], givers: [
+      G('마르타', '파르보스 의뢰인', ['나무꾼들이 {z}에 들어가질 못하고 있어요. {m} 때문에 겨울 땔감이 모자랄 지경이에요.', '아이들이 {z} 쪽 들판으로 놀러 갔다가 {m}에게 쫓겨 왔어요. 다시는 그런 일이 없게 해 주세요.']),
+      G('엘리스', '순간이동 술사', ['별빛 길을 여는 수정을 {z}에 두고 왔는데, {m}이(가) 그 주변에 진을 쳤어요. 길을 터 주면 수정을 찾으러 갈게요.']),
+      G('토르간', '하레나 대장장이', ['파르보스에서 오는 숯 마차가 {z}에서 {m}에게 습격당했어. 불이 꺼지면 망치도 멈춘다고.']),
+      G('리안', '음유시인', ['{z}에서 노래할 거리를 찾다가 {m}에게 혼쭐이 났어요. 그 녀석들을 혼내 주면 당신 노래를 지어 드릴게요.'])] },
+    kyle: { title: '사냥꾼 길드 게시판', cap: 14, zones: ['wwest', 'wnorth', 'wsouth', 'weast'], givers: [
+      G('카일', '사냥꾼 길드장', ['{z}의 {m} 무리가 길드 사냥꾼 둘을 다치게 했다. 무리의 수를 확 줄여 놓게.', '{z}에 {m}이(가) 부쩍 늘었다. 이대로 두면 하레나 성벽까지 내려올 거다.']),
+      G('브론', '무기상', ['칼날 재료를 실은 상단이 {z}에서 {m}에게 습격당했소. 길이 안전해져야 좋은 무기를 들여올 수 있지.']),
+      G('미나', '잡화상', ['{z}에서 나는 약초를 받아 와야 포션을 만들 수 있는데, {m} 때문에 채집꾼들이 다 돌아왔어요.']),
+      G('베른', '지도 제작자', ['{z}의 지도를 마저 그려야 하는데 {m}이(가) 측량대를 쫓아냈어! 한동안 조용하게 만들어 줘.']),
+      G('세라', '현자', ['{z}에서 이상한 기운이 느껴집니다. {m}이(가) 그 기운에 끌려 모여드는 것 같아요. 수를 줄여 주면 원인을 살펴보겠습니다.'])] },
+    rowen: { title: '하레나 경비대 게시판', cap: 10, zones: ['wnorth', 'wsouth', 'weast'], givers: [
+      G('로웬', '경비대장', ['{z}에서 {m}이(가) 무리를 지어 성벽 쪽으로 오고 있다. 경비대만으로는 모자라니 힘을 보태라.', '어젯밤 {z} 감시탑이 {m}에게 습격당했다. 감시탑을 다시 세울 수 있게 주변을 쓸어 버려라.']),
+      G('이레네', '다친 기사', ['내가 다치지만 않았어도 직접 갔을 거야. {z}의 {m}을(를) 그냥 두면 또 누군가 다쳐. 나 대신 부탁할게.']),
+      G('오르웬', '기록관 사서', ['{z}로 옛 기록을 찾으러 간 서기가 {m}에게 막혀 돌아오지 못하고 있다네. 길을 열어 주게.'])] },
+    hanna: { title: '여관 게시판', cap: 10, zones: ['road', 'wwest', 'wnorth'], givers: [
+      G('한나', '여관 주인', ['손님들이 {z}를 지나오다 {m}에게 짐을 다 잃었대요. 여관 손님이 끊기면 저도 큰일이에요.', '{z}에서 오는 식재료 마차가 {m} 때문에 사흘째 안 와요. 수프 냄비가 비어 가요!']),
+      G('티모', '아이', ['아빠가 {z}로 장 보러 갔는데 {m}이(가) 무섭대요… 아빠가 무사히 돌아오게 해 주세요!']),
+      G('루나', '별지기', ['{z}의 언덕이 별 보기에 제일 좋은데, {m}이(가) 자꾸 망원경을 넘어뜨려요. 조용한 밤을 돌려주세요.']),
+      G('나그네', '두건 쓴 여행자', ['…{z}를 지나야 하는데 {m}이(가) 길을 막고 있다. 대가는 넉넉히 치르지.'])] },
+  };
+  const BOARD_CAP = {}; for (const k in BOARDS) BOARD_CAP[k] = BOARDS[k].cap;
   function makePoster(board, rnd, id) {
-    const zs = BOARD_ZONES[board]; const zone = zs[Math.floor(rnd() * zs.length)];
-    const L = ZONE_LEVELS[zone]; const tys = [...new Set(ZONE_MON[zone])]; const ty = tys[Math.floor(rnd() * tys.length)];
-    const lv = MON[ty].fixed ? MON[ty].lv : Math.round(L[0] + rnd() * (L[1] - L[0]));
-    const need = 6 + Math.floor(rnd() * (board === 'harena' ? 12 : 7));
-    const st = monStats(ty, lv), rare = rnd() < 0.12;
-    return { id, board, ty, zone, lv, need, exp: Math.round(st.exp * need * (rare ? 0.9 : 0.6)), gold: Math.round(lv * need * (rare ? 10 : 6)), rare: rare ? 1 : 0,
-      giver: GIVERS[Math.floor(rnd() * GIVERS.length)], why: WHY[Math.floor(rnd() * WHY.length)], at: Date.now() };
+    const B = BOARDS[board]; const zone = B.zones[Math.floor(rnd() * B.zones.length)];
+    const L = ZONE_LEVELS[zone]; const tys = [...new Set(ZONE_MON[zone])];
+    const lv = Math.round(L[0] + rnd() * (L[1] - L[0]));
+    // 무거운 의뢰: 한 종류를 많이, 또는 두 종류를 함께
+    const two = tys.length > 1 && rnd() < 0.45, rare = rnd() < 0.15;
+    const pick = tys.slice().sort(() => rnd() - 0.5).slice(0, two ? 2 : 1);
+    const goals = pick.map((ty, k) => ({ ty, need: (two ? 12 : 22) + Math.floor(rnd() * (two ? 10 : 16)) - (k ? 4 : 0), have: 0 }));
+    let exp = 0; for (const g of goals) { const L2 = MON[g.ty].fixed ? MON[g.ty].lv : lv; exp += monStats(g.ty, L2).exp * g.need; }
+    const tot = goals.reduce((a, g) => a + g.need, 0);
+    const gv = B.givers[Math.floor(rnd() * B.givers.length)];
+    const why = gv.why[Math.floor(rnd() * gv.why.length)];
+    return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
+      giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { R1, C2, R2, ROAD, TOWN_R, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARD_CAP, makePoster };
+  const api = { R1, C2, R2, ROAD, TOWN_R, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
