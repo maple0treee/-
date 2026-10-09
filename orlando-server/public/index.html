@@ -4055,6 +4055,19 @@ function pmHelmGLSL(hb){const f=v=>v.toFixed(4);return `{vec3 hc=vec3(${f(hb.c[0
 function pmHelmPatch(m,hb,src=m){const prev=src.onBeforeCompile,key=src.customProgramCacheKey?src.customProgramCacheKey():'';
   m.onBeforeCompile=(s,r)=>{if(prev)prev.call(m,s,r);s.vertexShader=s.vertexShader.replace(/#include <begin_vertex>|vec3 transformed = [^;]*;/,x=>x+'\n'+pmHelmGLSL(hb));};
   m.customProgramCacheKey=()=>key+'helm'+hb.c.join()+hb.r.join();return m;}
+// 겹쳐 입은 옷: 아래에 입은 옷이 위 옷을 뚫고 비치지 않게 안쪽으로 살짝 집어넣는다 (바지 허리는 윗옷 밑, 바짓단은 신발 안)
+function pmYR(geo){if(geo.userData.yr)return geo.userData.yr;const p=geo.attributes.position.array,ys=[];for(let i=1;i<p.length;i+=3)ys.push(p[i]);const b=Float32Array.from(ys).sort();
+  return geo.userData.yr=[b[Math.floor(b.length*.02)],b[Math.floor((b.length-1)*.98)]];}
+function pmTuck(m,code,key,src=m){const prev=src.onBeforeCompile,k0=src.customProgramCacheKey?src.customProgramCacheKey():'';
+  m.onBeforeCompile=(s,r)=>{if(prev)prev.call(m,s,r);s.vertexShader=s.vertexShader.replace(/#include <begin_vertex>|vec3 transformed = [^;]*;/,x=>x+'\n'+code);};
+  m.customProgramCacheKey=()=>k0+'tuck'+key;return m;}
+function pmTuckCode(pc,show,d){const f=v=>v.toFixed(4),yr=q=>{const g=d.geos.find(x=>x.userData.piece===q);return g?pmYR(g):null;};
+  if(pc==='pants'){let top=9,bot=-9;for(const q of ['shirt','a0','a1','a2'])if(show.has(q)){const r=yr(q);if(r)top=Math.min(top,r[0]);}
+    for(const q of ['shoes','b0','b1'])if(show.has(q)){const r=yr(q);if(r)bot=Math.max(bot,r[1]);}
+    if(top>8&&bot<-8)return null;
+    return {key:f(top)+f(bot),code:`{float tk=smoothstep(${f(top+.004)},${f(top+.02)},transformed.y)+1.-smoothstep(${f(bot-.02)},${f(bot-.004)},transformed.y);transformed-=normal*.012*min(tk,1.);}`};}
+  if(pc==='shirt'&&(show.has('a0')||show.has('a2')))return {key:'sh',code:'transformed-=normal*.008;'};
+  return null;}
 // 갑옷 색: 단계에 따라
 function pmTint(slot,t,job){
   if(slot==='shirt')return new THREE.Color(JOBS[job]?JOBS[job].color:0x9c3d2f).lerp(new THREE.Color(0xffffff),.15);
@@ -4094,11 +4107,11 @@ function pmBuild(d,ap,G,job,outline=true){
   d.geos.forEach(geo=>{const pc=geo.userData.piece;if(!show.has(pc))return;
     const slot=pmSlotOf(pc);const t=slot==='armor'?G.armor:slot==='helm'?G.helm:slot==='boots'?G.boots:-1;
     const tint=geo.userData.kind==='cloth'?pmTint(slot,t,job):null;
-    const isHair=hb&&/^hair/.test(geo.userData.kind);const m=new THREE.SkinnedMesh(geo,isHair?pmHelmPatch(pmMat(d,geo,ap,tint,mask),hb):pmMat(d,geo,ap,tint,mask));m.bind(sk,new THREE.Matrix4());m.frustumCulled=false;m.castShadow=true;root.add(m);meshes.push(m);
+    const isHair=hb&&/^hair/.test(geo.userData.kind),tk=geo.userData.kind==='cloth'?pmTuckCode(pc,show,d):null;let mt=pmMat(d,geo,ap,tint,mask);if(isHair)mt=pmHelmPatch(mt,hb);if(tk)mt=pmTuck(mt,tk.code,tk.key);const m=new THREE.SkinnedMesh(geo,mt);m.bind(sk,new THREE.Matrix4());m.frustumCulled=false;m.castShadow=true;root.add(m);meshes.push(m);
     if(geo.userData.morph)face.push(m);
     if(outline&&geo.userData.kind!=='blend'&&geo.userData.kind!=='iris'&&geo.userData.kind!=='mask'){const k=geo.userData.kind;
       const oc=k==='hair'||k==='hairvc'?new THREE.Color(ap.h).multiplyScalar(.35).getHex():k==='cloth'?tint.clone().multiplyScalar(.4).getHex():0x5a3a30;
-      const ol=pmOutline(oc,k==='skin'?.004:.006,geo.userData.morph,geo.userData.cover?mask:null);const o=new THREE.SkinnedMesh(geo,isHair?pmHelmPatch(ol.clone(),hb,ol):ol);o.bind(sk,new THREE.Matrix4());o.frustumCulled=false;root.add(o);if(geo.userData.morph)face.push(o);}});
+      const ol=pmOutline(oc,k==='skin'?.004:.006,geo.userData.morph,geo.userData.cover?mask:null);const o=new THREE.SkinnedMesh(geo,isHair?pmHelmPatch(ol.clone(),hb,ol):tk?pmTuck(ol.clone(),tk.code,tk.key,ol):ol);o.bind(sk,new THREE.Matrix4());o.frustumCulled=false;root.add(o);if(geo.userData.morph)face.push(o);}});
   const by=n=>bones.find(b=>b.name===n);
   return {root,bones,sk,rest,by,face,height:d.height,grip:d.grip};}
 
