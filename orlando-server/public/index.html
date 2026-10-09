@@ -2765,7 +2765,7 @@ function _bakedModel(d,key){const dim=NPC_DIM[key]||1;
     if(g.face==='b'&&g.alpha==='opaque'){const ol=new THREE.Mesh(geo,animeOutline());G.add(ol);outlines.push(ol);}}
   return {G,open,closed,outlines,height:d.height,ready};}
 // NPC 메시(그룹) 하나를 구운 모델로 바꾼다. 머리 위 표시는 남긴다.
-const NPC_TALL={knight:1.14,bron:1.05,kyle:1.12,rowen:1.14,lian:1.1,bern:1.1,stranger:1.12,merchant:1.08,elis:1.05,marta:1.04,hanna:1.03,mina:1.04,sera:1.04,orwen:1.04,mentor:1.04};
+const NPC_TALL={messenger:1.12,knight:1.14,bron:1.05,kyle:1.12,rowen:1.14,lian:1.1,bern:1.1,stranger:1.12,merchant:1.08,elis:1.05,marta:1.04,hanna:1.03,mina:1.04,sera:1.04,orwen:1.04,mentor:1.04};
 function _swapBaked(mesh,M,key){const u=mesh.userData;const k=NPC_TALL[key]||1;M.G.scale.setScalar(k);M.height*=k;
   for(const c of [...mesh.children])if(c!==u.marker)mesh.remove(c);
   mesh.scale.setScalar(1);mesh.add(M.G);(NPCBAKE.models=NPCBAKE.models||{})[key]={G:M.G,r:M.ready,h:M.height-.04,ci:M.closed.map(m=>M.G.children.indexOf(m)),oi:M.open.map(m=>M.G.children.indexOf(m))};
@@ -5772,6 +5772,7 @@ function updatePortals(t){
     for(let i=0;i<f.seed.length;i++){const s=f.seed[i],k=(t*.22+s[2])%1,a=s[0]+t*(.5+s[2]*.4);
       f.pp[i*3]=Math.cos(a)*s[1];f.pp[i*3+1]=f.cy+k*2.8-.6+Math.sin(a)*.2;f.pp[i*3+2]=Math.sin(a*1.3)*.25;}
     f.pts.geometry.attributes.position.needsUpdate=true;}
+  if(window.__msgFx&&player&&player.position.z<-300)window.__msgFx(t);
   if(window.__hallTorches&&player&&player.position.z<-300)for(const T of window.__hallTorches){const k=.9+Math.sin(t*9+T.ph)*.07+Math.sin(t*21+T.ph)*.05;T.L.intensity=T.i*k;T.fl.scale.set(1,k,1);}
 }
 
@@ -5886,6 +5887,37 @@ function portalNear(){if(!player)return -1;for(let i=0;i<PORTALS.length;i++){con
 function usePortal(i){const p=PORTALS[i];if(!p)return;
   if(P&&P.lv<p.minLv){toast(`Lv ${p.minLv}부터 들어갈 수 있다`);return;}
   sfx('door');warpTo(p.to.x,p.to.z,p.to.yaw,p.msg);}
+
+/* ---------- 전달자: 포탈을 연 왕실 마법사 (지하실 가운데) ---------- */
+(function(){
+  const C={x:OR.HALL.x,z:OR.HALL.z};
+  addNpc({id:'messenger',name:'전달자',role:'왕실 마법사',x:C.x,z:C.z,faceX:C.x,faceZ:C.z+10,
+    look:{long:1,robe:0x1f2348,robe2:0x181c3c,hat:'hair',hatC:0xd6dae6,staff:0xffd23a,w:.62},
+    lines:['왔군. 이 문을 열어 둔 건 나다. 쉽게 열리는 문이 아니었지.',
+      '왕궁 마법사들 가운데 저 문을 열고 붙들어 둘 수 있는 자는 나 하나뿐이다.',
+      '위층 계단은 내가 막아 두었다. 아직은 올라갈 때가 아니다.',
+      '이름은 중요하지 않다. 그저 전달자라 부르면 된다.',
+      '긴장할 것 없다. 이 방 안에서는 어떤 마물도 네게 손대지 못한다. 내가 여기 있으니까.'],
+    acts:[['이야기 듣기','story']],
+    story:[
+      ['이 위는 왕국이다. 성벽 바깥의 일은 너희 모험가들이 더 잘 알겠지.','마물들이 해마다 더 짙어지고 있다. 왕국의 기사들만으로는 버티기 어려울 만큼.','그래서 내가 문을 열었다. 황야 끝에서 버텨 낸 자들만 이곳에 닿도록.'],
+      ['저 포탈은 내 마력으로 붙들고 있다. 한 번 열어 두면 쉬지 않고 힘을 먹지.','다른 마법사였다면 하루도 못 버티고 쓰러졌을 거다. 나는… 아직 멀쩡하군.','언젠가 더 먼 곳으로 가는 문도 열게 될 것이다. 그때까지 강해져 있어라.'],
+      ['예전에 왕궁 앞까지 밀려온 마물 떼가 있었다.','성문이 열리기 전에 끝났지. 내가 지팡이를 한 번 들었을 뿐이다.','…자랑하려는 건 아니다. 다만 내가 너를 부른 이유를 알아 두라는 거다. 나 혼자서는 모든 곳에 있을 수 없으니까.']]});
+  // 발밑에서 천천히 도는 마법진과 떠다니는 빛
+  const g=new THREE.Group();g.position.set(C.x,.03,C.z);scene.add(g);
+  const gm=c=>new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.75,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+  const r1=new THREE.Mesh(new THREE.RingGeometry(1.55,1.65,64),gm(0xffd23a));r1.rotation.x=-Math.PI/2;g.add(r1);
+  const r2=new THREE.Mesh(new THREE.RingGeometry(1.1,1.16,64),gm(0xffe68a));r2.rotation.x=-Math.PI/2;g.add(r2);
+  const spin=new THREE.Group();g.add(spin);
+  for(let k=0;k<8;k++){const a=k/8*Math.PI*2;const t=new THREE.Mesh(new THREE.PlaneGeometry(.18,.32),gm(0xffd23a));t.rotation.x=-Math.PI/2;t.rotation.z=-a;t.position.set(Math.cos(a)*1.36,.005,Math.sin(a)*1.36);spin.add(t);}
+  const tri=new THREE.Mesh(new THREE.RingGeometry(1.0,1.06,3),gm(0xffe68a));tri.rotation.x=-Math.PI/2;spin.add(tri);
+  const tri2=tri.clone();tri2.rotation.z=Math.PI;spin.add(tri2);
+  const orbs=[];for(let k=0;k<3;k++){const o=new THREE.Mesh(new THREE.SphereGeometry(.07,10,8),new THREE.MeshBasicMaterial({color:0xfff0b0}));scene.add(o);orbs.push(o);}
+  const L=new THREE.PointLight(0xffd870,.9,9,2);L.position.set(C.x,1.6,C.z);scene.add(L);
+  window.__msgFx=t=>{spin.rotation.y=t*.25;r2.material.opacity=.55+Math.sin(t*2)*.2;
+    orbs.forEach((o,k)=>{const a=t*.9+k*2.094;o.position.set(C.x+Math.cos(a)*.85,1.3+Math.sin(t*1.7+k)*.25,C.z+Math.sin(a)*.85);});
+    L.intensity=.8+Math.sin(t*1.3)*.15;};
+})();
 
 /* ---------- 맵 꾸미기: 풀, 꽃, 덤불, 버섯, 돌멩이, 마을 소품 ----------
    작은 것들은 인스턴싱으로 한 번에 그린다. 들판의 작은 장식은 부딪히지 않는다(몬스터 길찾기와 맞추기 위해). */
@@ -6922,7 +6954,8 @@ function drawHallPlan(c,X,Z,sc,f){const H=OR.HALL,R=H.R;
   for(const [a,k] of HALL_PROPS){c.fillStyle=k==='chest'?'#c9a05a':'#7a5232';const x=H.x+Math.cos(a)*(R-2.2),z=H.z+Math.sin(a)*(R-2.2),s=(k==='chest'?.8:1)*sc;c.fillRect(X(x)-s,Z(z)-s,s*2,s*2);}
   // 기사 석상
   c.fillStyle='#b8b0a2';[-1,1].forEach(s=>{c.beginPath();c.arc(X(H.x+s*3.9),Z(H.z-R+1.9),.6*sc,0,7);c.fill();});
-  for(const p of PORTALS)if(p.z<-300)drawPortalIcon(c,X(p.x),Z(p.z),Math.max(5,1.4*sc));}
+  for(const p of PORTALS)if(p.z<-300)drawPortalIcon(c,X(p.x),Z(p.z),Math.max(5,1.4*sc));
+  c.fillStyle='#f3cf6a';for(const n of NPCS)if(n.z<-300){c.beginPath();c.arc(X(n.x),Z(n.z),Math.max(3.5,.55*sc),0,7);c.fill();}}
 function drawHallMini(){
   const H=OR.HALL,S=264,sc=S/2/(H.R+4),X=v=>S/2+(v-H.x)*sc,Z=v=>S/2+(v-H.z)*sc;
   mctx.save();mctx.clearRect(0,0,S,S);mctx.beginPath();mctx.arc(S/2,S/2,S/2,0,7);mctx.clip();
@@ -7597,7 +7630,7 @@ function damageMonster(m,mult,o={}){
   m.hp-=d;m.flash=.18;
   if(P.skills.madness){const miss=1-P.hp/P.maxhp,h=d*miss*(1+.15*(P.skills.madness-1));P.hp=Math.min(P.maxhp,P.hp+h);P.lsAcc=(P.lsAcc||0)+h;}
   VFX.burst(mCenter(m),crit?0xffd040:0xfff0d0,crit?18:8,crit?6:3.5,.35,{up:.3,glow:crit});
-  {const at=m.mesh.position,D=m.D,blade=P.equip.weapon&&JOBS[P.job].weapon==='sword'&&P.job!=='fowler';const axe=P.job==='barbarian',sk=swingT<1&&SWORD_SKILL_HIT.has(myMoId);sfx(blade?(crit?(axe&&!sk?'ahit2':'blood2'):sk?'blood3':axe?'ahit1':'blood1'):P.job==='fowler'&&P.equip.weapon?'h_hit':'hit',at,1,1);if(crit)sfx('crit',at,.8);}
+  {const at=m.mesh.position,D=m.D,blade=P.equip.weapon&&JOBS[P.job].weapon==='sword'&&P.job!=='fowler';const axe=P.job==='barbarian',sk=swingT<1&&SWORD_SKILL_HIT.has(myMoId);const hammer=P.job==='fowler'&&P.equip.weapon;if(!(hammer&&o.nohs))sfx(blade?(crit?(axe&&!sk?'ahit2':'blood2'):sk?'blood3':axe?'ahit1':'blood1'):hammer?'h_hit':'hit',at,1,hammer&&!o.hsOrig?.86:1);if(crit)sfx('crit',at,.8);}
   if(mnet)mnet.emit('hit',{i:m.sid,d,st:o.stun||0,dot:o.dot?[Math.round(atkPow()*o.dot[0]*gapMul(m.lv)*10)/10,o.dot[1]]:0,tau:o.taunt||0,kb:o.kb||0,air:o.air||0});
   if(o.steal&&Math.random()<o.steal){if(addItem('hp_s'))log('HP 포션을 훔쳤다','good');}
   const s=screenOf(mCenter(m).add(new THREE.Vector3(0,.4,0)));
@@ -8749,6 +8782,8 @@ function hurlTarget(S){const q0=player.position,f0=flatFwd();let tg=null,bd=1e9;
   for(const m of alive()){if(m.D.boss||m.D.dragon||m.thrown)continue;const dx=m.mesh.position.x-q0.x,dz=m.mesh.position.z-q0.z,d=Math.hypot(dx,dz);if(d>S.range+m.r)continue;if(d>1.2&&(dx*f0.x+dz*f0.z)/d<.3)continue;if(d<bd){bd=d;tg=m;}}
   return tg;}
 function fowlSkill(S,id,pw,opt){
+  // 지진 만들기·던지기·용맹한 돌진은 워해머 피격음을 내지 않는다. 들어 올리기는 피치를 낮추지 않은 원래 소리로
+  if(id==='quake'||id==='hurl'||id==='bravecharge')opt={...opt,nohs:1};else if(id==='uplift')opt={...opt,hsOrig:1};
   const cone=(q,f,R,arc)=>alive().filter(m=>{const dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,dd=Math.hypot(dx,dz);if(dd>R+m.r)return false;return dd<1.2||(dx*f.x+dz*f.z)/dd>Math.cos(arc);});
   if(id==='hurl'){
     // 앞에 있는 적 하나를 붙잡아 머리 위로 들었다가, 내가 움직이던 방향(가만히 있었거나 뒤로 가던 중이면 앞)으로 내던진다
@@ -8765,7 +8800,7 @@ function fowlSkill(S,id,pw,opt){
       const ex=q.x+dir.x*K,ez=q.z+dir.z*K,T=tg.thrown;T.ex=ex;T.ez=ez;T.fx=q.x+f.x*1.5;T.fz=q.z+f.z*1.5;T.fy=q.y+2.1;T.rel=tAll;T.dur=Math.max(.4,.7*K/10);
       sfx('f_throw',q,1);
       // 서버 위치(들어 올리기 전 자리)에서 떨어질 자리까지 옮긴다. 피해는 땅에 떨어질 때 (날아가는 도중 쓰러져 사라지지 않게)
-      {const sp=snapAt(tg),bx=sp?sp[0]:T.sx,bz=sp?sp[1]:T.sz;if(tg.dying===null)shared(()=>damageMonster(tg,.05,{kb:[+(ex-bx).toFixed(2),+(ez-bz).toFixed(2)],stun:T.dur+.6}));}
+      {const sp=snapAt(tg),bx=sp?sp[0]:T.sx,bz=sp?sp[1]:T.sz;if(tg.dying===null)shared(()=>damageMonster(tg,.05,{nohs:1,kb:[+(ex-bx).toFixed(2),+(ez-bz).toFixed(2)],stun:T.dur+.6}));}
       setTimeout(()=>{if(mode!=='world')return;const at=new THREE.Vector3(ex,heightAt(ex,ez),ez);if(tg.dying===null)shared(()=>damageMonster(tg,S.mult*pw,{...opt,stun:.6}));
         groundCrack(at,1.6,.8);dustPuffs(at,1.6,14);rockDebris(at,1.2,12);VFX.shock(at,0xe8d8b0,3.2,.4);shakeT=Math.max(shakeT,.24);sfx('f_land',at,1);
         const bump=alive().filter(m=>m!==tg&&!m.D.boss&&!m.D.dragon&&(m===hitM||Math.hypot(m.mesh.position.x-ex,m.mesh.position.z-ez)<3.2+m.r));
