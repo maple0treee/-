@@ -1128,6 +1128,7 @@ body.talking #buffBar{visibility:hidden}
     function moveToward(m, gx, gz, spd) {
       const dx = gx - m.x, dz = gz - m.z, l = Math.hypot(dx, dz);
       if (l < 0.05) return 0;
+      if (m.slowT > 0) spd *= 0.35;
       const s = Math.min(spd * TICK, l);
       m.x += (dx / l) * s; m.z += (dz / l) * s;
       turn(m, Math.atan2(dx, dz), 0.5);
@@ -1428,6 +1429,7 @@ body.talking #buffBar{visibility:hidden}
           continue;
         }
         m.stun = Math.max(0, m.stun - TICK);
+        if (m.slowT > 0) m.slowT -= TICK;
         if (m.air > 0) m.air -= TICK;
         const sx = m.x, sz = m.z; let want = 0;
         const homeD = Math.hypot(m.x - m.home.x, m.z - m.home.z);
@@ -1535,6 +1537,9 @@ body.talking #buffBar{visibility:hidden}
         if (isFinite(tau) && tau > 0 && !m.dragon) { m.aggroOn = id; m.taunt = Math.min(tau, 5); }
         if (Array.isArray(d.kb) && !m.boss && !m.dragon) { const kx = Number(d.kb[0]), kz = Number(d.kb[1]), l = Math.hypot(kx, kz); if (isFinite(l) && l > 0.01) { const s = Math.min(l, 18) / l; m.x += kx * s; m.z += kz * s; m.windup = 0; m.dirty = true; } }
         // 띄우기: 잠깐 공중에 떠서 아무것도 못 한다 (-1이면 띄운 것을 거둔다)
+        // 느리게: 잠시 동안 움직임이 크게 느려진다
+        const sl = Number(d.sl);
+        if (isFinite(sl) && sl > 0 && !m.boss && !m.dragon) m.slowT = Math.max(m.slowT || 0, Math.min(sl, 6));
         const air = Number(d.air);
         if (isFinite(air) && air > 0 && !m.boss && !m.dragon) { m.air = Math.min(air, 2); m.stun = Math.max(m.stun, m.air); m.windup = 0; m.dirty = true; }
         else if (air < 0 && m.air > 0) { m.air = 0; m.dirty = true; }
@@ -1631,10 +1636,11 @@ const SKILLS={
     {id:'leap',name:'용맹한 착지',req:35,mp:16,cd:7,type:'leap',mult:2.4,radius:5,taunt:3,color:0xd8c090,desc:'두 손으로 방패를 머리 위로 들고 높이 뛰어올랐다가 그대로 내리꽂는다. 주변 적에게 240% 피해, 3초 동안 도발.'}],
   rogue:[
     {id:'ambush',name:'기습',req:1,mp:5,cd:4,type:'loot',mult:1.5,crit:1,range:4.2,desc:'반드시 치명타가 터지는 일격. 공격력 150%'},
-    {id:'sprint',name:'질주',req:2,mp:6,cd:12,type:'buff',buff:{speed:1.6},dur:5,desc:'5초 동안 이동 속도 60% 증가'}],
+    {id:'sprint',name:'질주',req:2,mp:6,cd:12,type:'buff',buff:{speed:1.6},dur:5,desc:'5초 동안 이동 속도 60% 증가'},
+    {id:'pilfer',name:'손버릇',req:3,mp:0,cd:0,type:'passive',desc:'(지속) 얻는 경험치 30% 증가, 몬스터가 장비를 떨어뜨릴 확률 60% 증가, 줍는 골드 30% 증가. 보스 상자에 장비 하나가 더 들어 있다'}],
   thief:[
-    {id:'reap',name:'처형',req:30,mp:10,cd:3.5,type:'loot',mult:2.6,range:2.8,color:0xe04040,desc:'쿠크리로 앞의 적 하나를 깊숙이 찌르고, 비틀어 뽑아낸다. 260% 피해. HP가 25% 미만인 적에게는 피해 2.5배, 그물에 묶인 적에게는 피해 2.2배'},
-    {id:'snare',name:'그물 던지기',req:32,mp:12,cd:10,type:'loot',mult:.6,range:17,radius:3.2,stun:3,color:0xc8b080,desc:'그물을 던져 떨어진 자리의 적들을 3초 동안 묶는다. 60% 피해'},
+    {id:'reap',name:'처형',req:30,mp:10,cd:3.5,type:'loot',mult:2.6,range:2.8,color:0xe04040,desc:'단검으로 앞의 적 하나를 깊숙이 찔러 넣는다(1타). 1.5초 안에 다시 쓰면 칼을 비틀어 뽑아낸다(2타). 두 번 합쳐 260% 피해. HP가 25% 미만인 적에게는 피해 2.5배, 그물에 묶인 적에게는 피해 2.2배'},
+    {id:'snare',name:'그물 던지기',req:32,mp:12,cd:10,type:'loot',mult:.6,range:17,radius:3.2,slow:3,color:0xc8b080,desc:'그물을 던져 떨어진 자리의 적들을 3초 동안 크게 느리게 만든다. 60% 피해'},
     {id:'quaff',name:'포션 마시기',req:35,mp:0,cd:20,type:'loot',dur:8,buff:{atk:1.6,speed:1.3},color:0xff6a6a,desc:'가진 포션 하나를 단숨에 들이켠다. 포션 효과가 2.5배가 되고, 8초 동안 공격력 60%, 이동 속도 30% 증가'}],
   assassin:[
     {id:'shuriken',name:'투척하기',req:30,mp:8,cd:4,type:'sin',mult:1.4,speed:42,mark:8,color:0xd0d8e8,desc:'수리검을 던져 140% 피해. 맞은 적에게 8초 동안 수리검 표식이 남고, 표식이 있는 적을 공격하면 40% 추가 피해'},
@@ -3968,7 +3974,7 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   const twL=S.shield&&!(atk&&mo&&mo.k3)?SHIELD_TW:0;
   S.AL.sh.rotation.set(q[3]-(S.style==='bow'||S.shield?sw*.3:sw),twL,q[4]-(air&&!atk?.4:0));S.AL.el.rotation.x=q[5];
   S.upper.rotation.set(q[7]+k*.08,q[6],0);
-  S.AR.hand.rotation.y=ex&&ex.wy?ex.wy:0;S.AR.hand.rotation.z=0;if(S.fwd&&S.w)S.w.rotation.y=-THIEF_KY+(atk&&mo&&mo.v==='reap'?reapTwist(swing):0);
+  S.AR.hand.rotation.y=ex&&ex.wy?ex.wy:0;S.AR.hand.rotation.z=0;if(S.fwd&&S.w)S.w.rotation.y=-THIEF_KY+(atk&&mo&&mo.v==='reap'?reapTwist(swing):atk&&mo&&mo.v==='reapOut'?reapTwist2(swing):0);
   S.head.position.y=.88+Math.sin(t*2)*.012*(1-k);S.head.rotation.y=-q[6]*.6;
   // 활과 지팡이는 손 방향과 상관없이 세워 든다
   if(S.style==='bow'){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.w.rotation.set(-lx,0,-S.AL.sh.rotation.z);
@@ -4276,7 +4282,7 @@ const MOTION_OF={
   taunt:{v:'bang',n:2,dur:.8},rampart:{v:'guard',dur:1.0,a:1.3},shatter:{v:'overhead',a:1.1,dur:.8,c:.4},unyield:{v:'pump',dur:.9},judgment:{v:'leap',j:1.0,dur:.9,sd:-1},
   // 도적 · 도둑 · 어쌔신
   ambush:{v:'ambushstab',dur:.45},sprint:{v:'ready',dur:.6},poison:{v:'throw',dur:.5},
-  reap:{v:'reap',dur:.85},snare:{v:'snare',dur:.6},quaff:{v:'quaff',dur:1.0},
+  reap:{v:'reap',dur:.85},reap1:{v:'reapIn',dur:.42},reap2:{v:'reapOut',dur:.5},snare:{v:'snare',dur:.6},quaff:{v:'quaff',dur:1.0},
   shuriken:{v:'shuriken',dur:.45},quakedash:{v:'dash',dur:.5,a:1.3},deepstab:{v:'deepstab',dur:.55},deepslash:{v:'deepslash',dur:.4},kb1:{v:'kchop',dur:.5},kb2:{v:'kchop',dur:.5,sd:-1},asl1:{v:'aslice',dur:.36},asl2:{v:'arise',dur:.36},asl3:{v:'ajab',dur:.36},
   // 마법사 · 성직자 · 메이지
   fireball:{v:'cast',dur:.5},frost:{v:'cast',dur:.4,sd:-1,a:.8},ring:{v:'castdown',dur:.6},healing:{v:'pray',dur:.8},holy:{v:'castup',dur:.7},bless:{v:'pray',dur:.6,a:.75,sd:-1},
@@ -4405,10 +4411,19 @@ function verb3(v,o,style){
       k(.34,{rx:-2.2,rz:.1,re:-1.3,lx:-2.05,lz:-.05,le:-1.1,ln:-.1,wr:0,tw:-.05});
       k(.52,{rx:-.6,re:-.1,lx:-.7,le:-.12,ln:.45,wr:1.3,cr:.35,tw:.03});
       k(.9,{rx:-.62,re:-.1,lx:-.72,le:-.12,ln:.42,wr:1.28,cr:.32});break;
-    case 'reap':           // 한 손으로 쿠크리를 허리 뒤로 당겼다가 팔을 끝까지 뻗어 깊숙이 찔러 넣고, 칼을 비틀어 돌리면서 그대로 뽑아낸다
+    case 'reap':           // 한 손으로 단검을 허리 뒤로 당겼다가 팔을 끝까지 뻗어 깊숙이 찔러 넣고, 칼을 비틀어 돌리면서 그대로 뽑아낸다
       k(.12,{rx:-.15,rz:.3,re:-2.2,wr:.2,tw:-.6,ln:-.1,cr:.25,lx:-.3,lz:-.1,le:-.8});
       k(.3,{rx:-1.85,rz:-.05,re:0,wr:.15,tw:.7,ln:.42,cr:.38,lx:.35,lz:-.35,le:-.3});
       k(.42,{rx:-1.88,rz:-.05,re:0,wr:.15,tw:.75,ln:.45,cr:.4,lx:.35,lz:-.35,le:-.3});
+      k(.75,{rx:-.6,rz:.2,re:-1.8,wr:-.2,tw:-.35,ln:.1,cr:.15,lx:-.2,lz:-.1,le:-.6});
+      k(.95,{rx:-.4,rz:.12,re:-1.5,wr:0,tw:-.15,ln:.03,cr:.08});break;
+    case 'reapIn':         // 처형 1타: 허리 뒤로 당겼다가 팔을 끝까지 뻗어 깊숙이 찔러 넣고, 박힌 채로 버틴다
+      k(.25,{rx:-.15,rz:.3,re:-2.2,wr:.2,tw:-.6,ln:-.1,cr:.25,lx:-.3,lz:-.1,le:-.8});
+      k(.62,{rx:-1.85,rz:-.05,re:0,wr:.15,tw:.7,ln:.42,cr:.38,lx:.35,lz:-.35,le:-.3});
+      k(.99,{rx:-1.88,rz:-.05,re:0,wr:.15,tw:.75,ln:.45,cr:.4,lx:.35,lz:-.35,le:-.3});break;
+    case 'reapOut':        // 처형 2타: 박힌 칼을 비틀면서 그대로 뽑아낸다
+      k(.02,{rx:-1.88,rz:-.05,re:0,wr:.15,tw:.75,ln:.45,cr:.4,lx:.35,lz:-.35,le:-.3});
+      k(.3,{rx:-1.8,rz:0,re:-.2,wr:.1,tw:.6,ln:.4,cr:.38,lx:.3,lz:-.3,le:-.3});
       k(.75,{rx:-.6,rz:.2,re:-1.8,wr:-.2,tw:-.35,ln:.1,cr:.15,lx:-.2,lz:-.1,le:-.6});
       k(.95,{rx:-.4,rz:.12,re:-1.5,wr:0,tw:-.15,ln:.03,cr:.08});break;
     case 'snare':          // 왼손으로 그물을 어깨 뒤로 감았다가 앞으로 펼쳐 던진다
@@ -4434,7 +4449,7 @@ function verb3(v,o,style){
       k(.25,{rx:-.6,rz:.75,re:-.4,wr:3.14,tw:.55,cr:.25,ln:.25,lx:-.7,le:-.9});
       k(.6,{rx:-2.5,rz:-.7,re:-.2,wr:3.14,tw:-.55,ln:-.1,lf:.08,cr:.05,lx:-.5,lz:.3,le:-.6});
       k(.9,{rx:-2.4,rz:-.65,re:-.25,wr:3.14,tw:-.5,ln:-.08,lx:-.5,lz:.3,le:-.6});break;
-    case 'kchop':          // 쿠크리를 어깨 위로 치켜들었다가 몸을 실어 비스듬히 내려 찍듯 벤다 (번갈아 반대쪽)
+    case 'kchop':          // 단검을 어깨 위로 치켜들었다가 몸을 실어 비스듬히 내려 찍듯 벤다 (번갈아 반대쪽)
       k(.3,{rx:-2.4,rz:.45*sd,re:-1.2,wr:-1.6,tw:-.45*sd,ln:-.1,cr:.1});
       k(.55,{rx:-.6,rz:-.35*sd,re:-.15,wr:0,tw:.45*sd,ln:.4,cr:.3});
       k(.85,{rx:-.65,rz:-.3*sd,re:-.2,wr:0,tw:.4*sd,ln:.35,cr:.25});break;
@@ -4649,6 +4664,10 @@ function verbFP(v,o,style){
       r(.88,{x:.04,y:-.44,z:-.67,rx:-.88});l(.88,{x:-.06,y:-.46,z:-.65,rx:-.84});break;
     case 'reap':
       r(.12,{x:.34,y:-.44,z:-.25,rx:-.4});r(.3,{x:.06,y:-.26,z:-.86,rx:-1.15});r(.42,{x:.06,y:-.26,z:-.88,rx:-1.15});r(.75,{x:.28,y:-.3,z:-.5,rx:-.5});break;
+    case 'reapIn':
+      r(.25,{x:.34,y:-.44,z:-.25,rx:-.4});r(.62,{x:.06,y:-.26,z:-.86,rx:-1.15});r(.99,{x:.06,y:-.26,z:-.88,rx:-1.15});break;
+    case 'reapOut':
+      r(.02,{x:.06,y:-.26,z:-.88,rx:-1.15});r(.3,{x:.07,y:-.26,z:-.84,rx:-1.1});r(.75,{x:.28,y:-.3,z:-.5,rx:-.5});break;
     case 'snare':
       l(.25,{x:-.45,y:.1,z:-.2});l(.45,{x:-.1,y:-.05,z:-.95});l(.85,{x:-.12,y:-.2,z:-.85});break;
     case 'quaff':
@@ -4743,6 +4762,7 @@ function verbFP(v,o,style){
   }
   return {R,L};
 }
+function reapTwist2(p){return -1.57*(p<.05?0:p<.45?(p-.05)/.4:p<.8?1-(p-.45)/.35:0);}
 function reapTwist(p){return -1.57*(p<.42?0:p<.75?(p-.42)/.33:p<.92?1-(p-.75)/.17:0);}
 const _motionCache={};
 function motionFor(style,id){
@@ -6835,7 +6855,7 @@ function setViewModel(job){if(viewModel)camera.remove(viewModel);viewModel=makeV
 function updateViewModel(dt,moving){
   if(!viewModel)return;const u=viewModel.userData,F=FP[u.style]||FP.sword;
   const sx=moving?Math.cos(cam.bob*.5)*.018:0,sy=moving?Math.abs(Math.sin(cam.bob*.5))*.018:Math.sin(tAll*1.6)*.006;
-  swingT=Math.min(1,swingT+dt*(myMo?1/myMo.dur:swingSpd(P?P.job:'warrior')));
+  swingT=Math.min(P&&P.reapHold&&myMoId==='reap1'?.97:1,swingT+dt*(myMo?1/myMo.dur:swingSpd(P?P.job:'warrior')));
   const alt=(u.style==='dagger'&&!u.oneD||(u.style==='fist'&&!u.shieldL))&&swingN%2===1;
   const apply=(h,keys,mirror)=>{if(!keys)return;const q=fpPose(keys,swingT);
     h.position.set((mirror?-q[0]:q[0])+sx,q[1]+sy-jumpY*.02,q[2]);h.rotation.set(q[3],mirror?-q[4]:q[4],mirror?-q[5]:q[5]);};
@@ -6854,7 +6874,7 @@ function updateViewModel(dt,moving){
   if(u.A){for(const h of [u.R,u.L]){h.position.y+=.07;h.position.z+=.03;}viewModel.updateMatrixWorld(true);u.R.userData.arm.visible=u.L.userData.arm.visible=false;try{pmFPPose(u.A,viewModel,{R:u.R,L:u.L});}catch(e){}}else{fpArm(u.R);fpArm(u.L);}
   if(u.style==='sword'&&(P.job==='barbarian')){const w=u.R.userData.wpn;if(w){if(w.userData.ry0===undefined)w.userData.ry0=w.rotation.y;w.rotation.y=w.userData.ry0+(myMoId==='axeb2'&&swingT<1?Math.PI:0);}}
   if(u.style==='dagger'){const w=u.R.userData.wpn;if(w){if(w.userData.rx0===undefined)w.userData.rx0=w.rotation.x;w.rotation.x=w.userData.rx0+(P&&P.deepHold&&!(myMoId==='deepstab'&&swingT<.82)?Math.PI:0);}}
-  if(u.kIn)u.kIn.rotation.y=Math.PI/2+(myMoId==='reap'&&swingT<1?reapTwist(swingT):0);
+  if(u.kIn)u.kIn.rotation.y=Math.PI/2+(myMoId==='reap'&&swingT<1?reapTwist(swingT):myMoId==='reap2'&&swingT<1?reapTwist2(swingT):0);
   if(u.arrow)u.arrow.visible=swingT>.12&&swingT<.6;
   if(u.orb){const g=swingT<1?Math.sin(swingT*Math.PI):0;u.orb.scale.setScalar(1+g*.6);u.orb.rotation.y+=dt*2;if(u.ring)u.ring.rotation.z+=dt*(1.5+g*8);}
 }
@@ -7849,7 +7869,7 @@ function damageMonster(m,mult,o={}){
   if(P.skills.madness){const miss=1-P.hp/P.maxhp,h=d*miss*(1+.15*(P.skills.madness-1));P.hp=Math.min(P.maxhp,P.hp+h);P.lsAcc=(P.lsAcc||0)+h;}
   VFX.burst(mCenter(m),crit?0xffd040:0xfff0d0,crit?18:8,crit?6:3.5,.35,{up:.3,glow:crit});
   {const at=m.mesh.position,D=m.D,blade=P.equip.weapon&&JOBS[P.job].weapon==='sword'&&P.job!=='fowler';const axe=P.job==='barbarian',sk=swingT<1&&SWORD_SKILL_HIT.has(myMoId);const hammer=P.job==='fowler'&&P.equip.weapon;if(!(hammer&&o.nohs))sfx(blade?(crit?(axe&&!sk?'ahit2':'blood2'):sk?'blood3':axe?'ahit1':'blood1'):hammer?'h_hit':'hit',at,1,hammer?.86:1);if(crit)sfx('crit',at,.8);}
-  if(mnet)mnet.emit('hit',{i:m.sid,d,st:o.stun||0,dot:o.dot?[Math.round(atkPow()*o.dot[0]*gapMul(m.lv)*10)/10,o.dot[1]]:0,tau:o.taunt||0,kb:o.kb||0,air:o.air||0});
+  if(mnet)mnet.emit('hit',{i:m.sid,d,st:o.stun||0,dot:o.dot?[Math.round(atkPow()*o.dot[0]*gapMul(m.lv)*10)/10,o.dot[1]]:0,tau:o.taunt||0,kb:o.kb||0,air:o.air||0,sl:o.slow||0});
   if(o.steal&&Math.random()<o.steal){if(addItem('hp_s'))log('HP 포션을 훔쳤다','good');}
   const s=screenOf(mCenter(m).add(new THREE.Vector3(0,.4,0)));
   if(s.ok)floatText(crit?`${d}!`:d,s.x+rnd(-18,18),s.y,crit?'crit':'');
@@ -7876,7 +7896,8 @@ function levelUpFx(lv){sfx('levelup');
 }
 // 도적 계열(도적·약탈자·암살자)은 경험치를 더 얻고 장비도 더 자주 줍는다
 const ROGUE_LINE={rogue:1,thief:1,assassin:1};const ROGUE_EXP=1.3,ROGUE_GEAR=1.6;
-const expMul=()=>P&&ROGUE_LINE[P.job]?ROGUE_EXP:1;
+const hasPilfer=()=>!!(P&&P.skills&&P.skills.pilfer>0);
+const expMul=()=>hasPilfer()?ROGUE_EXP:1;
 function gainExp(n){
   if(P.lv>=MAX_LV){P.exp=0;updateHud();return;}
   n=Math.round(n*expMul());P.exp+=n;
@@ -8053,6 +8074,7 @@ function useSkillInner(i){
     const f=flatFwd(),me=player.position;setTimeout(()=>{if(mode!=='world')return;const q=player.position;VFX.slash(q.clone().setY(q.y+1.1),cam.yaw,0xdff4ff,{r:S.crange*.7,arc:3.2,tilt:.08,roll:.15,dur:.3,dir:1});VFX.slash(q.clone().setY(q.y+1.1),cam.yaw,0xffffff,{r:S.crange*.5,arc:2.6,tilt:.08,roll:.15,dur:.22,dir:1});VFX.shock(q,0xdff4ff,S.crange,.35);shakeT=Math.max(shakeT,.12);},200);
     VFX.burst(new THREE.Vector3(me.x+f.x*1.6,me.y+1.1,me.z+f.z*1.6),0xdff4ff,22,5,.5,{mix:0xffffff});if(cds[id]>0)cds[id]*=.4;updateHud();return;}
   // 워리어: 스킬 도중에 누른 스킬은 지금 스킬이 끝나자마자 나간다
+  if(id==='reap'&&P.reapHold){reapPull();return;}
   if(skillBusy()){if(P.job==='barbarian')P.skQ={i,t:tAll};return;}
   if((cds[id]||0)>0){toast(`${S.name} 재사용 대기 ${Math.ceil(cds[id])}초`);return;}
   if(!P.equip.weapon){toast('맨손일 때는 기본 공격만 할 수 있어요');return;}
@@ -8167,13 +8189,13 @@ function addItem(id,n=1,quiet){
 function removeItem(id,n=1){for(let i=P.bag.length-1;i>=0&&n>0;i--){const e=P.bag[i];if(e.id!==id)continue;const t=Math.min(n,e.n);e.n-=t;n-=t;if(e.n<=0)P.bag.splice(i,1);}invDirty();}
 function dropLoot(m){
   const lv=m.lv,t=tierForLevel(lv),gm=gapExp(lv);
-  const g=Math.round((lv*rnd(2,4)+2)*gm);P.gold+=g;
+  const g=Math.round((lv*rnd(2,4)+2)*gm*(hasPilfer()?1.3:1));P.gold+=g;
   const got=[`${g} 골드`];
   const roll=(p,id,n=1)=>{if(Math.random()<p*gm&&addItem(id,n))got.push(ITEMS[id].name+(n>1?` ${n}개`:''));};
   roll(.28,lv>=12?'hp_l':'hp_s');roll(.2,lv>=12?'mp_l':'mp_s');
   if(lv>=15){roll(.05,'atk_p');roll(.05,'def_p');roll(.04,'spd_p');roll(.06,'recall');}
   if(lv>=40)roll(.03,'elixir');
-  const gc=(.07+(m.D.scale>1.5?.08:0))*gm*(ROGUE_LINE[P.job]?ROGUE_GEAR:1);
+  const gc=(.07+(m.D.scale>1.5?.08:0))*gm*(hasPilfer()?ROGUE_GEAR:1);
   if(Math.random()<gc){const tt=Math.min(9,t+(Math.random()<.15?1:0));const id=pick(GEAR_BY_TIER[tt]);if(addItem(id))got.push(`[${itemName(id,P.job)}]`);}
   log('획득: '+got.join(', '),'good');
 }
@@ -8768,7 +8790,7 @@ function updatePlayer(dt){
     const gh=heightAt(cp.x,cp.z)+.4;if(cp.y<gh)cp.y=gh;
     cp.x+=Math.cos(cam.yaw)*.55;cp.z-=Math.sin(cam.yaw)*.55;
     camera.position.copy(cp);
-    swingT=Math.min(1,swingT+dt*(myMo?1/myMo.dur:swingSpd(P.job)));
+    swingT=Math.min(P&&P.reapHold&&myMoId==='reap1'?.97:1,swingT+dt*(myMo?1/myMo.dur:swingSpd(P.job)));
   }else{
     player.visible=false;if(viewModel)viewModel.visible=true;
     camera.position.set(player.position.x,player.position.y+1.62+bobY-(player.userData.sitK||0)*.95,player.position.z);
@@ -8779,6 +8801,7 @@ function updatePlayer(dt){
 }
 function updateWorld(dt){
   // 워리어 선입력: 지금 스킬 동작이 거의 끝나면(75%) 눌러 둔 스킬을 바로 이어서 쓴다 (1인칭·3인칭 모두)
+  if(P&&P.reapHold){const H=P.reapHold;if(tAll-H.t>1.5||!H.m||H.m.dying!==null||myMoId!=='reap1')endReapHold();else swingT=Math.min(swingT,.97);}
   if(P&&P.skQ){const q=P.skQ;if(tAll-q.t>1.5||P.job!=='barbarian')P.skQ=null;else if(!P.dash&&(P.skN!==swingN||swingT>=.75)){P.skQ=null;P.skN=-1;useSkill(q.i);}}
   updatePlayer(dt);
   const z=zoneAt(player.position.x,player.position.z);setZone(z);
@@ -8929,16 +8952,23 @@ function bottleMesh(id){const col={hp_l:0xe03030,hp_s:0xff6060,mp_l:0x3050e0,mp_
   const g=new THREE.Group();g.add(new THREE.Mesh(new THREE.SphereGeometry(.06,10,8),new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:.35,transparent:true,opacity:.85,roughness:.15})));
   const nk=new THREE.Mesh(new THREE.CylinderGeometry(.022,.026,.06,8),new THREE.MeshStandardMaterial({color:0xdde8ee,transparent:true,opacity:.7}));nk.position.y=.07;g.add(nk);
   const ck=new THREE.Mesh(new THREE.CylinderGeometry(.024,.02,.025,8),new THREE.MeshStandardMaterial({color:0x8a5a30}));ck.position.y=.11;g.add(ck);return {g,col};}
+function endReapHold(){const H=P&&P.reapHold;if(!H)return;P.reapHold=null;cds.reap=H.S.cd;if(myMoId==='reap1')swingT=1;}
+// 처형 2타: 박힌 칼을 비틀어 뽑아낸다
+function reapPull(){const H=P.reapHold;P.reapHold=null;cds.reap=H.S.cd;swingT=0;swingN++;myMoId='reap2';myMo=motionFor('dagger','reap2');P.skN=swingN;
+  setTimeout(()=>{if(mode!=='world')return;const m=H.m;if(!m||m.dying!==null)return;m.reapT=tAll;
+    shared(()=>damageMonster(m,H.S.mult*H.pw*.6,{...H.opt,exec25:true,netx:m.netT>tAll}));const c=mCenter(m);
+    VFX.burst(c,0xd02020,24,5,.5,{mix:0x701010,up:.35,grav:6});spawnFx(0xd02020,c,.9,.3);shakeT=Math.max(shakeT,.14);sfx('heavy',c,.5);sfx('blood2',c,1);},170);}
 function lootSkill(S,id,pw,opt){
   const q0=player.position;
   if(id==='ambush'){setTimeout(()=>{if(mode!=='world')return;const q=player.position,t=q.clone();t.y+=1.15;t.x-=Math.sin(cam.yaw)*.4;t.z-=Math.cos(cam.yaw)*.4;
       VFX.thrust(t,cam.yaw,0xfff4e0,{len:2.4,dur:.13});sfx('d_ambush',q,1);const m=frontTarget(S.range);if(!m)return;shared(()=>damageMonster(m,S.mult*pw,opt));sfx('blood2',m.mesh.position,1);const c=mCenter(m);
       VFX.burst(c,0xffffff,8,4,.18,{mix:0xfff0c0});VFX.burst(c,0xff3030,12,3,.3,{grav:5});spawnFx(0xffffff,c,.45,.14);shakeT=Math.max(shakeT,.06);},180);
     const f=flatFwd();return q0.clone().add(new THREE.Vector3(f.x*1.4,1.2,f.z*1.4));}
-  if(id==='reap'){const tg=frontTarget(S.range);
-    setTimeout(()=>{if(mode!=='world')return;const m=tg&&tg.dying===null?tg:frontTarget(S.range);if(!m)return;
-      m.reapT=tAll;shared(()=>damageMonster(m,S.mult*pw,{...opt,exec25:true,netx:m.netT>tAll}));sfx('hit3',m.mesh.position,1);VFX.burst(mCenter(m),0xc02020,10,2.5,.3,{mix:0x601010});shakeT=Math.max(shakeT,.08);
-            setTimeout(()=>{if(mode!=='world')return;const c=mCenter(m);VFX.burst(c,0xd02020,24,5,.5,{mix:0x701010,up:.35,grav:6});spawnFx(0xd02020,c,.9,.3);shakeT=Math.max(shakeT,.14);sfx('heavy',c,.5);},250);},255);
+  // 처형 1타: 찔러 넣고 박힌 채로 버틴다 (1.5초 안에 다시 쓰면 2타로 뽑아낸다)
+  if(id==='reap'){const tg=frontTarget(S.range);myMoId='reap1';myMo=motionFor('dagger','reap1');
+    if(tg){cds.reap=0;P.reapHold={m:tg,t:tAll,pw,opt,S};}
+    setTimeout(()=>{if(mode!=='world')return;const m=tg&&tg.dying===null?tg:null;if(!m){endReapHold();return;}
+      m.reapT=tAll;shared(()=>damageMonster(m,S.mult*pw*.4,{...opt,exec25:true,netx:m.netT>tAll}));sfx('hit3',m.mesh.position,1);VFX.burst(mCenter(m),0xc02020,10,2.5,.3,{mix:0x601010});shakeT=Math.max(shakeT,.08);},180);
     const f=flatFwd();return q0.clone().add(new THREE.Vector3(f.x*1.6,1.2,f.z*1.6));}
   if(id==='snare'){const f=flatFwd();const tg=frontTarget(S.range,.75);let pt;
     if(tg)pt=tg.mesh.position.clone();else pt=new THREE.Vector3(q0.x+f.x*S.range*.7,0,q0.z+f.z*S.range*.7);pt.y=heightAt(pt.x,pt.z);
@@ -8946,11 +8976,11 @@ function lootSkill(S,id,pw,opt){
       const mat=new THREE.MeshBasicMaterial({color:0xc8b080,wireframe:true,transparent:true,opacity:.95});const disc=new THREE.Mesh(new THREE.CircleGeometry(1,14,0,Math.PI*2),mat);disc.rotation.x=-Math.PI/2;net.add(disc);
       const rim=new THREE.Mesh(new THREE.TorusGeometry(1,.04,5,28),new THREE.MeshStandardMaterial({color:0x8a6a40,roughness:.9}));rim.rotation.x=Math.PI/2;net.add(rim);
       for(let k=0;k<6;k++){const w=new THREE.Mesh(new THREE.SphereGeometry(.07,6,5),new THREE.MeshStandardMaterial({color:0x6a6a70,metalness:.5}));const a=k/6*Math.PI*2;w.position.set(Math.cos(a),0,Math.sin(a));net.add(w);}
-      net.position.copy(st);net.scale.setScalar(.25);scene.add(net);sfx('throw',st,.8);const fl=.25+Math.hypot(pt.x-st.x,pt.z-st.z)*.025,hold=S.stun*(1+.1*(pw-1)/.25);let landed=false;
+      net.position.copy(st);net.scale.setScalar(.25);scene.add(net);sfx('throw',st,.8);const fl=.25+Math.hypot(pt.x-st.x,pt.z-st.z)*.025,hold=S.slow*(1+.1*(pw-1)/.25);let landed=false;
       rogueFx.push({t:0,o:net,up:(e)=>{if(e.t<fl){const k=e.t/fl;net.position.set(st.x+(pt.x-st.x)*k,st.y+(pt.y+.1-st.y)*k+Math.sin(k*Math.PI)*(1.2+Math.hypot(pt.x-st.x,pt.z-st.z)*.12),st.z+(pt.z-st.z)*k);net.scale.setScalar(.25+k*(S.radius-.25));net.rotation.y+=.3;return;}
         if(!landed){landed=true;net.position.set(pt.x,pt.y+.08,pt.z);net.scale.setScalar(S.radius);
           const hit=alive().filter(m=>!m.D.dragon&&Math.hypot(m.mesh.position.x-pt.x,m.mesh.position.z-pt.z)<S.radius+m.r*.5);
-          for(const m of hit)m.netT=tAll+hold;shared(()=>{for(const m of hit)damageMonster(m,S.mult*pw,{...opt,stun:hold});});VFX.burst(pt.clone().setY(pt.y+.3),0xc8b080,18,3,.4,{up:.3,grav:6});sfx('block',pt,.7);if(hit.length)shakeT=Math.max(shakeT,.1);}
+          for(const m of hit)m.netT=tAll+hold;shared(()=>{for(const m of hit)damageMonster(m,S.mult*pw,{...opt,stun:0,slow:hold});});VFX.burst(pt.clone().setY(pt.y+.3),0xc8b080,18,3,.4,{up:.3,grav:6});sfx('block',pt,.7);if(hit.length)shakeT=Math.max(shakeT,.1);}
         if(e.t>fl+hold){mat.opacity=Math.max(0,1-(e.t-fl-hold)/.4);if(e.t>fl+hold+.4)return false;}}});},270);
     return pt.clone().setY(pt.y+.5);}
   if(id==='quaff'){const pid=pickPotion();if(!pid)return null;const I=ITEMS[pid];const {g:bot,col}=bottleMesh(pid);
@@ -9437,7 +9467,7 @@ function updateBossVisual(m,dt){
 // 보스 보상: 경험치는 바로, 골드·장비는 쓰러진 자리에 생기는 상자에 (플레이어마다 따로)
 function bossReward(m,n){
   const D=m.D,gold=D.gold||1000,exp=m.st.exp;
-  const loot=['crown',pick(GEAR_BY_TIER[5]),pick(GEAR_BY_TIER[4])];if(Math.random()>.35)loot.shift();if(ROGUE_LINE[P.job])loot.push(pick(GEAR_BY_TIER[4]));
+  const loot=['crown',pick(GEAR_BY_TIER[5]),pick(GEAR_BY_TIER[4])];if(Math.random()>.35)loot.shift();if(hasPilfer())loot.push(pick(GEAR_BY_TIER[4]));
   const items=[...loot.map(id=>[id,1]),['elixir',2],['hp_l',5],['atk_p',2]];
   log(`${D.name||'킹 슬라임'} 처치!${n>1?` (함께 ${n}명)`:''} EXP +${Math.round(exp*expMul())}`,'sys');bigBanner(`${D.name||'킹 슬라임'} 처치`,`EXP +${Math.round(exp*expMul())} · 상자가 나타났다`);
   gainExp(exp);questKill(m);spawnBossChest(m.mesh.position,gold,items,D.name||'킹 슬라임');save();
@@ -9445,7 +9475,7 @@ function bossReward(m,n){
 function dragonReward(m,n){
   if(m.D.wyvern){wyvernReward(m,n);return;}
   const D=m.D,gold=D.gold||50000,exp=m.st.exp;
-  const loot=[pick(GEAR_BY_TIER[9]),pick(GEAR_BY_TIER[9]),pick(GEAR_BY_TIER[8])];if(ROGUE_LINE[P.job])loot.push(pick(GEAR_BY_TIER[8]));
+  const loot=[pick(GEAR_BY_TIER[9]),pick(GEAR_BY_TIER[9]),pick(GEAR_BY_TIER[8])];if(hasPilfer())loot.push(pick(GEAR_BY_TIER[8]));
   for(const id of ['dfang','dscale','dheart'])if(Math.random()<.4)loot.unshift(id);
   const items=[...loot.map(id=>[id,1]),['elixir',5],['hp_l',10]];
   log(`붉은 용 이그니스 처치!${n>1?` (함께 ${n}명)`:''} EXP +${Math.round(exp*expMul())}`,'sys');
@@ -9455,7 +9485,7 @@ function dragonReward(m,n){
 // 와이번: 한 번 잡으면 다시는 둥지로 가지 않는다 (포탈이 바로 지하실로)
 function wyvernReward(m,n){
   const D=m.D,gold=D.gold||6000,exp=m.st.exp;
-  const loot=[pick(GEAR_BY_TIER[7]),pick(GEAR_BY_TIER[6])];if(ROGUE_LINE[P.job])loot.push(pick(GEAR_BY_TIER[6]));
+  const loot=[pick(GEAR_BY_TIER[7]),pick(GEAR_BY_TIER[6])];if(hasPilfer())loot.push(pick(GEAR_BY_TIER[6]));
   const items=[...loot.map(id=>[id,1]),['elixir',2],['hp_l',5]];
   log(`${D.name} 처치!${n>1?` (함께 ${n}명)`:''} EXP +${Math.round(exp*expMul())}`,'sys');
   bigBanner(`${D.name} 처치`,`EXP +${Math.round(exp*expMul()).toLocaleString('ko-KR')}`);sfx('levelup');

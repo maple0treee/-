@@ -115,6 +115,7 @@
     function moveToward(m, gx, gz, spd) {
       const dx = gx - m.x, dz = gz - m.z, l = Math.hypot(dx, dz);
       if (l < 0.05) return 0;
+      if (m.slowT > 0) spd *= 0.35;
       const s = Math.min(spd * TICK, l);
       m.x += (dx / l) * s; m.z += (dz / l) * s;
       turn(m, Math.atan2(dx, dz), 0.5);
@@ -415,6 +416,7 @@
           continue;
         }
         m.stun = Math.max(0, m.stun - TICK);
+        if (m.slowT > 0) m.slowT -= TICK;
         if (m.air > 0) m.air -= TICK;
         const sx = m.x, sz = m.z; let want = 0;
         const homeD = Math.hypot(m.x - m.home.x, m.z - m.home.z);
@@ -522,6 +524,9 @@
         if (isFinite(tau) && tau > 0 && !m.dragon) { m.aggroOn = id; m.taunt = Math.min(tau, 5); }
         if (Array.isArray(d.kb) && !m.boss && !m.dragon) { const kx = Number(d.kb[0]), kz = Number(d.kb[1]), l = Math.hypot(kx, kz); if (isFinite(l) && l > 0.01) { const s = Math.min(l, 18) / l; m.x += kx * s; m.z += kz * s; m.windup = 0; m.dirty = true; } }
         // 띄우기: 잠깐 공중에 떠서 아무것도 못 한다 (-1이면 띄운 것을 거둔다)
+        // 느리게: 잠시 동안 움직임이 크게 느려진다
+        const sl = Number(d.sl);
+        if (isFinite(sl) && sl > 0 && !m.boss && !m.dragon) m.slowT = Math.max(m.slowT || 0, Math.min(sl, 6));
         const air = Number(d.air);
         if (isFinite(air) && air > 0 && !m.boss && !m.dragon) { m.air = Math.min(air, 2); m.stun = Math.max(m.stun, m.air); m.windup = 0; m.dirty = true; }
         else if (air < 0 && m.air > 0) { m.air = 0; m.dirty = true; }
