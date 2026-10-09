@@ -3521,14 +3521,14 @@ function makeWyvern2(D){
   wingL.parent.visible=wingR.parent.visible=false;  // 펼친 날개는 날 때만
   // 접은 날개 = 앞발: 손목(날개 마디)으로 땅을 짚고, 손가락과 막은 등 쪽으로 접어 올린다
   const mkFold=s=>{const F=new THREE.Group();F.position.set(s*1.0,.75,1.3);body.add(F);
-    const E=[s*.8,.45,-.85],Wr=[s*.55,-2.85,.75];
+    const E=[s*1.45,.75,-.6],Wr=[s*2.05,-2.85,1.05];
     F.add(limb([0,0,0],E,.27,.2),limb(E,Wr,.19,.14),joint(E,.21),joint(Wr,.17));
     const kn=new THREE.Mesh(new THREE.ConeGeometry(.1,.42,8),hornM);kn.position.set(Wr[0],Wr[1]-.02,Wr[2]+.28);kn.rotation.x=Math.PI/2;F.add(kn);
     for(const dx of [-.12,.12]){const c=new THREE.Mesh(new THREE.ConeGeometry(.06,.26,8),hornM);c.position.set(Wr[0]+dx,Wr[1]-.05,Wr[2]+.22);c.rotation.x=Math.PI/2+.3;F.add(c);}
-    const tips=[[s*1.05,1.35,-1.4],[s*1.1,.75,-1.95],[s*.95,.05,-2.2],[s*.7,-.55,-2.1]];
+    const tips=[[s*2.05,1.75,-1.3],[s*2.35,1.0,-1.9],[s*2.2,.2,-2.25],[s*1.75,-.45,-2.15]];
     const pos=[];let prev=E;
     tips.forEach(t=>{F.add(limb(Wr,t,.075,.035));pos.push(...Wr,...prev,...t);prev=t;});
-    pos.push(...Wr,...prev,s*-.25,-.9,-2.0);
+    pos.push(...Wr,...prev,s*-.35,-.85,-2.0);
     const mg=new THREE.BufferGeometry();mg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));mg.computeVertexNormals();F.add(new THREE.Mesh(mg,memM));
     return F;};
   const foldL=mkFold(-1),foldR=mkFold(1);
@@ -9198,7 +9198,7 @@ function setupNetMonsters(r){
       const was=m.flags&8;m.flags=u[5]|0;if((m.flags&8)&&!was&&m.D.boss)m.vulnT=3.2;}
   });
   r.on('matk',msg=>{
-    const m=netMonsterById(msg.i);if(!m)return;m.lunge=.3;sfx(m.D.boss?'slam':'matk',m.mesh.position,.8,m.D.boss?.8:1);
+    const m=netMonsterById(msg.i);if(!m)return;m.lunge=.3;if(m.D.dragon)dragonBite(m);else sfx(m.D.boss?'slam':'matk',m.mesh.position,.8,m.D.boss?.8:1);
     if(msg.to!==r.myId()||mode!=='world'||!P)return;
     const d=Math.hypot(player.position.x-m.mesh.position.x,player.position.z-m.mesh.position.z);
     if(d<m.r+3.2&&jumpY<1.4)hurtByMonster(num(msg.atk,m.st.atk),m.lv,m.D.name,m);
@@ -9487,6 +9487,14 @@ const inLairMe=()=>!!(player&&Math.hypot(player.position.x-OR.LAIR.x,player.posi
 const arenaOfD=D=>D&&D.arena==='WLAIR'?OR.WLAIR:OR.LAIR;
 const inArenaOf=m=>{const A=arenaOfD(m.D);return !!(player&&Math.hypot(player.position.x-A.x,player.position.z-A.z)<A.r-.5);};
 /* 용의 경고 표시 위 연출: 숨결은 입에 불이 모이고, 불덩이는 하늘에서 떨어지고, 급강하는 날아오른다 */
+const _hp=new THREE.Vector3();
+const dCol=m=>m.D.wyvern?{a:0x9aff60,b:0xe8ff90,c:0x58c040,deep:0x2a6a20}:{a:0xff8a2a,b:0xffc040,c:0xff5a1a,deep:0x8a2a08};
+// 물기: 고개를 내리꽂으며 턱을 닫는다. 이빨 자국 두 줄과 파편
+function dragonBite(m){const U=m.mesh.userData;m.biteT=.42;sfx('slam',m.mesh.position,.9,.7);sfx('heavy',m.mesh.position,.8,1.2);
+  setTimeout(()=>{if(!U.head)return;U.head.getWorldPosition(_hp);const yaw=m.mesh.rotation.y+Math.PI,C=dCol(m);
+    const p=_hp.clone();p.y-=.3;VFX.slash(p,yaw,0xffffff,{r:2.6,arc:1.6,tilt:.35,roll:1.2,dur:.18,dir:1});VFX.slash(p,yaw,0xffe0d0,{r:2.6,arc:1.6,tilt:-.35,roll:-1.2,dur:.18,dir:-1});
+    VFX.burst(p,0xff4a3a,16,5,.4,{grav:7});VFX.burst(p,C.b,10,4,.3,{mix:0xffffff});VFX.shock(new THREE.Vector3(p.x,heightAt(p.x,p.z)+.1,p.z),C.a,3,.3);
+    dustPuffs(new THREE.Vector3(p.x,heightAt(p.x,p.z),p.z),1.6,5);if(player&&player.position.distanceTo(p)<9)shakeT=Math.max(shakeT,.18);},140);}
 function dragonTele(m,msg,d,T){
   const U=m.mesh.userData;
   if(msg.k==='breath'){m.breathT=d;sfx('roar',m.mesh.position,1,.7);}
@@ -9499,12 +9507,21 @@ function dragonTele(m,msg,d,T){
 }
 function dragonLand(m,msg){
   const x=num(msg.x),z=num(msg.z),k=msg.k,p=new THREE.Vector3(x,heightAt(x,z)+.5,z);
-  if(k==='breath'){const a=num(msg.a),len=num(msg.len,15);for(let i=1;i<=9;i++){const u=len*i/9;spawnFx(i%2?0xff8a2a:0xffc040,new THREE.Vector3(x+Math.sin(a)*u,heightAt(x+Math.sin(a)*u,z+Math.cos(a)*u)+1,z+Math.cos(a)*u),1.2+i*.18,.55);}
-    sfx('fire',p,1,.7);sfx('fire',{x:x+Math.sin(a)*8,z:z+Math.cos(a)*8},1,.6);m.breathT=0;m.breathFx=.6;}
-  else if(k==='meteor'){spawnFx(0xff7a2a,p,2.2,.45);spawnRing(0xffa040,p,num(msg.r,2.6),.4);sfx('boom',p,.8,1.2);if(player&&Math.hypot(player.position.x-x,player.position.z-z)<7)shakeT=Math.max(shakeT,.15);}
-  else if(k==='dive'){spawnFx(0xffb070,p,5,.6);spawnRing(0xffd0a0,p,num(msg.r,5),.6);sfx('boom',p,1);m.flyT=0;m.landT=.4;if(player&&Math.hypot(player.position.x-x,player.position.z-z)<14)shakeT=.4;}
-  else if(k==='tail'){spawnRing(0xffd8c0,p,num(msg.r,7),.45);sfx('whoosh',p,1,.6);m.tailSpin=.5;}
-  else if(k==='stomp'){spawnRing(0xffe0c0,p,num(msg.r,10),.6);spawnFx(0xd8c8b0,p,4,.5);sfx('boom',p,1,.8);if(player&&Math.hypot(player.position.x-x,player.position.z-z)<16)shakeT=.35;}
+  const C=dCol(m);
+  if(k==='breath'){const a=num(msg.a),len=num(msg.len,15),w=num(msg.w,2.7);
+    // 0.6초 동안 세 번의 물결로 뿜는다: 입에서 쏟아지는 알갱이 + 바닥을 따라 번지는 불꽃 고리
+    for(let wv=0;wv<4;wv++)setTimeout(()=>{for(let i=1;i<=10;i++){const u=len*i/10,px=x+Math.sin(a)*u,pz=z+Math.cos(a)*u,q=new THREE.Vector3(px,heightAt(px,pz)+.9+Math.random()*.6,pz);
+        VFX.burst(q,i%2?C.a:C.b,6+i,2+i*.25,.5,{up:.6,mix:0xffffff,glow:i<4});if(wv===0&&i%2===0)VFX.shock(new THREE.Vector3(px,heightAt(px,pz)+.08,pz),C.c,w*(.6+i*.05),.5);}},wv*150);
+    for(let i=1;i<=9;i++){const u=len*i/9;spawnFx(i%2?C.a:C.b,new THREE.Vector3(x+Math.sin(a)*u,heightAt(x+Math.sin(a)*u,z+Math.cos(a)*u)+1,z+Math.cos(a)*u),1.2+i*.18,.55);}
+    sfx('fire',p,1,.7);sfx('fire',{x:x+Math.sin(a)*8,z:z+Math.cos(a)*8},1,.6);m.breathT=0;m.breathFx=.7;}
+  else if(k==='meteor'){spawnFx(C.a,p,2.2,.45);spawnRing(C.b,p,num(msg.r,2.6),.4);VFX.burst(p,C.a,18,6,.6,{up:.8,mix:0xffffff});VFX.shock(p,C.c,num(msg.r,2.6)*1.2,.4);rockDebris(p,1,6);sfx('boom',p,.8,1.2);if(player&&Math.hypot(player.position.x-x,player.position.z-z)<7)shakeT=Math.max(shakeT,.15);}
+  else if(k==='dive'){spawnFx(0xffb070,p,5,.6);spawnRing(0xffd0a0,p,num(msg.r,5),.6);sfx('boom',p,1);
+    groundCrack(p,num(msg.r,5)*.8,1.4);rockDebris(p,num(msg.r,5)*.5,22);dustPuffs(p,num(msg.r,5),18);VFX.shock(p,C.b,num(msg.r,5)*1.3,.6);VFX.shock(p,0xffffff,num(msg.r,5)*.7,.35);VFX.burst(p.clone().setY(p.y+1),C.a,30,7,.7,{up:1,mix:0xffffff});m.flyT=0;m.landT=.4;if(player&&Math.hypot(player.position.x-x,player.position.z-z)<14)shakeT=.4;}
+  else if(k==='tail'){spawnRing(0xffd8c0,p,num(msg.r,7),.45);sfx('whoosh',p,1,.6);m.tailSpin=.5;
+    const R=num(msg.r,7);for(let s2=0;s2<4;s2++)setTimeout(()=>{const q=m.mesh.position.clone();q.y+=1.1;VFX.slash(q,m.mesh.rotation.y+s2*Math.PI/2,0xf0e6d0,{r:R*.95,arc:2.2,tilt:.03,dur:.2,dir:1});},s2*110);
+    dustPuffs(p,R*.8,16);VFX.shock(p,0xe8dcc0,R,.45);}
+  else if(k==='stomp'){spawnRing(0xffe0c0,p,num(msg.r,10),.6);spawnFx(0xd8c8b0,p,4,.5);sfx('boom',p,1,.8);m.landT=.45;
+    const R=num(msg.r,10);groundCrack(p,R*.7,1.6);rockDebris(p,R*.45,26);dustPuffs(p,R*.9,22);for(let i=0;i<3;i++)setTimeout(()=>VFX.shock(p,i?0xe8dcc0:0xffffff,R*(.5+i*.3),.5),i*90);if(player&&Math.hypot(player.position.x-x,player.position.z-z)<16)shakeT=.35;}
 }
 function updateDragonVisual(m,dt){
   const U=m.mesh.userData,t=(m.dph=(m.dph||0)+dt);
@@ -9518,11 +9535,16 @@ function updateDragonVisual(m,dt){
   if(U.foldL){const spread=m.flyT>0||m.stompT>0;U.wingL.parent.visible=U.wingR.parent.visible=spread;U.foldL.visible=U.foldR.visible=!spread;
     const mv=Math.min(1,(m.mvS||0)/2);U.foldL.rotation.x=Math.sin((m.dph||0)*5+Math.PI)*mv*.28;U.foldR.rotation.x=Math.sin((m.dph||0)*5)*mv*.28;}
   if(m.stompT>0)m.stompT-=dt;
+  // 몸을 일으켰다 내리찍기 (숨결·발 구르기 준비 때 앞을 든다)
+  {const want=m.breathT>0?-.32:m.stompT>0?-.55:m.landT>0?.2:(U.foldL?.04:0);m.pitch=(m.pitch??want)+(want-(m.pitch??want))*Math.min(1,dt*(m.landT>0?14:4));U.body.rotation.x=m.pitch;}
   // 숨결: 고개를 들었다가 입을 벌리고 불빛이 커진다
   if(m.breathT>0){m.breathT-=dt;U.neck[0].rotation.x=-.35;U.head.rotation.x=.35;U.jaw.rotation.x=.55;U.glow.material.opacity=Math.min(.9,U.glow.material.opacity+dt*.8);U.glow.scale.setScalar(1+Math.sin(t*20)*.15);}
   else if(m.breathFx>0){m.breathFx-=dt;U.jaw.rotation.x=.7;U.neck[0].rotation.x=.15;U.head.rotation.x=-.1;U.glow.material.opacity=.9*m.breathFx/.6;}
   else{U.neck[0].rotation.x=Math.sin(t*1.2)*.06;U.head.rotation.x=Math.sin(t*1.2+1)*.05;U.jaw.rotation.x=(m.flags&1)?.4:Math.max(0,Math.sin(t*.7))*.08;U.glow.material.opacity=Math.max(0,U.glow.material.opacity-dt*2);}
   U.neck[1].rotation.y=Math.sin(t*.9)*.12;
+  // 물기: 목을 내리꽂고 턱을 닫는다
+  if(m.biteT>0){m.biteT-=dt;const k=1-m.biteT/.42,dip=Math.sin(Math.min(1,k*1.6)*Math.PI);U.neck[0].rotation.x=.35*dip;U.neck[1].rotation.x=.3*dip;U.head.rotation.x=.25*dip;U.jaw.rotation.x=k<.35?.7:Math.max(0,.7-(k-.35)*4);}
+  else U.neck[1].rotation.x=0;
   // 꼬리 흔들기, 꼬리 휩쓸기는 몸을 한 바퀴
   U.tail.forEach((T,k)=>{T.rotation.y=Math.sin(t*1.8-k*.6)*(.12+k*.02)+(m.tailT>0?.25:0);T.rotation.x=Math.sin(t*1.2-k*.5)*.04;});
   if(m.tailT>0)m.tailT-=dt;
