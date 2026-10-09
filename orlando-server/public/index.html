@@ -590,6 +590,8 @@ body.touch.inv-open #hotbar{display:none}
 
 /* 버프 아이콘 (단축바 왼쪽 위) */
 #buffs{display:none!important}
+#hideFx{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;backdrop-filter:grayscale(.65);-webkit-backdrop-filter:grayscale(.65);background:radial-gradient(ellipse at center,rgba(140,140,150,.22) 35%,rgba(60,60,70,.62) 100%)}
+#hideFx.on{opacity:1}
 #buffBar{position:fixed;display:flex;gap:4px;pointer-events:auto;z-index:4}
 #buffBar[hidden]{display:none}
 #buffBar .bf{position:relative;width:30px;height:30px;border-radius:5px;overflow:hidden;background:var(--bc);border:1px solid rgba(255,255,255,.35);box-shadow:0 2px 6px rgba(0,0,0,.4)}
@@ -623,6 +625,7 @@ body.talking #buffBar{visibility:hidden}
 
 <div id="app">
   <canvas id="c" tabindex="0" aria-label="오를란도 3D 월드"></canvas>
+  <div id="hideFx" aria-hidden="true"></div>
   <div id="tags"></div>
 
   <div id="hud" hidden>
@@ -1707,7 +1710,7 @@ for(const j in HIGH)for(const [id,name,req,mp,cd,o,desc] of HIGH[j])SKILLS[j].pu
 const SKILL_MAX=5;
 const skMax=S=>S&&S.max||SKILL_MAX;  // 스킬마다 최대 단계 (업그레이드가 없는 스킬은 1)
 const SK={};Object.values(SKILLS).forEach(l=>l.forEach(s=>SK[s.id]=s));
-const BUFF_NAME={atk:'공격↑',def:'방어↑',speed:'속도↑',crit:'치명타',regen:'재생',fam:'익숙한 감각',rage:'분노'};
+const BUFF_NAME={atk:'공격↑',def:'방어↑',speed:'속도↑',crit:'치명타',regen:'재생',fam:'익숙한 감각',rage:'분노',hide:'은신'};
 const SLOT_KEYS=['우클릭','휠↑','휠↓','휠클릭','E','R','T'];
 const NSK=SLOT_KEYS.length; // 스킬 칸 수
 const BASIC={
@@ -6937,6 +6940,7 @@ function updateHud(){{const h=$('#hint');if(h&&P)h.hidden=P.lv>=3;}
 let hudT=0;function hudSoon(){if(tAll-hudT>.15){hudT=tAll;updateHud();updatePartyBars();}updateBuffBar();}
 /* 스킬 단축바 왼쪽 위의 버프 아이콘: 남은 시간만큼 위에서부터 회색으로 덮인다 */
 const BUFF_ICON={
+  hide:['#5a5a66','<path d="M2 12 C5 7 8.5 5 12 5 C15.5 5 19 7 22 12 C19 17 15.5 19 12 19 C8.5 19 5 17 2 12 Z" fill="none" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="#fff"/><path d="M4 20 L20 4" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>'],
   rage:['#b8261a','<path d="M12 2 C13 6 17 7 17 12 C17 16 14.8 19 12 19 C9.2 19 7 16 7 12.5 C7 10 8.5 8.6 9.5 7.5 C9.6 9.5 10.6 10.6 11.6 11 C11 8 11.2 4.8 12 2 Z" fill="#fff"/><path d="M5 21 H19" stroke="#fff" stroke-width="2" stroke-linecap="round"/>'],
   fam:['#c0402a','<path d="M4 20 L14 10 M14 10 L18 4 L20 6 L14 10" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M7 13 L11 17" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>'],
   atk:['#c4493b','<path d="M5 19 L15 9 M13 5 L19 5 L19 11 M7 13 L11 17 M4 20 L6 18" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round"/>'],
@@ -7884,7 +7888,7 @@ function damageMonster(m,mult,o={}){
   return d;
 }
 function killMonster(m,mine=true,partyN=1){
-  if(mine&&m.deepT&&tAll-m.deepT<1.5&&P&&P.job==='assassin'){P.hideT=tAll+3;VFX.burst(player.position.clone().add(new THREE.Vector3(0,1,0)),0x6a50a0,16,2.5,.5,{mix:0x202030});}
+  if(mine&&m.deepT&&tAll-m.deepT<1.5&&P&&P.job==='assassin'){P.hideT=tAll+3;P.buffs.hide={v:1,t:3,max:3};VFX.burst(player.position.clone().add(new THREE.Vector3(0,1,0)),0x6a50a0,16,2.5,.5,{mix:0x202030});}
   if(P&&P.reapHold&&P.reapHold.m===m&&m.reapT&&tAll-m.reapT<1.5){P.reapHold=null;if(myMoId==='reap1')swingT=1;cds.reap=0;spawnFx(0xd02020,player.position.clone().add(new THREE.Vector3(0,1.2,0)),1.2,.35);updateHud();}
   else if(mine&&m.reapT&&tAll-m.reapT<1.5&&P&&(cds.reap||0)>0){cds.reap=0;spawnFx(0xd02020,player.position.clone().add(new THREE.Vector3(0,1.2,0)),1.2,.35);updateHud();}
   sfx('die',m.mesh.position,1,m.D.build==='slime'?1.4:(m.D.scale||1)>1.4?.6:1);
@@ -8816,7 +8820,7 @@ function updatePlayer(dt){
   return moving;
 }
 function updateWorld(dt){
-  if(P&&player){const ga=P.hideT>tAll?.3:1;if(player.userData.ghostA!==ga)setGhost(player,ga);}
+  if(P&&player){const hid=P.hideT>tAll;if(!hid&&P.buffs.hide)delete P.buffs.hide;const ga=hid?.3:1;if(player.userData.ghostA!==ga)setGhost(player,ga);const hf=$('#hideFx');if(hf&&hf.classList.contains('on')!==hid)hf.classList.toggle('on',hid);}
   // 워리어 선입력: 지금 스킬 동작이 거의 끝나면(75%) 눌러 둔 스킬을 바로 이어서 쓴다 (1인칭·3인칭 모두)
   if(P&&P.reapHold){const H=P.reapHold;if(tAll-H.t>1.5||!H.m||H.m.dying!==null||myMoId!=='reap1')endReapHold();else swingT=Math.min(swingT,.97);}
   if(P&&P.skQ){const q=P.skQ;if(tAll-q.t>1.5||P.job!=='barbarian')P.skQ=null;else if(!P.dash&&(P.skN!==swingN||swingT>=.75)){P.skQ=null;P.skN=-1;useSkill(q.i);}}
@@ -8844,7 +8848,7 @@ function updateWorld(dt){
     if(Q.t<=0){P.pushPrep=null;const S=Q.S,f=flatFwd(),dd=S.ddur||.25;P.dash={t:dd,dur:dd,dist:S.dist,mult:S.mult*Q.pw,opt:Q.opt,hit:new Set(),f,push:true};P.dashFx=S.color;invuln=Math.max(invuln,dd+.1);
       sfx('dash');shakeT=Math.max(shakeT,.12);VFX.shock(q,S.color,1.8,.3);}}
   if(P.buffs.fam&&P.buffs.fam.t<=dt)P.famN=0;
-  for(const k in P.buffs){P.buffs[k].t-=dt;if(P.buffs[k].t<=0){delete P.buffs[k];if(k!=='fam')log(`${BUFF_NAME[k]} 효과가 끝났다`);}}
+  for(const k in P.buffs){P.buffs[k].t-=dt;if(P.buffs[k].t<=0){delete P.buffs[k];if(k!=='fam'&&k!=='hide')log(`${BUFF_NAME[k]} 효과가 끝났다`);}}
   hudSoon();
   invuln=Math.max(0,invuln-dt);
   updateNetMonsters(dt);
