@@ -314,6 +314,9 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 .poster .pl.hi{color:#b3261e;font-weight:700}
 .poster .pr{font-size:calc(var(--w)*.075);text-align:center;border-top:1px dashed rgba(60,40,20,.35);padding-top:4px}
 .poster.rare{background-color:#f3dccb}
+.poster.special{background-color:#f6e7b8;box-shadow:0 0 0 2px #d8a83a,0 0 18px 4px rgba(255,200,80,.75),0 6px 14px rgba(0,0,0,.35);animation:spGlow 1.6s ease-in-out infinite}
+@keyframes spGlow{50%{box-shadow:0 0 0 2px #f0c050,0 0 28px 8px rgba(255,210,90,.95),0 6px 14px rgba(0,0,0,.35)}}
+.bigposter.special{background-color:#f6e7b8;box-shadow:0 0 0 3px #d8a83a,0 0 30px rgba(255,200,80,.6)}
 .poster.rare::after{content:'급구';position:absolute;top:calc(var(--w)*.1);right:calc(var(--w)*.05);transform:rotate(14deg);color:#b3261e;border:2px solid #b3261e;border-radius:4px;font-size:calc(var(--w)*.08);padding:0 4px;font-weight:700;opacity:.85}
 #board .card{position:relative}
 #boardDetail{position:absolute;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(20,14,8,.62);border-radius:inherit;padding:12px;backdrop-filter:blur(2px)}
@@ -5900,7 +5903,8 @@ function makePortal(x,z,ry,o={}){
   const fx={g,U,pts,pp,seed,L,cy:top+1.9,cols};PORTAL_FX.push(fx);return fx;
 }
 // 레벨이 모자라면 포탈이 아예 보이지 않는다 (부딪히지도 않는다)
-const portalSeen=p=>!P||(P.lv>=p.minLv&&(!p.need||p.need()));
+// 동쪽 황야 포탈은 게시판의 조사 의뢰를 받아야 열린다 (와이번을 이미 잡은 사람은 열려 있다)
+const portalSeen=p=>!P||(P.lv>=p.minLv&&(!p.need||p.need())&&(p.id!=='east'||!!(P.got&&(P.got.portalQ||P.got.wyvern))));
 function updatePortals(t){
   for(const p of PORTALS){const v=portalSeen(p),f=p.fx;if(f.g.visible!==v){f.g.visible=v;for(const c of f.cols){if(v){if(!colliders.includes(c))colliders.push(c);}else{const i=colliders.indexOf(c);if(i>=0)colliders.splice(i,1);}}}}
   for(const f of PORTAL_FX){if(!f.g.visible)continue;
@@ -6038,7 +6042,9 @@ const PORTALS=[
     to:{x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-8.5,yaw:0},msg:null,color:0xffd23a,
     // 와이번을 잡기 전에는 둥지로
     alt:()=>P&&!(P.got&&P.got.wyvern)?{x:OR.WLAIR.x,z:OR.WLAIR.z+OR.WLAIR.r-5,yaw:0,msg:`포탈을 지나자 거센 바람이 몰아친다.`}:null},
-  {id:'nest_out',x:OR.WLAIR.x+OR.WLAIR.r-8,z:OR.WLAIR.z,ry:-Math.PI/2,minLv:0,label:'포탈로 들어가기',need:()=>!!(P&&P.got&&P.got.wyvern),
+  {id:'nest_out',x:OR.WLAIR.x+OR.WLAIR.r-8,z:OR.WLAIR.z,ry:-Math.PI/2,minLv:0,label:'포탈로 들어가기',
+    // 와이번을 잡기 전에는 동쪽 황야로 돌아가는 문, 잡은 뒤에는 지하실로 가는 문
+    alt:()=>P&&!(P.got&&P.got.wyvern)?{x:OR.EPORTAL.x-4,z:OR.EPORTAL.z,yaw:Math.PI/2,msg:null}:null,
     to:{x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-8.5,yaw:0},msg:null,color:0xffd23a},
   {id:'hall_back',x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-4.5,ry:0,minLv:0,label:'동쪽 황야로 돌아가기',
     to:{x:OR.EPORTAL.x-4,z:OR.EPORTAL.z,yaw:Math.PI/2},msg:'포탈을 지나 동쪽 황야로 돌아왔다.',color:0xffd23a},
@@ -6932,7 +6938,9 @@ function updateBuffBar(){
 }
 let bannerT=0;
 function setZone(z){
-  if(z===curZone)return;curZone=z;const Z=ZONES[z];if(z==='village'||z==='town')P.home=z;
+  if(z===curZone)return;curZone=z;
+  {const q=P&&P.quest;if(q&&q.special==='portal'){const inside=z==='wlair'||z==='hall';
+    if(inside&&(q.stage|0)<1){q.stage=1;updateQuestHud();save();}else if(!inside&&q.stage===1){q.stage=2;log('의뢰 목표 달성','sys');updateQuestHud();save();}}}const Z=ZONES[z];if(z==='village'||z==='town')P.home=z;
   $('#wName').textContent=Z.name;$('#wStars').textContent=stars(Z.diff);$('#wRec').textContent=Z.rec;
   $('#bT').textContent=Z.name;$('#bS').textContent=Z.diff?`${stars(Z.diff)}  ${Z.rec||''}`:'';
   $('#banner').classList.add('on');clearTimeout(bannerT);bannerT=setTimeout(()=>$('#banner').classList.remove('on'),2200);
@@ -7653,9 +7661,9 @@ const QTONE={
 };
 const qTone=()=>QTONE[npcCur&&npcCur.id]||QTONE.kyle;
 const boardOf=id=>OR.BOARDS[id]?id:'kyle';
-function qGoals(q){if(!q)return [];if(!Array.isArray(q.goals))q.goals=[{ty:q.ty,need:q.need||1,have:q.have||0}];return q.goals;}
-function qDone(q){return !!q&&qGoals(q).every(g=>g.have>=g.need);}
-function qText(q){return qGoals(q).map(g=>`${MON[g.ty].name} ${g.need}마리`).join(' · ');}
+function qGoals(q){if(!q||q.special)return [];if(!Array.isArray(q.goals))q.goals=[{ty:q.ty,need:q.need||1,have:q.have||0}];return q.goals;}
+function qDone(q){if(q&&q.special)return (q.stage|0)>=2;return !!q&&qGoals(q).every(g=>g.have>=g.need);}
+function qText(q){if(q&&q.special)return '동쪽 황야 끝 포탈 조사';return qGoals(q).map(g=>`${MON[g.ty].name} ${g.need}마리`).join(' · ');}
 function fillWhy(p){const g=qGoals(p)[0];const s=String(p.why||'').replace(/\{m\}/g,MON[g.ty].name).replace(/\{z\}/g,ZONES[p.zone].name);
   // 받침에 맞춰 조사 고르기: 이(가) 을(를) 은(는) 와(과) 로(으로)
   return s.replace(/([가-힣])(이\(가\)|을\(를\)|은\(는\)|와\(과\))/g,(m,ch,j)=>{const b=(ch.charCodeAt(0)-0xac00)%28>0;const [x,y]=j.replace(')','').split('(');return ch+(b?x:y);});}
@@ -7667,10 +7675,14 @@ function renderQuest(msg){
     const pot=q.lv>=20?'hp_l':'hp_s';if(ITEMS[pot])addItem(pot,3+(q.rare?3:0),true);
     log(`의뢰 완료! EXP +${Math.round(q.exp*expMul())} · ${q.gold} 골드${gotItem?` · [${itemName(reward,P.job)}]`:''}`,'sys');P.quest=null;gainExp(q.exp);updateQuestHud();save();
     renderNpc(T.done,box=>{npcBtn(box,'게시판 보기',()=>openBoard(boardOf(here)),'pri wide');});return;}
-  if(q){renderNpc(msg||`${T.doing} (${qGoals(q).map(g=>`${MON[g.ty].name} ${Math.min(g.have,g.need)}/${g.need}`).join(' · ')})`,box=>{npcBtn(box,'계속하기',()=>closeNpc(),'pri wide').dataset.skip='1';npcBtn(box,'게시판 보기',()=>openBoard(boardOf(here)),'wide');npcBtn(box,'의뢰 포기',()=>{P.quest=null;updateQuestHud();save();renderQuest(T.quit);},'wide');});return;}
+  if(q){renderNpc(msg||(q.special?T.doing:`${T.doing} (${qGoals(q).map(g=>`${MON[g.ty].name} ${Math.min(g.have,g.need)}/${g.need}`).join(' · ')})`),box=>{npcBtn(box,'계속하기',()=>closeNpc(),'pri wide').dataset.skip='1';npcBtn(box,'게시판 보기',()=>openBoard(boardOf(here)),'wide');npcBtn(box,'의뢰 포기',()=>{P.quest=null;updateQuestHud();save();renderQuest(T.quit);},'wide');});return;}
   if(msg){renderNpc(msg,box=>{npcBtn(box,'게시판 보기',()=>openBoard(boardOf(here)),'pri wide');});return;}
   openBoard(boardOf(here));
 }
+// Lv 60이 되면 하레나 게시판에 붙는 특별 의뢰: 동쪽 황야 끝 포탈 조사 (받아야 포탈이 열린다)
+const PORTAL_POSTER={id:'portal_survey',special:'portal',zone:'weast',lv:60,goals:[],exp:30000,gold:5000,rare:1,giver:'하레나 경비대',role:'경비대',
+  why:'동쪽 황야 끝에 처음 보는 문이 생겼다. 무엇으로 이어지는지 아무도 모른다. 들어가 보고, 살아서 돌아와 다오.'};
+const portalPosterUp=()=>!!(P&&P.lv>=60&&!(P.got&&(P.got.portalQ||P.got.wyvern))&&!(P.quest&&P.quest.special));
 /* ---------- 의뢰 게시판: 포스터를 눌러 가까이 들여다보고 승낙한다. 서버 게시판은 모두가 함께 쓴다 ---------- */
 let boardId=null,boardList=[],boardGiver=null;
 const localBoards={};
@@ -7689,7 +7701,7 @@ $('#boardDetail').addEventListener('click',e=>{if(e.target.id==='boardDetail')$(
 function renderBoard(){const box=$('#boardCork');box.innerHTML='';
   if(!boardList.length){const p=document.createElement('p');p.style.cssText='color:#f3e6c8;text-align:center;padding:40px 10px';p.textContent='게시판을 불러오는 중…';box.appendChild(p);return;}
   // 사람들이 손으로 아무렇게나 붙인 것처럼: 크기·기울기·위치가 제각각이고 서로 겹쳐도 된다
-  const W=Math.max(300,box.clientWidth-12),L=boardList,n=L.length;
+  const W=Math.max(300,box.clientWidth-12),L=(boardId==='kyle'&&portalPosterUp()?[PORTAL_POSTER]:[]).concat(boardList),n=L.length;
   const rnd=s=>{let h=2166136261;for(const ch of s)h=Math.imul(h^ch.charCodeAt(0),16777619);return ()=>{h=Math.imul(h^(h>>>15),2246822507);h=Math.imul(h^(h>>>13),3266489909);h^=h>>>16;return (h>>>0)/4294967296;};};
   const avg=W<520?112:150,cols=Math.max(2,Math.floor(W/(avg*.82))),rows=Math.ceil(n/cols),cellW=W/cols,cellH=avg*1.414*.78,H=rows*cellH+avg*.7;
   const pin=document.createElement('div');pin.id='boardPin';pin.style.height=H+'px';box.appendChild(pin);
@@ -7697,9 +7709,12 @@ function renderBoard(){const box=$('#boardCork');box.innerHTML='';
   order.forEach((p,k)=>{const R=rnd(p.id);const w=Math.round(avg*(.78+R()*.48)),h=w*1.414;
     const cx=(k%cols+.5)*cellW+(R()-.5)*cellW*.7,cy=(Math.floor(k/cols)+.5)*cellH+(R()-.5)*cellH*.5;
     const x=Math.max(2,Math.min(W-w-2,cx-w/2)),y=Math.max(4,Math.min(H-h-4,cy-h/2));
-    const b=document.createElement('button');b.type='button';b.className='poster'+(p.rare?' rare':'');
+    const b=document.createElement('button');b.type='button';b.className='poster'+(p.special?' special':p.rare?' rare':'');
     const pins=[['#f3a090','#a3281c'],['#9ec3f0','#2a5aa3'],['#f3e09a','#a3861c'],['#b6eaa6','#3a8a2a']][Math.floor(R()*4)];
     b.style.cssText=`left:${x}px;top:${y}px;--w:${w}px;--r:${((R()-.5)*16).toFixed(1)}deg;z-index:${1+Math.floor(R()*30)};--px:${30+R()*40}%;--pc1:${pins[0]};--pc2:${pins[1]};--sx:${Math.round(R()*100)}%;--sy:${Math.round(R()*100)}%`;
+    if(p.special){b.style.zIndex=60;b.innerHTML=`<span class="pk">조사 의뢰</span><span class="pm">포탈 조사</span><span class="pn"></span><span class="pt"></span><span class="pl"></span><span class="pr"></span>`;
+      b.querySelector('.pt').textContent=`${p.why} — ${p.giver}`;b.querySelector('.pl').textContent=`${ZONES[p.zone].name} · Lv ${p.lv}`;b.querySelector('.pr').textContent=`${p.gold} 골드`;
+      b.onclick=()=>showPoster(p,b);pin.appendChild(b);return;}
     const G=qGoals(p),hi=P&&p.lv>P.lv+5;
     b.innerHTML=`<span class="pk">${p.rare?'급히 구함':'현상 수배'}</span><span class="pm"></span><span class="pn"></span><span class="pt"></span><span class="pl${hi?' hi':''}"></span><span class="pr"></span>`;
     b.querySelector('.pm').textContent=MON[G[0].ty].name+(G.length>1?` 외`:'');b.querySelector('.pn').textContent=G.map(g=>`${MON[g.ty].name} ${g.need}`).join(' · ');
@@ -7711,6 +7726,10 @@ function showPoster(p,src){const d=$('#boardDetail');d.innerHTML='';d.hidden=fal
   const pp=document.createElement('div');pp.className='bigposter'+(p.rare?' rare':'');d.appendChild(pp);
   if(src){const a=src.getBoundingClientRect(),c=d.getBoundingClientRect();pp.style.setProperty('--fx',(a.left+a.width/2-(c.left+c.width/2))+'px');pp.style.setProperty('--fy',(a.top+a.height/2-(c.top+c.height/2))+'px');pp.style.setProperty('--fr',src.style.getPropertyValue('--r')||'0deg');}
   const add=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;pp.appendChild(e);return e;};
+  if(p.special){pp.classList.add('special');add('div','bk','조 사  의 뢰');add('h3',null,'동쪽 황야 끝\n포탈 조사');add('div','zl',`${ZONES[p.zone].name} · Lv ${p.lv}`);
+    add('div','from',`붙인 사람: ${p.giver}`);add('p','why',`“${p.why}”`);add('p','sign',`— ${p.giver}\n다 마치면 ${(boardGiver&&boardGiver.name)||'게시판 주인'}에게 알려 주세요.`);
+    add('div','rw',`보상  EXP ${p.exp} · ${p.gold} 골드 · 장비 · 포션`);if(P.quest)add('p','warn','이미 맡은 의뢰가 있다.');
+    const bt=add('div','btns');const ok=boardBtn('승낙하기',()=>acceptPortalSurvey(),'pri');if(P.quest)ok.disabled=true;bt.appendChild(ok);bt.appendChild(boardBtn('다시 붙이기',()=>{d.hidden=true;}));return;}
   add('div','bk',p.rare?'급 히  구 함':'현 상  수 배');
   add('h3',null,qGoals(p).map(g=>`${MON[g.ty].name} ${g.need}마리`).join('\n'));
   add('div','zl',`${ZONES[p.zone].name} · 권장 Lv ${p.lv}`);
@@ -7733,6 +7752,9 @@ function cleanQuest(q){if(!q||typeof q!=='object'||!ZONES[q.zone])return null;co
 function acceptPoster(p){P.quest=cleanQuest({...p,qid:p.id,from:boardGiver.id,fromName:boardGiver.name});if(!P.quest)return;
   updateQuestHud();save();closeBoard();log(`의뢰를 맡았다: ${p.giver}의 부탁 — ${qText(P.quest)} (${ZONES[p.zone].name})`,'sys');sfx('ui');
   if(party)for(const m of party.members)if(m.id!==myPeer())dm(m.id,{k:'qshare',n:P.name,q:P.quest});}
+function acceptPortalSurvey(){if(P.quest)return;const p=PORTAL_POSTER;
+  P.quest={qid:p.id,special:'portal',stage:0,zone:p.zone,lv:p.lv,goals:[],exp:p.exp,gold:p.gold,rare:1,giver:p.giver,role:p.role,why:p.why,from:boardGiver.id,fromName:boardGiver.name};
+  P.got=P.got||{};P.got.portalQ=1;updateQuestHud();save();closeBoard();log(`의뢰를 맡았다: ${p.giver}의 부탁 — 동쪽 황야 끝 포탈 조사`,'sys');sfx('ui');}
 function takePoster(p){if(P.quest)return;
   if(window.ORLANDO_WS&&room&&room.connected()){boardWant=p;room.emit('btake',{b:boardId,id:p.id}).catch(()=>{});return;}
   const L=boardLocal(boardId),i=L.findIndex(x=>x.id===p.id);if(i>=0)L.splice(i,1);acceptPoster(p);}
@@ -7748,7 +7770,8 @@ function questKill(m){const q=P.quest;if(!q)return;const g=qGoals(q).find(g=>g.t
   if(party&&q.qid)for(const pm of party.members)if(pm.id!==myPeer())dm(pm.id,{k:'qkill',qid:q.qid,ty:m.t});
   if(qDone(q))log(`의뢰 목표 달성`,'sys');}
 function updateQuestHud(){const e=$('#questHud'),bx=$('#questBox');const q=P&&P.quest;if(!q){bx.hidden=true;return;}bx.hidden=false;
-  e.textContent=qGoals(q).map(g=>`${MON[g.ty].name} 처치 ${Math.min(g.have,g.need)}/${g.need}`).join('\n')+(qDone(q)?`\n${q.fromName||'의뢰인'}에게 보고하기`:'');placeQuestBox();}
+  const lines=q.special?((q.stage|0)<1?['동쪽 황야 끝 포탈 들어가 보기']:(q.stage|0)<2?['포탈 밖으로 돌아오기']:[]):qGoals(q).map(g=>`${MON[g.ty].name} 처치 ${Math.min(g.have,g.need)}/${g.need}`);
+  if(qDone(q))lines.push(`${q.fromName||'의뢰인'}에게 보고하기`);e.textContent=lines.join('\n');placeQuestBox();}
 // 의뢰 창은 상태 창 바로 아래에 붙인다 (상태 창 높이가 버프·파티로 바뀌어도 따라간다)
 function placeQuestBox(){const s=$('#stat'),bx=$('#questBox');if(!s||!bx)return;const r=s.getBoundingClientRect();if(r.height)bx.style.top=Math.round(r.bottom+8)+'px';}
 try{new ResizeObserver(placeQuestBox).observe($('#stat'));}catch(e){}addEventListener('resize',placeQuestBox);
