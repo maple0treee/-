@@ -201,7 +201,7 @@
       // 노릴 대상
       let t = tg.find((q) => q.id === m.aggroOn);
       if (m.taunt > 0) m.taunt -= TICK;
-      if (!t || (!(m.taunt > 0) && Math.random() < 0.02)) { t = pick(tg); m.aggroOn = t.id; }
+      if (!t || (!(m.taunt > 0) && Math.random() < 0.02)) { const tn = tg.filter((q) => !q.dc); t = pick(tn.length ? tn : tg); m.aggroOn = t.id; }
       const dx = t.x - m.x, dz = t.z - m.z, dist = Math.hypot(dx, dz);
       turn(m, Math.atan2(dx, dz), 0.35);
       const cdm = rage ? 0.7 : 1;
@@ -282,7 +282,7 @@
       if (m.gap > 0 || m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }
       let t = tg.find((q) => q.id === m.aggroOn);
       if (m.taunt > 0) m.taunt -= TICK;
-      if (!t || (!(m.taunt > 0) && Math.random() < 0.015)) { t = pick(tg); m.aggroOn = t.id; }
+      if (!t || (!(m.taunt > 0) && Math.random() < 0.015)) { const tn = tg.filter((q) => !q.dc); t = pick(tn.length ? tn : tg); m.aggroOn = t.id; }
       const dx = t.x - m.x, dz = t.z - m.z, dist = Math.hypot(dx, dz), a = Math.atan2(dx, dz);
       turn(m, a, 0.25);
       const head = { x: m.x + Math.sin(m.ry) * (m.r + 0.5), z: m.z + Math.cos(m.ry) * (m.r + 0.5) };
@@ -399,7 +399,8 @@
       if (!clients.size) return;
       const ts = targetsFor();
       // 쉴더가 스쿠툼을 박아 두면 그 쉴더를 노리던 몬스터는 스쿠툼을 노린다
-      { const dcs = new Set(ts.filter((t) => t.dc).map((t) => t.id)); if (dcs.size) for (const m of monsters.values()) if (m.aggroOn && dcs.has('dc:' + m.aggroOn)) m.aggroOn = 'dc:' + m.aggroOn; }
+      // 도발당해 그 쉴더를 노리던 몬스터만 옮겨 간다 (그냥 박아 둔 스쿠툼은 아무도 끌지 않는다)
+      { const dcs = new Set(ts.filter((t) => t.dc).map((t) => t.id)); if (dcs.size) for (const m of monsters.values()) if (m.aggroOn && m.taunt > 0 && dcs.has('dc:' + m.aggroOn)) m.aggroOn = 'dc:' + m.aggroOn; }
       const players = [...clients.values()].filter((c) => c.pres.on);
       const active = [], updates = [];
       const boss = [...monsters.values()].find((q) => q.boss);
@@ -434,6 +435,7 @@
           if (dun ? !t.rot : t.dun) continue;
           const d = Math.hypot(t.x - m.x, t.z - m.z);
           // 단단한 감각(쉴더): 노리던 쉴더는 더 멀리 가도 놓치지 않는다
+          if (t.dc && t.id !== m.aggroOn) continue;
           const far = t.sd && t.id === m.aggroOn;
           if ((homeD > (far ? 80 : 45) && !m.summon) || d > (far ? 55 : 30)) continue;
           const pri = t.id === m.aggroOn ? d - 6 : d;

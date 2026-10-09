@@ -1221,7 +1221,7 @@ body.talking #buffBar{visibility:hidden}
       // 노릴 대상
       let t = tg.find((q) => q.id === m.aggroOn);
       if (m.taunt > 0) m.taunt -= TICK;
-      if (!t || (!(m.taunt > 0) && Math.random() < 0.02)) { t = pick(tg); m.aggroOn = t.id; }
+      if (!t || (!(m.taunt > 0) && Math.random() < 0.02)) { const tn = tg.filter((q) => !q.dc); t = pick(tn.length ? tn : tg); m.aggroOn = t.id; }
       const dx = t.x - m.x, dz = t.z - m.z, dist = Math.hypot(dx, dz);
       turn(m, Math.atan2(dx, dz), 0.35);
       const cdm = rage ? 0.7 : 1;
@@ -1302,7 +1302,7 @@ body.talking #buffBar{visibility:hidden}
       if (m.gap > 0 || m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }
       let t = tg.find((q) => q.id === m.aggroOn);
       if (m.taunt > 0) m.taunt -= TICK;
-      if (!t || (!(m.taunt > 0) && Math.random() < 0.015)) { t = pick(tg); m.aggroOn = t.id; }
+      if (!t || (!(m.taunt > 0) && Math.random() < 0.015)) { const tn = tg.filter((q) => !q.dc); t = pick(tn.length ? tn : tg); m.aggroOn = t.id; }
       const dx = t.x - m.x, dz = t.z - m.z, dist = Math.hypot(dx, dz), a = Math.atan2(dx, dz);
       turn(m, a, 0.25);
       const head = { x: m.x + Math.sin(m.ry) * (m.r + 0.5), z: m.z + Math.cos(m.ry) * (m.r + 0.5) };
@@ -1419,7 +1419,8 @@ body.talking #buffBar{visibility:hidden}
       if (!clients.size) return;
       const ts = targetsFor();
       // 쉴더가 스쿠툼을 박아 두면 그 쉴더를 노리던 몬스터는 스쿠툼을 노린다
-      { const dcs = new Set(ts.filter((t) => t.dc).map((t) => t.id)); if (dcs.size) for (const m of monsters.values()) if (m.aggroOn && dcs.has('dc:' + m.aggroOn)) m.aggroOn = 'dc:' + m.aggroOn; }
+      // 도발당해 그 쉴더를 노리던 몬스터만 옮겨 간다 (그냥 박아 둔 스쿠툼은 아무도 끌지 않는다)
+      { const dcs = new Set(ts.filter((t) => t.dc).map((t) => t.id)); if (dcs.size) for (const m of monsters.values()) if (m.aggroOn && m.taunt > 0 && dcs.has('dc:' + m.aggroOn)) m.aggroOn = 'dc:' + m.aggroOn; }
       const players = [...clients.values()].filter((c) => c.pres.on);
       const active = [], updates = [];
       const boss = [...monsters.values()].find((q) => q.boss);
@@ -1454,6 +1455,7 @@ body.talking #buffBar{visibility:hidden}
           if (dun ? !t.rot : t.dun) continue;
           const d = Math.hypot(t.x - m.x, t.z - m.z);
           // 단단한 감각(쉴더): 노리던 쉴더는 더 멀리 가도 놓치지 않는다
+          if (t.dc && t.id !== m.aggroOn) continue;
           const far = t.sd && t.id === m.aggroOn;
           if ((homeD > (far ? 80 : 45) && !m.summon) || d > (far ? 55 : 30)) continue;
           const pri = t.id === m.aggroOn ? d - 6 : d;
@@ -1656,7 +1658,7 @@ const SKILLS={
     {id:'shB',name:'회복하기/회수하기',req:60,type:'shd',color:0x8fd0b4,sc:{name:'회복하기',mp:20,cd:20,pct:.35},pa:{name:'회수하기',mp:8,cd:4,mult:1.4,bash:2.2,range:10},
       desc:'[스쿠툼] 최대 HP의 35%를 회복한다 / [파르마] 던진 파르마를 불러온다. 근처에 적이 있으면 적에게 먼저 날아가 그 적과 바로 곁의 적들에게 140% 피해를 주고(최대 5번), 없으면 바로 돌아온다. 파르마를 던지지 않았다면 방패로 앞을 쳐 220% 피해'},
     {id:'shC',name:'박아두기/방패 올려치기',req:60,type:'shd',color:0xbfd4ff,sc:{name:'박아두기',mp:12,cd:15,dur:10},pa:{name:'방패 올려치기',mp:10,cd:5,mult:3,range:3.4},
-      desc:'[스쿠툼] 스쿠툼을 땅에 박아 둔다. 나를 노리던 몬스터는 박힌 스쿠툼을 노린다. 다시 쓰면 뽑아 든다. 10초가 지나거나 큰 피해를 입으면 저절로 뽑힌다 / [파르마] 방패를 아래에서 위로 올려쳐 앞의 적들에게 300% 피해를 주고 띄운다'}],
+      desc:'[스쿠툼] 스쿠툼을 땅에 박아 둔다. 도발당해 나를 노리던 몬스터는 박힌 스쿠툼을 노린다. 다시 쓰면 뽑아 든다. 10초가 지나거나 큰 피해를 입으면 저절로 뽑힌다 / [파르마] 방패를 아래에서 위로 올려쳐 앞의 적들에게 300% 피해를 주고 띄운다'}],
   guardian:[
     {id:'raise',name:'방패 올리기',req:30,mp:10,cd:7,type:'guard',dur:3,buff:{def:2.5},mult:1.2,color:0xbfd4ff,desc:'3초 동안 방패를 들어 방어력 150% 증가. 그동안 기본 공격은 쓸 수 없고, 다른 스킬을 쓰면 방패를 내린다. 방패를 든 나를 공격한 적은 120% 피해를 입는다. 3초 안에 다시 누르면 일찍 내린다'},
     {id:'push',name:'밀기',req:32,mp:12,cd:7,type:'dash',push:true,prep:.55,mult:2,dist:7,ddur:.32,stun:1.5,color:0xc8d8f0,desc:'방패를 세우고 몸을 낮춰 힘을 모았다가(그동안 받는 피해 50% 감소) 앞으로 밀고 나간다. 부딪힌 적을 밀쳐내며 200% 피해, 1.5초 기절.'},
