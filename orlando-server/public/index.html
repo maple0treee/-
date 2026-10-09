@@ -614,6 +614,11 @@ body.talking #buffBar{visibility:hidden}
 #wmap .wmleg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--dim);align-items:center}
 #wmap .wmleg i{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);margin-right:-6px;border:1px solid #1b1712}
 #mini{cursor:pointer}
+
+/* 이어서 칠 수 있는 스킬(2타·3타): 밝은 테두리 */
+.slot.follow{box-shadow:0 0 0 2px #fff6c8,0 0 12px 3px rgba(255,236,150,.85)!important;animation:followPulse .6s ease-in-out infinite alternate}
+.msk.follow{box-shadow:0 0 0 3px #fff6c8,0 0 14px 4px rgba(255,236,150,.85)!important}
+@keyframes followPulse{to{box-shadow:0 0 0 2px #fff,0 0 18px 6px rgba(255,240,170,1)}}
 </style>
 
 <div id="app">
@@ -1617,7 +1622,7 @@ const SKILLS={
     {id:'guardstrike',name:'막기',req:62,mp:12,cd:9,type:'block',counter:true,needSword:true,dur:.5,pct:0,cmult:2.8,crange:4.2,cheal:.15,color:0xbfe3ff,desc:'칼을 가로로 눕혀 0.5초 동안 적의 공격을 완전히 막는다. 막아내면 3초 동안 이 스킬이 쳐내기로 바뀐다 — 앞쪽 적들을 떨쳐내며 280% 피해, HP 15% 회복, 막기의 남은 재사용 시간 60% 감소'},
     {id:'dashcut',name:'돌진하며 베기',req:65,mp:14,cd:7,type:'dash',moveDir:true,needSword:true,mult:2.6,dist:10,desc:'움직이던 방향으로 돌진하며 지나친 적에게 260% 피해'},
     {id:'duel',name:'결투 신청',req:68,mp:20,cd:30,type:'buff',buff:{atk:1.25,def:1.25},dur:10,duel:30,needSword:true,desc:'10초 동안 공격력·방어력 25% 증가. 가장 가까운 몬스터와 주변 무작위 몬스터 2마리에 30초 동안 표식 — 표식 대상에게 주는 피해 20% 증가(보스는 10%)'},
-    {id:'familiar',name:'익숙한 감각',req:60,mp:0,cd:0,type:'passive',desc:'(지속) 기본 공격마다 익숙한 감각 1중첩(최대 5). 중첩마다 이동 속도 3%·공격 속도 5% 증가. 4초 동안 기본 공격을 안 하면 사라진다'}],
+    {id:'familiar',name:'익숙한 감각',req:60,mp:0,cd:0,type:'passive',max:1,desc:'(지속) 기본 공격마다 익숙한 감각 1중첩(최대 5). 중첩마다 이동 속도 3%·공격 속도 5% 증가. 4초 동안 기본 공격을 안 하면 사라진다'}],
   barbarian:[
     {id:'axechop',name:'머리찍기',req:60,mp:14,cd:3,type:'barb',mult:4.4,range:3.4,color:0xffa860,desc:'도끼를 머리 위로 들어 앞을 내려찍는다. 440% 피해. [도끼 돌리기 뒤] 내려찍은 뒤 도끼를 한 번 더 크게 휘둘러 앞쪽 넓은 범위에 400% 피해. [견인하기 뒤] 견인하기에 맞은 적에게 온 힘을 실어 1800% 단일 피해 (치명타 확률 +50%, 2초 기절)'},
     {id:'axespin',name:'도끼 돌리기',req:60,mp:12,cd:7,type:'barb',mult:2.2,radius:4.4,color:0xd8b080,desc:'도끼를 크게 한 바퀴 돌려 주변 원형 범위의 적에게 220% 피해'},
@@ -1701,6 +1706,7 @@ const HIGH={
 for(const j in SKILLS)if(JOBS[j].from&&j!=='swordsman')for(const s of SKILLS[j]){const m={5:10,7:12,10:15}[s.req];if(m)s.req=m;}
 for(const j in HIGH)for(const [id,name,req,mp,cd,o,desc] of HIGH[j])SKILLS[j].push({id,name,req,mp,cd,desc,...o});
 const SKILL_MAX=5;
+const skMax=S=>S&&S.max||SKILL_MAX;  // 스킬마다 최대 단계 (업그레이드가 없는 스킬은 1)
 const SK={};Object.values(SKILLS).forEach(l=>l.forEach(s=>SK[s.id]=s));
 const BUFF_NAME={atk:'공격↑',def:'방어↑',speed:'속도↑',crit:'치명타',regen:'재생',fam:'익숙한 감각',rage:'분노'};
 const SLOT_KEYS=['우클릭','휠↑','휠↓','휠클릭','E','R','T'];
@@ -6990,13 +6996,13 @@ function updateHotbar(){
       else{const n=countOf(id);name=ITEMS[id].short;count=String(n);left=cds.item||0;frac=left/1;cls+=' item'+(n<=0?' none':'');}}
     else{const id=P.slots[i];cls+=' sk';
       if(!id){name='빈칸';cls+=' empty';}
-      else{const S=SK[id];name=S.name;left=cds[id]||0;frac=left/S.cd;if(S.counter&&P.counterT>0){name='쳐내기';left=0;frac=0;cls+=' ready';}else if(P.mp<S.mp)cls+=' nomp';else if(left<=0)cls+=' ready';}}
+      else{const S=SK[id];name=S.name;left=cds[id]||0;frac=left/S.cd;if(S.counter&&P.counterT>0){name='쳐내기';left=0;frac=0;cls+=' ready follow';}else if(id==='reap'&&P.reapHold){left=0;frac=0;cls+=' ready follow';}else if(P.mp<S.mp)cls+=' nomp';else if(left<=0)cls+=' ready';}}
     const key=name+cls+count+(left>0?Math.ceil(left):'');
     {const hh=(Math.round(frac*200)/2)+'%';if(h.lastH!==hh){h.lastH=hh;h.cd.style.height=hh;}}
     if(h.last!==key){h.last=key;h.nm.textContent=name;h.s.className=cls;h.cnt.textContent=count;h.cdn.textContent=left>0&&i<NSK?Math.ceil(left):'';}
     // 휴대폰: 공격 버튼 둘레의 스킬 버튼
     if(i<NSK&&mskEls[i]){const m=mskEls[i],id=P.slots[i];m.b.hidden=!id;
-      if(id){const mc=(i>=4?'msk o':'msk')+(cls.includes('ready')?' ready':'')+(cls.includes('nomp')?' nomp':'');if(m.c!==mc){m.c=mc;m.b.className=mc;}
+      if(id){const mc=(i>=4?'msk o':'msk')+(cls.includes('ready')?' ready':'')+(cls.includes('follow')?' follow':'')+(cls.includes('nomp')?' nomp':'');if(m.c!==mc){m.c=mc;m.b.className=mc;}
         if(m.n!==name){m.n=name;m.t.textContent=name;}const cd=(Math.round(frac*100))+'%';if(m.cd!==cd){m.cd=cd;m.b.style.setProperty('--cd',cd);}
         const cs=left>0?String(Math.ceil(left)):'';if(m.cs!==cs){m.cs=cs;m.e.textContent=cs;}}}
   }
@@ -7342,6 +7348,7 @@ function startGameNow(data){
   while(P.slots.length<NSK)P.slots.push(null);P.sp=data.sp??P.lv;
   // 바뀐 스킬: 지금 직업에 없는 스킬은 SP를 돌려주고 칸에서 뺀다
   if(data.skv!==SKILL_VER){fixSkills('스킬이 새로 바뀌어');}P.skv=SKILL_VER;
+  {let back=0;for(const id in P.skills){const mx=skMax(SK[id]);if(P.skills[id]>mx){back+=P.skills[id]-mx;P.skills[id]=mx;}}if(back){P.sp+=back;setTimeout(()=>log(`최대 단계가 바뀐 스킬이 있어 SP ${back}을(를) 돌려받았다.`,'sys'),500);}}
   P.advSp={...(data.advSp||{})};P.pastSkills={...(data.pastSkills||{})};grantAdvSp();
   // 직업에 맞지 않는 장비는 가방으로
   for(const s of ['weapon','sub']){const id=P.equip[s];if(id&&!canWear(id,P.job)){P.bag.push(bagGear(id,P.enh[s]));P.equip[s]=null;P.enh[s]=0;}}
@@ -7390,11 +7397,11 @@ function renderSkills(){
     const nm=document.createElement('div');nm.className='nm';
     const b=document.createElement('b');b.textContent=S.name;
     const meta=document.createElement('span');meta.textContent=S.type==='passive'?'패시브':`MP ${S.mp} · 재사용 ${S.cd}초`;
-    const pips=document.createElement('span');pips.className='pips';pips.textContent='●'.repeat(lvl)+'○'.repeat(SKILL_MAX-lvl);
+    const pips=document.createElement('span');pips.className='pips';pips.textContent='●'.repeat(lvl)+'○'.repeat(Math.max(0,skMax(S)-lvl));
     nm.append(b,meta,pips);
     const btn=document.createElement('button');btn.className='learn';btn.type='button';
     if(past){btn.textContent=lvl?`${lvl}단계`:'—';btn.disabled=true;}
-    else{btn.textContent=lvl===0?'배우기':lvl>=SKILL_MAX?'최대':'강화';btn.disabled=locked||lvl>=SKILL_MAX||P.sp<1;btn.onclick=()=>learn(S.id);}
+    else{btn.textContent=lvl===0?'배우기':lvl>=skMax(S)?'최대':'강화';btn.disabled=locked||lvl>=skMax(S)||P.sp<1;btn.onclick=()=>learn(S.id);}
     const p=document.createElement('p');p.textContent=S.desc+(lvl>1?` (강화 +${(lvl-1)*25}%)`:'');
     card.append(nm,btn,p);
     if(!past&&lvl>0&&S.type!=='passive'){
@@ -7407,7 +7414,7 @@ function renderSkills(){
   }
 }
 function learn(id){
-  const S=SK[id];const lvl=P.skills[id]||0;if(P.sp<1||lvl>=SKILL_MAX||P.lv<skReq(S))return;
+  const S=SK[id];const lvl=P.skills[id]||0;if(P.sp<1||lvl>=skMax(S)||P.lv<skReq(S))return;
   P.sp--;P.skills[id]=lvl+1;
   if(lvl===0){const e=S.type==='passive'?-1:P.slots.indexOf(null);if(e>=0)P.slots[e]=id;log(`${S.name}을(를) 배웠다${e>=0?` · ${SLOT_KEYS[e]}에 등록`:''}`,'sys');}
   else log(`${S.name} ${lvl+1}단계로 강화`,'sys');
@@ -7826,7 +7833,7 @@ function closeMentor(){$('#mentor').hidden=true;mode='world';canvas.focus();sync
 $('#mLater').onclick=closeMentor;
 // 전직하면 그 직업의 스킬 수만큼 SP를 받는다 (직업마다 한 번)
 // 지금 배울 수 있는 스킬을 모두 최대로 올릴 만큼 SP를 모았으면 레벨업 SP를 더 주지 않는다
-function spCapped(){const need=treeOf(P.job).reduce((a,s)=>a+SKILL_MAX,0);const spent=Object.values(P.skills||{}).reduce((a,v)=>a+(v|0),0);return P.sp+spent>=need;}
+function spCapped(){const need=treeOf(P.job).reduce((a,s)=>a+skMax(s),0);const spent=Object.values(P.skills||{}).reduce((a,v)=>a+(v|0),0);return P.sp+spent>=need;}
 function grantAdvSp(){}  // 전직 보너스 SP는 주지 않는다
 function advance(j){
   const from=JOBS[P.job].name;P.job=j;P.mentorReady=false;
