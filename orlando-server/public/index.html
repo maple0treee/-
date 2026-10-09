@@ -1540,7 +1540,7 @@ const ZONES={
   ruins:{name:'폐허',diff:4,sky:0xa2b0a2,mm:'#6a8050'},
   dungeon:{name:'석굴',diff:5,rec:'보스 킹 슬라임 · Lv 18 이상 · 함께 도전 추천',sky:0x17130f,mm:'#2a241c'},
   road:{name:'길',diff:4,sky:0xc4c9c2,mm:'#a08a62'},
-  town:{name:'하레나',diff:0,rec:'안전 지대 · 상점·대장간·여관·의뢰',sky:0xd8c8a6,mm:'#d2b88a'},
+  town:{name:'하레나',diff:0,rec:'안전 지대 · 상점·대장간·여관·의뢰',sky:0xd6e2ea,mm:'#d2b88a'},
   wwest:{name:'서쪽 황야',diff:5,sky:0xd6c4a0,mm:'#b08a55'},
   wnorth:{name:'북쪽 황야',diff:5,sky:0xcfc6ac,mm:'#a8986e'},
   wsouth:{name:'남쪽 황야',diff:5,sky:0xd8bf98,mm:'#b8874f'},
@@ -1820,6 +1820,28 @@ const sun=new THREE.DirectionalLight(0xfff0d4,1.05);
 sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
 const sc=sun.shadow.camera;sc.left=-36;sc.right=36;sc.top=36;sc.bottom=-36;sc.near=1;sc.far=140;sun.shadow.bias=-.0006;
 scene.add(sun,sun.target);
+/* 하늘: 지평선에서 꼭대기로 짙어지는 색, 해와 햇무리, 천천히 흐르는 구름 */
+const SKY={hor:new THREE.Uniform(new THREE.Color(0xc8d8e0)),zen:new THREE.Uniform(new THREE.Color(0x5a8ec8)),sun:new THREE.Uniform(new THREE.Vector3(30,60,20).normalize()),
+  t:new THREE.Uniform(0),cloud:new THREE.Uniform(.5),glow:new THREE.Uniform(1)};
+const skyDome=new THREE.Mesh(new THREE.SphereGeometry(360,32,16),new THREE.ShaderMaterial({uniforms:{uHor:SKY.hor,uZen:SKY.zen,uSun:SKY.sun,uT:SKY.t,uCloud:SKY.cloud,uGlow:SKY.glow},
+  vertexShader:'varying vec3 vD;void main(){vD=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+  fragmentShader:`varying vec3 vD;uniform vec3 uHor,uZen,uSun;uniform float uT,uCloud,uGlow;
+float hs(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hs(i),hs(i+vec2(1,0)),f.x),mix(hs(i+vec2(0,1)),hs(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*vn(p);p=p*2.03+vec2(1.7,9.2);a*=.5;}return v;}
+void main(){vec3 d=normalize(vD);float h=d.y;
+  vec3 col=mix(uHor,uZen,pow(smoothstep(-.02,.75,h),.8));
+  col=mix(col,uHor*1.04,smoothstep(.12,-.05,h)*.6);
+  float sd=max(dot(d,normalize(uSun)),0.);
+  col+=vec3(1.,.93,.78)*(pow(sd,900.)*3.+pow(sd,60.)*.35*uGlow+pow(sd,6.)*.12*uGlow);
+  if(h>0.){vec2 uv=d.xz/(h+.18)*1.6+vec2(uT*.012,uT*.005);
+    float n=fbm(uv),c=smoothstep(1.-uCloud,1.-uCloud+.3,n)*smoothstep(0.,.18,h);
+    float lit=.85+.25*pow(sd,4.);vec3 cc=mix(uHor*1.08,vec3(1.),.6)*lit;cc=mix(cc,cc*.82,smoothstep(.55,.95,fbm(uv*1.8+3.1)));
+    col=mix(col,cc,c*.9);}
+  gl_FragColor=vec4(col,1.);
+  #include <encodings_fragment>
+}`,side:THREE.BackSide,depthWrite:false,depthTest:false,fog:false}));
+skyDome.renderOrder=-1000;skyDome.frustumCulled=false;scene.add(skyDome);
 
 const mat=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.85,flatShading:true},o));
 const colliders=[];
@@ -1955,9 +1977,9 @@ function buildVillage(){
     MAP_HOUSES.push({x,z,r:Math.max(w,dpt)*.55});
   }
   flushHouses();
-  // 분수: 두 단 수반, 넘쳐 흐르는 물
-  buildVillageFountain(0,heightAt(0,0),0);
-  colliders.push({x:0,z:0,r:3.6});
+  // 우물: 둥근 돌담, 박공 지붕, 두레박
+  buildVillageWell(0,heightAt(0,0),0);
+  colliders.push({x:0,z:0,r:1.9});
   // 화톳불 기둥 (나무 기둥 위 쇠 바구니에 장작불)
   for(let i=0;i<4;i++){
     const a=i/4*Math.PI*2+Math.PI/4,x=Math.cos(a)*7.5,z=Math.sin(a)*7.5;
@@ -2435,6 +2457,41 @@ function buildBrazier(x,z){
   for(let i=0;i<8;i++){const a=i/8*Math.PI*2;M(new THREE.ConeGeometry(.025,.08,5),iron,Math.cos(a)*.51,1.84,Math.sin(a)*.51);}
   const flames=[];_fireBundle(g,0,1.6,0,1.7,flames);
   scene.add(g);_fireAnim(x,z,g,flames,2.1,.5);return g;
+}
+
+/* ---------- 파르보스 우물: 돌로 쌓은 둥근 우물, 나무 기둥과 박공 지붕, 도르래와 두레박 ---------- */
+function buildVillageWell(cx,y0,cz){
+  const g=new THREE.Group();g.position.set(cx,y0,cz);
+  const add=(m,x=0,y=0,z=0)=>{m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;g.add(m);return m;};
+  const stone=mat(0xa49c8c,{roughness:.9}),stone2=mat(0x8a8274,{roughness:.9}),wood=mat(0x6b4a2e),woodD=mat(0x4a3220),roof=mat(0x7a3a2c),rope=mat(0xc8b080),iron=mat(0x55504a,{metalness:.5});
+  // 둥근 돌담: 돌덩이를 한 줄씩 엇갈려 쌓는다
+  const R=1.25,rows=5;
+  for(let r=0;r<rows;r++){const n=14,off=r%2?Math.PI/n:0;for(let k=0;k<n;k++){const a=k/n*Math.PI*2+off;
+    const b=add(new THREE.Mesh(new THREE.BoxGeometry(.56,.2,.32),(k+r)%3?stone:stone2),Math.cos(a)*R,.1+r*.19,Math.sin(a)*R);b.rotation.y=-a+Math.PI/2;b.rotation.z=(Math.sin(k*7.3+r)*.04);}}
+  add(lathe([[R+.2,.98],[R+.22,1.08],[R-.2,1.08],[R-.22,.98]],20,stone2));
+  // 안쪽 어두운 물
+  const w=add(new THREE.Mesh(new THREE.CircleGeometry(R-.2,24),new THREE.MeshStandardMaterial({color:0x1e3a48,roughness:.1,metalness:.3})),0,.55,0);w.rotation.x=-Math.PI/2;
+  add(new THREE.Mesh(new THREE.CylinderGeometry(R-.18,R-.18,.5,20,1,true),mat(0x3a3630,{side:THREE.BackSide})),0,.8,0);
+  // 기둥 두 개와 가로대, 박공 지붕
+  for(const s of [-1,1]){add(new THREE.Mesh(new THREE.BoxGeometry(.18,2.6,.18),wood),s*(R+.05),1.3+.98-.98,0).position.y=1.98;}
+  add(new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,2*R+.6,8),woodD),0,2.75,0).rotation.z=Math.PI/2;
+  for(const s of [-1,1]){const p=add(new THREE.Mesh(new THREE.BoxGeometry(2*R+.9,.08,1.15),roof),0,3.42,s*.48);p.rotation.x=s*.62;}
+  add(new THREE.Mesh(new THREE.BoxGeometry(2*R+.95,.14,.14),woodD),0,3.78,0);
+  for(const s of [-1,1]){const t=add(new THREE.Mesh(new THREE.BoxGeometry(.1,.95,.1),wood),s*(R+.05),3.2,0);}
+  // 손잡이(크랭크)
+  const cr=add(new THREE.Mesh(new THREE.BoxGeometry(.06,.45,.06),iron),R+.35,2.6,0);
+  add(new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,.25,6),woodD),R+.45,2.42,0).rotation.z=Math.PI/2;
+  // 감긴 밧줄과 두레박
+  add(new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,.5,10),rope),.2,2.75,0).rotation.z=Math.PI/2;
+  add(new THREE.Mesh(new THREE.CylinderGeometry(.015,.015,1.35,4),rope),.2,2.05,0);
+  const bk=add(new THREE.Mesh(new THREE.CylinderGeometry(.2,.16,.3,10,1,true),mat(0x7a5a38,{side:THREE.DoubleSide})),.2,1.3,0);
+  add(new THREE.Mesh(new THREE.TorusGeometry(.2,.015,4,12),iron),.2,1.43,0).rotation.x=Math.PI/2;
+  add(new THREE.Mesh(new THREE.TorusGeometry(.2,.015,4,12,Math.PI),iron),.2,1.45,0);
+  // 우물가: 물통과 돌 디딤판
+  const tub=add(new THREE.Mesh(new THREE.CylinderGeometry(.3,.26,.36,10),mat(0x7a5a38)),R+.75,.18,.6);
+  add(new THREE.Mesh(new THREE.CircleGeometry(.27,10),new THREE.MeshStandardMaterial({color:0x4a8aa8,roughness:.1})),R+.75,.34,.6).rotation.x=-Math.PI/2;
+  add(new THREE.Mesh(new THREE.CylinderGeometry(R+.55,R+.65,.1,16),stone2),0,.05,0);
+  scene.add(g);return g;
 }
 
 /* ---------- 사람 조각하기: 여러 모양을 부드럽게 녹여 붙인 '하나의 매끈한 몸'을 만든다
@@ -4758,7 +4815,7 @@ const lavaPools=[];
   const W=400,D=330,NX=200,NZ=165;
   const g=new THREE.PlaneGeometry(W,D,NX,NZ);g.rotateX(-Math.PI/2);g.translate(120+W/2,0,0);
   const pos=g.attributes.position,cols=[];
-  const C={wwest:new THREE.Color(0xb3895a),wnorth:new THREE.Color(0xa69a7c),wsouth:new THREE.Color(0xbb8d58),weast:new THREE.Color(0xa8744c),town:new THREE.Color(0xd2b88a),road:new THREE.Color(0x9c8461)};
+  const C={wwest:new THREE.Color(0xb3895a),wnorth:new THREE.Color(0xa69a7c),wsouth:new THREE.Color(0xbb8d58),weast:new THREE.Color(0xa8744c),town:new THREE.Color(0xc8aa78),road:new THREE.Color(0x9c8461)};
   const rock=new THREE.Color(0x77756a),snowPeak=new THREE.Color(0xf4f7f9),tmp=new THREE.Color();
   for(let i=0;i<pos.count;i++){
     const x=pos.getX(i),z=pos.getZ(i),h=heightAt(x,z);pos.setY(i,h);
@@ -5148,7 +5205,7 @@ function addPalm(x,y,z,h,seed){
   { const q=at(1.1,13.3);const board=box(2,1.4,.12,0x6b4a2e,0,1.8,0);const papers=[0,1,2,3].map(k=>box(.4,.5,.02,0xf0e6cc,-.6+k*.4,1.85+(k%2)*.15,.07));
     prop(q.x,q.z,[box(.12,2.6,.12,0x4a3220,-.9,1.3,0),box(.12,2.6,.12,0x4a3220,.9,1.3,0),board,...papers],toward(q));colliders.push({...q,r:1.1}); }
   p=at(2.2,11.5);addNpc({id:'elis',name:'엘리스',role:'순간이동 술사',...p,look:{long:1,robe:0x3a2f6a,robe2:0x5a4a9a,hat:'hood',hatC:0x2a2050,staff:0x9ad7ff},
-    lines:['어디로 가고 싶나요? 별빛을 따라 데려다 드릴게요.','파르보스 분수 근처에서도 저를 찾을 수 있어요.','석굴 입구로도 보내 드릴 수 있어요. 준비가 되었다면요.'],acts:[['이동하기','travel']]});
+    lines:['어디로 가고 싶나요? 별빛을 따라 데려다 드릴게요.','파르보스 우물 근처에서도 저를 찾을 수 있어요.','석굴 입구로도 보내 드릴 수 있어요. 준비가 되었다면요.'],acts:[['이동하기','travel']]});
   { const q=at(2.2,13.6);const ring=new THREE.Mesh(new THREE.RingGeometry(1.1,1.4,32),new THREE.MeshBasicMaterial({color:0x9ad7ff,transparent:true,opacity:.7,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,depthWrite:false}));
     ring.rotation.x=-Math.PI/2;ring.position.set(q.x,heightAt(q.x,q.z)+.06,q.z);scene.add(ring); }
   p=at(2.8,12.5);addNpc({id:'sera',name:'세라',role:'현자',...p,look:{prop:'book',robe:0xe8e0c8,robe2:0xd0c8b0,hat:'hood',hatC:0xc8c0a8,beard:0xf0f0f0,staff:0xfff0a0},
@@ -5739,7 +5796,7 @@ function animateDungeonLights(t){
     const stall=(a,r,c)=>{const x=cx+Math.cos(a)*r,z=cz+Math.sin(a)*r;
       grp(x,z,-a+Math.PI/2,[mesh(new THREE.BoxGeometry(1.8,.8,.8),wood,0,.4,0),...[[-.85,-.35],[.85,-.35],[-.85,.35],[.85,.35]].map(([px,pz])=>mesh(new THREE.BoxGeometry(.08,2,.08),dark,px,1,pz)),
         mesh(new THREE.BoxGeometry(2,.06,1.1),mat(c),0,2.05,0,.15),...[0,1,2,3].map(k=>mesh(new THREE.SphereGeometry(.13,6,5),mat([0xd04a3a,0xe0c040,0x6ab04a,0xf09a40][k]),-.6+k*.4,.9,0))],.75);};
-    stall(.55,11.5,0xc04a3a);stall(1.0,11.5,0x3a6ac0);stall(-.55,11.5,0xe0c040);stall(-1.0,11.5,0x4a9a5a);stall(2.6,11.5,0x9a4ac0);stall(-2.6,11.5,0xc07a3a);
+    stall(.55,11.5,0xc04a3a);stall(1.0,11.5,0x3a6ac0);stall(-.55,11.5,0xe0c040);stall(-1.0,11.5,0x4a9a5a);
     // 도시의 작은 소품은 걸리지 않고 지나갈 수 있다
     [[.8,13.6],[-.8,13.6],[2.2,12.8],[-2.2,12.8]].forEach(([a,r])=>barrel(cx+Math.cos(a)*r,cz+Math.sin(a)*r,false));
     [[1.3,13.4],[-1.3,13.4]].forEach(([a,r])=>crate(cx+Math.cos(a)*r,cz+Math.sin(a)*r,.9,0,false));
@@ -7195,7 +7252,7 @@ function summonMentor(quiet){
   if(mentor)return;
   mentor=makeMentorMesh();mentor.position.set(0,heightAt(0,5),5.2);scene.add(mentor);npcBakeRequest('mentor',mentor);
   colliders.push({x:0,z:5.2,r:.6,mentor:true});
-  if(!quiet)log(`${(MENTORS[P.job]||MENTORS[baseOf(P.job)]).name}이(가) 파르보스 분수 곁에 나타났다. 전직할 수 있다.`,'sys');
+  if(!quiet)log(`${(MENTORS[P.job]||MENTORS[baseOf(P.job)]).name}이(가) 파르보스 우물 곁에 나타났다. 전직할 수 있다.`,'sys');
 }
 function openMentor(){
   const M=MENTORS[P.job]||MENTORS[baseOf(P.job)];mode='dialog';unlockPointer();syncLockTip();
@@ -8067,7 +8124,7 @@ function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);c
 Perf.init();mergeStaticGroups(3);LightPool.init();InstChunks.init();
 addEventListener('resize',resize);resize();
 const clock=new THREE.Clock();let tAll=0;
-const targetSky=new THREE.Color();
+const targetSky=new THREE.Color(),_sunC=new THREE.Color(),_zenC=new THREE.Color(),_skyBlue=new THREE.Color();
 function pushOut(p,r){for(const c of colliders){if(c.y0!==undefined&&(p.y===undefined||p.y<c.y0||p.y>c.y1))continue;const dx=p.x-c.x,dz=p.z-c.z,d=Math.hypot(dx,dz),mn=c.r+r;if(d<mn&&d>1e-4){p.x=c.x+dx/d*mn;p.z=c.z+dz/d*mn;}}}
 
 function updatePlayer(dt){
@@ -8216,7 +8273,12 @@ function updateWorld(dt){
     if(it)b.textContent='F · '+(it.startsWith('player:')?`${(others.get(bestP)||{}).name||'모험가'}에게 말 걸기`:it.startsWith('npc:')?`${bestN.name} (${bestN.role})`:(it.startsWith('chest:')?'보물 상자 열기':{shop:'상인과 거래',mentor:'스승과 대화',door_in:'석문 열기',door_out:'석굴에서 나가기'}[it]));}
   targetSky.set(ZONES[z].sky);scene.background.lerp(targetSky,z==='dungeon'?1:dt*1.2);scene.fog.color.copy(scene.background);
   scene.fog.near=z==='dungeon'?14:38;scene.fog.far=z==='dungeon'?60:140;
-  {const inD=z==='dungeon',inT=z==='town';hemi.intensity+=((inD?.32:inT?.64:.8)-hemi.intensity)*Math.min(1,dt*3);sun.intensity+=((inD?.15:inT?.86:1.05)-sun.intensity)*Math.min(1,dt*3);}
+  {const inD=z==='dungeon',inT=z==='town',kk=Math.min(1,dt*3);hemi.intensity+=((inD?.32:inT?.95:.8)-hemi.intensity)*kk;sun.intensity+=((inD?.15:inT?1.25:1.05)-sun.intensity)*kk;
+    sun.color.lerp(_sunC.set(inT?0xfff6e4:0xfff0d4),kk);
+    // 하늘 돔: 지평선은 안개색, 꼭대기는 짙은 하늘색. 사막(하레나)은 구름이 적고 햇무리가 세다
+    skyDome.visible=!inD;skyDome.position.copy(camera.position);SKY.t.value=tAll;SKY.hor.value.copy(scene.background);
+    _zenC.copy(scene.background).lerp(_skyBlue.set(inT?0x2f74c8:0x4f86c4),inT?.72:.55);SKY.zen.value.lerp(_zenC,kk);
+    SKY.cloud.value+=((inT?.18:/^w/.test(z)?.3:z==='ruins'||z==='swamp'?.62:.5)-SKY.cloud.value)*kk*.5;SKY.glow.value+=((inT?1.8:1)-SKY.glow.value)*kk;}
   sun.position.set(player.position.x+30,60,player.position.z+20);sun.target.position.copy(player.position);
   publishPresence(false);
 }
