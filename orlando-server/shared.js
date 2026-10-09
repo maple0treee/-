@@ -15,9 +15,12 @@
   const DUN = { x: 0, z: 422, R: 14, corZ0: 394, corZ1: 409, corW: 3.2 };
   const BOSS_HOME = { x: 0, z: 421 };
   const LAIR = { x: 470, z: 0, r: 18 };              // 심연 끝 붉은 용의 둥지
+  const HALL = { x: 0, z: -500, R: 24 };             // 동쪽 황야 끝 포탈 너머의 둥근 방 (천장이 막혀 있다)
+  const EPORTAL = { x: 484, z: 24 };                 // 동쪽 황야 끝 포탈
 
   function zoneAt(x, z) {
     if (z > 300) return 'dungeon';
+    if (z < -300) return 'hall';
     if (x > ROAD.x0 && x < ROAD.x1 && Math.abs(z) < 12 && Math.hypot(x - C2.x, z - C2.z) > R2 - 2) return 'road';
     const d2 = Math.hypot(x - C2.x, z - C2.z);
     if (x > 150) {
@@ -36,7 +39,7 @@
     if (a >= 0.25 * PI && a < 0.75 * PI) return 'swamp';
     return 'ruins';
   }
-  const SAFE = { village: 1, town: 1 };
+  const SAFE = { village: 1, town: 1, hall: 1 };
 
   // 걸어 다닐 수 있는 곳 안으로 붙잡는다 (첫 지역 원, 길, 두 번째 지역 원, 석굴)
   function roomClamp(p, rad) {
@@ -49,6 +52,7 @@
   }
   function worldClamp(p, rad) {
     if (p.z > 300) return roomClamp(p, rad);
+    if (p.z < -300) { const d = Math.hypot(p.x - HALL.x, p.z - HALL.z), r = HALL.R - rad; if (d > r) { p.x = HALL.x + (p.x - HALL.x) * r / d; p.z = HALL.z + (p.z - HALL.z) * r / d; } return; }
     const d1 = Math.hypot(p.x, p.z), d2 = Math.hypot(p.x - C2.x, p.z - C2.z);
     const r1 = R1 - rad, r2 = R2 - rad, hw = ROAD.half - rad;
     if (d1 <= r1 || d2 <= r2 || (p.x >= ROAD.x0 && p.x <= ROAD.x1 && Math.abs(p.z) <= hw)) return;
@@ -136,7 +140,7 @@
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 4], plains: [4, 7], swamp: [7, 11], ruins: [11, 15], dungeon: [18, 22], road: [12, 16], town: [0, 0], wwest: [20, 30], wnorth: [28, 40], wsouth: [38, 50], weast: [48, 60] };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 4], plains: [4, 7], swamp: [7, 11], ruins: [11, 15], dungeon: [18, 22], road: [12, 16], town: [0, 0], hall: [60, 60], wwest: [20, 30], wnorth: [28, 40], wsouth: [38, 50], weast: [48, 60] };
 
   // ---------- 의뢰 게시판 포스터 ----------
   // 의뢰를 주는 NPC마다 게시판이 따로 있다. 포스터는 마을 사람(실제 NPC)이 이유를 적어 붙인 것
@@ -175,6 +179,6 @@
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { R1, C2, R2, ROAD, TOWN_R, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { R1, C2, R2, ROAD, TOWN_R, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);

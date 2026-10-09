@@ -830,9 +830,12 @@ body.talking #buffBar{visibility:hidden}
   const DUN = { x: 0, z: 422, R: 14, corZ0: 394, corZ1: 409, corW: 3.2 };
   const BOSS_HOME = { x: 0, z: 421 };
   const LAIR = { x: 470, z: 0, r: 18 };              // 심연 끝 붉은 용의 둥지
+  const HALL = { x: 0, z: -500, R: 24 };             // 동쪽 황야 끝 포탈 너머의 둥근 방 (천장이 막혀 있다)
+  const EPORTAL = { x: 484, z: 24 };                 // 동쪽 황야 끝 포탈
 
   function zoneAt(x, z) {
     if (z > 300) return 'dungeon';
+    if (z < -300) return 'hall';
     if (x > ROAD.x0 && x < ROAD.x1 && Math.abs(z) < 12 && Math.hypot(x - C2.x, z - C2.z) > R2 - 2) return 'road';
     const d2 = Math.hypot(x - C2.x, z - C2.z);
     if (x > 150) {
@@ -851,7 +854,7 @@ body.talking #buffBar{visibility:hidden}
     if (a >= 0.25 * PI && a < 0.75 * PI) return 'swamp';
     return 'ruins';
   }
-  const SAFE = { village: 1, town: 1 };
+  const SAFE = { village: 1, town: 1, hall: 1 };
 
   // 걸어 다닐 수 있는 곳 안으로 붙잡는다 (첫 지역 원, 길, 두 번째 지역 원, 석굴)
   function roomClamp(p, rad) {
@@ -864,6 +867,7 @@ body.talking #buffBar{visibility:hidden}
   }
   function worldClamp(p, rad) {
     if (p.z > 300) return roomClamp(p, rad);
+    if (p.z < -300) { const d = Math.hypot(p.x - HALL.x, p.z - HALL.z), r = HALL.R - rad; if (d > r) { p.x = HALL.x + (p.x - HALL.x) * r / d; p.z = HALL.z + (p.z - HALL.z) * r / d; } return; }
     const d1 = Math.hypot(p.x, p.z), d2 = Math.hypot(p.x - C2.x, p.z - C2.z);
     const r1 = R1 - rad, r2 = R2 - rad, hw = ROAD.half - rad;
     if (d1 <= r1 || d2 <= r2 || (p.x >= ROAD.x0 && p.x <= ROAD.x1 && Math.abs(p.z) <= hw)) return;
@@ -951,7 +955,7 @@ body.talking #buffBar{visibility:hidden}
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 4], plains: [4, 7], swamp: [7, 11], ruins: [11, 15], dungeon: [18, 22], road: [12, 16], town: [0, 0], wwest: [20, 30], wnorth: [28, 40], wsouth: [38, 50], weast: [48, 60] };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 4], plains: [4, 7], swamp: [7, 11], ruins: [11, 15], dungeon: [18, 22], road: [12, 16], town: [0, 0], hall: [60, 60], wwest: [20, 30], wnorth: [28, 40], wsouth: [38, 50], weast: [48, 60] };
 
   // ---------- 의뢰 게시판 포스터 ----------
   // 의뢰를 주는 NPC마다 게시판이 따로 있다. 포스터는 마을 사람(실제 NPC)이 이유를 적어 붙인 것
@@ -990,7 +994,7 @@ body.talking #buffBar{visibility:hidden}
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { R1, C2, R2, ROAD, TOWN_R, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { R1, C2, R2, ROAD, TOWN_R, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -1552,6 +1556,7 @@ const ZONES={
   wwest:{name:'서쪽 황야',diff:5,sky:0xd6c4a0,mm:'#b08a55'},
   wnorth:{name:'북쪽 황야',diff:5,sky:0xcfc6ac,mm:'#a8986e'},
   wsouth:{name:'남쪽 황야',diff:5,sky:0xd8bf98,mm:'#b8874f'},
+  hall:{name:'고요의 전당',diff:0,rec:'Lv 60 이상 · 포탈 너머',sky:0x14121a,mm:'#3a3444'},
   weast:{name:'동쪽 황야',diff:5,sky:0xd2b090,mm:'#a46e45'},
 };
 for(const k in ZONES){const L=ZL[k];ZONES[k].min=L?L[0]:0;if(!ZONES[k].rec)ZONES[k].rec=`권장 Lv ${L[0]}–${L[1]}`;}
@@ -1780,7 +1785,7 @@ const MAP_HOUSES=[]; // 지도에 그릴 집 자리 {x,z,r}
 const PIT=OR.PIT,DUN=OR.DUN,C2=OR.C2,zoneAt=OR.zoneAt;
 const VOLC={x:445,z:-8};
 function heightAt(x,z){
-  if(z>300)return 0;
+  if(z>300||z<-300)return 0;
   if(x>=120)return height2(x,z);
   const d=Math.hypot(x,z),a=Math.atan2(z,x);
   let h=Math.sin(x*.045)*Math.cos(z*.05)*2.2+Math.sin(x*.12+z*.09)*.7+Math.cos(z*.16-x*.05)*.5;
@@ -5663,6 +5668,113 @@ function animateDungeonLights(t){
   if(window.__torches)for(const T of window.__torches){const f=.9+Math.sin(t*9+T.ph)*.08+Math.sin(t*23+T.ph)*.05;T.L.intensity=1.15*f;T.fl.scale.set(1,f,1);}
   if(window.__doorFlames)for(const f of window.__doorFlames)f.scale.y=.9+Math.sin(t*11+f.position.z)*.12;
 }
+/* ---------- 포탈 (재사용) ----------
+   PORTALS 에 항목만 추가하면 새 포탈이 생긴다.
+   { id, x, z, ry, to:{x,z,yaw}, minLv, label, msg, color } */
+const PORTAL_FX=[];
+function makePortal(x,z,ry,o={}){
+  const col=new THREE.Color(o.color??0x8a6cff),y=heightAt(x,z);
+  const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=ry||0;
+  const stone=mat(o.stone??0x5d5868,{roughness:.85}),stone2=mat(0x47424f,{roughness:.9});
+  const rune=mat(0xffffff,{emissive:col,emissiveIntensity:1.4,roughness:.4});
+  // 받침 계단
+  const s1=new THREE.Mesh(new THREE.CylinderGeometry(3.1,3.3,.35,24),stone2);s1.position.y=.17;
+  const s2=new THREE.Mesh(new THREE.CylinderGeometry(2.5,2.7,.3,24),stone);s2.position.y=.48;
+  g.add(s1,s2);
+  // 세워진 돌 고리
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.85,.32,10,40),stone);ring.position.y=2.65;g.add(ring);
+  const inner=new THREE.Mesh(new THREE.TorusGeometry(1.55,.06,6,48),rune);inner.position.y=2.65;g.add(inner);
+  // 고리 위 룬 돌 7개
+  for(let k=0;k<7;k++){const aa=Math.PI*(.1+k*.8/6);
+    const b=new THREE.Mesh(new THREE.BoxGeometry(.32,.5,.5),stone2);b.position.set(Math.cos(aa)*2.2,2.65+Math.sin(aa)*2.2,0);b.rotation.z=aa-Math.PI/2;g.add(b);
+    const r=new THREE.Mesh(new THREE.BoxGeometry(.1,.22,.52),rune);r.position.copy(b.position).multiplyScalar(1.07);r.position.y=2.65+(b.position.y-2.65)*1.07;r.rotation.z=b.rotation.z;g.add(r);}
+  // 양옆 기둥
+  [-1,1].forEach(s=>{const p=new THREE.Mesh(new THREE.BoxGeometry(.55,1.3,.7),stone2);p.position.set(s*1.95,1.2,0);g.add(p);});
+  // 소용돌이 면
+  const U={t:{value:0},c:{value:col},a:{value:1}};
+  const sw=new THREE.Mesh(new THREE.CircleGeometry(1.56,48),new THREE.ShaderMaterial({uniforms:U,transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,
+    vertexShader:'varying vec2 v;void main(){v=uv*2.-1.;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader:'uniform float t,a;uniform vec3 c;varying vec2 v;void main(){float r=length(v),th=atan(v.y,v.x);'+
+      'float s=sin(th*3.+r*9.-t*3.2)*.5+.5;float s2=sin(th*5.-r*14.+t*2.1)*.5+.5;'+
+      'float core=smoothstep(.55,0.,r);float edge=smoothstep(1.,.82,r);'+
+      'vec3 col=mix(c*.55,c*1.4+.15,s*.7+s2*.3)+vec3(core*.9);'+
+      'gl_FragColor=vec4(col*a,(.45+s*.35+core*.4)*edge*a);}'}));
+  sw.position.y=2.65;g.add(sw);
+  // 떠다니는 빛 알갱이
+  const N=26,pg=new THREE.BufferGeometry(),pp=new Float32Array(N*3),seed=[];
+  for(let i=0;i<N;i++)seed.push([Math.random()*6.28,1+Math.random()*1.6,Math.random()]);
+  pg.setAttribute('position',new THREE.BufferAttribute(pp,3));
+  const pts=new THREE.Points(pg,new THREE.PointsMaterial({color:col,size:.16,transparent:true,opacity:.85,depthWrite:false,blending:THREE.AdditiveBlending}));g.add(pts);
+  const L=new THREE.PointLight(col,1.6,14,2);L.position.set(0,2.6,.6);g.add(L);
+  g.traverse(m=>{if(m.isMesh&&m!==sw){m.castShadow=true;m.receiveShadow=true;}});
+  scene.add(g);
+  // 고리 양옆만 막는다 (가운데로는 걸어 들어갈 수 있게)
+  [-1,1].forEach(s=>{const c=Math.cos(ry||0),sn=Math.sin(ry||0);colliders.push({x:x+s*1.95*c,z:z-s*1.95*sn,r:.55});});
+  const fx={g,U,pts,pp,seed,L,inner};PORTAL_FX.push(fx);return fx;
+}
+function updatePortals(t){
+  for(const f of PORTAL_FX){
+    if(f.g.position.distanceToSquared(camera.position)>90*90)continue;
+    f.U.t.value=t;f.L.intensity=1.5+Math.sin(t*2.3)*.25;
+    for(let i=0;i<f.seed.length;i++){const s=f.seed[i],k=(t*.25+s[2])%1,a=s[0]+t*(.6+s[2]*.5);
+      f.pp[i*3]=Math.cos(a)*s[1]*(1-k*.6);f.pp[i*3+1]=2.65+Math.sin(a)*s[1]*(1-k*.6);f.pp[i*3+2]=(k-.5)*.8;}
+    f.pts.geometry.attributes.position.needsUpdate=true;}
+}
+
+/* ---------- 고요의 전당: 파르보스만 한 둥근 방, 천장이 막혀 있다 ---------- */
+(function buildHall(){
+  const C={x:OR.HALL.x,z:OR.HALL.z},R=OR.HALL.R;
+  const add=(m,cast=true)=>{m.castShadow=cast;m.receiveShadow=true;scene.add(m);return m;};
+  const floorM=mat(0x55516a,{roughness:.55,metalness:.1}),tile=mat(0x77728f,{roughness:.6}),wallM=mat(0x7a7488,{roughness:.9}),wall2=mat(0x666077,{roughness:.9});
+  const gold=mat(0xc8a860,{metalness:.6,roughness:.35}),glowM=mat(0xffffff,{emissive:0x8a6cff,emissiveIntensity:1.2});
+  // 바닥 + 동심원 + 방사형 줄
+  const fl=new THREE.Mesh(new THREE.CircleGeometry(R+1,64),floorM);fl.rotation.x=-Math.PI/2;fl.position.set(C.x,0,C.z);add(fl,false);
+  [6,12,18].forEach(r=>{const q=new THREE.Mesh(new THREE.RingGeometry(r-.12,r+.12,64),tile);q.rotation.x=-Math.PI/2;q.position.set(C.x,.01,C.z);add(q,false);});
+  for(let k=0;k<16;k++){const a=k/16*Math.PI*2;const q=new THREE.Mesh(new THREE.PlaneGeometry(.18,R-6),tile);q.rotation.x=-Math.PI/2;q.rotation.z=-a+Math.PI/2;
+    q.position.set(C.x+Math.cos(a)*(6+(R-6)/2),.012,C.z+Math.sin(a)*(6+(R-6)/2));add(q,false);}
+  const ins=new THREE.Mesh(new THREE.RingGeometry(2.2,2.5,48),glowM);ins.rotation.x=-Math.PI/2;ins.position.set(C.x,.02,C.z);add(ins,false);
+  // 둥근 벽 (판석) + 기둥
+  const N=36,H=9;
+  for(let i=0;i<N;i++){const a=i/N*Math.PI*2,px=C.x+Math.cos(a)*(R+.5),pz=C.z+Math.sin(a)*(R+.5);
+    const w=2*(R+.5)*Math.sin(Math.PI/N)+.08;
+    const p=new THREE.Mesh(new THREE.BoxGeometry(w,H,1),i%2?wallM:wall2);p.position.set(px,H/2,pz);p.lookAt(C.x,H/2,C.z);add(p);}
+  for(let i=0;i<12;i++){const a=i/12*Math.PI*2+Math.PI/12,x=C.x+Math.cos(a)*(R-.4),z=C.z+Math.sin(a)*(R-.4);
+    const col=new THREE.Mesh(new THREE.CylinderGeometry(.55,.65,H,12),wallM);col.position.set(x,H/2,z);add(col);
+    const cap=new THREE.Mesh(new THREE.BoxGeometry(1.5,.4,1.5),wall2);cap.position.set(x,H-.2,z);add(cap);
+    const base=new THREE.Mesh(new THREE.BoxGeometry(1.5,.5,1.5),wall2);base.position.set(x,.25,z);add(base);
+    colliders.push({x,z,r:.8});
+    // 기둥 사이 등잔
+    const b=a+Math.PI/12,bx=C.x+Math.cos(b)*(R-.3),bz=C.z+Math.sin(b)*(R-.3);
+    const cup=new THREE.Mesh(new THREE.CylinderGeometry(.3,.15,.3,10),gold);cup.position.set(bx,3.2,bz);scene.add(cup);
+    const fm=new THREE.Mesh(new THREE.SphereGeometry(.16,8,6),glowM);fm.position.set(bx,3.45,bz);scene.add(fm);}
+  // 처마 띠 + 막힌 돔 천장
+  const cor=new THREE.Mesh(new THREE.TorusGeometry(R+.2,.35,8,72),gold);cor.rotation.x=Math.PI/2;cor.position.set(C.x,H,C.z);add(cor,false);
+  const dome=new THREE.Mesh(new THREE.SphereGeometry(R+1,56,20,0,Math.PI*2,0,Math.PI/2),mat(0x3a3650,{side:THREE.BackSide,roughness:1}));
+  dome.scale.y=.55;dome.position.set(C.x,H,C.z);add(dome,false);
+  for(let k=1;k<=4;k++){const ph=k/5*Math.PI/2,r=(R+.9)*Math.cos(ph),y=H+(R+.9)*.55*Math.sin(ph);
+    const q=new THREE.Mesh(new THREE.TorusGeometry(r,.12,6,64),gold);q.rotation.x=Math.PI/2;q.position.set(C.x,y,C.z);add(q,false);}
+  // 천장의 별 (작은 빛 점)
+  {const n=140,pos=new Float32Array(n*3);for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,ph=.15+Math.random()*1.3,r=(R+.6);
+      pos[i*3]=C.x+Math.cos(a)*r*Math.cos(ph);pos[i*3+1]=H+r*.55*Math.sin(ph)-.1;pos[i*3+2]=C.z+Math.sin(a)*r*Math.cos(ph);}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+    scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0xd8ccff,size:.22,transparent:true,opacity:.8})));}
+  // 조명
+  const top=new THREE.PointLight(0xc8b8ff,1.15,60,1.5);top.position.set(C.x,H+8,C.z);scene.add(top);
+  for(let i=0;i<4;i++){const a=i/4*Math.PI*2+Math.PI/4;const L=new THREE.PointLight(0xffd8a0,.7,26,2);L.position.set(C.x+Math.cos(a)*(R-4),4,C.z+Math.sin(a)*(R-4));scene.add(L);}
+})();
+
+/* 포탈 목록: 새 포탈은 여기에 한 줄 */
+const PORTALS=[
+  {id:'east',x:OR.EPORTAL.x,z:OR.EPORTAL.z,ry:-Math.PI/2,minLv:60,label:'포탈로 들어가기',
+    to:{x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-8.5,yaw:0},msg:`포탈을 지나 ${ZONES.hall.name}에 들어섰다.`,color:0x8a6cff},
+  {id:'hall_back',x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-4.5,ry:0,minLv:0,label:'동쪽 황야로 돌아가기',
+    to:{x:OR.EPORTAL.x-4,z:OR.EPORTAL.z,yaw:Math.PI/2},msg:'포탈을 지나 동쪽 황야로 돌아왔다.',color:0x6cc8ff},
+];
+for(const p of PORTALS)p.fx=makePortal(p.x,p.z,p.ry,{color:p.color});
+function portalNear(){if(!player)return -1;for(let i=0;i<PORTALS.length;i++){const p=PORTALS[i];if(Math.hypot(player.position.x-p.x,player.position.z-p.z)<3.2)return i;}return -1;}
+function usePortal(i){const p=PORTALS[i];if(!p)return;
+  if(P&&P.lv<p.minLv){toast(`Lv ${p.minLv}부터 들어갈 수 있다`);return;}
+  sfx('door');warpTo(p.to.x,p.to.z,p.to.yaw,p.msg);}
 
 /* ---------- 맵 꾸미기: 풀, 꽃, 덤불, 버섯, 돌멩이, 마을 소품 ----------
    작은 것들은 인스턴싱으로 한 번에 그린다. 들판의 작은 장식은 부딪히지 않는다(몬스터 길찾기와 맞추기 위해). */
@@ -6598,6 +6710,7 @@ const mmBg=document.createElement('canvas');mmBg.width=MM.w;mmBg.height=MM.h;
 })();
 function drawMini(){
   if(player&&player.position.z>300){drawDungeonMini();return;}
+  if(player&&player.position.z<-300){drawHallMini();return;}
   const S=264,VR=70,sc=S/(2*VR),px=player?player.position.x:0,pz=player?player.position.z:0;
   const toX=x=>S/2+(x-px)*sc,toY=z=>S/2+(z-pz)*sc;
   mctx.save();mctx.clearRect(0,0,S,S);mctx.beginPath();mctx.arc(S/2,S/2,S/2,0,7);mctx.clip();
@@ -6612,6 +6725,7 @@ function drawMini(){
     mctx.fillStyle='rgba(255,208,96,.12)';mctx.beginPath();mctx.arc(qx,qy,R,0,7);mctx.fill();
     const dx=qx-S/2,dy=qy-S/2,dd=Math.hypot(dx,dy);if(dd>S/2-6+R){const ux=dx/dd,uy=dy/dd,ex=S/2+ux*(S/2-14),ey=S/2+uy*(S/2-14);
       mctx.fillStyle='#ffd060';mctx.strokeStyle='#1b1712';mctx.lineWidth=2;mctx.beginPath();mctx.moveTo(ex+ux*10,ey+uy*10);mctx.lineTo(ex-uy*7-ux*4,ey+ux*7-uy*4);mctx.lineTo(ex+uy*7-ux*4,ey-ux*7-uy*4);mctx.closePath();mctx.stroke();mctx.fill();}}}
+  for(const p of PORTALS)if(p.z>-300){const x=toX(p.x),y=toY(p.z);if(x<0||y<0||x>S||y>S)continue;mctx.fillStyle='#b49cff';mctx.strokeStyle='#1b1712';mctx.lineWidth=2;mctx.beginPath();mctx.arc(x,y,5,0,7);mctx.stroke();mctx.fill();}
   mctx.fillStyle='#f3cf6a';
   for(const n of NPCS){const x=toX(n.x),y=toY(n.z);if(x<0||y<0||x>S||y>S)continue;mctx.beginPath();mctx.arc(x,y,3.5,0,7);mctx.fill();}
   if(mentor){mctx.beginPath();mctx.arc(toX(mentor.position.x),toY(mentor.position.z),5,0,7);mctx.fill();}
@@ -6639,6 +6753,7 @@ function drawWorldMap(){
   const mark=(x,z,col,txt,r=5)=>{c.fillStyle=col;c.beginPath();c.arc(X(x),Z(z),r*f,0,7);c.fill();c.strokeStyle='#1b1712';c.lineWidth=1.5*f;c.stroke();
     if(txt){c.font=`${Math.round(10*f)}px "Gowun Batang",serif`;c.textAlign='left';c.textBaseline='middle';c.lineWidth=3*f;c.strokeStyle='rgba(20,16,12,.85)';c.strokeText(txt,X(x)+r*f+3*f,Z(z));c.fillStyle='#efe4cc';c.fillText(txt,X(x)+r*f+3*f,Z(z));}};
   mark(PIT.x,PIT.z,'#c9a05a','석굴 입구 (보스)',4);
+  for(const p of PORTALS)if(p.z>-300&&p.to.z<-300)mark(p.x,p.z,'#b49cff',`포탈 · ${ZONES.hall.name} (Lv ${p.minLv})`,4);
   for(const n of NPCS){c.fillStyle='#f3cf6a';c.beginPath();c.arc(X(n.x),Z(n.z),2*f,0,7);c.fill();}
   // 지역 이름과 레벨
   c.textAlign='center';c.textBaseline='middle';
@@ -6649,10 +6764,10 @@ function drawWorldMap(){
   // 의뢰 대상 지역 강조
   if(P&&P.quest&&P.quest.zone){const L=WMAP_LABELS.find(l=>l[0]===P.quest.zone);if(L){c.strokeStyle='#ffd060';c.lineWidth=2*f;c.setLineDash([4*f,3*f]);c.beginPath();c.arc(X(L[1]),Z(L[2]),22*f,0,7);c.stroke();c.setLineDash([]);}}
   // 다른 사람 (파티원은 초록)
-  for(const [k,o] of others){if(o.mesh.position.z>300)continue;const pty=party&&party.members.some(m=>m.id===k);c.fillStyle=pty?'#9be39b':'#9fd3e6';c.beginPath();c.arc(X(o.mesh.position.x),Z(o.mesh.position.z),4*f,0,7);c.fill();
+  for(const [k,o] of others){if(Math.abs(o.mesh.position.z)>300)continue;const pty=party&&party.members.some(m=>m.id===k);c.fillStyle=pty?'#9be39b':'#9fd3e6';c.beginPath();c.arc(X(o.mesh.position.x),Z(o.mesh.position.z),4*f,0,7);c.fill();
     if(pty){c.font=`${Math.round(9*f)}px "Gowun Batang",serif`;c.fillStyle='#9be39b';c.fillText(o.name,X(o.mesh.position.x),Z(o.mesh.position.z)-9*f);}}
   // 나
-  if(player){let px=player.position.x,pz=player.position.z;if(pz>300){px=PIT.x;pz=PIT.z;}
+  if(player){let px=player.position.x,pz=player.position.z;if(pz>300){px=PIT.x;pz=PIT.z;}else if(pz<-300){px=OR.EPORTAL.x;pz=OR.EPORTAL.z;}
     c.save();c.translate(X(px),Z(pz));c.rotate(-player.rotation.y);c.scale(f*1.2,f*1.2);c.fillStyle='#fff';c.strokeStyle='#c4493b';c.lineWidth=2;
     c.beginPath();c.moveTo(0,10);c.lineTo(-7,-7);c.lineTo(0,-3);c.lineTo(7,-7);c.closePath();c.stroke();c.fill();c.restore();}
 }
@@ -6660,6 +6775,19 @@ addEventListener('keydown',e=>{const c=codeOf(e);if(c!=='KeyM'||e.repeat||e.targ
 addEventListener('keydown',e=>{if(codeOf(e)==='Escape'&&wmapOpen){toggleWorldMap(false);e.stopImmediatePropagation();}},true);
 $('#mini').addEventListener('pointerdown',e=>{e.stopPropagation();if(P)toggleWorldMap();});
 $('#wmap').addEventListener('pointerdown',e=>{if(e.target.id==='wmapX'||e.target.id==='wmap')toggleWorldMap(false);});
+function drawHallMini(){
+  const H=OR.HALL,S=264,sc=S/2/(H.R+4),X=v=>S/2+(v-H.x)*sc,Z=v=>S/2+(v-H.z)*sc;
+  mctx.save();mctx.clearRect(0,0,S,S);mctx.beginPath();mctx.arc(S/2,S/2,S/2,0,7);mctx.clip();
+  mctx.fillStyle='#16141c';mctx.fillRect(0,0,S,S);
+  mctx.fillStyle='#3a3444';mctx.beginPath();mctx.arc(X(H.x),Z(H.z),H.R*sc,0,7);mctx.fill();
+  mctx.strokeStyle='#4f4860';mctx.lineWidth=1;[6,12,18].forEach(r=>{mctx.beginPath();mctx.arc(X(H.x),Z(H.z),r*sc,0,7);mctx.stroke();});
+  for(const p of PORTALS)if(p.z<-300){mctx.fillStyle='#8fd0ff';mctx.beginPath();mctx.arc(X(p.x),Z(p.z),5,0,7);mctx.fill();}
+  for(const m of monsters)if(m.dying===null&&m.mesh.position.z<-300){mctx.fillStyle='#e0533f';mctx.beginPath();mctx.arc(X(m.mesh.position.x),Z(m.mesh.position.z),4,0,7);mctx.fill();}
+  mctx.fillStyle='#9fd3e6';for(const o of others.values())if(o.mesh.position.z<-300){mctx.beginPath();mctx.arc(X(o.mesh.position.x),Z(o.mesh.position.z),5.5,0,7);mctx.fill();}
+  const x=X(player.position.x),y=Z(player.position.z);mctx.translate(x,y);mctx.rotate(-player.rotation.y);mctx.fillStyle='#fff';mctx.strokeStyle='#1b1712';mctx.lineWidth=2;
+  mctx.beginPath();mctx.moveTo(0,10);mctx.lineTo(-7,-7);mctx.lineTo(0,-3);mctx.lineTo(7,-7);mctx.closePath();mctx.stroke();mctx.fill();
+  mctx.restore();
+}
 function drawDungeonMini(){
   const S=264,sc=S/2/22,cx=DUN.x,cz=DUN.z-3,X=v=>S/2+(v-cx)*sc,Z=v=>S/2+(v-cz)*sc;
   mctx.save();mctx.clearRect(0,0,S,S);mctx.beginPath();mctx.arc(S/2,S/2,S/2,0,7);mctx.clip();
@@ -6908,7 +7036,7 @@ function faceMe(obj){if(!obj||!player)return;if(!obj.userData.baseQ)obj.userData
 function easeFacing(dt){for(const o of facing){const talking=mode==='dialog';o.userData.faceT+=dt;
   const target=talking?o.userData.faceQ:o.userData.baseQ;o.quaternion.slerp(target,Math.min(1,dt*(talking?8:2.5)));
   if(!talking&&o.quaternion.angleTo(o.userData.baseQ)<.01){o.quaternion.copy(o.userData.baseQ);facing.delete(o);}}}
-function doInteract(){if(interactTarget&&interactTarget.startsWith('chest:')){openBossChest(+interactTarget.slice(6));interactTarget=null;return;}if(interactTarget&&interactTarget.startsWith('player:')){openPlayerMenu(interactTarget.slice(7));return;}if(interactTarget&&interactTarget.startsWith('npc:')){const n=NPCS.find(q=>q.id===interactTarget.slice(4));if(n){faceMe(n.mesh);openNpc(n);}return;}if(interactTarget==='shop'){faceMe(merchant.userData.npc);openShop('village');}else if(interactTarget==='mentor'){faceMe(mentor);openMentor();}else if(interactTarget==='door_in')enterDungeon();else if(interactTarget==='door_out')leaveDungeon();}
+function doInteract(){if(interactTarget&&interactTarget.startsWith('portal:')){usePortal(+interactTarget.split(':')[1]);return;}if(interactTarget&&interactTarget.startsWith('chest:')){openBossChest(+interactTarget.slice(6));interactTarget=null;return;}if(interactTarget&&interactTarget.startsWith('player:')){openPlayerMenu(interactTarget.slice(7));return;}if(interactTarget&&interactTarget.startsWith('npc:')){const n=NPCS.find(q=>q.id===interactTarget.slice(4));if(n){faceMe(n.mesh);openNpc(n);}return;}if(interactTarget==='shop'){faceMe(merchant.userData.npc);openShop('village');}else if(interactTarget==='mentor'){faceMe(mentor);openMentor();}else if(interactTarget==='door_in')enterDungeon();else if(interactTarget==='door_out')leaveDungeon();}
 let warping=false;
 function warpTo(x,z,yaw,msg){
   if(warping)return;warping=true;
@@ -8280,6 +8408,7 @@ function updateWorld(dt){
   merchant.userData.sign.rotation.y+=dt*1.2;if(md<30)animNpc(merchant.userData.npc,tAll,dt);
   if(!it&&md<3.8)it='shop';
   if(!it){const ci=chestNear();if(ci>=0)it='chest:'+ci;}
+  if(!it){const pi=portalNear();if(pi>=0)it='portal:'+pi+(P.lv<PORTALS[pi].minLv?':x':'');}
   if(!it&&Math.hypot(player.position.x-DOOR_IN.x,player.position.z-DOOR_IN.z)<2.8)it='door_in';
   if(!it&&Math.hypot(player.position.x-DOOR_OUT.x,player.position.z-DOOR_OUT.z)<2.6)it='door_out';
   // 사람들: 머리 위 표시가 돈다 (말을 걸 때만 쳐다본다)
@@ -8291,10 +8420,10 @@ function updateWorld(dt){
   let bestP=null;
   if(!it&&room){let pd=3;for(const [k,o] of others){if(!o.mesh.visible)continue;const d=Math.hypot(player.position.x-o.mesh.position.x,player.position.z-o.mesh.position.z);if(d<pd&&Math.abs(player.position.y-o.mesh.position.y)<3){pd=d;bestP=k;}}if(bestP)it='player:'+bestP;}
   if(it!==interactTarget){interactTarget=it;const b=$('#interact');b.hidden=!it;
-    if(it)b.textContent='F · '+(it.startsWith('player:')?`${(others.get(bestP)||{}).name||'모험가'}에게 말 걸기`:it.startsWith('npc:')?`${bestN.name} (${bestN.role})`:(it.startsWith('chest:')?'상자 열기':{shop:'상인과 거래',mentor:'스승과 대화',door_in:'석문 열기',door_out:'석굴에서 나가기'}[it]));}
-  targetSky.set(ZONES[z].sky);scene.background.lerp(targetSky,z==='dungeon'?1:dt*1.2);scene.fog.color.copy(scene.background);
-  scene.fog.near=z==='dungeon'?14:38;scene.fog.far=z==='dungeon'?60:140;
-  {const inD=z==='dungeon',inT=z==='town',kk=Math.min(1,dt*3);hemi.intensity+=((inD?.32:inT?.95:.8)-hemi.intensity)*kk;sun.intensity+=((inD?.15:inT?1.25:1.05)-sun.intensity)*kk;
+    if(it)b.textContent='F · '+(it.startsWith('player:')?`${(others.get(bestP)||{}).name||'모험가'}에게 말 걸기`:it.startsWith('npc:')?`${bestN.name} (${bestN.role})`:(it.startsWith('chest:')?'상자 열기':it.startsWith('portal:')?(q=>it.endsWith(':x')?`${q.label} (Lv ${q.minLv})`:q.label)(PORTALS[+it.split(':')[1]]):{shop:'상인과 거래',mentor:'스승과 대화',door_in:'석문 열기',door_out:'석굴에서 나가기'}[it]));}
+  targetSky.set(ZONES[z].sky);scene.background.lerp(targetSky,z==='dungeon'||z==='hall'?1:dt*1.2);scene.fog.color.copy(scene.background);
+  scene.fog.near=z==='dungeon'?14:z==='hall'?30:38;scene.fog.far=z==='dungeon'?60:z==='hall'?95:140;
+  {const inH=z==='hall',inD=z==='dungeon'||inH,inT=z==='town',kk=Math.min(1,dt*3);hemi.intensity+=((inH?.4:inD?.32:inT?.95:.8)-hemi.intensity)*kk;sun.intensity+=((inD?.15:inT?1.25:1.05)-sun.intensity)*kk;
     sun.color.lerp(_sunC.set(inT?0xfff6e4:0xfff0d4),kk);
     // 하늘 돔: 지평선은 안개색, 꼭대기는 짙은 하늘색. 사막(하레나)은 구름이 적고 햇무리가 세다
     skyDome.visible=!inD;skyDome.position.copy(camera.position);SKY.t.value=tAll;SKY.hor.value.copy(scene.background);
@@ -9024,7 +9153,7 @@ function loopBody(){
   if(mode==='title'){const a=tAll*.05;camera.position.set(Math.cos(a)*30,14,Math.sin(a)*30);camera.lookAt(0,2,0);apPreviewTick(dt);}
   else if(mode==='world')updateWorld(dt);
   else if(mode==='dialog'){updateViewModel(dt,0);updateNetMonsters(dt);for(const m of monsters)m.tag.hidden=true;}
-  updateFx(dt);VFX.update(dt);updateAmbient(dt);updateOthers(dt);animateDungeonLights(tAll);
+  updateFx(dt);VFX.update(dt);updateAmbient(dt);updateOthers(dt);animateDungeonLights(tAll);updatePortals(tAll);
   if(mode!=='title'){const pp=player?player.position:camera.position;LightPool.update(dt,pp);InstChunks.update(camera.position);for(const m of monsters)if(m.mesh)setFarHidden(m.mesh,m.mesh.position.distanceToSquared(camera.position)>95*95);}
   Perf.tick();
   updateHazards(dt);updateTeles(dt);for(const f of lairFlames)f.scale.set(1+Math.sin(tAll*11+f.position.z)*.12,1+Math.sin(tAll*7+f.position.z)*.2,1);renderMirror(dt);
