@@ -831,7 +831,7 @@ body.talking #buffBar{visibility:hidden}
   const DUN = { x: 0, z: 422, R: 14, corZ0: 394, corZ1: 409, corW: 3.2 };
   const BOSS_HOME = { x: 0, z: 421 };
   const LAIR = { x: 470, z: 0, r: 18 };              // 심연 끝 붉은 용의 둥지
-  const HALL = { x: 0, z: -500, R: 24 };             // 동쪽 황야 끝 포탈 너머: 왕국의 지하실 (둥근 방, 천장이 막혀 있다)
+  const HALL = { x: 0, z: -500, R: 24 };             // 동쪽 황야 끝 포탈 너머: 지하실 (둥근 방, 천장이 막혀 있다)
   const EPORTAL = { x: 484, z: 24 };                 // 동쪽 황야 끝 포탈
 
   function zoneAt(x, z) {
@@ -1557,7 +1557,7 @@ const ZONES={
   wwest:{name:'서쪽 황야',diff:5,sky:0xd6c4a0,mm:'#b08a55'},
   wnorth:{name:'북쪽 황야',diff:5,sky:0xcfc6ac,mm:'#a8986e'},
   wsouth:{name:'남쪽 황야',diff:5,sky:0xd8bf98,mm:'#b8874f'},
-  hall:{name:'왕국의 지하실',diff:0,rec:'Lv 60 이상 · 포탈 너머',sky:0x16110c,mm:'#4a3e34'},
+  hall:{name:'지하실',diff:0,rec:'Lv 60 이상 · 포탈 너머',sky:0x16110c,mm:'#4a3e34'},
   weast:{name:'동쪽 황야',diff:5,sky:0xd2b090,mm:'#a46e45'},
 };
 for(const k in ZONES){const L=ZL[k];ZONES[k].min=L?L[0]:0;if(!ZONES[k].rec)ZONES[k].rec=`권장 Lv ${L[0]}–${L[1]}`;}
@@ -1805,7 +1805,10 @@ function heightAt(x,z){
 const ARCH_PIT={x0:OR.C2.x+OR.TOWN_BLD.x-OR.TOWN_BLD.w/2,x1:OR.C2.x+OR.TOWN_BLD.x+OR.TOWN_BLD.w/2,z0:OR.C2.z+OR.TOWN_BLD.z-OR.TOWN_BLD.d/2,z1:OR.C2.z+OR.TOWN_BLD.z+OR.TOWN_BLD.d/2,y:null};
 function height2(x,z){
   if(false&&x>ARCH_PIT.x0+.05&&x<ARCH_PIT.x1-.05&&z>ARCH_PIT.z0+.05&&z<ARCH_PIT.z1-.05){if(ARCH_PIT.y===null)ARCH_PIT.y=height2Raw(OR.C2.x+OR.TOWN_BLD.x,OR.C2.z+OR.TOWN_BLD.z);return ARCH_PIT.y-6;}
-  return height2Raw(x,z);}
+  const h=height2Raw(x,z),pd=Math.hypot(x-OR.EPORTAL.x,z-OR.EPORTAL.z);
+  if(pd<10){// 포탈 자리는 평평하게 다진다
+    if(height2.pad==null)height2.pad=height2Raw(OR.EPORTAL.x,OR.EPORTAL.z);const k=1-smooth(4.5,10,pd);return h*(1-k)+height2.pad*k;}
+  return h;}
 function height2Raw(x,z){
   const dx=x-C2.x,dz=z-C2.z,d2=Math.hypot(dx,dz),a=Math.atan2(dz,dx);
   let h=Math.sin(x*.04)*Math.cos(z*.045)*2.4+Math.sin(x*.11+z*.08)*.8+Math.cos(z*.13-x*.07)*.5;
@@ -5721,16 +5724,18 @@ function royalCrown(s,gold,gem){const g=new THREE.Group();
   const cr1=new THREE.Mesh(new THREE.BoxGeometry(.04*s,.22*s,.04*s),gold);cr1.position.y=.66*s;const cr2=new THREE.Mesh(new THREE.BoxGeometry(.14*s,.04*s,.04*s),gold);cr2.position.y=.7*s;g.add(cr1,cr2);
   return g;}
 function makePortal(x,z,ry,o={}){
-  const col=new THREE.Color(o.color??0xffc95a),y=heightAt(x,z);
+  const col=new THREE.Color(o.color??0xffc95a);
+  // 바닥에 딱 붙게: 포탈 자리 땅은 평평하게 다져 두고(heightAt), 얇은 발판만 살짝 드러낸다
+  const y=heightAt(x,z);
   const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=ry||0;
   const gold=ROYAL.gold(),marble=ROYAL.marble(),marble2=ROYAL.marble2(),gem=mat(0x2a3f9a,{metalness:.3,roughness:.25,emissive:0x101a50,emissiveIntensity:.6});
   const red=new THREE.MeshStandardMaterial({map:royalTex('carpet',1,2),roughness:.9});
   // 대리석 3단 계단 (금 테두리)
-  [[3.4,.22],[2.9,.22],[2.4,.22]].forEach(([w,h],k)=>{const s=new THREE.Mesh(new THREE.BoxGeometry(w*1.55,h,w),k%2?marble2:marble);s.position.y=h/2+k*h;g.add(s);
-    const tr=new THREE.Mesh(new THREE.BoxGeometry(w*1.55+.04,.04,w+.04),gold);tr.position.y=(k+1)*h-.01;g.add(tr);});
-  const top=.66;
+  const top=.04,dep=1.2;
+  {const s=new THREE.Mesh(new THREE.BoxGeometry(5.2,dep,2.2),marble);s.position.y=top-dep/2;g.add(s);
+    const tr=new THREE.Mesh(new THREE.BoxGeometry(5.24,.03,2.24),gold);tr.position.y=top-.005;g.add(tr);}
   // 붉은 융단 (포탈 앞으로)
-  const cp=new THREE.Mesh(new THREE.PlaneGeometry(1.5,5),red);cp.rotation.x=-Math.PI/2;cp.position.set(0,.02,3.6);g.add(cp);
+  const cp=new THREE.Mesh(new THREE.PlaneGeometry(1.5,4),red);cp.rotation.x=-Math.PI/2;cp.position.set(0,top+.01,3.1);if(o.carpet!==false)g.add(cp);
   // 기둥 두 개 (대리석 + 금 기둥머리) + 왕실 깃발
   const bannerM=new THREE.MeshStandardMaterial({map:royalTex('banner'),side:THREE.DoubleSide,roughness:.85});
   [-1,1].forEach(s=>{const px=s*1.95;
@@ -5740,8 +5745,8 @@ function makePortal(x,z,ry,o={}){
     const r2=r1.clone();r2.position.y=top+3.7;
     const cap=new THREE.Mesh(new THREE.BoxGeometry(.75,.3,.75),gold);cap.position.set(px,top+3.92,0);
     g.add(base,sh,r1,r2,cap);
-    const bn=new THREE.Mesh(new THREE.PlaneGeometry(.9,2.2),bannerM);bn.position.set(px+s*.62,top+2.55,.05);g.add(bn);
-    const rod=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,1.1,6),gold);rod.rotation.z=Math.PI/2;rod.position.set(px+s*.62,top+3.68,.05);g.add(rod);});
+    if(o.banner!==false){const bn=new THREE.Mesh(new THREE.PlaneGeometry(.9,2.2),bannerM);bn.position.set(px+s*.62,top+2.55,.05);g.add(bn);
+    const rod=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,1.1,6),gold);rod.rotation.z=Math.PI/2;rod.position.set(px+s*.62,top+3.68,.05);g.add(rod);}});
   // 반원 아치 (대리석) + 금 테
   const archY=top+4.05;
   const arch=new THREE.Mesh(new THREE.TorusGeometry(1.95,.34,10,36,Math.PI),marble);arch.position.y=archY;g.add(arch);
@@ -5784,7 +5789,8 @@ function updatePortals(t){
   if(window.__hallTorches&&player&&player.position.z<-300)for(const T of window.__hallTorches){const k=.9+Math.sin(t*9+T.ph)*.07+Math.sin(t*21+T.ph)*.05;T.L.intensity=T.i*k;T.fl.scale.set(1,k,1);}
 }
 
-/* ---------- 왕국의 지하실: 파르보스만 한 둥근 방, 둥근 천장으로 막혀 있다. 위층 계단은 막혔다 ---------- */
+const HALL_PROPS=[[Math.PI*.18,'chest'],[Math.PI*.82,'chest'],[Math.PI*.35,'barrel'],[Math.PI*.65,'crate'],[Math.PI*1.08,'barrel'],[Math.PI*1.92,'crate'],[Math.PI*1.25,'chest'],[Math.PI*1.75,'chest']];
+/* ---------- 지하실: 파르보스만 한 둥근 방, 둥근 천장으로 막혀 있다. 위층 계단은 막혔다 ---------- */
 (function buildHall(){
   const C={x:OR.HALL.x,z:OR.HALL.z},R=OR.HALL.R,H=7.5;
   const add=(m,cast=true)=>{m.castShadow=cast;m.receiveShadow=true;scene.add(m);return m;};
@@ -5792,21 +5798,8 @@ function updatePortals(t){
   const brickC=new THREE.MeshStandardMaterial({map:royalTex('brick',10,3),roughness:.95,side:THREE.BackSide});
   const flag=new THREE.MeshStandardMaterial({map:royalTex('flag',14,14),roughness:.85});
   const stone=mat(0x8a7e70),stone2=mat(0x6e6458),gold=ROYAL.gold(),marble=ROYAL.marble(),iron=mat(0x3a3634,{metalness:.6,roughness:.45}),wood=mat(0x5a3a22),wood2=mat(0x7a5232);
-  const bannerM=new THREE.MeshStandardMaterial({map:royalTex('banner'),side:THREE.DoubleSide,roughness:.85});
-  const carpet=new THREE.MeshStandardMaterial({map:royalTex('carpet',1,5),roughness:.9});
   // 바닥: 판석
   const fl=new THREE.Mesh(new THREE.CircleGeometry(R+1,64),flag);fl.rotation.x=-Math.PI/2;fl.position.set(C.x,0,C.z);add(fl,false);
-  // 붉은 융단: 남쪽 포탈 → 가운데 → 북쪽 계단
-  const cp=new THREE.Mesh(new THREE.PlaneGeometry(2.4,R*2-4),carpet);cp.rotation.x=-Math.PI/2;cp.position.set(C.x,.015,C.z);add(cp,false);
-  // 가운데: 둥근 문장 깔개 (금 고리)
-  const rug=new THREE.Mesh(new THREE.CircleGeometry(4.2,48),mat(0x5e0f16,{roughness:.9}));rug.rotation.x=-Math.PI/2;rug.position.set(C.x,.02,C.z);add(rug,false);
-  [4.1,3.6].forEach(r=>{const q=new THREE.Mesh(new THREE.RingGeometry(r-.1,r,64),mat(0xd4af37,{roughness:.5}));q.rotation.x=-Math.PI/2;q.position.set(C.x,.025,C.z);add(q,false);});
-  for(let k=0;k<16;k++){const a=k/16*Math.PI*2;const d=new THREE.Mesh(new THREE.CircleGeometry(.16,4),mat(0xd4af37));d.rotation.x=-Math.PI/2;d.position.set(C.x+Math.cos(a)*3.85,.026,C.z+Math.sin(a)*3.85);add(d,false);}
-  // 가운데 받침대 위 왕관
-  const ped=new THREE.Mesh(new THREE.CylinderGeometry(.55,.7,1.1,12),marble);ped.position.set(C.x,.55,C.z);add(ped);
-  const pg=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.08,16),gold);pg.position.set(C.x,1.12,C.z);add(pg);
-  const cw=royalCrown(.9,gold,mat(0x8a1822,{roughness:.4,emissive:0x300408,emissiveIntensity:.5}));cw.position.set(C.x,1.2,C.z);cw.traverse(o=>{if(o.isMesh)o.castShadow=true;});scene.add(cw);
-  colliders.push({x:C.x,z:C.z,r:.9});
   // 둥근 벽 (북쪽은 계단 자리로 비운다)
   const N=36,gapA=.13;
   for(let i=0;i<N;i++){const a=i/N*Math.PI*2;const da=Math.atan2(Math.sin(a+Math.PI/2),Math.cos(a+Math.PI/2));if(Math.abs(da)<gapA)continue;
@@ -5842,11 +5835,8 @@ function updatePortals(t){
     colliders.push({x,z,r:.8});
     const b=a+Math.PI/12,da=Math.atan2(Math.sin(b+Math.PI/2),Math.cos(b+Math.PI/2));if(Math.abs(da)<.2)continue; // 계단 앞은 비운다
     const ux=Math.cos(b),uz=Math.sin(b);
-    if(i%2===0){// 왕실 깃발
-      const bn=new THREE.Mesh(new THREE.PlaneGeometry(1.7,3.6),bannerM);bn.position.set(C.x+ux*(R-.06),H-2.7,C.z+uz*(R-.06));bn.lookAt(C.x,H-2.7,C.z);scene.add(bn);
-      const rod=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,2,6),gold);rod.position.set(C.x+ux*(R-.15),H-.85,C.z+uz*(R-.15));rod.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(-uz,0,ux));scene.add(rod);
-      [-1,1].forEach(s=>{const k=new THREE.Mesh(new THREE.SphereGeometry(.09,8,6),gold);k.position.set(C.x+ux*(R-.15)-uz*s,H-.85,C.z+uz*(R-.15)+ux*s);scene.add(k);});}
-    else{// 벽 횃불
+    if(i%2===0)continue;
+    {// 벽 횃불
       const x2=C.x+ux*(R-.3),z2=C.z+uz*(R-.3);
       const br=new THREE.Mesh(new THREE.CylinderGeometry(.08,.05,.7,6),iron);br.position.set(x2,3.1,z2);scene.add(br);
       const cup=new THREE.Mesh(new THREE.CylinderGeometry(.2,.1,.22,8),gold);cup.position.set(x2-ux*.05,3.5,z2-uz*.05);scene.add(cup);
@@ -5865,7 +5855,7 @@ function updatePortals(t){
       for(let k=0;k<18;k++){const c=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,.03,8),gold);c.position.set(.95+Math.random()*.6-.3,.02+Math.random()*.15,Math.random()*.6-.3);c.rotation.set(Math.random()*.6,0,Math.random()*.6);g.add(c);}
       const pile=new THREE.Mesh(new THREE.ConeGeometry(.45,.32,10),gold);pile.position.set(.95,.16,0);g.add(pile);colliders.push({x,z,r:1});}
     g.position.set(x,0,z);g.rotation.y=Math.atan2(-ux,-uz);g.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});scene.add(g);};
-  [[Math.PI*.18,'chest'],[Math.PI*.82,'chest'],[Math.PI*.35,'barrel'],[Math.PI*.65,'crate'],[Math.PI*1.08,'barrel'],[Math.PI*1.92,'crate'],[Math.PI*1.25,'chest'],[Math.PI*1.75,'chest']].forEach(([a,k])=>prop(a,k));
+  HALL_PROPS.forEach(([a,k])=>prop(a,k));
   // 북쪽: 위층으로 올라가는 계단 (내려진 쇠창살과 무너진 돌로 막혀 있다)
   {const sx=C.x,z0=C.z-R+.3,Wd=3.6,stepH=.32,stepD=.55,n=14;
     for(let k=0;k<n;k++){const s=new THREE.Mesh(new THREE.BoxGeometry(Wd,stepH*(k+1),stepD),k%2?stone:stone2);s.position.set(sx,stepH*(k+1)/2,z0-.6-k*stepD);add(s);}
@@ -5875,10 +5865,8 @@ function updatePortals(t){
     for(let k=0;k<16;k++){const r=new THREE.Mesh(new THREE.DodecahedronGeometry(.35+Math.random()*.45,0),k%3?stone2:stone);
       const t=Math.random();r.position.set(sx+(Math.random()-.5)*Wd*.9,stepH*n*(.55+t*.45)+.3,z0-.6-n*stepD*(.55+t*.45));r.rotation.set(Math.random()*3,Math.random()*3,0);add(r);}
     const wall=new THREE.Mesh(new THREE.BoxGeometry(Wd+.2,H+2,.8),stone2);wall.position.set(sx,(H+2)/2,z0-.6-n*stepD-.6);add(wall);
-    // 입구 아치 + 왕관 문장
+    // 입구 아치
     const ar=new THREE.Mesh(new THREE.BoxGeometry(Wd+2.2,1.1,1.3),stone);ar.position.set(sx,4.7,z0+.1);add(ar);
-    const crest=new THREE.Mesh(new THREE.BoxGeometry(1,.8,.12),gold);crest.position.set(sx,4.7,z0+.8);add(crest);
-    const mini=royalCrown(.55,gold,mat(0x2a3f9a,{roughness:.3}));mini.position.set(sx,5.32,z0+.55);scene.add(mini);
     [-1,1].forEach(s=>{const p=new THREE.Mesh(new THREE.BoxGeometry(1.1,4.2,1.3),stone);p.position.set(sx+s*(Wd/2+.55),2.1,z0+.1);add(p);});
     // 내려진 쇠창살 + 못 박은 판자
     for(let k=0;k<9;k++){const b=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,4.1,6),iron);b.position.set(sx-Wd/2+.2+k*(Wd-.4)/8,2.05,z0+.35);add(b);}
@@ -5911,7 +5899,7 @@ const PORTALS=[
   {id:'hall_back',x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-4.5,ry:0,minLv:0,label:'동쪽 황야로 돌아가기',
     to:{x:OR.EPORTAL.x-4,z:OR.EPORTAL.z,yaw:Math.PI/2},msg:'포탈을 지나 동쪽 황야로 돌아왔다.',color:0xffc95a},
 ];
-for(const p of PORTALS)p.fx=makePortal(p.x,p.z,p.ry,{color:p.color});
+for(const p of PORTALS)p.fx=makePortal(p.x,p.z,p.ry,{color:p.color,carpet:p.z>-300,banner:p.z>-300});
 function portalNear(){if(!player)return -1;for(let i=0;i<PORTALS.length;i++){const p=PORTALS[i];if(Math.hypot(player.position.x-p.x,player.position.z-p.z)<3.2)return i;}return -1;}
 function usePortal(i){const p=PORTALS[i];if(!p)return;
   if(P&&P.lv<p.minLv){toast(`Lv ${p.minLv}부터 들어갈 수 있다`);return;}
@@ -6866,7 +6854,7 @@ function drawMini(){
     mctx.fillStyle='rgba(255,208,96,.12)';mctx.beginPath();mctx.arc(qx,qy,R,0,7);mctx.fill();
     const dx=qx-S/2,dy=qy-S/2,dd=Math.hypot(dx,dy);if(dd>S/2-6+R){const ux=dx/dd,uy=dy/dd,ex=S/2+ux*(S/2-14),ey=S/2+uy*(S/2-14);
       mctx.fillStyle='#ffd060';mctx.strokeStyle='#1b1712';mctx.lineWidth=2;mctx.beginPath();mctx.moveTo(ex+ux*10,ey+uy*10);mctx.lineTo(ex-uy*7-ux*4,ey+ux*7-uy*4);mctx.lineTo(ex+uy*7-ux*4,ey-ux*7-uy*4);mctx.closePath();mctx.stroke();mctx.fill();}}}
-  for(const p of PORTALS)if(p.z>-300){const x=toX(p.x),y=toY(p.z);if(x<0||y<0||x>S||y>S)continue;mctx.fillStyle='#e8c252';mctx.strokeStyle='#1b1712';mctx.lineWidth=2;mctx.beginPath();mctx.arc(x,y,5,0,7);mctx.stroke();mctx.fill();}
+  for(const p of PORTALS)if(p.z>-300){const x=toX(p.x),y=toY(p.z);if(x<0||y<0||x>S||y>S)continue;drawPortalIcon(mctx,x,y,6);}
   mctx.fillStyle='#f3cf6a';
   for(const n of NPCS){const x=toX(n.x),y=toY(n.z);if(x<0||y<0||x>S||y>S)continue;mctx.beginPath();mctx.arc(x,y,3.5,0,7);mctx.fill();}
   if(mentor){mctx.beginPath();mctx.arc(toX(mentor.position.x),toY(mentor.position.z),5,0,7);mctx.fill();}
@@ -6887,6 +6875,14 @@ function drawWorldMap(){
   const cv=$('#wmapC'),box=cv.getBoundingClientRect();if(!box.width)return;
   const dpr=Math.min(2,devicePixelRatio||1),W=Math.round(box.width*dpr),H=Math.round(box.height*dpr);if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}
   const c=cv.getContext('2d');c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,W,H);
+  if(player&&player.position.z<-300){const HL=OR.HALL,s2=Math.min(W,H)/2/(HL.R+12),X=v=>W/2+(v-HL.x)*s2,Z=v=>H/2+(v-HL.z+2)*s2-14*Math.min(2.4,Math.max(1,s2*.13)),f2=Math.min(2.4,Math.max(1,s2*.13));
+    drawHallPlan(c,X,Z,s2,f2);
+    for(const [k,o] of others){if(o.mesh.position.z>-300)continue;c.fillStyle='#9fd3e6';c.beginPath();c.arc(X(o.mesh.position.x),Z(o.mesh.position.z),5*f2,0,7);c.fill();}
+    c.textAlign='center';c.textBaseline='middle';c.font=`bold ${Math.round(16*f2)}px "Song Myung","Gowun Batang",serif`;c.lineWidth=4*f2;c.strokeStyle='rgba(20,16,12,.9)';c.fillStyle='#f0e2c0';
+    const ty=Z(HL.z+HL.R)+18*f2;c.strokeText(ZONES.hall.name,W/2,ty);c.fillText(ZONES.hall.name,W/2,ty);
+    c.font=`${Math.round(10*f2)}px "Gowun Batang",serif`;c.fillStyle='#d4ae63';c.strokeText('동쪽 황야 포탈 너머',W/2,ty+17*f2);c.fillText('동쪽 황야 포탈 너머',W/2,ty+17*f2);
+    c.save();c.translate(X(player.position.x),Z(player.position.z));c.rotate(-player.rotation.y);c.scale(f2*1.2,f2*1.2);c.fillStyle='#fff';c.strokeStyle='#c4493b';c.lineWidth=2;
+    c.beginPath();c.moveTo(0,10);c.lineTo(-7,-7);c.lineTo(0,-3);c.lineTo(7,-7);c.closePath();c.stroke();c.fill();c.restore();return;}
   const sc=Math.min(W/MM.w,H/MM.h),ox=(W-MM.w*sc)/2,oy=(H-MM.h*sc)/2,X=x=>ox+(x-MM.x0)*sc,Z=z=>oy+(z-MM.z0)*sc;
   c.imageSmoothingEnabled=false;c.drawImage(mmBg,ox,oy,MM.w*sc,MM.h*sc);
   const f=Math.max(1,sc*.9);
@@ -6894,7 +6890,7 @@ function drawWorldMap(){
   const mark=(x,z,col,txt,r=5)=>{c.fillStyle=col;c.beginPath();c.arc(X(x),Z(z),r*f,0,7);c.fill();c.strokeStyle='#1b1712';c.lineWidth=1.5*f;c.stroke();
     if(txt){c.font=`${Math.round(10*f)}px "Gowun Batang",serif`;c.textAlign='left';c.textBaseline='middle';c.lineWidth=3*f;c.strokeStyle='rgba(20,16,12,.85)';c.strokeText(txt,X(x)+r*f+3*f,Z(z));c.fillStyle='#efe4cc';c.fillText(txt,X(x)+r*f+3*f,Z(z));}};
   mark(PIT.x,PIT.z,'#c9a05a','석굴 입구 (보스)',4);
-  for(const p of PORTALS)if(p.z>-300&&p.to.z<-300)mark(p.x,p.z,'#e8c252',`포탈 · ${ZONES.hall.name} (Lv ${p.minLv})`,4);
+  for(const p of PORTALS)if(p.z>-300&&p.to.z<-300){drawPortalIcon(c,X(p.x),Z(p.z),5*f);const t=`포탈 · ${ZONES.hall.name} (Lv ${p.minLv})`;c.font=`${Math.round(10*f)}px "Gowun Batang",serif`;c.textAlign='right';c.textBaseline='middle';c.lineWidth=3*f;c.strokeStyle='rgba(20,16,12,.85)';c.strokeText(t,X(p.x)-8*f,Z(p.z));c.fillStyle='#f3d98a';c.fillText(t,X(p.x)-8*f,Z(p.z));}
   for(const n of NPCS){c.fillStyle='#f3cf6a';c.beginPath();c.arc(X(n.x),Z(n.z),2*f,0,7);c.fill();}
   // 지역 이름과 레벨
   c.textAlign='center';c.textBaseline='middle';
@@ -6916,14 +6912,34 @@ addEventListener('keydown',e=>{const c=codeOf(e);if(c!=='KeyM'||e.repeat||e.targ
 addEventListener('keydown',e=>{if(codeOf(e)==='Escape'&&wmapOpen){toggleWorldMap(false);e.stopImmediatePropagation();}},true);
 $('#mini').addEventListener('pointerdown',e=>{e.stopPropagation();if(P)toggleWorldMap();});
 $('#wmap').addEventListener('pointerdown',e=>{if(e.target.id==='wmapX'||e.target.id==='wmap')toggleWorldMap(false);});
+// 포탈 표시: 금빛 아치
+function drawPortalIcon(c,x,y,s){c.save();c.translate(x,y);c.lineWidth=Math.max(1.5,s*.35);c.strokeStyle='#1b1712';c.fillStyle='#ffd774';
+  c.beginPath();c.moveTo(-s,s);c.lineTo(-s,0);c.arc(0,0,s,Math.PI,0);c.lineTo(s,s);c.closePath();c.stroke();c.fill();
+  c.fillStyle='#c98a1e';c.beginPath();c.moveTo(-s*.5,s);c.lineTo(-s*.5,0);c.arc(0,0,s*.5,Math.PI,0);c.lineTo(s*.5,s);c.closePath();c.fill();c.restore();}
+// 지하실 평면도 (미니맵·큰 지도 공용)
+function drawHallPlan(c,X,Z,sc,f){const H=OR.HALL,R=H.R;
+  c.fillStyle='#17120d';c.fillRect(-9999,-9999,99999,99999);
+  // 계단 통로
+  c.fillStyle='#3a3029';c.fillRect(X(H.x-1.8),Z(H.z-R-8.5),3.6*sc,9*sc);
+  for(let k=0;k<14;k++){c.fillStyle=k%2?'#4a3e34':'#433830';c.fillRect(X(H.x-1.8),Z(H.z-R-.3-k*.55),3.6*sc,.55*sc);}
+  c.fillStyle='#6a5a4a';c.beginPath();c.arc(X(H.x),Z(H.z),R*sc,0,7);c.fill();
+  c.strokeStyle='#2a221b';c.lineWidth=Math.max(2,1*sc);c.beginPath();c.arc(X(H.x),Z(H.z),(R+.4)*sc,-Math.PI/2+.13,Math.PI*1.5-.13);c.stroke();
+  // 쇠창살
+  c.strokeStyle='#1b1712';c.lineWidth=Math.max(2,.3*sc);c.setLineDash([2*f,2*f]);c.beginPath();c.moveTo(X(H.x-1.8),Z(H.z-R+.65));c.lineTo(X(H.x+1.8),Z(H.z-R+.65));c.stroke();c.setLineDash([]);
+  // 기둥
+  c.fillStyle='#4a3e34';for(let i=0;i<12;i++){const a=i/12*Math.PI*2+Math.PI/12,x=H.x+Math.cos(a)*(R-.35),z=H.z+Math.sin(a)*(R-.35);c.beginPath();c.arc(X(x),Z(z),.75*sc,0,7);c.fill();}
+  // 횃불
+  c.fillStyle='#ffa040';for(let i=1;i<12;i+=2){const a=i/12*Math.PI*2+Math.PI/6,da=Math.atan2(Math.sin(a+Math.PI/2),Math.cos(a+Math.PI/2));if(Math.abs(da)<.2)continue;
+    c.beginPath();c.arc(X(H.x+Math.cos(a)*(R-.6)),Z(H.z+Math.sin(a)*(R-.6)),.45*sc,0,7);c.fill();}
+  // 상자·통
+  for(const [a,k] of HALL_PROPS){c.fillStyle=k==='chest'?'#c9a05a':'#7a5232';const x=H.x+Math.cos(a)*(R-2.2),z=H.z+Math.sin(a)*(R-2.2),s=(k==='chest'?.8:1)*sc;c.fillRect(X(x)-s,Z(z)-s,s*2,s*2);}
+  // 기사 석상
+  c.fillStyle='#b8b0a2';[-1,1].forEach(s=>{c.beginPath();c.arc(X(H.x+s*3.9),Z(H.z-R+1.9),.6*sc,0,7);c.fill();});
+  for(const p of PORTALS)if(p.z<-300)drawPortalIcon(c,X(p.x),Z(p.z),Math.max(5,1.4*sc));}
 function drawHallMini(){
   const H=OR.HALL,S=264,sc=S/2/(H.R+4),X=v=>S/2+(v-H.x)*sc,Z=v=>S/2+(v-H.z)*sc;
   mctx.save();mctx.clearRect(0,0,S,S);mctx.beginPath();mctx.arc(S/2,S/2,S/2,0,7);mctx.clip();
-  mctx.fillStyle='#17120d';mctx.fillRect(0,0,S,S);
-  mctx.fillStyle='#4a3e34';mctx.beginPath();mctx.arc(X(H.x),Z(H.z),H.R*sc,0,7);mctx.fill();
-  mctx.fillStyle='#7a1a20';mctx.fillRect(X(H.x-1.2),Z(H.z-H.R+2),2.4*sc,(H.R*2-4)*sc);mctx.beginPath();mctx.arc(X(H.x),Z(H.z),4.2*sc,0,7);mctx.fill();
-  mctx.fillStyle='#2a221b';mctx.fillRect(X(H.x-1.8),Z(H.z-H.R-1),3.6*sc,2*sc);
-  for(const p of PORTALS)if(p.z<-300){mctx.fillStyle='#8fd0ff';mctx.beginPath();mctx.arc(X(p.x),Z(p.z),5,0,7);mctx.fill();}
+  drawHallPlan(mctx,X,Z,sc,1);
   for(const m of monsters)if(m.dying===null&&m.mesh.position.z<-300){mctx.fillStyle='#e0533f';mctx.beginPath();mctx.arc(X(m.mesh.position.x),Z(m.mesh.position.z),4,0,7);mctx.fill();}
   mctx.fillStyle='#9fd3e6';for(const o of others.values())if(o.mesh.position.z<-300){mctx.beginPath();mctx.arc(X(o.mesh.position.x),Z(o.mesh.position.z),5.5,0,7);mctx.fill();}
   const x=X(player.position.x),y=Z(player.position.z);mctx.translate(x,y);mctx.rotate(-player.rotation.y);mctx.fillStyle='#fff';mctx.strokeStyle='#1b1712';mctx.lineWidth=2;
