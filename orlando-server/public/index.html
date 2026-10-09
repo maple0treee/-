@@ -5250,8 +5250,6 @@ function addPalm(x,y,z,h,seed){
     lines:['성벽 밖은 황야다.','멀리 갈수록 짐승들이 사나워지지.','어젯밤에도 순찰조 하나가 돌아오지 않았다.'],acts:[['주변 이야기','talk']]});
   p=at(-.3,6.3);addNpc({id:'timo',name:'티모',role:'아이',...p,look:{robe:0xd0a040,robe2:0xd0a040,hat:'hair',hatC:0x3a2a1a,small:true},
     lines:['나도 커서 모험가 할 거야!','분수에 동전 던지면 소원이 이루어진대!','동쪽 황야에는 불도마뱀이 산대. 꼬리가 뜨겁대!'],acts:[['이야기 듣기','talk']]});
-  p=at(1.75,6.4);addNpc({id:'lian',name:'리안',role:'음유시인',...p,look:{prop:'lute',robe:0x7a2a5a,robe2:0x9a4a7a,hat:'wide',hatC:0x5a1a3a},
-    lines:['♪ 마왕도 용사도 없는 땅, 오를란도… 우리 모두가 이야기의 주인공이라네 ♪','황야 끝에는 아무도 돌아오지 못한 길이 있다더군. 노래로 남길 만하지.','함께 싸운 이들의 이름은 오래 기억되는 법이지.'],acts:[['노래 듣기','talk']]});
   // 첫 마을의 의뢰인
   addNpc({id:'marta',name:'마르타',role:'파르보스 의뢰인',x:-8.2,z:8.4,faceX:0,faceZ:0,look:{prop:'book',robe:0x6a5a3a,robe2:0xa08a5a,hat:'hair',hatC:0x8a5a2a,long:1,apron:0xe8dcc0},
     lines:['어서 와요. 파르보스 사람들이 부탁한 일을 게시판에 모아 두고 있어요.','숲의 늑대 때문에 나무꾼들이 일을 못 하고 있대요. 도와주면 사례할게요.','하레나 길드와 같은 일을 하고 있어요.'],acts:[['의뢰 받기','quest']]});
@@ -5762,11 +5760,14 @@ function makePortal(x,z,ry,o={}){
   const L=new THREE.PointLight(col,1.7,14,2);L.position.set(0,2.6,.8);g.add(L);
   g.traverse(m=>{if(m.isMesh&&m!==sw){m.castShadow=true;m.receiveShadow=true;}});
   scene.add(g);
-  [-1,1].forEach(s=>{const c=Math.cos(ry||0),sn=Math.sin(ry||0);colliders.push({x:x+s*2.05*c,z:z-s*2.05*sn,r:.55});});
-  const fx={g,U,pts,pp,seed,L,cy:top+1.9};PORTAL_FX.push(fx);return fx;
+  const cols=[];[-1,1].forEach(s=>{const c=Math.cos(ry||0),sn=Math.sin(ry||0);const cc={x:x+s*2.05*c,z:z-s*2.05*sn,r:.55};colliders.push(cc);cols.push(cc);});
+  const fx={g,U,pts,pp,seed,L,cy:top+1.9,cols};PORTAL_FX.push(fx);return fx;
 }
+// 레벨이 모자라면 포탈이 아예 보이지 않는다 (부딪히지도 않는다)
+const portalSeen=p=>!P||P.lv>=p.minLv;
 function updatePortals(t){
-  for(const f of PORTAL_FX){
+  for(const p of PORTALS){const v=portalSeen(p),f=p.fx;if(f.g.visible!==v){f.g.visible=v;for(const c of f.cols){if(v){if(!colliders.includes(c))colliders.push(c);}else{const i=colliders.indexOf(c);if(i>=0)colliders.splice(i,1);}}}}
+  for(const f of PORTAL_FX){if(!f.g.visible)continue;
     if(f.g.position.distanceToSquared(camera.position)>90*90)continue;
     f.U.t.value=t;f.L.intensity=1.55+Math.sin(t*2.3)*.25;
     for(let i=0;i<f.seed.length;i++){const s=f.seed[i],k=(t*.22+s[2])%1,a=s[0]+t*(.5+s[2]*.4);
@@ -5883,7 +5884,7 @@ const PORTALS=[
     to:{x:OR.EPORTAL.x-4,z:OR.EPORTAL.z,yaw:Math.PI/2},msg:'포탈을 지나 동쪽 황야로 돌아왔다.',color:0xffd23a},
 ];
 for(const p of PORTALS)p.fx=makePortal(p.x,p.z,p.ry,{color:p.color});
-function portalNear(){if(!player)return -1;for(let i=0;i<PORTALS.length;i++){const p=PORTALS[i];if(Math.hypot(player.position.x-p.x,player.position.z-p.z)<3.2)return i;}return -1;}
+function portalNear(){if(!player)return -1;for(let i=0;i<PORTALS.length;i++){const p=PORTALS[i];if(portalSeen(p)&&Math.hypot(player.position.x-p.x,player.position.z-p.z)<3.2)return i;}return -1;}
 function usePortal(i){const p=PORTALS[i];if(!p)return;
   if(P&&P.lv<p.minLv){toast(`Lv ${p.minLv}부터 들어갈 수 있다`);return;}
   sfx('door');warpTo(p.to.x,p.to.z,p.to.yaw,p.msg);}
@@ -6872,7 +6873,7 @@ function drawMini(){
     mctx.fillStyle='rgba(255,208,96,.12)';mctx.beginPath();mctx.arc(qx,qy,R,0,7);mctx.fill();
     const dx=qx-S/2,dy=qy-S/2,dd=Math.hypot(dx,dy);if(dd>S/2-6+R){const ux=dx/dd,uy=dy/dd,ex=S/2+ux*(S/2-14),ey=S/2+uy*(S/2-14);
       mctx.fillStyle='#ffd060';mctx.strokeStyle='#1b1712';mctx.lineWidth=2;mctx.beginPath();mctx.moveTo(ex+ux*10,ey+uy*10);mctx.lineTo(ex-uy*7-ux*4,ey+ux*7-uy*4);mctx.lineTo(ex+uy*7-ux*4,ey-ux*7-uy*4);mctx.closePath();mctx.stroke();mctx.fill();}}}
-  for(const p of PORTALS)if(p.z>-300){const x=toX(p.x),y=toY(p.z);if(x<0||y<0||x>S||y>S)continue;drawPortalIcon(mctx,x,y,6);}
+  for(const p of PORTALS)if(p.z>-300&&portalSeen(p)){const x=toX(p.x),y=toY(p.z);if(x<0||y<0||x>S||y>S)continue;drawPortalIcon(mctx,x,y,6);}
   mctx.fillStyle='#f3cf6a';
   for(const n of NPCS){const x=toX(n.x),y=toY(n.z);if(x<0||y<0||x>S||y>S)continue;mctx.beginPath();mctx.arc(x,y,3.5,0,7);mctx.fill();}
   if(mentor){mctx.beginPath();mctx.arc(toX(mentor.position.x),toY(mentor.position.z),5,0,7);mctx.fill();}
@@ -6908,7 +6909,7 @@ function drawWorldMap(){
   const mark=(x,z,col,txt,r=5)=>{c.fillStyle=col;c.beginPath();c.arc(X(x),Z(z),r*f,0,7);c.fill();c.strokeStyle='#1b1712';c.lineWidth=1.5*f;c.stroke();
     if(txt){c.font=`${Math.round(10*f)}px "Gowun Batang",serif`;c.textAlign='left';c.textBaseline='middle';c.lineWidth=3*f;c.strokeStyle='rgba(20,16,12,.85)';c.strokeText(txt,X(x)+r*f+3*f,Z(z));c.fillStyle='#efe4cc';c.fillText(txt,X(x)+r*f+3*f,Z(z));}};
   mark(PIT.x,PIT.z,'#c9a05a','석굴 입구 (보스)',4);
-  for(const p of PORTALS)if(p.z>-300&&p.to.z<-300){drawPortalIcon(c,X(p.x),Z(p.z),5*f);const t=`포탈 · ${ZONES.hall.name} (Lv ${p.minLv})`;c.font=`${Math.round(10*f)}px "Gowun Batang",serif`;c.textAlign='right';c.textBaseline='middle';c.lineWidth=3*f;c.strokeStyle='rgba(20,16,12,.85)';c.strokeText(t,X(p.x)-8*f,Z(p.z));c.fillStyle='#ffe27a';c.fillText(t,X(p.x)-8*f,Z(p.z));}
+  for(const p of PORTALS)if(p.z>-300&&p.to.z<-300&&portalSeen(p)){drawPortalIcon(c,X(p.x),Z(p.z),5*f);const t=`포탈 · ${ZONES.hall.name} (Lv ${p.minLv})`;c.font=`${Math.round(10*f)}px "Gowun Batang",serif`;c.textAlign='right';c.textBaseline='middle';c.lineWidth=3*f;c.strokeStyle='rgba(20,16,12,.85)';c.strokeText(t,X(p.x)-8*f,Z(p.z));c.fillStyle='#ffe27a';c.fillText(t,X(p.x)-8*f,Z(p.z));}
   for(const n of NPCS){c.fillStyle='#f3cf6a';c.beginPath();c.arc(X(n.x),Z(n.z),2*f,0,7);c.fill();}
   // 지역 이름과 레벨
   c.textAlign='center';c.textBaseline='middle';
