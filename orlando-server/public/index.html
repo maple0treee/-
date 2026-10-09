@@ -1600,7 +1600,7 @@ const SKILLS={
     {id:'push',name:'밀기',req:32,mp:12,cd:7,type:'dash',push:true,prep:.55,mult:2,dist:7,ddur:.32,stun:1.5,color:0xc8d8f0,desc:'방패를 세우고 몸을 낮춰 힘을 모았다가(그동안 받는 피해 50% 감소) 앞으로 밀고 나간다. 부딪힌 적을 밀쳐내며 200% 피해, 1.5초 기절.'},
     {id:'leap',name:'용맹한 착지',req:35,mp:16,cd:7,type:'leap',mult:2.4,radius:5,taunt:3,color:0xd8c090,desc:'두 손으로 방패를 머리 위로 들고 높이 뛰어올랐다가 그대로 내리꽂는다. 주변 적에게 240% 피해, 3초 동안 도발.'}],
   rogue:[
-    {id:'ambush',name:'기습',req:1,mp:5,cd:4,type:'melee',mult:1.5,crit:1,range:2.6,desc:'반드시 치명타가 터지는 일격. 공격력 150%'},
+    {id:'ambush',name:'기습',req:1,mp:5,cd:4,type:'loot',mult:1.5,crit:1,range:2.6,desc:'반드시 치명타가 터지는 일격. 공격력 150%'},
     {id:'sprint',name:'질주',req:2,mp:6,cd:12,type:'buff',buff:{speed:1.6},dur:5,desc:'5초 동안 이동 속도 60% 증가'}],
   thief:[
     {id:'reap',name:'처형',req:30,mp:10,cd:6,type:'loot',mult:2.6,range:2.8,color:0xe04040,desc:'쿠크리로 앞의 적 하나를 깊숙이 찌르고, 비틀어 뽑아낸다. 260% 피해. HP가 25% 미만인 적에게는 피해 2.5배'},
@@ -3705,12 +3705,12 @@ function makeStickPlayer(job,gear){
     const sh=new THREE.Group();const S2=makeShield('tower',G.weapon);mountShield(S2,'tower',.85);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;w=sh;}
   else if(style==='fist'){w=new THREE.Group();AR.hand.add(w);
     if((G.sub??-1)>=0&&JOBS[job].sub){const sh=new THREE.Group();const S2=makeShield('buckler',G.sub);mountShield(S2,'buckler',.8);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;}}
-  else{w=stickWeapon(style,job,G.weapon);w.rotation.x=Math.PI/2;if(job==='thief'||job==='rogue')w.rotation.y=THIEF_KY;AR.hand.add(w);
+  else{w=stickWeapon(style,job,G.weapon);w.rotation.x=Math.PI/2;if(job==='thief'||job==='rogue')w.rotation.y=job==='rogue'?-THIEF_KY:THIEF_KY;AR.hand.add(w);
     if(style==='dagger'&&!ONE_DAGGER[job]){w2=stickWeapon('dagger',job,G.weapon);w2.rotation.x=Math.PI/2;AL.hand.add(w2);}
     if(style==='sword'&&(G.sub??-1)>=0){const sh=new THREE.Group();const S2=makeShield('buckler',G.sub);mountShield(S2,'buckler',.8);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;}}
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   const bodyG=new THREE.Group();while(g.children.length)bodyG.add(g.children[0]);g.add(bodyG);
-  g.userData={mats,stick:{L,R,AL,AR,upper,torso,head,style,w,w2,shield,nock,body:bodyG,one:!!ONE_DAGGER[job],fwd:job==='thief'||job==='rogue'},weapon:w,head,torso};
+  g.userData={mats,stick:{L,R,AL,AR,upper,torso,head,style,w,w2,shield,nock,body:bodyG,one:!!ONE_DAGGER[job],fwd:job==='thief'||job==='rogue',rg:job==='rogue'},weapon:w,head,torso};
   return g;
 }
 /* 공격 동작: 직업(무기)마다 다른 열쇠 자세를 시간에 따라 섞는다
@@ -3764,7 +3764,7 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   const twL=S.shield&&!(atk&&mo&&mo.k3)?SHIELD_TW:0;
   S.AL.sh.rotation.set(q[3]-(S.style==='bow'||S.shield?sw*.3:sw),twL,q[4]-(air&&!atk?.4:0));S.AL.el.rotation.x=q[5];
   S.upper.rotation.set(q[7]+k*.08,q[6],0);
-  S.AR.hand.rotation.y=ex&&ex.wy?ex.wy:0;S.AR.hand.rotation.z=0;if(S.fwd&&S.w)S.w.rotation.y=THIEF_KY+(atk&&mo&&mo.v==='reap'?reapTwist(swing):0);
+  S.AR.hand.rotation.y=ex&&ex.wy?ex.wy:0;S.AR.hand.rotation.z=0;if(S.fwd&&S.w)S.w.rotation.y=(S.rg?-THIEF_KY:THIEF_KY)+(atk&&mo&&mo.v==='reap'?reapTwist(swing):0);
   S.head.position.y=.88+Math.sin(t*2)*.012*(1-k);S.head.rotation.y=-q[6]*.6;
   // 활과 지팡이는 손 방향과 상관없이 세워 든다
   if(S.style==='bow'){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.w.rotation.set(-lx,0,-S.AL.sh.rotation.z);
@@ -4057,7 +4057,7 @@ const MOTION_OF={
   raise:{v:'shieldplant',dur:3,two:1},push:{v:'shieldcharge',dur:.9,two:1},pushE:{v:'shieldrush',dur:.5,two:1},leap:{v:'shieldslam',dur:.95,two:1},
   taunt:{v:'bang',n:2,dur:.8},rampart:{v:'guard',dur:1.0,a:1.3},shatter:{v:'overhead',a:1.1,dur:.8,c:.4},unyield:{v:'pump',dur:.9},judgment:{v:'leap',j:1.0,dur:.9,sd:-1},
   // 도적 · 도둑 · 어쌔신
-  ambush:{v:'thrust',dur:.4},sprint:{v:'ready',dur:.6},poison:{v:'throw',dur:.5},
+  ambush:{v:'ambushstab',dur:.45},sprint:{v:'ready',dur:.6},poison:{v:'throw',dur:.5},
   reap:{v:'reap',dur:.85},snare:{v:'snare',dur:.6},quaff:{v:'quaff',dur:1.0},
   shuriken:{v:'shuriken',dur:.45},quakedash:{v:'dash',dur:.5,a:1.3},deepstab:{v:'deepstab',dur:.9},kb1:{v:'kchop',dur:.5},kb2:{v:'kchop',dur:.5,sd:-1},asl1:{v:'aslice',dur:.36},asl2:{v:'arise',dur:.36},asl3:{v:'ajab',dur:.36},
   // 마법사 · 성직자 · 메이지
@@ -4218,6 +4218,11 @@ function verb3(v,o,style){
       k(.3,{rx:-2.4,rz:.45*sd,re:-1.2,wr:-1.6,tw:-.45*sd,ln:-.1,cr:.1});
       k(.55,{rx:-.6,rz:-.35*sd,re:-.15,wr:0,tw:.45*sd,ln:.4,cr:.3});
       k(.85,{rx:-.65,rz:-.3*sd,re:-.2,wr:0,tw:.4*sd,ln:.35,cr:.25});break;
+    case 'ambushstab':     // 허리춤에 칼끝을 숨겼다가, 몸을 낮춘 채 아래에서 위로 급소를 정확히 찌르고 빠르게 빼낸다
+      k(.2,{rx:-.4,re:-2.1,tw:-.5,cr:.3,ln:.1,wr:.1,wy:-1.3,lx:-.6,le:-1.0});
+      k(.4,{rx:-1.75,re:0,tw:.55,ln:.4,cr:.35,wr:.1,wy:-1.3,lx:.2,lz:-.3,le:-.4});
+      k(.62,{rx:-1.75,re:0,tw:.55,ln:.4,cr:.35,wr:.1,wy:-1.3,lx:.2,lz:-.3,le:-.4});
+      k(.85,{rx:-.7,re:-1.6,tw:-.1,ln:.1,cr:.15,wr:.1,wy:-1.3});break;
     case 'aslice':         // 짧게 끊어 치는 가로 베기: 오른쪽 어깨 앞에서 왼쪽으로, 손목은 고정하고 허리로 민다
       k(.2,{rx:-1.25,rz:.95,re:-1.1,tw:.5,wr:1.6,wy:-1.3,cr:.15});k(.45,{rx:-1.4,rz:-.75,re:-.15,tw:-.55,wr:1.6,wy:-1.3,ln:.18,cr:.2});k(.8,{rx:-1.3,rz:-.7,re:-.25,tw:-.45,wr:1.6,wy:-1.3,ln:.12,cr:.15});break;
     case 'arise':          // 되돌아오며 왼쪽 아래에서 오른쪽 위로 올려 베기
@@ -4428,6 +4433,8 @@ function verbFP(v,o,style){
     case 'kchop':          // 날이 이펙트의 대각선을 따라가게: 오른쪽 위로 날을 눕혀 들었다가 왼쪽 아래로 날을 앞세워 내려벤다 (번갈아 반대쪽)
       if(sd>0){r(.3,{x:.3,y:.1,z:-.66,rx:-.1,rz:-1.3});r(.55,{x:-.12,y:-.4,z:-.75,rx:-1.25,rz:.9});r(.85,{x:-.12,y:-.42,z:-.72,rx:-1.25,rz:.9});}
       else{r(.3,{x:-.08,y:.12,z:-.68,rx:.35,rz:1.0});r(.55,{x:.42,y:-.4,z:-.7,rx:-1.25,rz:-.9});r(.85,{x:.42,y:-.42,z:-.68,rx:-1.25,rz:-.9});}break;
+    case 'ambushstab':
+      r(.2,{x:.3,y:-.45,z:-.25,rx:-1.0,ry:.12});r(.4,{x:.04,y:-.2,z:-.9,rx:-1.0,ry:.12});r(.62,{x:.04,y:-.2,z:-.88,rx:-1.0,ry:.12});r(.85,{x:.25,y:-.32,z:-.5,rx:-.6});break;
     case 'aslice':
       r(.2,{x:.4,y:-.25,z:-.5,rx:-1.2,ry:-.5});r(.45,{x:-.3,y:-.3,z:-.72,rx:-1.2,ry:.6});r(.8,{x:-.3,y:-.31,z:-.7,rx:-1.2,ry:.62});break;
     case 'arise':
@@ -6225,7 +6232,7 @@ function makeViewModel(job){
   else if(style==='sword'){const w=stickWeapon(style,job,G.weapon);w.rotation.set(-.5,0,-.12);w.scale.setScalar(job==='barbarian'||job==='fowler'?.6:.85);if(job==='barbarian'||job==='fowler')w.position.y=-.08;R.add(w);
     if((G.sub??-1)>=0){L.visible=true;u.hasL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
   else if(style==='shield'){R.visible=false;u.noR=true;L.visible=true;u.hasL=true;const sh=makeShield('tower',G.weapon);mountShield(sh,'tower',.82,Math.PI-.35);const sg=new THREE.Group();sg.add(sh);L.add(sg);u.shieldG=sg;}
-  else if(style==='dagger'){(ONE_DAGGER[job]?[R]:[R,L]).forEach((h,k)=>{let w=stickWeapon('dagger',job,G.weapon);if(job==='thief'||job==='rogue'){const g=new THREE.Group();w.rotation.y=Math.PI/2;g.add(w);if(job==='thief')u.kIn=w;w=g;}const tz=ONE_DAGGER[job]?-.05:-.55;w.rotation.set(-.45,0,k?.55:tz);w.scale.setScalar(.95);h.add(w);});L.visible=!ONE_DAGGER[job];if(ONE_DAGGER[job])u.oneD=1;}
+  else if(style==='dagger'){(ONE_DAGGER[job]?[R]:[R,L]).forEach((h,k)=>{let w=stickWeapon('dagger',job,G.weapon);if(job==='thief'||job==='rogue'){const g=new THREE.Group();w.rotation.y=job==='rogue'?-Math.PI/2:Math.PI/2;g.add(w);if(job==='thief')u.kIn=w;w=g;}const tz=ONE_DAGGER[job]?-.05:-.55;w.rotation.set(-.45,0,k?.55:tz);w.scale.setScalar(.95);h.add(w);});L.visible=!ONE_DAGGER[job];if(ONE_DAGGER[job])u.oneD=1;}
   else if(style==='staff'){const w=stickWeapon('staff',job,G.weapon);w.scale.setScalar(.62);w.position.y=-.1;w.rotation.set(-.12,0,-.08);R.add(w);u.orb=w.userData.orb;u.ring=w.userData.ring;L.visible=true;}
   else if(style==='bow'){const w=stickWeapon('bow',job,G.weapon);w.rotation.set(0,Math.PI,0);w.scale.setScalar(.52);L.add(w);L.visible=true;
     const a=arrowMesh();a.rotation.y=Math.PI;a.visible=false;R.add(a);u.arrow=a;}
@@ -8205,6 +8212,10 @@ function bottleMesh(id){const col={hp_l:0xe03030,hp_s:0xff6060,mp_l:0x3050e0,mp_
   const ck=new THREE.Mesh(new THREE.CylinderGeometry(.024,.02,.025,8),new THREE.MeshStandardMaterial({color:0x8a5a30}));ck.position.y=.11;g.add(ck);return {g,col};}
 function lootSkill(S,id,pw,opt){
   const q0=player.position;
+  if(id==='ambush'){setTimeout(()=>{if(mode!=='world')return;const q=player.position,t=q.clone();t.y+=1.15;t.x-=Math.sin(cam.yaw)*.4;t.z-=Math.cos(cam.yaw)*.4;
+      VFX.thrust(t,cam.yaw,0xfff4e0,{len:2.4,dur:.13});const m=frontTarget(S.range);if(!m)return;shared(()=>damageMonster(m,S.mult*pw,opt));const c=mCenter(m);
+      VFX.burst(c,0xffffff,8,4,.18,{mix:0xfff0c0});VFX.burst(c,0xff3030,12,3,.3,{grav:5});spawnFx(0xffffff,c,.45,.14);sfx('hit3',c,.8);shakeT=Math.max(shakeT,.06);},180);
+    const f=flatFwd();return q0.clone().add(new THREE.Vector3(f.x*1.4,1.2,f.z*1.4));}
   if(id==='reap'){const tg=frontTarget(S.range);
     setTimeout(()=>{if(mode!=='world')return;const m=tg&&tg.dying===null?tg:frontTarget(S.range);if(!m)return;
       m.reapT=tAll;shared(()=>damageMonster(m,S.mult*pw,{...opt,exec25:true}));sfx('hit3',m.mesh.position,1);VFX.burst(mCenter(m),0xc02020,10,2.5,.3,{mix:0x601010});shakeT=Math.max(shakeT,.08);
