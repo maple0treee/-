@@ -8499,11 +8499,11 @@ function netFx(o){
 function playRemoteFx(d){
   const n=(v,a,b,def=0)=>clamp(num(v,def),a,b);
   const col=Math.floor(n(d.c,0,0xffffff,0xffffff));
-  if(d.k==='p'){sfx(n(d.g,0,20)>0?'bow':'cast',{x:n(d.x,-200,600),z:n(d.z,-200,500)},.45);
+  if(d.k==='p'){sfx(n(d.g,0,20)>0?'bow':'cast',{x:n(d.x,-WB,WB),z:n(d.z,-WB,WB)},.45);
     const dir=new THREE.Vector3(n(d.dx,-1,1),n(d.dy,-1,1),n(d.dz,-1,1));if(dir.lengthSq()<.01)return;
-    fireProj({visual:true,start:new THREE.Vector3(n(d.x,-200,600),n(d.y,-20,60),n(d.z,-200,500)),dir,speed:n(d.sp,5,80,30),size:n(d.s,.05,.6,.2),color:col,g:n(d.g,0,20),...(d.r!=null?{rim:n(d.r,0,0xffffff,0)}:{})});
-  }else if(d.k==='r'){spawnRing(col,new THREE.Vector3(n(d.x,-200,600),0,n(d.z,-200,500)),n(d.s,.5,8,2),n(d.d,.1,2,.5));}
-  else{spawnFx(col,new THREE.Vector3(n(d.x,-200,600),n(d.y,-20,60),n(d.z,-200,500)),n(d.s,.2,6,1),n(d.d,.1,2,.45));}
+    fireProj({visual:true,start:new THREE.Vector3(n(d.x,-WB,WB),n(d.y,-50,200),n(d.z,-WB,WB)),dir,speed:n(d.sp,5,80,30),size:n(d.s,.05,.6,.2),color:col,g:n(d.g,0,20),...(d.r!=null?{rim:n(d.r,0,0xffffff,0)}:{})});
+  }else if(d.k==='r'){spawnRing(col,new THREE.Vector3(n(d.x,-WB,WB),0,n(d.z,-WB,WB)),n(d.s,.5,8,2),n(d.d,.1,2,.5));}
+  else{spawnFx(col,new THREE.Vector3(n(d.x,-WB,WB),n(d.y,-50,200),n(d.z,-WB,WB)),n(d.s,.2,6,1),n(d.d,.1,2,.45));}
 }
 function syncPeers(peers){
   const seen=new Set();pageViewers=peers.filter(p=>p.kind==='viewer').length;
@@ -8527,7 +8527,7 @@ function syncPeers(peers){
     o.name=safeName(pr.n);o.lv=clamp(Math.floor(num(pr.lv,1)),1,9999);o.h=clamp(num(pr.h,1),0,1);o.pt=typeof pr.pt==='string'?pr.pt:null;
     o.tag.classList.toggle('pty',!!(party&&party.members.some(m=>m.id===p.peer)));
     o.mesh.userData.sit=!!pr.st;o.hd=!!pr.hd;
-    o.tx=clamp(num(pr.x),-200,600);o.ty=clamp(num(pr.y),-10,60);o.tz=clamp(num(pr.z),-200,500);o.r=num(pr.r);
+    o.tx=clamp(num(pr.x),-WB,WB);o.ty=clamp(num(pr.y),-50,200);o.tz=clamp(num(pr.z),-WB,WB);o.r=num(pr.r);
     if(num(pr.sw)!==o.sw){if(o.swInit&&o.mesh&&!(typeof pr.mo==='string'&&pr.mo)&&!(o.mesh.userData.stick&&o.mesh.userData.stick.style==='fist'))slashFx(o.mesh.position,num(pr.r),JOBS[o.job].weapon,null,num(pr.sw)%2===1);if(o.swInit)sfx(o.mesh.userData.stick&&o.mesh.userData.stick.style==='fist'?'punch':JOBS[o.job].weapon==='dagger'?'stab':'swing',o.mesh.position,.5);o.sw=num(pr.sw);o.swT=0;o.moObj=typeof pr.mo==='string'&&pr.mo?motionFor(JOBS[o.job].weapon,pr.mo):null;}
     o.b.textContent=o.name;o.s.textContent=`${JOBS[job].name} Lv ${o.lv}`;
   }
@@ -8545,9 +8545,12 @@ function renderOnline(){
   $('#onCount').textContent=(P?1:0)+others.size;
 }
 // 은신: 몸을 반투명하게 (재질은 처음 한 번 복제해서 다른 사람 모델에 번지지 않게)
-function setGhost(mesh,a){mesh.userData.ghostA=a;mesh.traverse(o=>{if(!o.material)return;if(!o.userData.ghostOwn){o.material=Array.isArray(o.material)?o.material.map(x=>x.clone()):o.material.clone();o.userData.ghostOwn=true;}
+const ghostClone=x=>{const c=x.clone();c.onBeforeCompile=x.onBeforeCompile;c.customProgramCacheKey=x.customProgramCacheKey;if(x.uniforms)c.uniforms=x.uniforms;return c;};   // 셰이더 수정(외곽선·가림)을 그대로 가져간다
+function setGhost(mesh,a){const was=mesh.userData.ghostA;mesh.userData.ghostA=a;if(a>=1&&(was===undefined||was>=1))return;mesh.traverse(o=>{if(!o.material)return;if(!o.userData.ghostOwn){o.material=Array.isArray(o.material)?o.material.map(ghostClone):ghostClone(o.material);o.userData.ghostOwn=true;}
   for(const mt of Array.isArray(o.material)?o.material:[o.material]){if(mt.userData.g0===undefined)mt.userData.g0=[mt.transparent,mt.opacity,mt.depthWrite];const g=mt.userData.g0;
     if(a>=1){mt.transparent=g[0];mt.opacity=g[1];mt.depthWrite=g[2];}else{mt.transparent=true;mt.opacity=g[1]*a;mt.depthWrite=false;}mt.needsUpdate=true;}});}
+// 다른 모험가 위치를 받을 수 있는 범위: 맵이 어디에 추가되든 넉넉하게
+const WB=5000;
 function updateOthers(dt){
   for(const o of others.values()){
     const m=o.mesh,prev=m.position.clone();
