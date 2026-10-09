@@ -70,6 +70,7 @@ function cleanPresence(d) {
     h: Math.max(0, Math.min(1, typeof d.h === 'number' && isFinite(d.h) ? Math.round(d.h * 100) / 100 : 1)),
     g: typeof d.g === 'string' && /^[-0-9,]{0,24}$/.test(d.g) ? d.g : '',
     st: d.st ? 1 : 0,
+    hd: d.hd ? 1 : 0,
     mo: typeof d.mo === 'string' && /^[a-z0-9]{0,16}$/.test(d.mo) ? d.mo : '',
     ap: typeof d.ap === 'string' && /^[mf],[0-9a-f]{6},[0-9a-f]{6}(,\d)?$/.test(d.ap) ? d.ap : '',
   };

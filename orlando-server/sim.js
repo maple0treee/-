@@ -125,7 +125,7 @@
       const out = [];
       for (const [id, c] of clients) {
         const p = c.pres;
-        if (!p.on || !p.al) continue;
+        if (!p.on || !p.al || p.hd) continue;
         if (SAFE[zoneAt(p.x, p.z)]) continue;
         out.push({ id, x: p.x, z: p.z, dun: p.z > 300, rot: inRotunda(p) });
       }

@@ -1142,7 +1142,7 @@ body.talking #buffBar{visibility:hidden}
       const out = [];
       for (const [id, c] of clients) {
         const p = c.pres;
-        if (!p.on || !p.al) continue;
+        if (!p.on || !p.al || p.hd) continue;
         if (SAFE[zoneAt(p.x, p.z)]) continue;
         out.push({ id, x: p.x, z: p.z, dun: p.z > 300, rot: inRotunda(p) });
       }
@@ -1649,7 +1649,7 @@ const SKILLS={
   assassin:[
     {id:'shuriken',name:'투척하기',req:30,mp:8,cd:4,type:'sin',mult:1.4,speed:42,mark:8,color:0xd0d8e8,desc:'수리검을 던져 140% 피해. 맞은 적에게 8초 동안 수리검 표식이 남고, 표식이 있는 적을 공격하면 40% 추가 피해'},
     {id:'quakedash',name:'돌진',req:32,mp:12,cd:8,type:'sin',mult:1.2,dist:10,ddur:.22,erupt:.9,radius:2,color:0xffa030,desc:'움직이던 방향으로 돌진하며 지나친 적에게 120% 피해'},
-    {id:'deepstab',name:'깊게 찌르기',req:35,mp:14,cd:7,type:'sin',mult:3.8,range:3,color:0xb060ff,desc:'단검을 위로 던져 거꾸로 잡는다. 5초 안에 일반공격을 하면 오른쪽 아래에서 왼쪽 위로 비스듬히 깊게 베어 앞의 적 하나에게 380% 피해'}],
+    {id:'deepstab',name:'깊게 찌르기',req:35,mp:14,cd:7,type:'sin',mult:3.8,range:3,color:0xb060ff,desc:'단검을 위로 던져 거꾸로 잡는다. 5초 안에 일반공격을 하면 오른쪽 아래에서 왼쪽 위로 비스듬히 깊게 베어 앞의 적 하나에게 380% 피해. 이걸로 적을 처치하면 3초 동안 은신'}],
   mage:[
     {id:'fireball',name:'화염구',req:1,mp:8,cd:3,type:'proj',mult:2,explode:2.2,speed:22,size:.35,color:0xff7a2a,desc:'터지는 화염구. 공격력 200%, 주변에도 피해'},
     {id:'frost',name:'냉기 화살',req:2,mp:8,cd:5,type:'proj',mult:1.2,stun:1.5,speed:30,size:.25,color:0x9fe6ff,desc:'120% 피해, 1.5초 동안 얼린다'},
@@ -7884,6 +7884,7 @@ function damageMonster(m,mult,o={}){
   return d;
 }
 function killMonster(m,mine=true,partyN=1){
+  if(mine&&m.deepT&&tAll-m.deepT<1.5&&P&&P.job==='assassin'){P.hideT=tAll+3;VFX.burst(player.position.clone().add(new THREE.Vector3(0,1,0)),0x6a50a0,16,2.5,.5,{mix:0x202030});}
   if(P&&P.reapHold&&P.reapHold.m===m&&m.reapT&&tAll-m.reapT<1.5){P.reapHold=null;if(myMoId==='reap1')swingT=1;cds.reap=0;spawnFx(0xd02020,player.position.clone().add(new THREE.Vector3(0,1.2,0)),1.2,.35);updateHud();}
   else if(mine&&m.reapT&&tAll-m.reapT<1.5&&P&&(cds.reap||0)>0){cds.reap=0;spawnFx(0xd02020,player.position.clone().add(new THREE.Vector3(0,1.2,0)),1.2,.35);updateHud();}
   sfx('die',m.mesh.position,1,m.D.build==='slime'?1.4:(m.D.scale||1)>1.4?.6:1);
@@ -8008,6 +8009,7 @@ function skillBusy(){return !!P&&((P.skN===swingN&&swingT<1)||!!P.dash);}
 function basicAttackInner(){
   if(basicCd>0||!P||P.guardT>0||P.pushPrep||P.leap||skillBusy())return;
   if(P.deepToss&&tAll<P.deepToss)return; // 깊게 찌르기: 단검이 공중에 있는 동안은 칠 수 없다
+  if(P.hideT>tAll&&!P.deepReady)P.hideT=0;
   if(!P.equip.weapon){  // 맨손: 모든 직업이 같다
     basicCd=BASIC.fist.cd;swingT=0;swingN++;myMo=null;myMoId='';sfx('punch');
     setTimeout(()=>{if(mode!=='world'||!P)return;shared(()=>singleHit(BASIC.fist.range,BASIC.fist.mult,{color:0xffe8c8}));const f=flatFwd(),q=player.position;VFX.burst(new THREE.Vector3(q.x+f.x*1.3,q.y+1.3,q.z+f.z*1.3),0xffe8c8,8,2.5,.25,{up:.1});},90);return;}
@@ -8049,7 +8051,7 @@ function basicAttackInner(){
   if(B.kind==='melee'&&P.deepReady&&P.equip.weapon){const D=P.deepReady;P.deepReady=null;myMoId='deepslash';myMo=motionFor('dagger','deepslash');sfx('w_swing',player.position,.9);
     setTimeout(()=>{if(mode!=='world')return;const q=player.position,p=q.clone();p.y+=1.2;p.x-=Math.sin(cam.yaw)*.3;p.z-=Math.cos(cam.yaw)*.3;
       VFX.slash(p,cam.yaw,0xc080ff,{r:2.2,arc:2.4,tilt:.1,roll:-1.0,dur:.22,dir:-1});
-      const m=frontTarget(D.S.range);if(m){shared(()=>damageMonster(m,D.S.mult*D.pw,D.opt));const c=mCenter(m);
+      const m=frontTarget(D.S.range);if(m){m.deepT=tAll;shared(()=>damageMonster(m,D.S.mult*D.pw,D.opt));const c=mCenter(m);
         VFX.burst(c,0xb060ff,20,4,.4,{mix:0xffffff});VFX.burst(c,0xc02020,14,3,.4,{grav:6});sfx('d_deep',c,1);shakeT=Math.max(shakeT,.14);}},240);
     setTimeout(()=>{if(P&&!P.deepReady)P.deepHold=false;},400);return;}
   if(B.kind==='melee'&&P.job==='assassin'&&P.equip.weapon){const now=performance.now();asnN=now-asnAt<1100?(asnN%3)+1:1;asnAt=now;const st=asnN,sw=swingN;
@@ -8095,7 +8097,7 @@ function useSkillInner(i){
   if(P.mp<S.mp){toast('MP가 부족해요');return;}
   if(emp){endGuard();P.empShield=true;}
   const bc=S.type==='barb'?barbCombo(id):'';
-  P.mp-=S.mp;cds[id]=S.cd;swingT=0;swingN++;myMoId=bc==='bat'?'batswing':bc==='spinchop'?'axechopF':id;myMo=motionFor(JOBS[P.job].weapon,emp&&id==='push'?'pushE':myMoId);P.skN=swingN;sfxSkill(S,id);
+  P.mp-=S.mp;cds[id]=S.cd;if(P.hideT>tAll)P.hideT=0;swingT=0;swingN++;myMoId=bc==='bat'?'batswing':bc==='spinchop'?'axechopF':id;myMo=motionFor(JOBS[P.job].weapon,emp&&id==='push'?'pushE':myMoId);P.skN=swingN;sfxSkill(S,id);
   const pw=1+.25*(lvl-1),opt={stun:S.stun,dot:S.dot,crit:S.crit,execute:S.execute,steal:S.steal,color:S.color};
   let fxAt=null;
   switch(S.type){
@@ -8477,7 +8479,7 @@ function publishPresence(force){
   if(!room||!P||!player)return;
   const now=performance.now();if(!force&&now-lastPres<100)return;lastPres=now;
   const f2=v=>isFinite(v)?+v.toFixed(2):0;
-  const pr={n:P.name,j:P.job,lv:P.lv,x:f2(player.position.x),y:f2(player.position.y),z:f2(player.position.z),r:f2(cam.yaw%(Math.PI*2)),sw:swingN,on:mode!=='title'?1:0,al:P.hp>0&&mode!=='title'?1:0,pt:party?party.id:null,h:+clamp(P.hp/P.maxhp,0,1).toFixed(2),g:gearCode(gearOf(P)),st:sitting?1:0,mo:myMoId,ap:apCode(P.ap)};
+  const pr={n:P.name,j:P.job,lv:P.lv,x:f2(player.position.x),y:f2(player.position.y),z:f2(player.position.z),r:f2(cam.yaw%(Math.PI*2)),sw:swingN,on:mode!=='title'?1:0,al:P.hp>0&&mode!=='title'?1:0,pt:party?party.id:null,h:+clamp(P.hp/P.maxhp,0,1).toFixed(2),g:gearCode(gearOf(P)),st:sitting?1:0,hd:P.hideT>tAll?1:0,mo:myMoId,ap:apCode(P.ap)};
   const key=JSON.stringify(pr);if(key===lastPresKey)return;lastPresKey=key;
   room.presence(pr).catch(e=>{presErr=(e&&e.code)||'오류';renderOnline();});
 }
@@ -8517,7 +8519,7 @@ function syncPeers(peers){
     o.swInit=true;
     o.name=safeName(pr.n);o.lv=clamp(Math.floor(num(pr.lv,1)),1,9999);o.h=clamp(num(pr.h,1),0,1);o.pt=typeof pr.pt==='string'?pr.pt:null;
     o.tag.classList.toggle('pty',!!(party&&party.members.some(m=>m.id===p.peer)));
-    o.mesh.userData.sit=!!pr.st;
+    o.mesh.userData.sit=!!pr.st;o.hd=!!pr.hd;
     o.tx=clamp(num(pr.x),-200,600);o.ty=clamp(num(pr.y),-10,60);o.tz=clamp(num(pr.z),-200,500);o.r=num(pr.r);
     if(num(pr.sw)!==o.sw){if(o.swInit&&o.mesh&&!(typeof pr.mo==='string'&&pr.mo)&&!(o.mesh.userData.stick&&o.mesh.userData.stick.style==='fist'))slashFx(o.mesh.position,num(pr.r),JOBS[o.job].weapon,null,num(pr.sw)%2===1);if(o.swInit)sfx(o.mesh.userData.stick&&o.mesh.userData.stick.style==='fist'?'punch':JOBS[o.job].weapon==='dagger'?'stab':'swing',o.mesh.position,.5);o.sw=num(pr.sw);o.swT=0;o.moObj=typeof pr.mo==='string'&&pr.mo?motionFor(JOBS[o.job].weapon,pr.mo):null;}
     o.b.textContent=o.name;o.s.textContent=`${JOBS[job].name} Lv ${o.lv}`;
@@ -8535,6 +8537,10 @@ function renderOnline(){
   if(presErr){const li=document.createElement('li');li.className='solo';li.textContent='내 위치 전송 실패: '+presErr;ul.appendChild(li);}
   $('#onCount').textContent=(P?1:0)+others.size;
 }
+// 은신: 몸을 반투명하게 (재질은 처음 한 번 복제해서 다른 사람 모델에 번지지 않게)
+function setGhost(mesh,a){mesh.userData.ghostA=a;mesh.traverse(o=>{if(!o.material)return;if(!o.userData.ghostOwn){o.material=Array.isArray(o.material)?o.material.map(x=>x.clone()):o.material.clone();o.userData.ghostOwn=true;}
+  for(const mt of Array.isArray(o.material)?o.material:[o.material]){if(mt.userData.g0===undefined)mt.userData.g0=[mt.transparent,mt.opacity,mt.depthWrite];const g=mt.userData.g0;
+    if(a>=1){mt.transparent=g[0];mt.opacity=g[1];mt.depthWrite=g[2];}else{mt.transparent=true;mt.opacity=g[1]*a;mt.depthWrite=false;}mt.needsUpdate=true;}});}
 function updateOthers(dt){
   for(const o of others.values()){
     const m=o.mesh,prev=m.position.clone();
@@ -8547,7 +8553,8 @@ function updateOthers(dt){
     animPlayer(m,sp/6,tAll,o.swT,m.position.y-heightAt(m.position.x,m.position.z)>.35,o.sw%2===1,o.moObj);
     const s=screenOf(m.position.clone().add(new THREE.Vector3(0,2.3,0)));
     const d=m.position.distanceTo(camera.position);
-    if(s.ok&&d<60&&mode!=='title'){o.tag.hidden=false;o.tag.style.left=s.x+'px';o.tag.style.top=s.y+'px';}else o.tag.hidden=true;
+    if(m.userData.ghostA!==(o.hd?.08:1))setGhost(m,o.hd?.08:1);
+    if(s.ok&&d<60&&mode!=='title'&&!o.hd){o.tag.hidden=false;o.tag.style.left=s.x+'px';o.tag.style.top=s.y+'px';}else o.tag.hidden=true;
     if(o.chat){o.chat.t-=dt;if(o.cb.textContent!==o.chat.text)o.cb.textContent=o.chat.text;o.cb.hidden=o.chat.t<=0;if(o.chat.t<=0)o.chat=null;}
   }
 }
@@ -8809,6 +8816,7 @@ function updatePlayer(dt){
   return moving;
 }
 function updateWorld(dt){
+  if(P&&player){const ga=P.hideT>tAll?.3:1;if(player.userData.ghostA!==ga)setGhost(player,ga);}
   // 워리어 선입력: 지금 스킬 동작이 거의 끝나면(75%) 눌러 둔 스킬을 바로 이어서 쓴다 (1인칭·3인칭 모두)
   if(P&&P.reapHold){const H=P.reapHold;if(tAll-H.t>1.5||!H.m||H.m.dying!==null||myMoId!=='reap1')endReapHold();else swingT=Math.min(swingT,.97);}
   if(P&&P.skQ){const q=P.skQ;if(tAll-q.t>1.5||P.job!=='barbarian')P.skQ=null;else if(!P.dash&&(P.skN!==swingN||swingT>=.75)){P.skQ=null;P.skN=-1;useSkill(q.i);}}
@@ -9302,7 +9310,7 @@ function makeLocalMonsterNet(){
     start(){
       sim=createSim({cols:colliders.filter(c=>!c.mentor&&!c.bld).map(c=>[c.x,c.z,c.r])});
       sim.join('me',dispatch);
-      setInterval(()=>{sim.presence('me',P&&player&&mode!=='title'?{x:player.position.x,z:player.position.z,on:1,al:P.hp>0?1:0}:{on:0});sim.tick();},100);
+      setInterval(()=>{sim.presence('me',P&&player&&mode!=='title'?{x:player.position.x,z:player.position.z,on:1,al:P.hp>0?1:0,hd:P.hideT>tAll?1:0}:{on:0});sim.tick();},100);
     },
   };
 }
