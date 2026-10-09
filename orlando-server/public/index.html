@@ -7558,9 +7558,9 @@ function renderNpc(text,extra){
     if(extra){extra(body);
       if(body.querySelector('button')&&!body.querySelector('[data-skip]')){const b=npcBtn(body,'선택하지 않기',()=>{$('#npcChoices').hidden=true;},'wide skip');b.dataset.skip='1';}
       $('#npcChoices').hidden=!body.children.length;}
-    for(const [label,act] of n.acts)npcBtn(acts,label,()=>npcAct(act),'pri');
+    for(const [label,act] of n.acts){if(act==='talk'||act==='story')continue;npcBtn(acts,label,()=>npcAct(act),'pri');}
     if(n.id==='messenger'&&P.mentorReady&&secondAdv())npcBtn(acts,'전직',()=>{closeNpc();openMentor();},'pri');
-    if(!n.noTalk&&!n.acts.some(a=>a[1]==='talk'))npcBtn(acts,'이야기',()=>npcAct('talk'),'pri');
+    if(!n.noTalk)npcBtn(acts,'이야기',()=>npcAct('talk'),'pri');
     npcBtn(acts,'그만두기',closeNpc,'pri');
     placeChoices();
   });
@@ -7596,7 +7596,8 @@ function npcAct(act){
   if(act.startsWith('ir:'))return ireneAct(act.slice(3));
   if(act.startsWith('shop:')){closeNpc();openShop(act.slice(5));return;}
   if(act==='sell'){closeNpc();shopId=n.id==='mina'?'goods':'arms';openSell();return;}
-  if(act==='talk'){n.li=(n.li||0)+1;renderNpc(n.lines[n.li%n.lines.length]);return;}
+  // 이야기: 짧은 대사와 긴 이야기(여러 장)를 한 버튼에서 차례로
+  if(act==='talk'||act==='story'){const L=n.lines.map(l=>[l]).concat(n.story||[]);n.ti=((n.ti??0)+1)%L.length;showPages(L[n.ti]);return;}
   if(act==='giveheal'){
     if(P.got&&P.got.ireneHeal){renderNpc('덕분에 상처가 많이 아물었어. 그때 받은 약, 잊지 않을게.');return;}
     if(!P.bag.some(e=>e.id==='hp_s'&&e.n>0)){renderNpc('마음만으로도 고맙네. 하지만 지금 자네 가방엔 작은 치료약이 없는 것 같군.');return;}
@@ -7769,7 +7770,7 @@ function questKill(m){const q=P.quest;if(!q)return;const g=qGoals(q).find(g=>g.t
   if(party&&q.qid)for(const pm of party.members)if(pm.id!==myPeer())dm(pm.id,{k:'qkill',qid:q.qid,ty:m.t});
   if(qDone(q))log(`의뢰 목표 달성`,'sys');}
 function updateQuestHud(){const e=$('#questHud'),bx=$('#questBox');const q=P&&P.quest;if(!q){bx.hidden=true;return;}bx.hidden=false;
-  const lines=q.special?((q.stage|0)<1?['동쪽 황야 끝 포탈 들어가 보기']:(q.stage|0)<2?['포탈 밖으로 돌아오기']:[]):qGoals(q).map(g=>`${MON[g.ty].name} 처치 ${Math.min(g.have,g.need)}/${g.need}`);
+  const lines=q.special?((q.stage|0)<1?['동쪽 황야 끝 포탈 조사']:(q.stage|0)<2?['포탈 밖으로 돌아오기']:[]):qGoals(q).map(g=>`${MON[g.ty].name} 처치 ${Math.min(g.have,g.need)}/${g.need}`);
   if(qDone(q))lines.push(`${q.fromName||'의뢰인'}에게 보고하기`);e.textContent=lines.join('\n');placeQuestBox();}
 // 의뢰 창은 상태 창 바로 아래에 붙인다 (상태 창 높이가 버프·파티로 바뀌어도 따라간다)
 function placeQuestBox(){const s=$('#stat'),bx=$('#questBox');if(!s||!bx)return;const r=s.getBoundingClientRect();if(r.height)bx.style.top=Math.round(r.bottom+8)+'px';}
