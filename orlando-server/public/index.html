@@ -1790,7 +1790,10 @@ const ITEMS={
   ITEMS.sh1={name:'나무 방패',slot:'sub',tier:0,req:1,st:{def:4,hp:20},jobs:['warrior'],fixed:true,desc:'전사가 왼손에 드는 방패'};
   ITEMS.swd={name:'검사의 장검',slot:'weapon',tier:3,req:10,st:{atk:16,crit:.06},jobs:['swordsman','swordmaster'],fixed:true,desc:'검사가 되면 받는 전용 검'};
   ITEMS.fham={name:'파울러의 워해머',slot:'weapon',tier:5,req:60,st:{atk:30,def:6,hp:110},jobs:['fowler'],fixed:true,desc:'파울러가 되면 받는 전용 워해머'};
-  ITEMS.shd={name:'쉴더의 스쿠툼과 파르마',slot:'weapon',tier:5,req:60,st:{atk:14,def:16,hp:170},jobs:['shielder'],fixed:true,desc:'쉴더가 되면 받는 사각방패와 원형방패'};
+  ITEMS.shd={name:'쉴더의 스쿠툼과 파르마',slot:'weapon',tier:5,req:60,st:{atk:14,def:16,hp:170},jobs:['shielder'],fixed:true,desc:'예전 쉴더 방패 (스쿠툼과 파르마로 나뉘었다)'};
+  // 쉴더의 두 방패: 주무기 칸이든 보조무기 칸이든 아무 데나 낀다
+  ITEMS.scutum={name:'스쿠툼',slot:'weapon',shk:'sc',tier:5,req:60,st:{atk:6,def:12,hp:110},jobs:['shielder'],fixed:true,desc:'쉴더의 사각방패. 주무기 칸이나 보조무기 칸에 낀다'};
+  ITEMS.parma={name:'파르마',slot:'weapon',shk:'pa',tier:5,req:60,st:{atk:10,def:6,hp:60},jobs:['shielder'],fixed:true,desc:'쉴더의 원형방패. 주무기 칸이나 보조무기 칸에 낀다'};
   ITEMS.bax={name:'워리어의 양날 도끼',slot:'weapon',tier:5,req:60,st:{atk:34,crit:.05,hp:60},jobs:['barbarian'],fixed:true,desc:'워리어가 되면 받는 전용 도끼'};
   ITEMS.gsh={name:'방패병의 방패',slot:'weapon',tier:3,req:10,st:{atk:10,def:12,hp:80},jobs:['guardian'],fixed:true,desc:'방패병가 되면 받는 방패. 보조무기 칸을 쓰지 않는다'};
   ITEMS.crown={name:'킹 슬라임의 왕관',slot:'helm',tier:10,req:18,st:{def:16,hp:220,atk:8},desc:'석굴의 킹 슬라임에게서만 얻을 수 있다'};
@@ -3818,7 +3821,46 @@ function makeShield(kind='buckler',tier=0){
   const ring=(outer,inner,depth,m)=>{const s=outer;s.holes.push(new THREE.Path(inner.getPoints(24).reverse()));return ext(s,depth,m,.006);};
   const add=(m,x,y,z,rx=0,ry=0,rz=0)=>{m.position.set(x,y,z);m.rotation.set(rx,ry,rz);g.add(m);return m;};
   const gemC=tier>=6?tierCol(tier).getHex():0x3a7ad8;
-  if(kind==='parma'){
+  if(kind==='scutum'){
+    // 쉴더의 스쿠툼: 몸을 감싸게 휜 긴 사각 방패. 붉은 칠 위에 금빛 독수리 날개와 번개, 가운데 청동 혹과 세로 등뼈, 쇠 테두리
+    const R=.56,L=1.18,H=1.08;
+    const red=mat(0x8c1c18,{roughness:.55,flatShading:false}),gold=mat(0xd8a838,{metalness:.8,roughness:.25,flatShading:false}),bronze=mat(0xa8763a,{metalness:.75,roughness:.3,flatShading:false});
+    const iron=mat(0x8a8f96,{metalness:.7,roughness:.35,flatShading:false}),back=mat(0x5a3e28,{roughness:.9,side:THREE.BackSide}),lea=mat(0x5a3a22,{roughness:.85}),wood=mat(0x6a4a2c,{roughness:.85});
+    const arc=(r,h,m,y=0,len=L)=>{const me=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,26,1,true,-len/2,len),m);me.position.set(0,y,-R);g.add(me);return me;};
+    // 휜 면 위의 한 점 (a: 가운데에서 벌어진 각도)
+    const on=(m,a,y,lift=.006,rz=0)=>{m.position.set(Math.sin(a)*(R+lift),y,Math.cos(a)*(R+lift)-R);m.rotation.set(0,a,rz);g.add(m);return m;};
+    arc(R,H,red);arc(R-.022,H,back);
+    // 테두리: 위아래 쇠테, 양옆 세로 테
+    for(const y of [H/2-.015,-H/2+.015])arc(R+.01,.04,iron,y,L+.025);
+    for(const s2 of [-1,1])on(new THREE.Mesh(new THREE.BoxGeometry(.045,H+.02,.045),iron),s2*L/2,0,.003);
+    // 위아래 금띠와 그 안쪽 가는 금선
+    for(const y of [H/2-.09,-H/2+.09])arc(R+.006,.022,gold,y,L-.1);
+    for(const y of [H/2-.13,-H/2+.13])arc(R+.006,.008,gold,y,L-.14);
+    // 세로 등뼈 (청동)
+    on(new THREE.Mesh(new THREE.BoxGeometry(.06,H-.08,.03),bronze),0,0,.01);
+    // 가운데 둥근 혹 + 금테 + 바깥 사각 받침
+    {on(new THREE.Mesh(new THREE.BoxGeometry(.32,.32,.012),bronze),0,0,.014);
+      const boss=new THREE.Mesh(new THREE.SphereGeometry(.12,20,12,0,Math.PI*2,0,Math.PI/2),gold);boss.rotation.x=Math.PI/2;boss.position.set(0,0,.024);g.add(boss);
+      add(new THREE.Mesh(new THREE.TorusGeometry(.125,.016,6,26),bronze),0,0,.026);
+      if(tier>=6)add(new THREE.Mesh(new THREE.OctahedronGeometry(.035,0),mat(gemC,{emissive:gemC,emissiveIntensity:.9})),0,0,.15);}
+    // 독수리 날개: 혹 양옆으로 비스듬히 펼친 깃털 다섯 장씩
+    for(const s2 of [-1,1])for(let k=0;k<5;k++){const a=s2*(.24+k*.075),y=.03+k*.035,len=.2-k*.018;
+      on(new THREE.Mesh(new THREE.BoxGeometry(.032,len,.012),gold),a,y,.012,s2*(.55+k*.12));
+      on(new THREE.Mesh(new THREE.BoxGeometry(.026,len*.75,.012),gold),a+s2*.02,y-.09,.012,-s2*(.35+k*.1));}
+    // 번개: 혹 위아래로 지그재그 두 갈래
+    for(const sy of [-1,1])for(const s2 of [-1,1]){const pts=[[.05,.2],[.11,.27],[.06,.33],[.12,.42]];
+      for(let k=0;k<pts.length-1;k++){const [x0,y0]=pts[k],[x1,y1]=pts[k+1],mx=(x0+x1)/2*s2,my=(y0+y1)/2*sy,dx=(x1-x0)*s2,dy=(y1-y0)*sy,len=Math.hypot(dx,dy);
+        on(new THREE.Mesh(new THREE.BoxGeometry(.022,len+.012,.012),gold),mx/R,my,.012,-Math.atan2(dx,dy));}}
+    // 네 모서리 월계 고리
+    for(const sx of [-1,1])for(const sy of [-1,1]){const t=new THREE.Mesh(new THREE.TorusGeometry(.06,.01,5,14,Math.PI*1.2),gold);on(t,sx*(L/2-.13),sy*(H/2-.2),.01,Math.PI*(sx>0?(sy>0?-.1:.7):(sy>0?1.3:.9)));}
+    // 리벳: 테두리를 따라
+    for(const y of [H/2-.015,-H/2+.015])for(let k=0;k<9;k++){const a=(k/8-.5)*(L-.08);on(new THREE.Mesh(new THREE.SphereGeometry(.012,6,5),iron),a,y,.03);}
+    // 뒷면: 혹 뒤 가로 손잡이, 나무 받침목 두 개, 가죽 어깨끈
+    add(new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.2,8),lea),0,0,-.09,0,0,Math.PI/2);
+    for(const x of [-.1,.1])add(new THREE.Mesh(new THREE.BoxGeometry(.03,.04,.07),wood),x,0,-.06);
+    for(const y of [.32,-.32])add(new THREE.Mesh(new THREE.BoxGeometry(.5,.05,.03),wood),0,y,-.06);
+    add(new THREE.Mesh(new THREE.BoxGeometry(.05,.6,.015),lea),.12,.05,-.08);
+  }else if(kind==='parma'){
     // 쉴더의 파르마: 둥글게 부푼 원형 방패. 붉은 칠, 청동 테와 가운데 혹, 청동 고리와 리벳
     const Rr=.38,SR=1.0,th=Math.asin(Rr/SR),cz=-Math.cos(th)*SR;
     const paint=mat(0x8a2a22,{roughness:.55,flatShading:false}),bronze=mat(0xb8873e,{metalness:.75,roughness:.3,flatShading:false}),back=mat(0x4a3424,{roughness:.9,side:THREE.BackSide}),lea=mat(0x5a3a22,{roughness:.85});
@@ -3886,7 +3928,7 @@ function makeShield(kind='buckler',tier=0){
   return g;
 }
 // 방패 손잡이 위치(방패 안 좌표). 손이 정확히 여기를 쥐도록 방패를 옮긴다
-const SHIELD_GRIP={buckler:new THREE.Vector3(0,-.06,-.1),tower:new THREE.Vector3(.05,.02,-.095),parma:new THREE.Vector3(0,0,-.075)};
+const SHIELD_GRIP={buckler:new THREE.Vector3(0,-.06,-.1),tower:new THREE.Vector3(.05,.02,-.095),parma:new THREE.Vector3(0,0,-.075),scutum:new THREE.Vector3(0,0,-.09)};
 function mountShield(sh,kind,scale,rotY=0){sh.scale.setScalar(scale);sh.rotation.set(0,rotY,0);
   sh.position.copy(SHIELD_GRIP[kind]).multiplyScalar(scale).applyAxisAngle(new THREE.Vector3(0,1,0),rotY).negate();}
 // 쉴더 방패 자리: 손에 들면 그대로, 등에 메면 앞면이 뒤를 보게
@@ -3894,9 +3936,9 @@ function shdSeat(m,onBack){m.position.set(0,0,0);m.rotation.set(0,onBack?Math.PI
 // st: {pa: 파르마를 든 상태, paA: 파르마가 손을 떠남, scA: 스쿠툼이 손을 떠남}
 function shdApply(mesh,st){const D=mesh&&mesh.userData.stick&&mesh.userData.stick.shd;if(!D)return;
   const hand=st.pa?(st.paA?null:D.pa):(st.scA?null:D.sc),other=st.pa?(st.scA?null:D.sc):(st.paA?null:D.pa);
-  for(const m of [D.sc,D.pa])if(m.parent)m.parent.remove(m);
+  for(const m of [D.sc,D.pa])if(m&&m.parent)m.parent.remove(m);
   if(hand){D.hand.add(hand);shdSeat(hand,false);}if(other){D.back.add(other);shdSeat(other,true);}
-  for(const m of [D.sc,D.pa])m.traverse(o=>{if(o.isMesh)o.visible=true;});}
+  for(const m of [D.sc,D.pa])if(m)m.traverse(o=>{if(o.isMesh)o.visible=true;});}
 function kiteShield(){return makeShield('tower',0);}
 function arrowMesh(){
   const g=new THREE.Group();
@@ -3906,9 +3948,9 @@ function arrowMesh(){
   return g;
 }
 // gear: {helm,armor,boots,weapon} 각각 단계(없으면 -1)
-function gearOf(p){const t=s=>{const id=p&&p.equip&&p.equip[s];return id&&ITEMS[id]?ITEMS[id].tier:-1;};return{helm:t('helm'),armor:t('armor'),boots:t('boots'),weapon:t('weapon'),sub:t('sub'),acc:t('acc')};}
-function gearCode(G){return [G.helm,G.armor,G.boots,G.weapon,G.sub??-1,G.acc??-1].join(',');}
-function parseGear(s){const a=String(s||'').split(',').map(v=>Math.max(-1,Math.min(10,Math.floor(Number(v))))).map(v=>isFinite(v)?v:-1);return{helm:a[0]??-1,armor:a[1]??-1,boots:a[2]??-1,weapon:a[3]??-1,sub:a[4]??-1,acc:a[5]??-1};}
+function gearOf(p){const t=s=>{const id=p&&p.equip&&p.equip[s];return id&&ITEMS[id]?ITEMS[id].tier:-1;};const wi=p&&p.equip&&ITEMS[p.equip.weapon];return{helm:t('helm'),armor:t('armor'),boots:t('boots'),weapon:t('weapon'),sub:t('sub'),acc:t('acc'),shs:wi&&wi.shk==='pa'?1:0};}
+function gearCode(G){return [G.helm,G.armor,G.boots,G.weapon,G.sub??-1,G.acc??-1,G.shs?1:0].join(',');}
+function parseGear(s){const a=String(s||'').split(',').map(v=>Math.max(-1,Math.min(10,Math.floor(Number(v))))).map(v=>isFinite(v)?v:-1);return{helm:a[0]??-1,armor:a[1]??-1,boots:a[2]??-1,weapon:a[3]??-1,sub:a[4]??-1,acc:a[5]??-1,shs:a[6]===1?1:0};}
 function makeStickPlayer(job,gear){
   const J=JOBS[job],G=gear||{helm:-1,armor:-1,boots:-1,weapon:-1},g=new THREE.Group(),mats=[];
   const M=(c,x)=>{const m=mat(c,x);mats.push(m);return m;};
@@ -3967,9 +4009,13 @@ function makeStickPlayer(job,gear){
     const sh=new THREE.Group();sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;w=sh;
     if(job==='shielder'){
       // 쉴더: 스쿠툼(사각)과 파르마(원형). 든 방패는 왼손, 나머지는 등에 멘다
-      const sc=new THREE.Group(),pa=new THREE.Group();{const a=makeShield('tower',G.weapon);mountShield(a,'tower',.85);sc.add(a);}{const b=makeShield('parma',G.weapon);mountShield(b,'parma',.95);pa.add(b);}
-      sc.userData.kind='sc';pa.userData.kind='pa';const back=new THREE.Group();back.position.set(0,.3,-.2);upper.add(back);
-      sh.add(sc);back.add(pa);shdSeat(pa,true);shdInfo={sc,pa,hand:sh,back};}
+      // 주무기 칸에 파르마를 끼면(shs) 보조무기 칸이 스쿠툼
+      const tS=G.shs?(G.sub??-1):G.weapon,tP=G.shs?G.weapon:(G.sub??-1);
+      const sc=tS>=0?new THREE.Group():null,pa=tP>=0?new THREE.Group():null;
+      if(sc){const a=makeShield('scutum',tS);mountShield(a,'scutum',.85);sc.add(a);sc.userData.kind='sc';}
+      if(pa){const b=makeShield('parma',tP);mountShield(b,'parma',.95);pa.add(b);pa.userData.kind='pa';}
+      const back=new THREE.Group();back.position.set(0,.3,-.2);upper.add(back);
+      if(sc)sh.add(sc);if(pa){back.add(pa);shdSeat(pa,true);}shdInfo={sc,pa,hand:sh,back,tS,tP};}
     else{const S2=makeShield('tower',G.weapon);mountShield(S2,'tower',.85);sh.add(S2);}}
   else if(style==='fist'){w=new THREE.Group();AR.hand.add(w);
     if((G.sub??-1)>=0&&JOBS[job].sub){const sh=new THREE.Group();const S2=makeShield('buckler',G.sub);mountShield(S2,'buckler',.8);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;}}
@@ -4243,7 +4289,7 @@ function pmAttach(g,job,gear,ap){
     const tgt=new THREE.Vector3(0,cp.y-.02,cp.z-.2).applyMatrix4(g.matrixWorld);ch.add(S.shd.back);S.shd.back.position.copy(ch.worldToLocal(tgt));
     const cq=new THREE.Quaternion(),gq=new THREE.Quaternion();ch.getWorldQuaternion(cq);g.getWorldQuaternion(gq);S.shd.back.quaternion.copy(cq.invert().multiply(gq));
     const ws=new THREE.Vector3();ch.getWorldScale(ws);const gs=new THREE.Vector3();g.getWorldScale(gs);S.shd.back.scale.set(gs.x/ws.x,gs.y/ws.y,gs.z/ws.z);}
-    for(const m of [S.shd.sc,S.shd.pa])m.traverse(o=>keep.add(o));}
+    for(const m of [S.shd.sc,S.shd.pa])if(m)m.traverse(o=>keep.add(o));}
   S.body.traverse(o=>{if(o.isMesh&&!keep.has(o))o.visible=false;});
   // 화살통은 등(가슴뼈)에 멘다
   if(S.quiver){const ch=A.by('J_Bip_C_UpperChest')||A.by('J_Bip_C_Chest');A.root.updateMatrixWorld(true);const cp=new THREE.Vector3();ch.getWorldPosition(cp);
@@ -4364,7 +4410,7 @@ const MOTION_OF={
   reap:{v:'reap',dur:.85},reap1:{v:'reapIn',dur:.5},reap2:{v:'reapOut',dur:.62},snare:{v:'snare',dur:.6},quaff:{v:'quaff',dur:1.0},
   shuriken:{v:'shuriken',dur:.45},quakedash:{v:'dash',dur:.5,a:1.3},deepstab:{v:'deepstab',dur:.55},deepslash:{v:'deepslash',dur:.4},kb1:{v:'kchop',dur:.5},kb2:{v:'kchop',dur:.5,sd:-1},asl1:{v:'aslice',dur:.36},asl2:{v:'arise',dur:.36},asl3:{v:'ajab',dur:.36},
   // 쉴더 (방패는 왼손)
-  shswap:{v:'shswap',dur:.42},shTaunt:{v:'bang',n:2,dur:.8},shThrow:{v:'snare',dur:.5},shHeal:{v:'shheal',dur:.75},shRecall:{v:'shrecall',dur:.5},shBash:{v:'shieldbash',dur:.55},shPlant:{v:'shieldplant',dur:.7,two:1},shUpper:{v:'shupper',dur:.5},shPull:{v:'shswap',dur:.42},
+  shswap:{v:'shswap',dur:.42},shtaunt:{v:'bang',n:2,dur:.8},shthrow:{v:'snare',dur:.5},shheal2:{v:'shheal',dur:.75},shrecall2:{v:'shrecall',dur:.5},shbash:{v:'shieldbash',dur:.55},shplant:{v:'shieldplant',dur:.7,two:1},shupper2:{v:'shupper',dur:.5},shpull:{v:'shswap',dur:.42},pb1:{v:'pjab',dur:.36},pb2:{v:'pback',dur:.4},pb3:{v:'pspin',dur:.6},
   // 마법사 · 성직자 · 메이지
   fireball:{v:'cast',dur:.5},frost:{v:'cast',dur:.4,sd:-1,a:.8},ring:{v:'castdown',dur:.6},healing:{v:'pray',dur:.8},holy:{v:'castup',dur:.7},bless:{v:'pray',dur:.6,a:.75,sd:-1},
   bolt:{v:'cast',dur:.35,a:1.35},blizzard:{v:'channel',dur:.95,sd:-1},meteor:{v:'castup',j:.25,dur:1.0,a:1.2},
@@ -4589,6 +4635,12 @@ function verb3(v,o,style){
     case 'shswap':         // 든 방패를 허리 뒤로 내렸다가 다른 방패를 꺼내 든다
       k(.38,{lx:.35,lz:-.3,le:-.35,tw:.45,ln:.05});
       k(.75,{lx:-.25,lz:.1,le:-1.5,tw:-.05});break;
+    case 'pjab':           // 파르마로 짧고 빠르게 내지르는 주먹
+      k(.22,{lx:-.75,lz:.15,le:-1.95,tw:-.6,cr:.22,ln:.05});k(.45,{lx:-1.62,lz:.25,le:-.02,tw:.65,ln:.42,cr:.26});k(.78,{lx:-1.5,lz:.22,le:-.12,tw:.5,ln:.32,cr:.2});break;
+    case 'pback':          // 몸 앞을 가로질러 감았다가 손등 쪽으로 방패 테두리를 휘둘러 친다
+      k(.25,{lx:-1.45,lz:.95,le:-1.3,tw:.8,cr:.2,ln:.05});k(.5,{lx:-1.5,lz:-1.2,le:-.05,tw:-.8,ln:.18,cr:.22});k(.8,{lx:-1.4,lz:-1.05,le:-.15,tw:-.6,ln:.1,cr:.16});break;
+    case 'pspin':          // 몸을 낮췄다가 방패를 뻗은 채 한 바퀴 돌며 살짝 뛰어올라 후려친다
+      k(.15,{lx:-1.0,lz:.6,le:-1.45,tw:.6,cr:.32});k(.62,{lx:-1.55,lz:-1.25,le:-.05,tw:-.2,sp:Math.PI*2,lf:.28,cr:.05});k(.86,{lx:-1.45,lz:-.6,le:-.2,sp:Math.PI*2,lf:0,cr:.3,ln:.3});break;
     case 'shheal':         // 방패를 가슴에 끌어안고 오른손을 가슴에 얹는다
       k(.35,{lx:-1.25,lz:.35,le:-1.65,rx:-1.0,rz:-.35,re:-1.85,ln:-.12,cr:.12});
       k(.85,{lx:-1.3,lz:.35,le:-1.6,rx:-1.05,rz:-.35,re:-1.85,ln:-.18,cr:.08,lf:.05});break;
@@ -4811,6 +4863,12 @@ function verbFP(v,o,style){
       r(.86,{x:-.62,y:-.25,z:-.55,rz:1.15});l(.86,{x:-.5,y:-.26,z:-.56});break;
     case 'shieldrush':
       l(.18,{x:-.04,y:-.27,z:-.98});l(.9,{x:-.04,y:-.27,z:-.95});r(.18,{x:.1,y:-.29,z:-.92});r(.9,{x:.1,y:-.29,z:-.9});break;
+    case 'pjab':
+      l(.22,{x:-.3,y:-.52,z:-.35});l(.45,{x:-.06,y:-.3,z:-1.02});l(.78,{x:-.08,y:-.32,z:-.95});break;
+    case 'pback':
+      l(.25,{x:.25,y:-.36,z:-.6,ry:.6});l(.5,{x:-.65,y:-.3,z:-.72,ry:-.7});l(.8,{x:-.6,y:-.32,z:-.68,ry:-.6});break;
+    case 'pspin':
+      l(.15,{x:-.22,y:-.52,z:-.45});l(.45,{x:.6,y:-.3,z:-.7,ry:.7});l(.68,{x:-.7,y:-.3,z:-.62,ry:-.7});l(.9,{x:-.1,y:-.36,z:-.95});break;
     case 'shswap':
       l(.38,{x:-.45,y:-.95,z:-.35});l(.75,{x:-.4,y:-.55,z:-.65});break;
     case 'shheal':
@@ -6864,14 +6922,17 @@ function irGive(id){
    P.shd = {pa: 파르마를 든 상태인지, paObj: 손을 떠난 파르마(날아가는 중·바닥·되돌아오는 중), plant: 땅에 박힌 스쿠툼} */
 function shdState(){if(!P.shd)P.shd={pa:false,paObj:null,plant:null};return P.shd;}
 // 1인칭 손에 들 방패 (없으면 null)
-function shdHandKind(){if(!P||P.job!=='shielder')return 'tower';const s=shdState();return s.pa?(s.paObj?null:'parma'):(s.plant?null:'tower');}
+function shdHandKind(){if(!P||P.job!=='shielder')return 'tower';const s=shdState();return s.pa?(s.paObj||!shdHas('pa')?null:'parma'):(s.plant||!shdHas('sc')?null:'scutum');}
+// 낀 방패: 주무기·보조무기 칸 어디든
+function shdId(k){for(const sl of ['weapon','sub']){const id=P.equip[sl];if(id&&shkOf(id)===k)return id;}return null;}
+function shdHas(k){return !!shdId(k);}
 function shdVis(){const s=shdState();return {pa:s.pa,paA:!!s.paObj,scA:!!s.plant};}
 function shdRefresh(){if(!P||P.job!=='shielder'||!player)return;shdSync();setViewModel(P.job);publishPresence(true);}
 // 내 몸의 방패 모습을 상태에 맞춘다 (몸을 새로 만들어도 다시 맞춘다)
-function shdSync(){if(!P||P.job!=='shielder'||!player)return;const v=shdVis(),key=(v.pa?1:0)+(v.paA?2:0)+(v.scA?4:0)+'|'+player.uuid;if(player.userData.shdKey!==key){player.userData.shdKey=key;shdApply(player,v);}}
-function shdTier(){return P&&P.equip.weapon&&ITEMS[P.equip.weapon]?ITEMS[P.equip.weapon].tier:0;}
+function shdSync(){if(!P||P.job!=='shielder'||!player)return;{const s=shdState();if(s.pa&&!shdHas('pa')&&shdHas('sc')&&!s.paObj)s.pa=false;else if(!s.pa&&!shdHas('sc')&&shdHas('pa')&&!s.plant)s.pa=true;}const v=shdVis(),key=(v.pa?1:0)+(v.paA?2:0)+(v.scA?4:0)+'|'+player.uuid;if(player.userData.shdKey!==key){player.userData.shdKey=key;shdApply(player,v);}}
+function shdTier(k){const id=P&&shdId(k);return id?ITEMS[id].tier:0;}
 function shdParmaMesh(t){const g=new THREE.Group(),m=makeShield('parma',t);mountShield(m,'parma',.95);g.add(m);g.traverse(o=>{if(o.isMesh)o.castShadow=true;});return g;}
-function shdScutumMesh(t){const g=new THREE.Group(),m=makeShield('tower',t);m.scale.setScalar(1.05);m.position.y=.5;g.add(m);g.traverse(o=>{if(o.isMesh)o.castShadow=true;});return g;}
+function shdScutumMesh(t){const g=new THREE.Group(),m=makeShield('scutum',t);m.scale.setScalar(1.05);m.position.y=.5;g.add(m);g.traverse(o=>{if(o.isMesh)o.castShadow=true;});return g;}
 // 스킬 칸 하나가 지금 어떤 모습인지 (든 방패에 따라 이름·재사용·MP가 바뀐다)
 function shdForm(S){const s=shdState();
   if(S.id==='shswap')return {name:s.pa?'파르마':'스쿠툼',cd:S.cd,mp:0,key:'shswap',ok:true};
@@ -6881,13 +6942,14 @@ function shdForm(S){const s=shdState();
   return {f,F,name:pull?'뽑아 들기':F.name,cd:F.cd,mp:pull?0:F.mp,key:S.id+'_'+f,ok,pull};}
 function shdUse(S,lvl){
   const s=shdState(),F=shdForm(S),pw=1+.25*(lvl-1);
-  if(F.pull){swingT=0;swingN++;myMoId='shPull';myMo=motionFor('shield','shPull');P.skN=swingN;shdUnplant(false);return;}
+  if(F.pull){swingT=0;swingN++;myMoId='shpull';myMo=motionFor('shield','shpull');P.skN=swingN;shdUnplant(false);return;}
   if(!F.ok){toast('파르마를 회수해야 쓸 수 있어요');return;}
+  if(S.id==='shswap'&&!shdHas(s.pa?'sc':'pa')){toast(s.pa?'스쿠툼을 끼고 있지 않아요':'파르마를 끼고 있지 않아요');return;}
   if((cds[F.key]||0)>0){toast(`${F.name} 재사용 대기 ${Math.ceil(cds[F.key])}초`);return;}
   if(!P.equip.weapon){toast('맨손일 때는 기본 공격만 할 수 있어요');return;}
   if(P.mp<F.mp){toast('MP가 부족해요');return;}
   P.mp-=F.mp;cds[F.key]=F.cd;if(P.hideT>tAll)P.hideT=0;
-  const mo=S.id==='shswap'?'shswap':{shA_sc:'shTaunt',shA_pa:'shThrow',shB_sc:'shHeal',shB_pa:s.paObj?'shRecall':'shBash',shC_sc:'shPlant',shC_pa:'shUpper'}[F.key];
+  const mo=S.id==='shswap'?'shswap':{shA_sc:'shtaunt',shA_pa:'shthrow',shB_sc:'shheal2',shB_pa:s.paObj?'shrecall2':'shbash',shC_sc:'shplant',shC_pa:'shupper2'}[F.key];
   swingT=0;swingN++;myMoId=mo;myMo=motionFor('shield',mo);P.skN=swingN;
   const q0=player.position,f0=flatFwd(),col=S.color||0xd8c090;
   switch(F.key){
@@ -6899,7 +6961,7 @@ function shdUse(S,lvl){
         const c=mCenter(m);setTimeout(()=>{if(mode==='world')VFX.burst(c.clone().setY(c.y+.7),0xff5a3a,10,2.2,.45,{up:.9,grav:2});},120+n*20);}
       setTimeout(()=>{if(mode!=='world')return;const q=player.position;VFX.shock(q,col,R,.55);VFX.shock(q,0xff6a40,R*.55,.4);VFX.aura(q,0xff6a40,26,.9,1.6);shakeT=Math.max(shakeT,.14);sfx('block',q,.9,.85);sfx('roar',q,.55,1.25);},260);break;}
     case 'shA_pa':{   // 방패 던지기
-      setTimeout(()=>{if(mode!=='world'||!P||s.paObj)return;const f=flatFwd(),q=player.position,mesh=shdParmaMesh(shdTier());
+      setTimeout(()=>{if(mode!=='world'||!P||s.paObj)return;const f=flatFwd(),q=player.position,mesh=shdParmaMesh(shdTier('pa'));
         const pos=new THREE.Vector3(q.x+f.x*.8,q.y+1.15,q.z+f.z*.8);mesh.position.copy(pos);scene.add(mesh);
         s.paObj={mesh,st:'fly',pos,vx:f.x*24,vz:f.z*24,vy:0,trav:0,max:F.F.range,mult:F.F.mult*pw,spin:0};shdRefresh();sfx('whoosh',q,.9);sfx('throw',q,.6);},210);break;}
     case 'shB_sc':{   // 회복하기
@@ -6914,7 +6976,7 @@ function shdUse(S,lvl){
       break;}
     case 'shC_sc':{   // 박아두기
       setTimeout(()=>{if(mode!=='world'||!P||s.plant)return;const f=flatFwd(),q=player.position,x=q.x+f.x*1.3,z=q.z+f.z*1.3,y=heightAt(x,z),yaw=Math.atan2(f.x,f.z);
-        const mesh=shdScutumMesh(shdTier());mesh.position.set(x,y-.12,z);mesh.rotation.y=yaw;scene.add(mesh);
+        const mesh=shdScutumMesh(shdTier('sc'));mesh.position.set(x,y-.12,z);mesh.rotation.y=yaw;scene.add(mesh);
         s.plant={x,z,yaw,t:tAll+F.F.dur,dmg:0,mesh};shdRefresh();
         const at=new THREE.Vector3(x,y,z);VFX.shock(at,col,3,.45);VFX.shock(at,0xffffff,1.6,.3);VFX.burst(at.clone().setY(y+.2),0xb8a888,26,5,.55,{up:.6,grav:9});
         shakeT=Math.max(shakeT,.2);cam.land=.08;sfx('slam',at,1);sfx('block',at,.6,.8);},300);break;}
@@ -6985,6 +7047,18 @@ function shdRemoteTick(o,dt){if(!o.shdPp||!o.shdPpT)return;const P2=o.shdPp.posi
   P2.x+=(T[0]-P2.x)*k;P2.y+=(T[1]-P2.y)*k;P2.z+=(T[2]-P2.z)*k;o.shdSpin=(o.shdSpin||0)+dt*14;o.shdPp.rotation.set(-Math.PI/2,0,o.shdSpin);}
 function shdPres(){if(!P||P.job!=='shielder'||!P.shd)return {ss:0,dc:null,pp:null};const s=P.shd,r=v=>+v.toFixed(2);
   return {ss:(s.pa?1:0)|(s.paObj?2:0)|(s.plant?4:0),dc:s.plant?[r(s.plant.x),r(s.plant.z),r(s.plant.yaw)]:null,pp:s.paObj?[r(s.paObj.pos.x),r(s.paObj.pos.y),r(s.paObj.pos.z)]:null};}
+
+// 파르마 기본 공격: 빠른 3연타 (방패 주먹 → 손등 치기 → 회전 강타)
+let pbN=0,pbAt=0;
+function parmaBasic(B){const now=performance.now();pbN=now-pbAt<1100?(pbN%3)+1:1;pbAt=now;const st=pbN,sw=swingN;
+  basicCd=st===3?.72:.5;myMoId='pb'+st;myMo=motionFor('shield',myMoId);
+  setTimeout(()=>{if(mode!=='world'||!P||swingN!==sw)return;const q=player.position,f=flatFwd(),col=0xf0c890;
+    const n=shared(()=>st===3?aoeHit(q,3.3,B.mult*.95,{color:col,nohs:1}):meleeHit(B.range+.3,B.mult*(st===1?.5:.55),{color:col,nohs:1}));
+    const p=q.clone();p.y+=1.1;
+    if(st===1){const t=new THREE.Vector3(q.x+f.x*1.5,q.y+1.15,q.z+f.z*1.5);VFX.burst(t,col,n?14:6,n?4:2.5,.3,{mix:0xffffff});if(n)spawnFx(0xffffff,t,.5,.15);}
+    else if(st===2)VFX.slash(p,cam.yaw,col,{r:1.9,arc:2.4,tilt:.08,dur:.17,dir:-1});
+    else{VFX.slash(p,cam.yaw,col,{r:2.6,arc:6.2,tilt:.05,dur:.28,dir:1});VFX.shock(q,col,3.3,.35);VFX.burst(q.clone().setY(q.y+.3),0xb8a888,16,4,.45,{up:.7,grav:9});}
+    if(n){shakeT=Math.max(shakeT,st===3?.12:.06);sfx('sh_bash',q,st===3?1:.85,st===1?1.12:st===2?1.05:.95);}else sfx('swing2',q,.55,1.2);},st===3?330:150);}
 
 /* ---------- 플레이어 모델: 막대 인간 ---------- */
 function makePlayerMesh(job,gear,ap){const m=makeStickPlayer(job,gear);m.userData.gcode=gear?gearCode(gear):'';
@@ -7066,7 +7140,7 @@ function makeViewModel(job){
   if(style==='fist'){L.visible=true;if((G.sub??-1)>=0&&J.sub){u.hasL=true;u.shieldL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
   else if(style==='sword'){const w=stickWeapon(style,job,G.weapon);w.rotation.set(-.5,0,-.12);w.scale.setScalar(job==='barbarian'||job==='fowler'?.6:.85);if(job==='barbarian'||job==='fowler')w.position.y=-.08;R.add(w);
     if((G.sub??-1)>=0){L.visible=true;u.hasL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
-  else if(style==='shield'){R.visible=false;u.noR=true;L.visible=true;const kd=job==='shielder'?shdHandKind():'tower';const sg=new THREE.Group();if(kd){u.hasL=true;const sh=makeShield(kd,G.weapon);mountShield(sh,kd,kd==='parma'?.9:.82,Math.PI-.35);sg.add(sh);}L.add(sg);u.shieldG=sg;}
+  else if(style==='shield'){R.visible=false;u.noR=true;L.visible=true;const kd=job==='shielder'?shdHandKind():'tower';const sg=new THREE.Group();if(kd){u.hasL=true;const tt=job!=='shielder'?G.weapon:kd==='parma'?(G.shs?G.weapon:G.sub):(G.shs?G.sub:G.weapon);const sh=makeShield(kd,tt);mountShield(sh,kd,kd==='parma'?.9:.82,Math.PI-.35);sg.add(sh);}L.add(sg);u.shieldG=sg;}
   else if(style==='dagger'){(ONE_DAGGER[job]?[R]:[R,L]).forEach((h,k)=>{let w=stickWeapon('dagger',job,G.weapon);if(job==='thief'||job==='rogue'){const g=new THREE.Group();w.rotation.y=job==='rogue'?-Math.PI/2:Math.PI/2;g.add(w);if(job==='thief')u.kIn=w;w=g;}const tz=ONE_DAGGER[job]?-.05:-.55;w.rotation.set(-.45,0,k?.55:tz);w.scale.setScalar(.95);h.add(w);});L.visible=!ONE_DAGGER[job];if(ONE_DAGGER[job])u.oneD=1;}
   else if(style==='staff'){const w=stickWeapon('staff',job,G.weapon);w.scale.setScalar(.62);w.position.y=-.1;w.rotation.set(-.12,0,-.08);R.add(w);u.orb=w.userData.orb;u.ring=w.userData.ring;L.visible=true;}
   else if(style==='bow'){const w=stickWeapon('bow',job,G.weapon);w.rotation.set(0,Math.PI,0);w.scale.setScalar(.52);L.add(w);L.visible=true;
@@ -7881,7 +7955,7 @@ const enhCost=(id,lv)=>Math.round((80+GEAR_PRICE[ITEMS[id].tier]*.25)*Math.pow(l
 const enhRate=lv=>Math.max(.2,1-Math.max(0,lv-3)*.11);
 function renderEnhance(msg){
   renderNpc(msg||'어느 장비를 두드려 줄까? 실패해도 장비는 멀쩡하지만 골드는 돌려주지 않아.',box=>{
-    for(const slot of SLOTS){if(slot==='sub'&&!JOBS[P.job].sub&&!P.equip.sub)continue;const id=P.equip[slot];const lv=P.enh[slot]||0;
+    for(const slot of SLOTS){if(slot==='sub'&&!JOBS[P.job].sub&&!P.equip.sub&&P.job!=='shielder')continue;const id=P.equip[slot];const lv=P.enh[slot]||0;
       const row=document.createElement('div');row.className='enh';
       const t=document.createElement('div');t.className='stx';
       const b=document.createElement('b');b.textContent=id?`${itemName(id,P.job)} +${lv}`:`${SLOT_NAME[slot]} 없음`;if(id)b.style.color=TIER_COLOR[ITEMS[id].tier];
@@ -8255,6 +8329,7 @@ function basicAttackInner(){
     setTimeout(()=>{if(mode!=='world'||!P||swingN!==sw)return;const n=shared(()=>meleeHit(B.range+.3,B.mult*.72,{color:0xffffff}));if(n&&P.job==='barbarian')for(const sid of ['axechop','axespin','tow'])if(cds[sid]>0)cds[sid]=Math.max(0,cds[sid]-.7);
       const q=player.position,p=q.clone();p.y+=1.1;VFX.slash(p,cam.yaw,0xffe0c0,{r:2.0,arc:1.8,tilt:sw%2?-1.0:1.0,dur:.18,dir:sw%2?-1:1});
       if(n){shakeT=Math.max(shakeT,.07);sfx('heavy',q,.6);}},300);return;}
+  if(B.kind==='melee'&&P.job==='shielder'&&shdHandKind()==='parma'){parmaBasic(B);return;}
   if(B.kind==='melee'&&JOBS[P.job].weapon==='shield'){const sw=swingN;setTimeout(()=>{if(mode!=='world'||!P||swingN!==sw)return;const n=shared(()=>meleeHit(B.range,B.mult,{color:0xffffff,nohs:1}));
       const q=player.position,f=flatFwd();if(n)shakeT=Math.max(shakeT,.08);VFX.burst(new THREE.Vector3(q.x+f.x*1.6,q.y+1.1,q.z+f.z*1.6),0xdde8ff,n?16:8,n?4:2.5,.35,{mix:0xffffff});sfx(n?'sh_bash':'swing2',null,n?1:.7);slashFx(player.position,cam.yaw,'shield',null,sw%2===1);},520);return;}
   if(B.kind==='melee'&&P.job==='swordmaster'&&P.equip.weapon){const sw=swingN,st=swingN%2?2:1;myMoId='sm'+st;myMo=motionFor('sword',myMoId);
@@ -8469,7 +8544,15 @@ function bagGear(id,enh){return enh>0?{id,n:1,enh:enh|0}:{id,n:1};}
 function canWear(id,job){const I=ITEMS[id];if(!I)return false;if(I.jobs&&!I.jobs.includes(job))return false;if(I.slot==='sub'&&!JOBS[job].sub)return false;return true;}
 // 직업에 맞는 장비를 한 번씩 준다: 전사는 나무 방패, 검사는 검사의 장검, 방패병은 방패병의 방패
 function giveJobGear(quiet){
-  const want=P.job==='warrior'?['sh1','sub']:P.job==='swordsman'?['swd','weapon']:P.job==='guardian'?['gsh','weapon']:P.job==='barbarian'?['bax','weapon']:P.job==='fowler'?['fham','weapon']:P.job==='shielder'?['shd','weapon']:null;
+  // 쉴더: 스쿠툼은 주무기, 파르마는 보조무기 칸에 (예전의 한 묶음 방패는 둘로 나눈다)
+  if(P.job==='shielder'||P.bag.some(e=>e.id==='shd')||P.equip.weapon==='shd'){
+    const bi=P.bag.findIndex(e=>e.id==='shd');if(bi>=0){P.bag.splice(bi,1,{id:'scutum',n:1},{id:'parma',n:1});}
+    if(P.equip.weapon==='shd'){P.equip.weapon=null;P.got.shd2=0;}}
+  if(P.job==='shielder'&&!P.got.shd2){P.got.shd2=1;
+    for(const [id,slot] of [['scutum','weapon'],['parma','sub']]){if(P.equip.weapon===id||P.equip.sub===id||P.bag.some(e=>e.id===id))continue;
+      const old=P.equip[slot];if(old)P.bag.push(bagGear(old,P.enh[slot]));P.equip[slot]=id;P.enh[slot]=0;}
+    computeStats(P);if(!quiet)setTimeout(()=>log('[스쿠툼]과 [파르마]를 받았다.','sys'),700);return;}
+  const want=P.job==='warrior'?['sh1','sub']:P.job==='swordsman'?['swd','weapon']:P.job==='guardian'?['gsh','weapon']:P.job==='barbarian'?['bax','weapon']:P.job==='fowler'?['fham','weapon']:null;
   if(!want||P.got[want[0]])return;const [id,slot]=want;P.got[id]=1;
   const owned=P.equip[slot]===id||P.bag.some(e=>e.id===id);if(owned)return;
   const old=P.equip[slot];
@@ -8478,12 +8561,16 @@ function giveJobGear(quiet){
   else P.bag.push({id,n:1});
   computeStats(P);setTimeout(()=>log(`[${itemName(id,P.job)}]을(를) 받았다.`,'sys'),700);
 }
+// 쉴더의 방패는 주무기·보조무기 어느 칸에나 낀다: 빈 칸 먼저, 둘 다 차 있으면 같은 종류(스쿠툼·파르마)를 바꾼다
+function shkOf(id){const I=ITEMS[id];return !I?null:I.shk||(I.slot==='weapon'?'sc':null);}
+function equipSlotOf(id){const I=ITEMS[id];if(!I.shk||P.job!=='shielder')return I.slot;
+  if(!P.equip.weapon)return 'weapon';if(!P.equip.sub)return 'sub';return shkOf(P.equip.sub)===I.shk&&shkOf(P.equip.weapon)!==I.shk?'sub':'weapon';}
 function equipAt(idx){
   const e=P.bag[idx];if(!e)return;const I=ITEMS[e.id];if(I.kind!=='gear')return;
   if(!canWear(e.id,P.job)){const why=I.slot==='sub'&&!JOBS[P.job].sub?'이 직업은 보조무기를 쓰지 않아요':`${I.jobs.map(j=>JOBS[j].name).join('·')} 전용이에요`;toast(why);log(`${itemName(e.id,P.job)}: ${why}`,'bad');return;}
   if(P.lv<I.req){toast(`레벨 제한: Lv ${I.req}부터 착용할 수 있어요`);log(`${itemName(e.id,P.job)}은(는) 레벨 제한 때문에 착용할 수 없다 (Lv ${I.req} 필요, 지금 Lv ${P.lv})`,'bad');return;}
   // 강화 수치는 장비 하나하나에 붙어 다닌다
-  const old=P.equip[I.slot],oldEnh=P.enh[I.slot]||0;P.bag.splice(idx,1);P.equip[I.slot]=e.id;P.enh[I.slot]=e.enh||0;if(old)P.bag.splice(idx,0,bagGear(old,oldEnh));
+  const sl=equipSlotOf(e.id),old=P.equip[sl],oldEnh=P.enh[sl]||0;P.bag.splice(idx,1);P.equip[sl]=e.id;P.enh[sl]=e.enh||0;if(old)P.bag.splice(idx,0,bagGear(old,oldEnh));
   const hr=P.hp/P.maxhp,mr=P.mp/P.maxmp;computeStats(P);P.hp=Math.round(P.maxhp*hr);P.mp=Math.round(P.maxmp*mr);
   log(`${itemName(e.id,P.job)} 장착`,'sys');invSel=null;invDirty();updateHud();save();
 }
