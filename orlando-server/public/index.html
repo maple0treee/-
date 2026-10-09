@@ -7363,6 +7363,7 @@ function renderNpc(text,extra){
       if(body.querySelector('button')&&!body.querySelector('[data-skip]')){const b=npcBtn(body,'선택하지 않기',()=>{$('#npcChoices').hidden=true;},'wide skip');b.dataset.skip='1';}
       $('#npcChoices').hidden=!body.children.length;}
     for(const [label,act] of n.acts)npcBtn(acts,label,()=>npcAct(act),'pri');
+    if(n.id==='messenger'&&P.mentorReady&&secondAdv())npcBtn(acts,'전직',()=>{closeNpc();openMentor();},'pri');
     if(!n.noTalk&&!n.acts.some(a=>a[1]==='talk'))npcBtn(acts,'이야기',()=>npcAct('talk'),'pri');
     npcBtn(acts,'그만두기',closeNpc,'pri');
     placeChoices();
@@ -7565,14 +7566,19 @@ try{new ResizeObserver(placeQuestBox).observe($('#stat'));}catch(e){}addEventLis
 addEventListener('keydown',e=>{if(codeOf(e)==='Escape'&&!$('#shop').hidden)closeShop();});
 
 /* ---------- 스승 / 전직 ---------- */
+// 1차 전직(기본 직업)은 하레나의 스승에게서, 2차 전직은 지하실의 전달자에게서
+const MENTOR_AT={x:OR.C2.x-5.5,z:OR.C2.z+4.5};
+const secondAdv=()=>!!(P&&JOBS[P.job].from);
 function summonMentor(quiet){
+  if(secondAdv()){if(!quiet)log('전달자가 기다리고 있다.','sys');return;}
   if(mentor)return;
-  mentor=makeMentorMesh();mentor.position.set(0,heightAt(0,5),5.2);scene.add(mentor);npcBakeRequest('mentor',mentor);
-  colliders.push({x:0,z:5.2,r:.6,mentor:true});
-  if(!quiet)log(`${(MENTORS[P.job]||MENTORS[baseOf(P.job)]).name}이(가) 파르보스 우물 곁에 나타났다. 전직할 수 있다.`,'sys');
+  mentor=makeMentorMesh();mentor.position.set(MENTOR_AT.x,heightAt(MENTOR_AT.x,MENTOR_AT.z),MENTOR_AT.z);mentor.lookAt(OR.C2.x,mentor.position.y,OR.C2.z);scene.add(mentor);npcBakeRequest('mentor',mentor);
+  colliders.push({x:MENTOR_AT.x,z:MENTOR_AT.z,r:.6,mentor:true});
+  if(!quiet)log(`${(MENTORS[P.job]||MENTORS[baseOf(P.job)]).name}이(가) 하레나에 나타났다.`,'sys');
 }
+const MESSENGER_ADV='여기까지 버텼군. 둘 중 하나를 골라라. 고르고 나면 되돌릴 수 없다.';
 function openMentor(){
-  const M=MENTORS[P.job]||MENTORS[baseOf(P.job)];mode='dialog';unlockPointer();syncLockTip();
+  const M=secondAdv()?{name:'전달자',line:MESSENGER_ADV}:(MENTORS[P.job]||MENTORS[baseOf(P.job)]);mode='dialog';unlockPointer();syncLockTip();
   $('#mWho').textContent=M.name;$('#mSay').textContent=M.line;
   const box=$('#mchoices');box.innerHTML='';
   JOBS[P.job].adv.forEach(j=>{
@@ -7598,7 +7604,7 @@ function advance(j){
   const pos=player.position.clone();scene.remove(player);player=makePlayerMesh(j,gearOf(P),P.ap);player.position.copy(pos);player.visible=false;scene.add(player);setViewModel(j);
   spawnFx(0xf3cf6a,pos.clone().add(new THREE.Vector3(0,1,0)),3,.9);
   log(`${from}에서 ${JOBS[j].name}(으)로 전직했다.`,'sys');
-  scene.remove(mentor);mentor=null;const ci=colliders.findIndex(c=>c.mentor);if(ci>=0)colliders.splice(ci,1);
+  if(mentor){scene.remove(mentor);mentor=null;}const ci=colliders.findIndex(c=>c.mentor);if(ci>=0)colliders.splice(ci,1);
   $('#interact').hidden=true;interactTarget=null;closeMentor();updateHud();renderOnline();save();publishPresence(true);
 }
 
@@ -7755,8 +7761,10 @@ function markDuel(sec){const me=player.position,list=alive().filter(m=>m.mesh.po
   log(`결투 신청! ${picks.map(m=>m.D.name).join(', ')}에게 표식을 남겼다`,'sys');}
 let fowlN=0,fowlAt=0,asnN=0,asnAt=0;
 function basicAttack(){return shared(basicAttackInner);}
+// 스킬을 쓰는 동안(동작이 끝날 때까지, 돌진 중)은 평타도 다른 스킬도 못 쓴다
+function skillBusy(){return !!P&&((P.skN===swingN&&swingT<1)||!!P.dash);}
 function basicAttackInner(){
-  if(basicCd>0||!P||P.guardT>0||P.pushPrep||P.leap)return;
+  if(basicCd>0||!P||P.guardT>0||P.pushPrep||P.leap||skillBusy())return;
   if(P.deepToss&&tAll<P.deepToss)return; // 깊게 찌르기: 단검이 공중에 있는 동안은 칠 수 없다
   if(!P.equip.weapon){  // 맨손: 모든 직업이 같다
     basicCd=BASIC.fist.cd;swingT=0;swingN++;myMo=null;myMoId='';sfx('punch');
@@ -7823,6 +7831,7 @@ function useSkillInner(i){
     shared(()=>meleeHit(S.crange,S.cmult*pw2,{color:0xdff4ff}));const g=heal(P.maxhp*S.cheal);
     const f=flatFwd(),me=player.position;setTimeout(()=>{if(mode!=='world')return;const q=player.position;VFX.slash(q.clone().setY(q.y+1.1),cam.yaw,0xdff4ff,{r:S.crange*.7,arc:3.2,tilt:.08,roll:.15,dur:.3,dir:1});VFX.slash(q.clone().setY(q.y+1.1),cam.yaw,0xffffff,{r:S.crange*.5,arc:2.6,tilt:.08,roll:.15,dur:.22,dir:1});VFX.shock(q,0xdff4ff,S.crange,.35);shakeT=Math.max(shakeT,.12);},200);
     VFX.burst(new THREE.Vector3(me.x+f.x*1.6,me.y+1.1,me.z+f.z*1.6),0xdff4ff,22,5,.5,{mix:0xffffff});if(cds[id]>0)cds[id]*=.4;updateHud();return;}
+  if(skillBusy())return;
   if((cds[id]||0)>0){toast(`${S.name} 재사용 대기 ${Math.ceil(cds[id])}초`);return;}
   if(!P.equip.weapon){toast('맨손일 때는 기본 공격만 할 수 있어요');return;}
   if(id==='hurl'&&!hurlTarget(S)){toast('붙잡을 적이 없어요');return;}
@@ -7833,7 +7842,7 @@ function useSkillInner(i){
   if(P.mp<S.mp){toast('MP가 부족해요');return;}
   if(emp){endGuard();P.empShield=true;}
   const bc=S.type==='barb'?barbCombo(id):'';
-  P.mp-=S.mp;cds[id]=S.cd;swingT=0;swingN++;myMoId=bc==='bat'?'batswing':bc==='spinchop'?'axechopF':id;myMo=motionFor(JOBS[P.job].weapon,emp&&id==='push'?'pushE':myMoId);sfxSkill(S,id);
+  P.mp-=S.mp;cds[id]=S.cd;swingT=0;swingN++;myMoId=bc==='bat'?'batswing':bc==='spinchop'?'axechopF':id;myMo=motionFor(JOBS[P.job].weapon,emp&&id==='push'?'pushE':myMoId);P.skN=swingN;sfxSkill(S,id);
   const pw=1+.25*(lvl-1),opt={stun:S.stun,dot:S.dot,crit:S.crit,execute:S.execute,steal:S.steal,color:S.color};
   let fxAt=null;
   switch(S.type){
