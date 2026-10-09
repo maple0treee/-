@@ -765,6 +765,12 @@ body.talking #buffBar{visibility:hidden}
     </div>
   </div>
 
+  <div id="portalWin" class="overlay" hidden>
+    <div class="card panel" role="dialog" aria-label="포탈" style="width:min(340px,100%)">
+      <header><h2>포탈</h2></header>
+      <div class="chest-btns" style="flex-direction:column;gap:8px"><button type="button" class="ghost" id="pwNest">와이번 둥지</button><button type="button" class="ghost" id="pwHall">지하실</button><button class="ghost" id="pwClose">닫기 (Esc)</button></div>
+    </div>
+  </div>
   <div id="chestWin" class="overlay" hidden>
     <div class="card panel" role="dialog" aria-label="상자">
       <header><h2 id="chestTitle">상자</h2></header>
@@ -3446,7 +3452,7 @@ function makeWyvern2(D){
     if(y>bellyY+.55&&Math.sin(z*3.1+Math.abs(x)*4)>.6)c=_mx(c,ridge,.6);
     return _sc(c,.86+n*.24);};
   // 몸통 (몸 그룹 원점 = 예전과 같은 자리)
-  const body=new THREE.Group();body.position.y=2.3;body.rotation.x=-.16;g.add(body);
+  const body=new THREE.Group();body.position.y=2.3;body.rotation.x=.04;g.add(body);
   const fb=(x,y,z)=>{const ax=Math.abs(x);
     let d=_ell(x,y,z,0,0,0,1.0,.9,1.9);
     d=_smin(d,_ell(x,y,z,0,.28,1.5,1.05,1.0,1.05),.5);                 // 가슴
@@ -3512,6 +3518,20 @@ function makeWyvern2(D){
     const mg=new THREE.BufferGeometry();mg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));mg.computeVertexNormals();
     arm.add(new THREE.Mesh(mg,memM));return arm;};
   const wingL=mkWing(-1),wingR=mkWing(1);
+  wingL.parent.visible=wingR.parent.visible=false;  // 펼친 날개는 날 때만
+  // 접은 날개 = 앞발: 손목(날개 마디)으로 땅을 짚고, 손가락과 막은 등 쪽으로 접어 올린다
+  const mkFold=s=>{const F=new THREE.Group();F.position.set(s*1.0,.75,1.3);body.add(F);
+    const E=[s*.8,.45,-.85],Wr=[s*.55,-2.85,.75];
+    F.add(limb([0,0,0],E,.27,.2),limb(E,Wr,.19,.14),joint(E,.21),joint(Wr,.17));
+    const kn=new THREE.Mesh(new THREE.ConeGeometry(.1,.42,8),hornM);kn.position.set(Wr[0],Wr[1]-.02,Wr[2]+.28);kn.rotation.x=Math.PI/2;F.add(kn);
+    for(const dx of [-.12,.12]){const c=new THREE.Mesh(new THREE.ConeGeometry(.06,.26,8),hornM);c.position.set(Wr[0]+dx,Wr[1]-.05,Wr[2]+.22);c.rotation.x=Math.PI/2+.3;F.add(c);}
+    const tips=[[s*1.05,1.35,-1.4],[s*1.1,.75,-1.95],[s*.95,.05,-2.2],[s*.7,-.55,-2.1]];
+    const pos=[];let prev=E;
+    tips.forEach(t=>{F.add(limb(Wr,t,.075,.035));pos.push(...Wr,...prev,...t);prev=t;});
+    pos.push(...Wr,...prev,s*-.25,-.9,-2.0);
+    const mg=new THREE.BufferGeometry();mg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));mg.computeVertexNormals();F.add(new THREE.Mesh(mg,memM));
+    return F;};
+  const foldL=mkFold(-1),foldR=mkFold(1);
   // 다리 2개 (뒷다리만): 굵은 허벅지, 뒤로 꺾인 발목, 세 발가락
   const legGeo=m2geo('wy_leg',(x,y,z)=>{let d=_ell(x,y,z,0,-.3,-.05,.5,.72,.62);
       d=_smin(d,_cap(x,y,z,0,-.7,.05,0,-1.25,-.4,.34,.24),.2);
@@ -3534,7 +3554,7 @@ function makeWyvern2(D){
   club.add(m2mesh(m2geo('wy_club',(x,y,z)=>_ell(x,y,z,0,0,-.2,.3,.22,.55),(x,y,z)=>_sc(dk,.9+_nz(x,y,z,30)*.2),[-.4,-.3,-.85],[.4,.3,.45],.03),mats));
   for(let k=0;k<6;k++){const a=k/6*Math.PI*2,c=new THREE.Mesh(new THREE.ConeGeometry(.06,.35,6),hornM);c.position.set(Math.cos(a)*.27,Math.sin(a)*.2,-.25);c.rotation.set(0,0,a-Math.PI/2);club.add(c);}
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
-  g.userData={mats,body,neck,head,jaw,glow,wingL,wingR,legs,tail,h:5.5};
+  g.userData={mats,body,neck,head,jaw,glow,wingL,wingR,foldL,foldR,legs,tail,h:5.5};
   return g;
 }
 const MON2_BUILD={wyvern:makeWyvern2,wolf:makeCanine2,dog:makeCanine2,jackal:makeCanine2,hyena:makeCanine2,boar:makeBoar2,toad:makeToad2};
@@ -6025,7 +6045,15 @@ const PORTALS=[
 ];
 for(const p of PORTALS)p.fx=makePortal(p.x,p.z,p.ry,{color:p.color});
 function portalNear(){if(!player)return -1;for(let i=0;i<PORTALS.length;i++){const p=PORTALS[i];if(portalSeen(p)&&Math.hypot(player.position.x-p.x,player.position.z-p.z)<3.2)return i;}return -1;}
+// 와이번을 잡은 뒤의 동쪽 황야 포탈: 둥지로 갈지 지하실로 갈지 고른다
+function openPortalChoice(p){mode='dialog';attackHeld=false;unlockPointer();syncLockTip();$('#portalWin').hidden=false;
+  const go=(t)=>{closePortalChoice();sfx('door');warpTo(t.x,t.z,t.yaw,null);};
+  $('#pwNest').onclick=()=>go({x:OR.WLAIR.x,z:OR.WLAIR.z+OR.WLAIR.r-5,yaw:0});
+  $('#pwHall').onclick=()=>go(p.to);$('#pwClose').onclick=closePortalChoice;}
+function closePortalChoice(){if($('#portalWin').hidden)return;$('#portalWin').hidden=true;mode='world';syncLockTip();focusGame();relock();}
+addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#portalWin').hidden){closePortalChoice();e.stopImmediatePropagation();}},true);
 function usePortal(i){const p=PORTALS[i];if(!p)return;
+  if(p.id==='east'&&P&&P.lv>=p.minLv&&P.got&&P.got.wyvern){openPortalChoice(p);return;}
   if(P&&P.lv<p.minLv){toast(`Lv ${p.minLv}부터 들어갈 수 있다`);return;}
   const alt=p.alt&&p.alt();sfx('door');if(alt)warpTo(alt.x,alt.z,alt.yaw,alt.msg);else warpTo(p.to.x,p.to.z,p.to.yaw,p.msg);}
 
@@ -9486,6 +9514,9 @@ function updateDragonVisual(m,dt){
   m.mesh.position.y=heightAt(m.mesh.position.x,m.mesh.position.z)+fly;
   const flap=m.flyT>0?Math.sin(t*9)*.7:m.stompT>0?Math.sin(t*14)*.9:Math.sin(t*1.6)*.12;
   U.wingL.rotation.z=-.15+flap;U.wingR.rotation.z=.15-flap;
+  // 와이번: 땅에서는 접은 날개로 짚고 네 발로 걷고, 날 때(급강하·발 구르기)만 날개를 펼친다
+  if(U.foldL){const spread=m.flyT>0||m.stompT>0;U.wingL.parent.visible=U.wingR.parent.visible=spread;U.foldL.visible=U.foldR.visible=!spread;
+    const mv=Math.min(1,(m.mvS||0)/2);U.foldL.rotation.x=Math.sin((m.dph||0)*5+Math.PI)*mv*.28;U.foldR.rotation.x=Math.sin((m.dph||0)*5)*mv*.28;}
   if(m.stompT>0)m.stompT-=dt;
   // 숨결: 고개를 들었다가 입을 벌리고 불빛이 커진다
   if(m.breathT>0){m.breathT-=dt;U.neck[0].rotation.x=-.35;U.head.rotation.x=.35;U.jaw.rotation.x=.55;U.glow.material.opacity=Math.min(.9,U.glow.material.opacity+dt*.8);U.glow.scale.setScalar(1+Math.sin(t*20)*.15);}
