@@ -15,7 +15,7 @@
   const DUN = { x: 0, z: 422, R: 14, corZ0: 394, corZ1: 409, corW: 3.2 };
   const BOSS_HOME = { x: 0, z: 421 };
   const LAIR = { x: 470, z: 0, r: 18 };              // 심연 끝 붉은 용의 둥지
-  const HALL = { x: 0, z: -500, R: 24 };             // 동쪽 황야 끝 포탈 너머의 둥근 방 (천장이 막혀 있다)
+  const HALL = { x: 0, z: -500, R: 24 };             // 동쪽 황야 끝 포탈 너머: 왕국의 지하실 (둥근 방, 천장이 막혀 있다)
   const EPORTAL = { x: 484, z: 24 };                 // 동쪽 황야 끝 포탈
 
   function zoneAt(x, z) {
