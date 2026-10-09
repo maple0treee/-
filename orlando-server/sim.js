@@ -32,7 +32,11 @@
 
     // ---------- 접속자 ----------
     const clients = new Map(); // id -> {send, pres}
-    const send = (id, msg) => { const c = clients.get(id); if (c) c.send(msg); };
+    // 'dc:<id>'는 쉴더가 땅에 박아 둔 스쿠툼: 그 스쿠툼을 친 공격은 주인에게 따로 알린다
+    const send = (id, msg) => {
+      if (typeof id === 'string' && id.startsWith('dc:')) { if (msg.t !== 'matk') return; const o = clients.get(id.slice(3)); if (o) o.send({ t: 'dch', i: msg.i, atk: msg.atk }); return; }
+      const c = clients.get(id); if (c) c.send(msg);
+    };
     const broadcast = (msg, except) => { for (const [id, c] of clients) if (id !== except) c.send(msg); };
     const inRotunda = (p) => p.z > 300 && Math.hypot(p.x - DUN.x, p.z - DUN.z) < DUN.R - 1.5;
     const inLair = (p) => Math.hypot(p.x - LAIR.x, p.z - LAIR.z) < LAIR.r - 0.5;
@@ -127,7 +131,8 @@
         const p = c.pres;
         if (!p.on || !p.al || p.hd) continue;
         if (SAFE[zoneAt(p.x, p.z)]) continue;
-        out.push({ id, x: p.x, z: p.z, dun: p.z > 300, rot: inRotunda(p) });
+        out.push({ id, x: p.x, z: p.z, dun: p.z > 300, rot: inRotunda(p), sd: !!p.sd });
+        if (Array.isArray(p.dc)) { const q = { x: p.dc[0], z: p.dc[1] }; if (!SAFE[zoneAt(q.x, q.z)]) out.push({ id: 'dc:' + id, x: q.x, z: q.z, dun: q.z > 300, rot: inRotunda(q), sd: true, dc: true }); }
       }
       return out;
     }
@@ -276,7 +281,8 @@
       if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 3.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); broadcast({ t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.8 * fast; } return; }
       if (m.gap > 0 || m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }
       let t = tg.find((q) => q.id === m.aggroOn);
-      if (!t || Math.random() < 0.015) { t = pick(tg); m.aggroOn = t.id; }
+      if (m.taunt > 0) m.taunt -= TICK;
+      if (!t || (!(m.taunt > 0) && Math.random() < 0.015)) { t = pick(tg); m.aggroOn = t.id; }
       const dx = t.x - m.x, dz = t.z - m.z, dist = Math.hypot(dx, dz), a = Math.atan2(dx, dz);
       turn(m, a, 0.25);
       const head = { x: m.x + Math.sin(m.ry) * (m.r + 0.5), z: m.z + Math.cos(m.ry) * (m.r + 0.5) };
@@ -392,6 +398,8 @@
     function tick() {
       if (!clients.size) return;
       const ts = targetsFor();
+      // 쉴더가 스쿠툼을 박아 두면 그 쉴더를 노리던 몬스터는 스쿠툼을 노린다
+      { const dcs = new Set(ts.filter((t) => t.dc).map((t) => t.id)); if (dcs.size) for (const m of monsters.values()) if (m.aggroOn && dcs.has('dc:' + m.aggroOn)) m.aggroOn = 'dc:' + m.aggroOn; }
       const players = [...clients.values()].filter((c) => c.pres.on);
       const active = [], updates = [];
       const boss = [...monsters.values()].find((q) => q.boss);
@@ -425,7 +433,9 @@
         for (const t of ts) {
           if (dun ? !t.rot : t.dun) continue;
           const d = Math.hypot(t.x - m.x, t.z - m.z);
-          if ((homeD > 45 && !m.summon) || d > 30) continue;
+          // 단단한 감각(쉴더): 노리던 쉴더는 더 멀리 가도 놓치지 않는다
+          const far = t.sd && t.id === m.aggroOn;
+          if ((homeD > (far ? 80 : 45) && !m.summon) || d > (far ? 55 : 30)) continue;
           const pri = t.id === m.aggroOn ? d - 6 : d;
           if ((d < 9 || t.id === m.aggroOn) && pri < best) { best = pri; tgt = t; }
         }
@@ -521,7 +531,7 @@
         if (isFinite(st) && st > 0) m.stun = Math.max(m.stun, Math.min(st, 8) * (m.boss ? 0.25 : m.dragon ? 0 : 1));
         // 도발: 잠시 동안 이 사람만 노린다 · 밀치기: 맞은 방향으로 밀려난다 (보스·용은 꿈쩍 않는다)
         const tau = Number(d.tau);
-        if (isFinite(tau) && tau > 0 && !m.dragon) { m.aggroOn = id; m.taunt = Math.min(tau, 5); }
+        if (isFinite(tau) && tau > 0) { m.aggroOn = id; m.taunt = Math.min(tau, 5); }
         if (Array.isArray(d.kb) && !m.boss && !m.dragon) { const kx = Number(d.kb[0]), kz = Number(d.kb[1]), l = Math.hypot(kx, kz); if (isFinite(l) && l > 0.01) { const s = Math.min(l, 18) / l; m.x += kx * s; m.z += kz * s; m.windup = 0; m.dirty = true; } }
         // 띄우기: 잠깐 공중에 떠서 아무것도 못 한다 (-1이면 띄운 것을 거둔다)
         // 느리게: 잠시 동안 움직임이 크게 느려진다
