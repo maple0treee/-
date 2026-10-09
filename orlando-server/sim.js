@@ -4,7 +4,7 @@
   const OR = (typeof module !== 'undefined' && module.exports) ? require('./shared.js') : root.OR;
 
   function createSim(opts) {
-    const { MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, zoneAt, SAFE, worldClamp, roomClamp, keepOutOfSafe, DUN, BOSS_HOME, C2, R2, ROAD, PIT, TOWN_R, LAIR } = OR;
+    const { MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, zoneAt, SAFE, worldClamp, roomClamp, keepOutOfSafe, DUN, BOSS_HOME, C2, R2, ROAD, PIT, TOWN_R, LAIR, WLAIR } = OR;
     const TICK = 0.1;
     const rnd = (a, b) => a + Math.random() * (b - a);
     const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -36,6 +36,9 @@
     const broadcast = (msg, except) => { for (const [id, c] of clients) if (id !== except) c.send(msg); };
     const inRotunda = (p) => p.z > 300 && Math.hypot(p.x - DUN.x, p.z - DUN.z) < DUN.R - 1.5;
     const inLair = (p) => Math.hypot(p.x - LAIR.x, p.z - LAIR.z) < LAIR.r - 0.5;
+    // 용 같은 큰 보스는 자기 둥지(원) 안에서만 싸운다
+    const arenaOf = (m) => (m.D && m.D.arena === 'WLAIR' ? WLAIR : LAIR);
+    const inArena = (A, p) => Math.hypot(p.x - A.x, p.z - A.z) < A.r - 0.5;
 
     // ---------- 몬스터 ----------
     const monsters = new Map();
@@ -81,7 +84,11 @@
     function spawnDragon() {
       return makeMon('reddragon', 'lair', { x: LAIR.x + 4, z: LAIR.z }, 100, { dragon: true, r: 3.4, ry: -Math.PI / 2, cd: { breath: 3, tail: 6, stomp: 9, dive: 13, meteor: 16 }, gap: 0, sks: [], phase: 1, idleT: 0, mv: null, skSeq: 0, said: 0 });
     }
+    function spawnWyvern() {
+      return makeMon('wyvern', 'wlair', { x: WLAIR.x, z: WLAIR.z - 8 }, 62, { dragon: true, r: 3.4 * (MON.wyvern.scale || 1), ry: 0, cd: { breath: 3, tail: 6, stomp: 9, dive: 11, meteor: 14 }, gap: 0, sks: [], phase: 1, idleT: 0, mv: null, skSeq: 0, said: 0 });
+    }
     for (const z in ZONE_COUNT) for (let k = 0; k < ZONE_COUNT[z]; k++) spawn(z);
+    spawnWyvern();
     spawnBoss();
     // 용의 둥지는 없앴다 (붉은 용은 나오지 않는다)
 
@@ -92,7 +99,8 @@
         for (const s of [...monsters.values()]) if (s.summon) { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [] }); }
         later(() => broadcast({ t: 'mspawn', m: pub(spawnBoss()) }), 90000);
       } else if (m.dragon) {
-        later(() => broadcast({ t: 'mspawn', m: pub(spawnDragon()) }), 300000);
+        if (m.ty === 'wyvern') later(() => broadcast({ t: 'mspawn', m: pub(spawnWyvern()) }), 20000);
+        else later(() => broadcast({ t: 'mspawn', m: pub(spawnDragon()) }), 300000);
       } else if (!m.summon && !m.dragon) later(() => { const n = spawn(m.zone); if (n) broadcast({ t: 'mspawn', m: pub(n) }); }, 9000);
     }
     function hurt(m, dmg, from) {
@@ -232,7 +240,7 @@
 
     // ---------- 붉은 용 (Lv 100 보스) ----------
     // 모든 큰 기술은 바닥에 경고(msk)가 먼저 뜨고, 잠시 뒤 판정(mskr). 같은 시간에 여러 개가 겹칠 수 있다.
-    function lairClamp(p, rad) { const d = Math.hypot(p.x - LAIR.x, p.z - LAIR.z), mx = LAIR.r - rad; if (d > mx) { p.x = LAIR.x + (p.x - LAIR.x) * mx / d; p.z = LAIR.z + (p.z - LAIR.z) * mx / d; } }
+    function lairClamp(p, rad) { const A = arenaOf(p); const d = Math.hypot(p.x - A.x, p.z - A.z), mx = A.r - rad; if (d > mx) { p.x = A.x + (p.x - A.x) * mx / d; p.z = A.z + (p.z - A.z) * mx / d; } }
     function dSkill(m, o) {
       const sk = { sid: ++m.skSeq, t: 0, ...o };
       sk.msg = { t: 'msk', i: m.i, sid: sk.sid, k: o.k, d: r2(o.tele), ...(o.sh === 'c' ? { sh: 'c', x: r2(o.x), z: r2(o.z), r: r2(o.r) } : { sh: 'l', x: r2(o.x), z: r2(o.z), a: r2(o.a), len: r2(o.len), w: r2(o.w) }) };
@@ -241,28 +249,28 @@
     }
     function dResolve(m, sk, tg) {
       const hit = tg.filter((t) => inShape(sk, t.x, t.z, 0.8)).map((t) => t.id);
-      const out = { ...sk.msg, t: 'mskr', dmg: Math.round(m.atk * sk.mul), lv: 100, hit };
+      const out = { ...sk.msg, t: 'mskr', dmg: Math.round(m.atk * sk.mul), lv: m.lv, hit };
       if (sk.pool) { out.pool = sk.pool[0]; out.dps = Math.round(m.atk * sk.pool[1]); }
       if (sk.jump) out.jump = 1;
       broadcast(out);
       if (sk.k === 'dive') { m.mv = { fx: m.x, fz: m.z, tx: sk.x, tz: sk.z, t: 0, dur: 0.25 }; }
     }
     function dragonTick(m, ts) {
-      const tg = ts.filter((t) => inLair(t));
+      const A = arenaOf(m), tg = ts.filter((t) => inArena(A, t)), W = m.ty === 'wyvern', NM = m.D.name;
       // 진행 중인 기술
       for (const sk of [...m.sks]) { sk.t += TICK; if (sk.t >= sk.tele) { dResolve(m, sk, tg); m.sks.splice(m.sks.indexOf(sk), 1); } }
       if (m.mv) { m.mv.t += TICK; const k = Math.min(1, m.mv.t / m.mv.dur); m.x = m.mv.fx + (m.mv.tx - m.mv.fx) * k; m.z = m.mv.fz + (m.mv.tz - m.mv.fz) * k; if (k >= 1) m.mv = null; lairClamp(m, m.r); return; }
       if (!tg.length) {
         m.idleT += TICK; m.aggroOn = null; m.windup = 0;
         if (m.idleT > 10 && m.hp < m.mh) { m.hp = Math.min(m.mh, m.hp + m.mh * 0.04 * TICK); m.dirty = true; if (m.hp >= m.mh) { m.hitBy.clear(); m.phase = 1; m.said = 0; } }
-        moveToward(m, LAIR.x + 4, LAIR.z, 2.5); return;
+        moveToward(m, m.home.x, m.home.z, 2.5); return;
       }
-      if (m.idleT > 3 || !m.said) { broadcast({ t: 'bsay', m: '붉은 용 이그니스가 깨어났다! 바닥의 붉은 표시를 피하세요.', lair: 1 }); m.said = 1; }
+      if (m.idleT > 3 || !m.said) { broadcast({ t: 'bsay', m: W ? `${NM}이(가) 날개를 펼쳤다.` : '붉은 용 이그니스가 깨어났다! 바닥의 붉은 표시를 피하세요.', lair: 1, ax: A.x, az: A.z }); m.said = 1; }
       m.idleT = 0;
       const C = m.cd; for (const k in C) C[k] -= TICK;
       m.gap -= TICK; m.atkCd -= TICK;
       const frac = m.hp / m.mh, ph = frac < 0.25 ? 3 : frac < 0.55 ? 2 : 1;
-      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1 }); C.meteor = Math.min(C.meteor, 1); }
+      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? `${NM}이(가) 높이 떠올랐다.` : `${NM}이(가) 울부짖는다.`) : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
       const fast = ph === 3 ? 0.65 : ph === 2 ? 0.82 : 1;
       if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 3.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); broadcast({ t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.8 * fast; } return; }
       if (m.gap > 0 || m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }
@@ -273,7 +281,7 @@
       const head = { x: m.x + Math.sin(m.ry) * (m.r + 0.5), z: m.z + Math.cos(m.ry) * (m.r + 0.5) };
       if (C.meteor <= 0 && ph >= 2) {
         const n = 4 + ph * 2;
-        for (let k = 0; k < n; k++) { const q = k < tg.length ? tg[k] : null; const p = q ? { x: q.x + rnd(-1.5, 1.5), z: q.z + rnd(-1.5, 1.5) } : (() => { const aa = rnd(0, 6.28), d = rnd(2, LAIR.r - 2); return { x: LAIR.x + Math.cos(aa) * d, z: LAIR.z + Math.sin(aa) * d }; })();
+        for (let k = 0; k < n; k++) { const q = k < tg.length ? tg[k] : null; const p = q ? { x: q.x + rnd(-1.5, 1.5), z: q.z + rnd(-1.5, 1.5) } : (() => { const aa = rnd(0, 6.28), d = rnd(2, A.r - 2); return { x: A.x + Math.cos(aa) * d, z: A.z + Math.sin(aa) * d }; })();
           dSkill(m, { k: 'meteor', sh: 'c', x: p.x, z: p.z, r: 2.6, tele: 1.5 + k * 0.22, mul: 1.15, pool: [3, 0.18], col: 1 }); }
         C.meteor = 16 * fast; m.gap = 1.2;
       } else if (C.dive <= 0 && dist > 6) {
@@ -506,7 +514,7 @@
         if (!m || !isFinite(dmg) || dmg <= 0) return;
         if (Math.hypot((c.pres.x || 0) - m.x, (c.pres.z || 0) - m.z) > 40) return;
         if (m.boss && !inRotunda(c.pres)) return;
-        if (m.dragon && !inLair(c.pres)) return;
+        if (m.dragon && !inArena(arenaOf(m), c.pres)) return;
         const st = Number(d.st);
         if (isFinite(st) && st > 0) m.stun = Math.max(m.stun, Math.min(st, 8) * (m.boss ? 0.25 : m.dragon ? 0 : 1));
         // 도발: 잠시 동안 이 사람만 노린다 · 밀치기: 맞은 방향으로 밀려난다 (보스·용은 꿈쩍 않는다)
