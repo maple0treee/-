@@ -364,7 +364,7 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 #fade{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .35s}
 #fade.on{opacity:1}
 @media (max-width:1100px){#bossbar{top:calc(var(--safe-t) + 150px);width:min(420px,calc(100vw - 2*var(--gut)))}}
-#chatIn{margin-top:2px;width:100%;font-family:var(--f-body);font-size:12.5px;padding:6px 8px;background:#17130e;border:1px solid var(--line);border-radius:4px;color:var(--parch);-webkit-user-select:text;user-select:text}
+#chatIn{margin-top:2px;width:100%;box-sizing:border-box;font-family:var(--f-body);font-size:12.5px;padding:6px 8px;background:#17130e;border:1px solid var(--line);border-radius:4px;color:var(--parch);-webkit-user-select:text;user-select:text}
 #chatIn::placeholder{color:#7d705a}
 #log .chat{color:var(--parch)}
 #log .chat b{color:var(--peer);font-weight:700}
@@ -1260,7 +1260,7 @@ body.talking #buffBar{visibility:hidden}
       if (sk.k === 'dive') { m.mv = { fx: m.x, fz: m.z, tx: sk.x, tz: sk.z, t: 0, dur: 0.25 }; }
     }
     function dragonTick(m, ts) {
-      const A = arenaOf(m), tg = ts.filter((t) => inArena(A, t)), W = m.ty === 'wyvern', NM = m.D.name;
+      const A = arenaOf(m), tg = ts.filter((t) => inArena(A, t)), W = m.ty === 'wyvern', NM = m.D.name, NMi = NM + ((NM.charCodeAt(NM.length - 1) - 0xac00) % 28 ? '이' : '가');
       // 진행 중인 기술
       for (const sk of [...m.sks]) { sk.t += TICK; if (sk.t >= sk.tele) { dResolve(m, sk, tg); m.sks.splice(m.sks.indexOf(sk), 1); } }
       if (m.mv) { m.mv.t += TICK; const k = Math.min(1, m.mv.t / m.mv.dur); m.x = m.mv.fx + (m.mv.tx - m.mv.fx) * k; m.z = m.mv.fz + (m.mv.tz - m.mv.fz) * k; if (k >= 1) m.mv = null; lairClamp(m, m.r); return; }
@@ -1269,12 +1269,12 @@ body.talking #buffBar{visibility:hidden}
         if (m.idleT > 10 && m.hp < m.mh) { m.hp = Math.min(m.mh, m.hp + m.mh * 0.04 * TICK); m.dirty = true; if (m.hp >= m.mh) { m.hitBy.clear(); m.phase = 1; m.said = 0; } }
         moveToward(m, m.home.x, m.home.z, 2.5); return;
       }
-      if (m.idleT > 3 || !m.said) { broadcast({ t: 'bsay', m: W ? `${NM}이(가) 날개를 펼쳤다.` : '붉은 용 이그니스가 깨어났다! 바닥의 붉은 표시를 피하세요.', lair: 1, ax: A.x, az: A.z }); m.said = 1; }
+      if (m.idleT > 3 || !m.said) { broadcast({ t: 'bsay', m: W ? `${NMi} 날개를 펼쳤다.` : '붉은 용 이그니스가 깨어났다! 바닥의 붉은 표시를 피하세요.', lair: 1, ax: A.x, az: A.z }); m.said = 1; }
       m.idleT = 0;
       const C = m.cd; for (const k in C) C[k] -= TICK;
       m.gap -= TICK; m.atkCd -= TICK;
       const frac = m.hp / m.mh, ph = frac < 0.25 ? 3 : frac < 0.55 ? 2 : 1;
-      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? `${NM}이(가) 높이 떠올랐다.` : `${NM}이(가) 울부짖는다.`) : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
+      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? `${NMi} 높이 떠올랐다.` : `${NMi} 울부짖는다.`) : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
       const fast = ph === 3 ? 0.65 : ph === 2 ? 0.82 : 1;
       if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 3.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); broadcast({ t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.8 * fast; } return; }
       if (m.gap > 0 || m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }
@@ -3435,7 +3435,109 @@ function makeBiped2(D){
   g.userData.h=1.85;
   return g;
 }
-const MON2_BUILD={wolf:makeCanine2,dog:makeCanine2,jackal:makeCanine2,hyena:makeCanine2,boar:makeBoar2,toad:makeToad2};
+/* ===== 와이번: 매끈한 곡면 몸 + 날개 팔 (움직임 그룹은 붉은 용과 같아 같은 움직임 코드를 쓴다) ===== */
+function makeWyvern2(D){
+  const g=new THREE.Group(),mats=[];
+  const sc=_c3(0x35604c),dk=_c3(0x1a2c24),bl=_c3(0xcabd8c),ridge=_c3(0x24382e);
+  const skin=(x,y,z,bellyY,f=22)=>{const n=_nz(x,y,z,f);let c=_mx(sc,dk,_st(.2,.9,y-bellyY)*.55);c=_mx(c,bl,_st(bellyY+.05,bellyY-.35,y)*.9);
+    // 배 비늘 띠
+    if(y<bellyY&&Math.sin(z*7.5)>.75)c=_sc(c,.82);
+    // 등 무늬
+    if(y>bellyY+.55&&Math.sin(z*3.1+Math.abs(x)*4)>.6)c=_mx(c,ridge,.6);
+    return _sc(c,.86+n*.24);};
+  // 몸통 (몸 그룹 원점 = 예전과 같은 자리)
+  const body=new THREE.Group();body.position.y=2.3;body.rotation.x=-.16;g.add(body);
+  const fb=(x,y,z)=>{const ax=Math.abs(x);
+    let d=_ell(x,y,z,0,0,0,1.0,.9,1.9);
+    d=_smin(d,_ell(x,y,z,0,.28,1.5,1.05,1.0,1.05),.5);                 // 가슴
+    d=_smin(d,_ell(x,y,z,0,-.05,-1.45,.88,.82,1.05),.45);               // 엉덩이
+    d=_smin(d,_ell(ax,y,z,.82,-.25,-.85,.5,.75,.72),.35);               // 허벅지 근육
+    d=_smin(d,_ell(ax,y,z,.75,.62,1.45,.45,.38,.5),.3);                 // 날개 어깨
+    d=_smin(d,_cap(x,y,z,0,.5,2.0,0,.95,2.75,.72,.6),.35);              // 목 밑동
+    d=_smin(d,_cap(x,y,z,0,-.05,-2.2,0,-.12,-2.95,.62,.5),.35);         // 꼬리 밑동
+    return d;};
+  body.add(m2mesh(m2geo('wy_body',fb,(x,y,z)=>skin(x,y,z,-.35),[-1.7,-1.4,-3.3],[1.7,1.7,3.4],.07),mats,{r:.6}));
+  // 등가시 (매끈한 원뿔)
+  const hornM=MD.smooth(0x2a2420,{roughness:.45});mats.push(hornM);
+  for(let k=0;k<9;k++){const sp=new THREE.Mesh(new THREE.ConeGeometry(.13,.5-k*.03,8),hornM);sp.position.set(0,1.02-Math.abs(k-3)*.05,1.9-k*.55);sp.rotation.x=-.45;body.add(sp);}
+  // 목: 세 마디
+  const neck=[];
+  const segGeo=(k,len,r0,r1)=>m2geo('wy_n'+k,(x,y,z)=>_smin(_cap(x,y,z,0,0,0,0,len[0],len[1],r0,r1),_ell(x,y,z,0,len[0]*.5,len[1]*.5,r0*.95,r0*.9,Math.hypot(len[0],len[1])*.55),.15),
+    (x,y,z)=>{const u=(y-z*.9);return skin(x,u*.6,z,-.25,26);},[-r0-.2,-r0-.2,-r0-.2],[r0+.2,len[0]+r1+.2,len[1]+r1+.2],.04);
+  const n0=new THREE.Group();n0.position.set(0,.6,2.4);body.add(n0);neck.push(n0);n0.add(m2mesh(segGeo(0,[.75,.8],.62,.54),mats,{r:.6}));
+  const n1=new THREE.Group();n1.position.set(0,.75,.8);n0.add(n1);neck.push(n1);n1.add(m2mesh(segGeo(1,[.7,.75],.55,.47),mats,{r:.6}));
+  const n2=new THREE.Group();n2.position.set(0,.7,.75);n1.add(n2);neck.push(n2);n2.add(m2mesh(segGeo(2,[.45,.85],.48,.42),mats,{r:.6}));
+  // 머리
+  const head=new THREE.Group();head.position.set(0,.45,.85);head.scale.setScalar(1.3);n2.add(head);
+  const fh=(x,y,z)=>{const ax=Math.abs(x);
+    let d=_ell(x,y,z,0,.14,.1,.5,.42,.58);
+    d=_smin(d,_cap(x,y,z,0,.1,.35,0,.06,1.45,.33,.2),.22);               // 주둥이
+    d=_smin(d,_ell(ax,y,z,.26,.36,.55,.16,.1,.26),.1);                   // 눈두덩
+    d=_smin(d,_ell(ax,y,z,.12,.2,1.45,.07,.06,.08),.05);                // 콧구멍 둔덕
+    d=_smin(d,_cap(ax,y,z,.32,.02,.1,.42,-.12,-.18,.12,.05),.12);        // 볼 가시 뿌리
+    // 아래턱 자리(위턱만): 아래는 평평하게 깎는다
+    d=Math.max(d,-(y+.06));
+    return d;};
+  const hc=(x,y,z)=>{let c=skin(x,y,z,-.02,34);if(z>1.3&&y>.12&&Math.abs(x)>.06&&Math.abs(x)<.14)c=[.06,.05,.05];return c;};
+  head.add(m2mesh(m2geo('wy_head',fh,hc,[-.62,-.12,-.65],[.62,.62,1.75],.025),mats,{r:.55}));
+  const jaw=new THREE.Group();jaw.position.set(0,-.08,.3);head.add(jaw);
+  jaw.add(m2mesh(m2geo('wy_jaw',(x,y,z)=>{let d=_cap(x,y,z,0,-.06,0,0,-.04,1.05,.28,.15);d=Math.max(d,y+.0);return d;},
+    (x,y,z)=>{let c=_mx(bl,dk,_st(-.05,-.2,y)*.3);if(y>-.03)c=[.45,.14,.16];return _sc(c,.9+_nz(x,y,z,40)*.15);},[-.35,-.36,-.3],[.35,.05,1.25],.02),mats,{r:.6}));
+  const toothM=MD.smooth(0xf0e8d8,{roughness:.4});
+  for(let k=0;k<6;k++)[-1,1].forEach(s=>{const t=new THREE.Mesh(new THREE.ConeGeometry(.035,.14,6),toothM);t.position.set(s*.2*(1-k*.08),.02,.18+k*.16);jaw.add(t);
+    const u=new THREE.Mesh(new THREE.ConeGeometry(.035,.14,6),toothM);u.position.set(s*.21*(1-k*.08),-.08,.48+k*.16);u.rotation.x=Math.PI;head.add(u);});
+  const glow=new THREE.Mesh(new THREE.SphereGeometry(.26,12,10),new THREE.MeshBasicMaterial({color:0x9aff60,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));glow.position.set(0,-.05,1.15);head.add(glow);
+  const eyeM=mat(0xfff0a0,{emissive:0xffb020,emissiveIntensity:1.6,flatShading:false});
+  [-1,1].forEach(s=>{const e=new THREE.Mesh(new THREE.SphereGeometry(.085,12,10),eyeM);e.position.set(s*.33,.33,.68);e.scale.set(.7,.6,.45);head.add(e);
+    const pu=new THREE.Mesh(new THREE.BoxGeometry(.012,.09,.02),mat(0x100808));pu.position.set(s*.355,.33,.71);head.add(pu);
+    // 뒤로 휘는 뿔 두 쌍
+    const h1=new THREE.Mesh(new THREE.ConeGeometry(.1,1.0,10),hornM);h1.position.set(s*.28,.5,-.38);h1.rotation.set(-1.15,0,s*.25);head.add(h1);
+    const h2=new THREE.Mesh(new THREE.ConeGeometry(.07,.55,8),hornM);h2.position.set(s*.42,.25,-.3);h2.rotation.set(-1.35,0,s*.7);head.add(h2);});
+  // 날개(=팔): 매끈한 뼈 + 반투명 막
+  const boneM=MD.smooth(0x1e2e26,{roughness:.55});mats.push(boneM);
+  const memM=new THREE.MeshStandardMaterial({color:0x4a6a52,roughness:.75,side:THREE.DoubleSide,transparent:true,opacity:.9});mats.push(memM);
+  const limb=(a,b,r0,r1)=>{const v=new THREE.Vector3(b[0]-a[0],b[1]-a[1],b[2]-a[2]),L=v.length();const c=new THREE.Mesh(new THREE.CylinderGeometry(r1,r0,L,10),boneM);
+    c.position.set((a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2);c.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.normalize());return c;};
+  const joint=(p,r)=>{const j=new THREE.Mesh(new THREE.SphereGeometry(r,12,10),boneM);j.position.set(...p);return j;};
+  const mkWing=s=>{const W=new THREE.Group();W.position.set(s*1.0,.9,1.2);W.rotation.set(-.25,s*-.25,s*.35);body.add(W);
+    const arm=new THREE.Group();W.add(arm);
+    const sh=[0,0,0],el=[s*1.3,.75,-.1],wr=[s*2.5,1.0,0];
+    arm.add(limb(sh,el,.26,.18),limb(el,wr,.17,.12),joint(el,.2),joint(wr,.15));
+    const claw=new THREE.Mesh(new THREE.ConeGeometry(.08,.42,8),hornM);claw.position.set(wr[0],wr[1]+.25,wr[2]+.1);arm.add(claw);
+    const fingers=[[s*6.2,1.6,-1.0],[s*6.6,-.2,-2.0],[s*5.4,-1.2,-3.3],[s*3.6,-1.4,-4.0]];
+    const pos=[];let prev=wr;
+    fingers.forEach((f,k)=>{arm.add(limb(wr,f,.08,.035));const cl=new THREE.Mesh(new THREE.ConeGeometry(.05,.25,6),hornM);cl.position.set(...f);arm.add(cl);
+      pos.push(...wr,...prev,...f);prev=f;});
+    pos.push(...wr,...prev,0,-.6,-2.6);pos.push(...wr,0,-.6,-2.6,...sh);
+    const mg=new THREE.BufferGeometry();mg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));mg.computeVertexNormals();
+    arm.add(new THREE.Mesh(mg,memM));return arm;};
+  const wingL=mkWing(-1),wingR=mkWing(1);
+  // 다리 2개 (뒷다리만): 굵은 허벅지, 뒤로 꺾인 발목, 세 발가락
+  const legGeo=m2geo('wy_leg',(x,y,z)=>{let d=_ell(x,y,z,0,-.3,-.05,.5,.72,.62);
+      d=_smin(d,_cap(x,y,z,0,-.7,.05,0,-1.25,-.4,.34,.24),.2);
+      d=_smin(d,_cap(x,y,z,0,-1.25,-.4,0,-1.75,-.15,.22,.18),.12);
+      d=_smin(d,_ell(x,y,z,0,-1.86,.2,.3,.12,.42),.12);
+      for(const tx of [-.18,0,.18])d=_smin(d,_cap(x,y,z,tx,-1.88,.3,tx*1.3,-1.92,.72,.08,.05),.06);
+      return d;},(x,y,z)=>{let c=skin(x,y,z,-.9);if(y<-1.55)c=_mx(c,dk,.6);return c;},[-.6,-2.05,-.8],[.6,.45,.9],.035);
+  const legs=[];
+  [-1,1].forEach(s=>{const L=new THREE.Group();L.position.set(s*1.05,-.35,-.75);L.add(m2mesh(legGeo,mats,{r:.6}));
+    for(const tx of [-.18,0,.18]){const c=new THREE.Mesh(new THREE.ConeGeometry(.06,.3,8),hornM);c.position.set(tx*1.3,-1.92,.82);c.rotation.x=Math.PI/2;L.add(c);}
+    body.add(L);legs.push(L);});
+  // 꼬리: 일곱 마디 (같은 모양을 크기만 줄여 쓴다), 끝은 가시 달린 곤봉
+  const tGeo=m2geo('wy_tail',(x,y,z)=>_cap(x,y,z,0,0,.1,0,0,-1.35,.62,.5),(x,y,z)=>skin(x,y,z,-.25,24),[-.8,-.8,-1.95],[.8,.8,.8],.05);
+  const tail=[];let tp=body,off=[0,-.1,-2.8];
+  for(let k=0;k<7;k++){const T=new THREE.Group();T.position.set(...off);tp.add(T);tail.push(T);const s2=1-k*.12;
+    const me=m2mesh(tGeo,mats,{r:.6});me.scale.set(s2,s2*.92,1);T.add(me);
+    const sp=new THREE.Mesh(new THREE.ConeGeometry(.09*s2,.36*s2,8),hornM);sp.position.set(0,.55*s2,-.6);sp.rotation.x=-.5;T.add(sp);
+    tp=T;off=[0,-.03,-1.3];}
+  const club=new THREE.Group();club.position.set(0,0,-.6);tp.add(club);
+  club.add(m2mesh(m2geo('wy_club',(x,y,z)=>_ell(x,y,z,0,0,-.2,.3,.22,.55),(x,y,z)=>_sc(dk,.9+_nz(x,y,z,30)*.2),[-.4,-.3,-.85],[.4,.3,.45],.03),mats));
+  for(let k=0;k<6;k++){const a=k/6*Math.PI*2,c=new THREE.Mesh(new THREE.ConeGeometry(.06,.35,6),hornM);c.position.set(Math.cos(a)*.27,Math.sin(a)*.2,-.25);c.rotation.set(0,0,a-Math.PI/2);club.add(c);}
+  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  g.userData={mats,body,neck,head,jaw,glow,wingL,wingR,legs,tail,h:5.5};
+  return g;
+}
+const MON2_BUILD={wyvern:makeWyvern2,wolf:makeCanine2,dog:makeCanine2,jackal:makeCanine2,hyena:makeCanine2,boar:makeBoar2,toad:makeToad2};
 for(const k in BIPED2)MON2_BUILD[k]=makeBiped2;
 
 /* ===== 전갈 ===== */
@@ -5914,11 +6016,11 @@ const HALL_PROPS=[[Math.PI*.18,'chest'],[Math.PI*.82,'chest'],[Math.PI*.35,'barr
 /* 포탈 목록: 새 포탈은 여기에 한 줄 */
 const PORTALS=[
   {id:'east',x:OR.EPORTAL.x,z:OR.EPORTAL.z,ry:-Math.PI/2,minLv:60,label:'포탈로 들어가기',
-    to:{x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-8.5,yaw:0},msg:`포탈을 지나 ${ZONES.hall.name}에 들어섰다.`,color:0xffd23a,
+    to:{x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-8.5,yaw:0},msg:null,color:0xffd23a,
     // 와이번을 잡기 전에는 둥지로
     alt:()=>P&&!(P.got&&P.got.wyvern)?{x:OR.WLAIR.x,z:OR.WLAIR.z+OR.WLAIR.r-5,yaw:0,msg:`포탈을 지나자 거센 바람이 몰아친다.`}:null},
   {id:'nest_out',x:OR.WLAIR.x,z:OR.WLAIR.z+OR.WLAIR.r-2.5,ry:0,minLv:0,label:'포탈로 들어가기',need:()=>!!(P&&P.got&&P.got.wyvern),
-    to:{x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-8.5,yaw:0},msg:`포탈을 지나 ${ZONES.hall.name}에 들어섰다.`,color:0xffd23a},
+    to:{x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-8.5,yaw:0},msg:null,color:0xffd23a},
   {id:'hall_back',x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-4.5,ry:0,minLv:0,label:'동쪽 황야로 돌아가기',
     to:{x:OR.EPORTAL.x-4,z:OR.EPORTAL.z,yaw:Math.PI/2},msg:'포탈을 지나 동쪽 황야로 돌아왔다.',color:0xffd23a},
 ];
@@ -6807,7 +6909,6 @@ function setZone(z){
   $('#wName').textContent=Z.name;$('#wStars').textContent=stars(Z.diff);$('#wRec').textContent=Z.rec;
   $('#bT').textContent=Z.name;$('#bS').textContent=Z.diff?`${stars(Z.diff)}  ${Z.rec||''}`:'';
   $('#banner').classList.add('on');clearTimeout(bannerT);bannerT=setTimeout(()=>$('#banner').classList.remove('on'),2200);
-  if(P)log(`${Z.name}에 들어섰다.`);
 }
 
 // 단축바
@@ -7281,7 +7382,7 @@ function warpTo(x,z,yaw,msg){
     if(msg)log(msg,'sys');publishPresence(true);
     setTimeout(()=>{f.classList.remove('on');warping=false;},180);},380);
 }
-function enterDungeon(){sfx('door');warpTo(DUN.x,DUN.corZ0+2.6,Math.PI,'무거운 석문을 밀고 석굴 안으로 들어섰다. 깊은 곳에서 무언가 꿈틀거린다.');}
+function enterDungeon(){sfx('door');warpTo(DUN.x,DUN.corZ0+2.6,Math.PI,null);}
 function leaveDungeon(){sfx('door');warpTo(DOOR_IN.x+1.2,DOOR_IN.z,-Math.PI/2,'석굴 밖으로 나왔다.');}
 const MERCHANT_POS={x:-10.5,z:-6};
 const merchant=(function(){
@@ -7898,7 +7999,8 @@ function useSkillInner(i){
     shared(()=>meleeHit(S.crange,S.cmult*pw2,{color:0xdff4ff}));const g=heal(P.maxhp*S.cheal);
     const f=flatFwd(),me=player.position;setTimeout(()=>{if(mode!=='world')return;const q=player.position;VFX.slash(q.clone().setY(q.y+1.1),cam.yaw,0xdff4ff,{r:S.crange*.7,arc:3.2,tilt:.08,roll:.15,dur:.3,dir:1});VFX.slash(q.clone().setY(q.y+1.1),cam.yaw,0xffffff,{r:S.crange*.5,arc:2.6,tilt:.08,roll:.15,dur:.22,dir:1});VFX.shock(q,0xdff4ff,S.crange,.35);shakeT=Math.max(shakeT,.12);},200);
     VFX.burst(new THREE.Vector3(me.x+f.x*1.6,me.y+1.1,me.z+f.z*1.6),0xdff4ff,22,5,.5,{mix:0xffffff});if(cds[id]>0)cds[id]*=.4;updateHud();return;}
-  if(skillBusy())return;
+  // 워리어: 스킬 도중에 누른 스킬은 지금 스킬이 끝나자마자 나간다
+  if(skillBusy()){if(P.job==='barbarian')P.skQ={i,t:tAll};return;}
   if((cds[id]||0)>0){toast(`${S.name} 재사용 대기 ${Math.ceil(cds[id])}초`);return;}
   if(!P.equip.weapon){toast('맨손일 때는 기본 공격만 할 수 있어요');return;}
   if(id==='hurl'&&!hurlTarget(S)){toast('붙잡을 적이 없어요');return;}
@@ -8614,6 +8716,7 @@ function updatePlayer(dt){
     cp.x+=Math.cos(cam.yaw)*.55;cp.z-=Math.sin(cam.yaw)*.55;
     camera.position.copy(cp);
     swingT=Math.min(1,swingT+dt*(myMo?1/myMo.dur:swingSpd(P.job)));
+    if(P.skQ&&!skillBusy()){const q=P.skQ;P.skQ=null;if(tAll-q.t<1.5&&P.job==='barbarian')useSkill(q.i);}
   }else{
     player.visible=false;if(viewModel)viewModel.visible=true;
     camera.position.set(player.position.x,player.position.y+1.62+bobY-(player.userData.sitK||0)*.95,player.position.z);
