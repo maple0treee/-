@@ -1645,7 +1645,7 @@ const SKILLS={
   thief:[
     {id:'reap',name:'처형',req:30,mp:10,cd:3.5,type:'loot',mult:2.6,range:2.8,color:0xe04040,desc:'단검으로 앞의 적 하나를 깊숙이 찔러 넣는다(1타). 1.5초 안에 다시 쓰면 칼을 비틀어 뽑아낸다(2타). 두 번 합쳐 260% 피해. HP가 25% 미만인 적에게는 피해 2.5배, 그물에 묶인 적에게는 피해 2.2배'},
     {id:'snare',name:'그물 던지기',req:32,mp:12,cd:10,type:'loot',mult:.6,range:17,radius:3.2,slow:3,color:0xc8b080,desc:'그물을 던져 떨어진 자리의 적들을 3초 동안 크게 느리게 만든다. 60% 피해'},
-    {id:'quaff',name:'포션 마시기',req:35,mp:0,cd:20,type:'loot',dur:8,buff:{atk:1.6,speed:1.3},color:0xff6a6a,desc:'무작위 포션 하나를 단숨에 들이켠다. 포션 효과가 2.5배가 되고, 8초 동안 공격력 60%, 이동 속도 30% 증가'},
+    {id:'quaff',name:'포션 마시기',req:35,mp:0,cd:20,type:'loot',dur:8,buff:{atk:1.6,speed:1.3},color:0xff6a6a,desc:'가방에 있는 포션 가운데 무작위로 하나를 단숨에 들이켠다. 포션 효과가 2.5배가 되고, 8초 동안 공격력 60%, 이동 속도 30% 증가'},
     {id:'pilfer',name:'조용한 감각',req:40,mp:0,cd:0,type:'passive',desc:'(지속) 얻는 경험치 30% 증가, 몬스터가 장비를 떨어뜨릴 확률 60% 증가, 줍는 골드 30% 증가'}],
   assassin:[
     {id:'shuriken',name:'투척하기',req:30,mp:8,cd:4,type:'sin',mult:1.4,speed:42,mark:8,color:0xd0d8e8,desc:'수리검을 던져 140% 피해. 맞은 적에게 8초 동안 수리검 표식이 남고, 표식이 있는 적을 공격하면 40% 추가 피해'},
@@ -7834,7 +7834,9 @@ $('#mLater').onclick=closeMentor;
 // 전직하면 그 직업의 스킬 수만큼 SP를 받는다 (직업마다 한 번)
 // 지금 배울 수 있는 스킬을 모두 최대로 올릴 만큼 SP를 모았으면 레벨업 SP를 더 주지 않는다
 function spCapped(){const need=treeOf(P.job).reduce((a,s)=>a+skMax(s),0);const spent=Object.values(P.skills||{}).reduce((a,v)=>a+(v|0),0);return P.sp+spent>=need;}
-function grantAdvSp(){}  // 전직 보너스 SP는 주지 않는다
+// 레벨에 맞는 SP: 1 + 짝수 레벨마다 1. 전직 전 스킬을 다 올려 더 받지 못했던 SP는 전직하면(또는 접속할 때) 채워 준다
+function grantAdvSp(){if(!P)return;const ent=1+Math.floor(P.lv/2),spent=Object.values(P.skills||{}).reduce((a,v)=>a+(v|0),0),have=P.sp+spent;
+  const need=treeOf(P.job).reduce((a,s)=>a+skMax(s),0),add=Math.min(ent-have,need-have);if(add>0){P.sp+=add;log(`SP ${add}을(를) 받았다.`,'sys');}}
 function advance(j){
   const from=JOBS[P.job].name;P.job=j;P.mentorReady=false;
   if(P.equip.sub&&!canWear(P.equip.sub,j)){P.bag.push(bagGear(P.equip.sub,P.enh.sub));P.equip.sub=null;P.enh.sub=0;}
@@ -8086,6 +8088,7 @@ function useSkillInner(i){
   if((cds[id]||0)>0){toast(`${S.name} 재사용 대기 ${Math.ceil(cds[id])}초`);return;}
   if(!P.equip.weapon){toast('맨손일 때는 기본 공격만 할 수 있어요');return;}
   if(id==='hurl'&&!hurlTarget(S)){toast('붙잡을 적이 없어요');return;}
+  if(id==='quaff'&&!randBagPotion()){toast('마실 포션이 없어요');return;}
   if(S.needSword&&(JOBS[P.job].weapon==='shield'||!P.equip.weapon||(ITEMS[P.equip.weapon]&&ITEMS[P.equip.weapon].jobs&&ITEMS[P.equip.weapon].jobs.includes('guardian')))){toast('검을 들어야 쓸 수 있어요');return;}
   if(S.needSub&&!(P.equip.sub&&ITEMS[P.equip.sub])&&JOBS[P.job].weapon!=='shield'){toast('보조무기(방패)를 들어야 쓸 수 있어요');return;}
   if(S.type==='leap'&&(jumpY>.05||P.leap||P.dash)){toast('땅에 발을 딛고 있어야 해요');return;}
@@ -8945,7 +8948,8 @@ function frontTarget(range,cosMin=.5){const q=player.position,f=flatFwd();let be
   for(const m of alive()){const dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz);if(d>range+m.r)continue;if(d>1.2&&(dx*f.x+dz*f.z)/d<cosMin)continue;const sc=d-(d>1e-3?(dx*f.x+dz*f.z)/d:1);if(sc<bd){bd=sc;best=m;}}
   return best;}
 const POTION_ORDER=[['hp_l','hp'],['hp_s','hp'],['mp_l','mp'],['mp_s','mp'],['atk_p'],['spd_p'],['def_p'],['elixir']];
-const QUAFF_POOL=['hp_s','hp_l','mp_s','mp_l','atk_p','def_p','spd_p'];
+// 포션 마시기: 가방에 있는 포션들 가운데 무작위로 하나
+function randBagPotion(){if(!P)return null;const ids=[...new Set(P.bag.filter(e=>{const I=ITEMS[e.id];return I&&I.kind==='use'&&(I.hp||I.mp||I.buff)&&e.n>0;}).map(e=>e.id))];return ids.length?pick(ids):null;}
 function pickPotion(){if(!P)return null;const hpLow=P.hp<P.maxhp,mpLow=P.mp<P.maxmp;
   for(const [id,k] of POTION_ORDER)if(countOf(id)>0&&(!k||(k==='hp'?hpLow:mpLow)))return id;
   for(const [id] of POTION_ORDER)if(countOf(id)>0)return id;return null;}
@@ -8990,8 +8994,7 @@ function lootSkill(S,id,pw,opt){
           for(const m of hit)m.netT=tAll+hold;shared(()=>{for(const m of hit)damageMonster(m,S.mult*pw,{...opt,stun:0,slow:hold});});VFX.burst(pt.clone().setY(pt.y+.3),0xc8b080,18,3,.4,{up:.3,grav:6});sfx('block',pt,.7);if(hit.length)shakeT=Math.max(shakeT,.1);}
         if(e.t>fl+hold){mat.opacity=Math.max(0,1-(e.t-fl-hold)/.4);if(e.t>fl+hold+.4)return false;}}});},270);
     return pt.clone().setY(pt.y+.5);}
-  // 포션 마시기: 가방과 상관없이 무작위 포션 하나를 들이켠다
-  if(id==='quaff'){const pid=pick(QUAFF_POOL);const I=ITEMS[pid];const {g:bot,col}=bottleMesh(pid);
+  if(id==='quaff'){const pid=randBagPotion();if(!pid)return null;const I=ITEMS[pid];const {g:bot,col}=bottleMesh(pid);
     // 3인칭은 몸의 왼손에, 1인칭은 화면의 왼손에 하나씩만 든다
     const An=player.userData&&player.userData.anime,lh=An&&An.hold&&An.hold[1]?An.hold[1][1]:(player.userData.stick?player.userData.stick.AL.hand:null);
     // 애니 모델이면 실제 왼손 뼈(주먹 가운데)에, 아니면 막대 손에
@@ -9008,7 +9011,7 @@ function lootSkill(S,id,pw,opt){
       if(bot.parent){const hb=An&&An.by&&An.by('J_Bip_C_Head');if(hb){hb.getWorldPosition(mouth);const fw=flatFwd();mouth.x+=fw.x*.06;mouth.z+=fw.z*.06;mouth.y+=.02;}
         else{const fw=flatFwd();mouth.set(player.position.x+fw.x*.1,player.position.y+1.5,player.position.z+fw.z*.1);}aim(bot,mouth);}
       if(fpB&&fpB.parent){camera.getWorldPosition(mouth);mouth.y-=.12;aim(fpB,mouth);}}});
-    setTimeout(()=>{if(mode!=='world'||!P)return;sfx('potion');const m25=2.5;
+    setTimeout(()=>{if(mode!=='world'||!P)return;if(countOf(pid)<=0)return;removeItem(pid);sfx('potion');const m25=2.5;
       if(I.hp)heal(P.maxhp*I.hp*m25);if(I.mp){P.mp=Math.min(P.maxmp,P.mp+P.maxmp*I.mp*m25);}
       if(I.buff)for(const [k,v] of Object.entries(I.buff))P.buffs[k]={v:1+(v-1)*m25,t:I.dur};
       for(const [k,v] of Object.entries(S.buff)){const nv=1+(v-1)*pw,cur=P.buffs[k];if(!cur||cur.v<=nv)P.buffs[k]={v:nv,t:Math.max(S.dur,cur&&cur.v===nv?cur.t:0)};}
