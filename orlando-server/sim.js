@@ -99,7 +99,7 @@
         for (const s of [...monsters.values()]) if (s.summon) { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [] }); }
         later(() => broadcast({ t: 'mspawn', m: pub(spawnBoss()) }), 90000);
       } else if (m.dragon) {
-        if (m.ty === 'wyvern') later(() => broadcast({ t: 'mspawn', m: pub(spawnWyvern()) }), 20000);
+        if (m.ty === 'wyvern') later(() => broadcast({ t: 'mspawn', m: pub(spawnWyvern()) }), 120000);
         else later(() => broadcast({ t: 'mspawn', m: pub(spawnDragon()) }), 300000);
       } else if (!m.summon && !m.dragon) later(() => { const n = spawn(m.zone); if (n) broadcast({ t: 'mspawn', m: pub(n) }); }, 9000);
     }
