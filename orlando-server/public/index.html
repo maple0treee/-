@@ -8723,9 +8723,20 @@ function lootSkill(S,id,pw,opt){
   if(id==='quaff'){const pid=pickPotion();if(!pid)return null;const I=ITEMS[pid];const {g:bot,col}=bottleMesh(pid);
     // 3인칭은 몸의 왼손에, 1인칭은 화면의 왼손에 하나씩만 든다
     const An=player.userData&&player.userData.anime,lh=An&&An.hold&&An.hold[1]?An.hold[1][1]:(player.userData.stick?player.userData.stick.AL.hand:null);
-    if(lh){bot.position.set(0,-.02,.06);bot.rotation.x=Math.PI;lh.add(bot);}
-    let fpB=null;if(viewModel&&viewModel.userData&&viewModel.userData.L){fpB=bottleMesh(pid).g;fpB.scale.setScalar(1.4);fpB.rotation.z=.6;viewModel.userData.L.add(fpB);}
-    rogueFx.push({t:0,o:null,up:(e)=>{if(e.t>.95){if(bot.parent)bot.parent.remove(bot);if(fpB&&fpB.parent)fpB.parent.remove(fpB);return false;}}});
+    // 애니 모델이면 실제 왼손 뼈(주먹 가운데)에, 아니면 막대 손에
+    const LB=An&&An.by&&An.by('J_Bip_'+(An.mirror?'R':'L')+'_Hand'),gi=An&&An.grip&&An.grip[An.mirror?'R':'L'];
+    if(LB){if(gi)bot.position.fromArray(gi.c);bot.scale.setScalar(1/((An.root&&An.root.scale.x)||1));LB.add(bot);}
+    else if(lh){bot.position.set(0,-.02,.06);bot.rotation.x=Math.PI;lh.add(bot);}
+    let fpB=null;if(viewModel&&viewModel.userData&&viewModel.userData.L){fpB=bottleMesh(pid).g;fpB.scale.setScalar(1.1);fpB.rotation.z=.6;viewModel.userData.L.add(fpB);}
+    // 병 주둥이(병의 +Y)가 늘 입 쪽을 향하게: 매 프레임 입 위치를 바라보도록 돌린다
+    const _Y=new THREE.Vector3(0,1,0),_p=new THREE.Vector3(),_t=new THREE.Vector3(),_q=new THREE.Quaternion(),_pq=new THREE.Quaternion();
+    const aim=(o,tgt)=>{if(!o.parent)return;o.parent.updateMatrixWorld(true);o.getWorldPosition(_p);const d=_t.copy(tgt).sub(_p);if(d.lengthSq()<1e-6)return;
+      _q.setFromUnitVectors(_Y,d.normalize());o.parent.getWorldQuaternion(_pq);o.quaternion.copy(_pq.invert().multiply(_q));};
+    const mouth=new THREE.Vector3();
+    rogueFx.push({t:0,o:null,up:(e)=>{if(e.t>.95){if(bot.parent)bot.parent.remove(bot);if(fpB&&fpB.parent)fpB.parent.remove(fpB);return false;}
+      if(bot.parent){const hb=An&&An.by&&An.by('J_Bip_C_Head');if(hb){hb.getWorldPosition(mouth);const fw=flatFwd();mouth.x+=fw.x*.06;mouth.z+=fw.z*.06;mouth.y+=.02;}
+        else{const fw=flatFwd();mouth.set(player.position.x+fw.x*.1,player.position.y+1.5,player.position.z+fw.z*.1);}aim(bot,mouth);}
+      if(fpB&&fpB.parent){camera.getWorldPosition(mouth);mouth.y-=.12;aim(fpB,mouth);}}});
     setTimeout(()=>{if(mode!=='world'||!P)return;if(countOf(pid)<=0)return;removeItem(pid);sfx('potion');const m25=2.5;
       if(I.hp)heal(P.maxhp*I.hp*m25);if(I.mp){P.mp=Math.min(P.maxmp,P.mp+P.maxmp*I.mp*m25);}
       if(I.buff)for(const [k,v] of Object.entries(I.buff))P.buffs[k]={v:1+(v-1)*m25,t:I.dur};
