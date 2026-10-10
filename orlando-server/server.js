@@ -127,7 +127,7 @@ wss.on('connection', (ws) => {
       // 스킬 효과: 정해진 종류와 숫자만 골라서 다른 사람에게 전달
       const d = m.d, n = (v) => (typeof v === 'number' && isFinite(v) ? Math.round(v * 100) / 100 : 0);
       const out = { k: ['p', 'r', 'b'].includes(d.k) ? d.k : 'b' };
-      for (const key of ['x', 'y', 'z', 'dx', 'dy', 'dz', 'sp', 's', 'c', 'g', 'd', 'r']) if (key in d) out[key] = n(d[key]);
+      for (const key of ['x', 'y', 'z', 'dx', 'dy', 'dz', 'sp', 's', 'c', 'g', 'd', 'r', 'a']) if (key in d) out[key] = n(d[key]);
       broadcast({ t: 'fx', id, d: out }, ws);
     } else if (m.t === 'dm' && m.d && typeof m.d === 'object' && typeof m.d.to === 'string') {
       // 파티·거래: 한 사람에게만 전달
