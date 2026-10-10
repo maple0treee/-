@@ -1656,7 +1656,7 @@ const SKILLS={
     {id:'shA',name:'도발하기/방패 던지기',req:60,type:'shd',color:0xd8c090,sc:{name:'도발하기',mp:15,cd:12,radius:15,dur:5},pa:{name:'방패 던지기',mp:10,cd:6,mult:3.8,range:16},
       desc:'[스쿠툼] 주변 몬스터(보스 포함)를 5초 동안 도발해 나를 노리게 한다. 도발된 몬스터가 나에게 주는 피해는 50% 줄어든다 / [파르마] 들고 있는 파르마를 앞으로 던져 처음 맞은 적에게 380% 피해. 떨어진 파르마는 가서 주울 수 있다. 파르마를 회수하기 전까지는 파르마 스킬을 쓸 수 없다(회수하기 제외)'},
     {id:'shB',name:'박아두기/회수하기',req:60,type:'shd',color:0xbfd4ff,sc:{name:'박아두기',mp:12,cd:15,dur:10},pa:{name:'회수하기',mp:8,cd:4,mult:1.4,bash:2.2,range:10},
-      desc:'[스쿠툼] 스쿠툼을 땅에 박아 둔다. 도발당해 나를 노리던 몬스터는 박힌 스쿠툼을 노린다. 다시 쓰면 뽑아 든다. 10초가 지나거나 큰 피해를 입으면 저절로 뽑힌다 / [파르마] 던진 파르마를 불러온다. 근처에 적이 있으면 적에게 먼저 날아가 그 적과 바로 곁의 적들에게 140% 피해를 주고(최대 5번), 없으면 바로 돌아온다. 파르마를 던지지 않았다면 방패로 앞을 쳐 220% 피해'},
+      desc:'[스쿠툼] 스쿠툼을 땅에 박아 둔다. 도발당해 나를 노리던 몬스터는 박힌 스쿠툼을 노린다. 다시 쓰면 뽑아 든다. 10초가 지나거나 큰 피해를 입으면 저절로 뽑힌다 / [파르마] 던진 파르마를 불러온다. 근처에 적이 있으면 적에게 먼저 날아가 그 적과 바로 곁의 적들에게 140% 피해를 주고, 돌아오는 길에 곁을 지나는 적에게도 튕긴다(모두 합쳐 최대 5번). 파르마를 던지지 않았다면 방패로 앞을 쳐 220% 피해'},
     {id:'shC',name:'회복하기/방패 올려치기',req:60,type:'shd',color:0x8fd0b4,sc:{name:'회복하기',mp:20,cd:20,pct:.35},pa:{name:'방패 올려치기',mp:10,cd:5,mult:3,range:3.4},
       desc:'[스쿠툼] 최대 HP의 35%를 회복한다 / [파르마] 방패를 아래에서 위로 올려쳐 앞의 적들에게 300% 피해를 주고 띄운다'}],
   guardian:[
@@ -6992,7 +6992,7 @@ function shdUse(S,lvl){
       if(s.paObj){const o=s.paObj,R=F.F.range,chain=[],used=new Set();let at=o.pos.clone();
         for(let k=0;k<5;k++){let best=null,bd=R;for(const m of alive()){if(used.has(m))continue;const d=Math.hypot(m.mesh.position.x-at.x,m.mesh.position.z-at.z);if(d<bd){bd=d;best=m;}}
           if(!best)break;used.add(best);chain.push(best);at=best.mesh.position.clone();}
-        o.st='recall';o.chain=chain;o.mult=F.F.mult*pw;o.hitN=0;sfx('whoosh',o.pos,.8,1.15);VFX.burst(o.pos.clone(),col,14,3,.4,{mix:0xffffff,up:.5});}
+        o.st='recall';o.chain=chain;o.used=used;o.mult=F.F.mult*pw;o.hitN=0;sfx('whoosh',o.pos,.8,1.15);VFX.burst(o.pos.clone(),col,14,3,.4,{mix:0xffffff,up:.5});}
       else setTimeout(()=>{if(mode!=='world'||!P)return;const n=shared(()=>meleeHit(3,F.F.bash*pw,{color:col,stun:.5}));const f=flatFwd(),q=player.position,at=new THREE.Vector3(q.x+f.x*1.5,q.y+1.1,q.z+f.z*1.5);
         VFX.burst(at,col,n?18:8,n?4.5:2.5,.4,{mix:0xffffff});VFX.slash(q.clone().setY(q.y+1.05),cam.yaw,col,{r:1.6,arc:1.8,tilt:.1,dur:.2,dir:1});if(n)shakeT=Math.max(shakeT,.1);sfx(n?'heavy':'swing2',q,.7);},230);
       break;}
@@ -7041,6 +7041,8 @@ function shdUpdate(dt){
     if(Math.hypot(me.x-o.pos.x,me.z-o.pos.z)<1.7){shdCatch(false);return;}}
   else if(o.st==='recall'){
     while(o.chain.length&&o.chain[0].dying!==null)o.chain.shift();
+    // 돌아오는 길에도 곁을 지나는 몬스터에게 저절로 튕긴다 (모두 합쳐 최대 5번)
+    if(!o.chain.length&&o.used&&o.used.size<5){let best=null,bd=4.5;for(const m of alive()){if(o.used.has(m))continue;const dd=Math.hypot(m.mesh.position.x-o.pos.x,m.mesh.position.z-o.pos.z);if(dd<bd){bd=dd;best=m;}}if(best){o.used.add(best);o.chain.push(best);}}
     const tg=o.chain[0],to=tg?mCenter(tg):me.clone().setY(me.y+1.1);
     const d=o.pos.distanceTo(to),step=34*dt;o.spin+=dt*24;
     if(d<=Math.max(.7,step)){
