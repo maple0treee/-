@@ -3645,11 +3645,26 @@ function taperedBlade(w,y0,len,tip,thick,m){const sh=new THREE.Shape();sh.moveTo
   const g=new THREE.ExtrudeGeometry(sh,{depth:thick*.3,bevelEnabled:true,bevelThickness:thick*.35,bevelSize:thick*.22,bevelSegments:1,curveSegments:10});g.translate(0,0,-thick*.15);g.computeVertexNormals();return new THREE.Mesh(g,m);}
 const tierCol=t=>new THREE.Color(TIER_COLOR[Math.max(0,Math.min(10,t))]);
 // 무기는 손잡이가 원점, 칼날은 +y 방향으로 만든다 (붙일 때 돌린다)
+// 기본류 무기의 등급별 생김새: 쇠·나무·장식·보석 색 (견습 → 강철 → 미스릴 → 고대의 → 룬 → 서리 → 화염 → 망령 → 심연 → 전설의)
+const TIER_LOOK=[
+  {metal:0xb0aca0,wood:0x7a5a38,acc:0x8a7a5a,gem:null},
+  {metal:0xd9dde2,wood:0x6b4526,acc:0xc79a3e,gem:null},
+  {metal:0xe0ecf8,wood:0x5a4a66,acc:0xbcd0ee,gem:0x8fd0ff},
+  {metal:0xb89a58,wood:0x4a3626,acc:0x5f8a6a,gem:0x6fe0a0},
+  {metal:0xcfd6e0,wood:0x383848,acc:0x8ab0ff,gem:0x5fa0ff},
+  {metal:0xe6f3ff,wood:0x46586a,acc:0xa6dcff,gem:0xb8ecff},
+  {metal:0xffb272,wood:0x3a1a12,acc:0xff6a30,gem:0xff4a10},
+  {metal:0xb3a2cc,wood:0x2a2434,acc:0x8a60c0,gem:0xa070ff},
+  {metal:0x3c3c4c,wood:0x1a1a22,acc:0x5444a8,gem:0x5038d0},
+  {metal:0xf6e4a6,wood:0x6a4a1a,acc:0xffd060,gem:0xffe080}];
+function tierLook(t){return TIER_LOOK[Math.max(0,Math.min(9,t|0))];}
 function stickWeapon(kind,job,tier=-1){
   const g=new THREE.Group();
+  const basic=!!(JOBS[job]&&!JOBS[job].from)&&tier>=0&&tier<=9,TL=basic?tierLook(tier):null;   // 기본류(기본 직업 생김새)만 등급별 색이 바뀐다
   const glow=tier>=6?{emissive:tierCol(tier).getHex(),emissiveIntensity:.35}:{};
-  const steel=mat(0xd9dde2,Object.assign({metalness:.7,roughness:.25,flatShading:false},glow)),dark=mat(0x6a7078,{metalness:.6,roughness:.35});
-  const gold=mat(0xc79a3e,{metalness:.65,roughness:.3}),leather=mat(0x4a2e1c,{roughness:.8}),wood=mat(0x6b4526,{roughness:.75});
+  const steel=mat(TL?TL.metal:0xd9dde2,Object.assign({metalness:.7,roughness:.25,flatShading:false},glow)),dark=mat(0x6a7078,{metalness:.6,roughness:.35});
+  const gold=mat(TL?TL.acc:0xc79a3e,{metalness:.65,roughness:.3}),leather=mat(TL?TL.wood:0x4a2e1c,{roughness:.8}),wood=mat(TL?TL.wood:0x6b4526,{roughness:.75});
+  const gemM=TL&&TL.gem?mat(TL.gem,{emissive:TL.gem,emissiveIntensity:tier>=4?.9:.4,flatShading:true}):null;
   const add=(m,x,y,z,rx=0,ry=0,rz=0)=>{m.position.set(x,y,z);m.rotation.set(rx,ry,rz);g.add(m);return m;};
   const cyl=(r1,r2,h,m,s=8)=>new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,s),m);
   const box=(x,y,z,m)=>new THREE.Mesh(new THREE.BoxGeometry(x,y,z),m);
@@ -3730,11 +3745,13 @@ function stickWeapon(kind,job,tier=-1){
     add(cyl(.024,.026,.2,leather),0,0,0);
     for(let k=0;k<4;k++)add(cyl(.028,.028,.012,gold),0,-.07+k*.045,0);
     add(sph(.04,gold,10,8),0,-.12,0);
-    add(new THREE.Mesh(new THREE.OctahedronGeometry(.022,0),mat(0xc0303a,{emissive:0x701018,emissiveIntensity:.6})),0,-.12,.035);
+    add(new THREE.Mesh(new THREE.OctahedronGeometry(.022,0),gemM||mat(0xc0303a,{emissive:0x701018,emissiveIntensity:.6})),0,-.12,.035);
     add(box(.2,.04,.06,gold),0,.12,0);
     [-1,1].forEach(s=>{add(sph(.03,gold),s*.11,.14,0);});
     add(bladeMesh(straight(.035,.14,L,.2,.88),.016,steel),0,0,0);
-    add(box(.018,L*.8,.02,dark),0,.14+L*.42,0);
+    add(box(.018,L*.8,.02,tier>=4&&gemM?gemM:dark),0,.14+L*.42,0);   // 룬 등급부터 홈이 빛난다
+    if(tier>=2&&gemM)add(new THREE.Mesh(new THREE.OctahedronGeometry(.02,0),gemM),0,.12,.04);   // 미스릴부터 코등이 보석
+    if(tier>=7){[-1,1].forEach(s=>{add(box(.1,.022,.04,gold),s*.15,.17,0,0,0,s*.6);add(cone(.014,.05,gold,5),s*.2,.22,0,0,0,-s*.5);});}   // 망령부터 날개 코등이
   }else if(kind==='dagger'&&thief){
     // 도둑: 앞으로 굽은 넓은 쿠크리, 놋쇠빛 날, 등에 톱니
     const blade=mat(0xc9ab72,Object.assign({metalness:.7,roughness:.3,flatShading:false},glow)),cloth=mat(0x8a3a2a,{roughness:.9});
@@ -3756,10 +3773,13 @@ function stickWeapon(kind,job,tier=-1){
       add(bladeMesh(sh,.011,blade),0,0,0);}
     add(box(.0045,.17,.016,edgeM),0,.17,0);
   }else if(kind==='dagger'){
-    const blade=mat(0xd9dde2,Object.assign({metalness:.7,roughness:.25,flatShading:false},glow));
+    const blade=steel;
     add(cyl(.02,.022,.12,leather),0,0,0);
     add(new THREE.Mesh(new THREE.TorusGeometry(.03,.009,5,10),gold),0,-.08,0);
     add(box(.12,.025,.045,gold),0,.07,0);
+    if(tier>=2&&gemM)add(new THREE.Mesh(new THREE.OctahedronGeometry(.016,0),gemM),0,-.08,0);
+    if(tier>=4&&gemM)add(box(.008,.22,.014,gemM),0,.22,0);
+    if(tier>=7)[-1,1].forEach(s=>add(cone(.01,.04,gold,4),s*.07,.09,0,0,0,-s*.6));
     {const sh=new THREE.Shape();sh.moveTo(-.022,.08);sh.lineTo(.022,.08);sh.quadraticCurveTo(.03,.3,.05,.45);sh.quadraticCurveTo(.02,.38,-.004,.33);sh.quadraticCurveTo(-.014,.2,-.022,.08);
       add(bladeMesh(sh,.012,blade),0,0,0);}
   }else if(kind==='staff'){
@@ -3788,23 +3808,42 @@ function stickWeapon(kind,job,tier=-1){
       for(let k=0;k<3;k++){const a=k/3*Math.PI*2;add(new THREE.Mesh(new THREE.OctahedronGeometry(.022,0),cry),Math.cos(a)*.2,top+.14,Math.sin(a)*.2);}
       g.userData.orb=orb;g.userData.ring=ring;void moon;
     }else{
-      // 마법사: 자연스러운 나뭇가지 지팡이. 살짝 휜 자루에 옹이가 몇 개, 아래쪽은 끈으로 감은 손잡이, 윗끝이 두 갈래로 갈라져 그 사이에 작은 돌 하나를 끈으로 묶었다
-      const bark=mat(0x6a4a2c,{roughness:.9}),knot=mat(0x4e331c,{roughness:.95}),twine=mat(0xb59a6a,{roughness:.9}),stone=mat(0xd8e4ea,{emissive:0x8fb0c8,emissiveIntensity:.7,flatShading:true});
-      add(cyl(.024,.034,1.0,bark),0,.0,0,0,0,.03);add(cyl(.022,.026,.7,bark),.03,.82,0,0,0,.09);   // 두 토막으로 살짝 휘게
-      for(const [y,a,r] of [[-.2,.4,.03],[.25,2.1,.028],[.62,3.9,.03],[1.0,1.2,.026]])add(sph(r,knot,6,5),Math.cos(a)*.026,y,Math.sin(a)*.026);  // 옹이
-      for(let k=0;k<6;k++)add(new THREE.Mesh(new THREE.TorusGeometry(.03,.006,4,10),twine),0,-.42+k*.03,0,Math.PI/2,0,0);   // 끈으로 감은 손잡이
-      add(cone(.03,.08,knot,6),0,-.56,0,Math.PI,0,0);
-      const fy=top-.02;add(cyl(.012,.018,.3,bark),.07,fy+.1,0,0,0,-.45);add(cyl(.012,.018,.26,bark),-.06,fy+.09,0,0,0,.5);   // 두 갈래
-      for(let k=0;k<3;k++)add(new THREE.Mesh(new THREE.TorusGeometry(.055,.005,4,12),twine),0,fy+.08+k*.02,0,Math.PI/2,0,k*.5);   // 돌을 묶은 끈
-      const orb=add(new THREE.Mesh(new THREE.IcosahedronGeometry(.055,0),stone),0,fy+.12,0);orb.rotation.set(.4,.3,.2);
-      const ring=add(new THREE.Mesh(new THREE.TorusGeometry(.09,.004,4,20),twine),0,fy+.12,0,Math.PI/2,0,0);ring.visible=false;
+      // 마법사: 옹이 진 나뭇가지 지팡이. 마디마다 살짝 꺾인 자루, 껍질 마디, 감아 올라가는 덩굴, 가죽 감개와 매듭, 쇠 물미,
+      //         머리는 뿌리 같은 갈고리 셋이 안쪽으로 휘어 등급 색 수정을 감싸고, 끈에 작은 깃털 장식이 매달린다
+      const bark=mat(TL?TL.wood:0x6a4a2c,{roughness:.92}),barkD=mat(new THREE.Color(TL?TL.wood:0x6a4a2c).multiplyScalar(.7).getHex(),{roughness:.95}),
+        vine=mat(0x4f6a35,{roughness:.9}),hide=mat(0x3e2a1a,{roughness:.85}),iron=mat(0x5a5f68,{metalness:.65,roughness:.4}),
+        cry=gemM||mat(0xd8e4ea,{emissive:0x8fb0c8,emissiveIntensity:.8,flatShading:true}),feather=mat(0xe8e0d0,{roughness:.9});
+      // 자루: 마디 다섯이 번갈아 조금씩 꺾인다
+      const seg=[[-.55,-.2,.0,.02],[-.2,.15,.02,-.03],[.15,.5,-.02,.03],[.5,.85,.03,-.02],[.85,top,-.02,.0]];
+      for(const [y0,y1,ox,oz] of seg){const h=y1-y0,m=cyl(.024,.03,h+.02,bark,9);m.position.set(ox,(y0+y1)/2,oz);m.rotation.set(oz*.6,0,-ox*.6);g.add(m);
+        add(new THREE.Mesh(new THREE.TorusGeometry(.03,.007,5,10),barkD),ox,y1-.01,oz,Math.PI/2,0,0);}   // 마디 껍질
+      for(const [y,a] of [[-.05,.4],[.32,2.3],[.68,4.1],[.98,1.1]])add(sph(.028,barkD,6,5),Math.cos(a)*.028,y,Math.sin(a)*.028);   // 옹이
+      // 덩굴: 나선으로 감아 올라간다
+      {const pts=[];for(let k=0;k<=40;k++){const t=k/40,a=t*Math.PI*3.4;pts.push(new THREE.Vector3(Math.cos(a)*.033,.05+t*1.0,Math.sin(a)*.033));}
+        g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),60,.0055,5,false),vine));
+        for(const t of [.2,.45,.7,.92]){const a=t*Math.PI*3.4,y=.05+t*1.0;const lf=cone(.014,.04,vine,4);lf.position.set(Math.cos(a)*.052,y+.015,Math.sin(a)*.052);lf.rotation.set(.3,-a,Math.cos(a)>0?.7:-.7);lf.scale.set(.5,1,1);g.add(lf);}}   // 잎
+      // 손잡이: 가죽 감개 + 매듭 + 늘어진 끈
+      for(let k=0;k<8;k++)add(new THREE.Mesh(new THREE.TorusGeometry(.031,.007,5,10),hide),0,-.46+k*.028,0,Math.PI/2,0,k*.4);
+      add(sph(.016,hide,6,5),.03,-.25,.0);add(box(.012,.14,.006,hide),.035,-.33,.01,.15,0,.25);add(box(.012,.11,.006,hide),.025,-.31,-.02,-.1,0,-.2);
+      add(cyl(.032,.026,.06,iron),0,-.55,0);add(cone(.026,.07,iron,8),0,-.615,0,Math.PI,0,0);   // 쇠 물미
+      // 머리: 뿌리 같은 갈고리 셋
+      const fy=top;for(let k=0;k<3;k++){const a=k/3*Math.PI*2+.4,cx=Math.cos(a),cz=Math.sin(a);
+        add(cyl(.014,.02,.2,bark,6),cx*.05,fy+.08,cz*.05,cz*.55,0,-cx*.55);
+        add(cyl(.009,.014,.16,bark,6),cx*.1,fy+.22,cz*.1,cz*.05,0,-cx*.05);
+        add(cyl(.005,.009,.12,bark,5),cx*.07,fy+.33,cz*.07,-cz*.7,0,cx*.7);}
+      for(let k=0;k<2;k++)add(new THREE.Mesh(new THREE.TorusGeometry(.041,.004,4,12),hide),0,fy+.1+k*.02,0,Math.PI/2,0,k*.6);   // 묶은 끈
+      const orb=add(new THREE.Mesh(new THREE.OctahedronGeometry(.055,0),cry),0,fy+.24,0);orb.scale.set(.8,1.5,.8);orb.rotation.y=.4;
+      // 깃털 장식: 끈 하나에 구슬과 깃털
+      add(cyl(.003,.003,.14,hide,4),.07,fy-.02,.03,.1,0,.5);add(sph(.012,gold,6,5),.1,-.0+fy-.09,.05);
+      {const f=cone(.014,.1,feather,5);f.position.set(.11,fy-.16,.06);f.rotation.set(0,0,Math.PI+.4);f.scale.set(.6,1,1);g.add(f);}
+      const ring=add(new THREE.Mesh(new THREE.TorusGeometry(.09,.004,4,20),hide),0,fy+.24,0,Math.PI/2,0,0);ring.visible=false;
       g.userData.orb=orb;g.userData.ring=ring;
     }
   }else if(kind==='bow'){
     // 활: 가운데 손잡이가 원점, 활 등은 +z(앞)으로 볼록, 시위는 뒤(-z)
     const sniper=job==='sniper',hunter=job==='hunter';
     const S=sniper?1.18:1;
-    const limbM=mat(sniper?0x262c26:hunter?0x5a3a1e:0x7a5230,{roughness:.6,flatShading:false});
+    const limbM=mat(sniper?0x262c26:hunter?0x5a3a1e:TL?TL.wood:0x7a5230,{roughness:.6,flatShading:false});
     const pts=(hunter?[[-.62,-.14],[-.6,-.26],[-.45,-.22],[-.22,-.06],[0,0],[.22,-.06],[.45,-.22],[.6,-.26],[.62,-.14]]:[[-.66,-.24],[-.6,-.29],[-.45,-.2],[-.22,-.06],[0,0],[.22,-.06],[.45,-.2],[.6,-.29],[.66,-.24]]).map(([y,z])=>new THREE.Vector3(0,y*S,z));
     g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),40,sniper?.018:.02,6,false),limbM));
     add(cyl(.032,.032,.16,leather),0,0,-.005);
@@ -3818,6 +3857,10 @@ function stickWeapon(kind,job,tier=-1){
       for(let k=0;k<3;k++)add(cyl(.036,.036,.012,mat(0x3a5a2a)),0,.1+k*.04,-.005);
     }else{
       [-1,1].forEach(s=>{add(sph(.022,sniper?dark:gold,6,5),0,s*tipY,tipZ);});
+      if(TL){for(let k=0;k<3;k++)add(cyl(.026,.026,.012,gold),0,-.07+k*.07,-.005);   // 손잡이 띠
+        if(tier>=2&&gemM)add(new THREE.Mesh(new THREE.OctahedronGeometry(.018,0),gemM),0,.12,.03);
+        if(tier>=4&&gemM)[-1,1].forEach(s=>add(box(.012,.12,.012,gemM),0,s*.42,-.1,s*.25,0,0));
+        if(tier>=7)[-1,1].forEach(s=>add(cone(.02,.1,gold,5),0,s*(tipY+.06),tipZ+.02,s>0?0:Math.PI,0,0));}
       if(sniper){[-1,1].forEach(s=>add(box(.016,.18,.03,dark),0,s*(tipY-.12),tipZ+.05,s*.4,0,0));}
     }
     // 시위: 양 끝에서 시위 잡는 점까지 두 토막으로, 당기면 뒤로 휜다 (setBowDraw)
