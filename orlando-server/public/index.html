@@ -8497,6 +8497,20 @@ function detonateFx(at,r,col){const g=new THREE.Vector3(at.x,heightAt(at.x,at.z)
   VFX.burst(at,col,36,r*1.6,.55,{up:.35,mix:0xffffff,grav:5,drag:2.4});VFX.burst(at,0xffffff,14,r*1.1,.4,{up:.5,layer:1,grav:3});
   for(let i=0;i<10;i++){const a=Math.random()*Math.PI*2,rr=r*(.5+Math.random()*.5);VFX.emit(1,at.x+Math.cos(a)*rr,g.y+.2+Math.random()*.6,at.z+Math.sin(a)*rr,0,.9+Math.random(),0,col,.6+Math.random()*.4,-1,1.5);}
   spawnFx(col,at,r*.9,.35);}
+// 번개 띠: 지그재그 점들을 카메라를 향한 띠로 이어 그린다 (흰 심 + 푸른 테), 짧게 번쩍이고 사라진다
+function boltRibbon(a,b,col,w,dur){const len=a.distanceTo(b),n=Math.max(6,Math.floor(len*3)),d=b.clone().sub(a),pts=[];
+  for(let i=0;i<=n;i++){const t=i/n,q=a.clone().addScaledVector(d,t);if(i&&i<n){const j=.5*(1-Math.abs(t-.5)*.6);q.x+=(Math.random()-.5)*j;q.y+=(Math.random()-.5)*j;q.z+=(Math.random()-.5)*j;}pts.push(q);}
+  const mk=(width,color,op)=>{const pos=[],idx=[];const cp=camera.position;
+    for(let i=0;i<=n;i++){const q=pts[i],dir=(i<n?pts[i+1].clone().sub(q):q.clone().sub(pts[i-1])).normalize(),toC=cp.clone().sub(q).normalize(),tap=Math.min(1,q.distanceTo(a)/1.6,.3+q.distanceTo(b)/.6),side=dir.cross(toC).normalize().multiplyScalar(width*tap);   // 손 가까이는 가늘게
+      pos.push(q.x+side.x,q.y+side.y,q.z+side.z,q.x-side.x,q.y-side.y,q.z-side.z);if(i<n){const k=i*2;idx.push(k,k+1,k+2,k+1,k+3,k+2);}}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);
+    const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color,transparent:true,opacity:op,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));m.renderOrder=7;scene.add(m);fx.push({m,t:0,dur,ring:true,op});};
+  mk(w*2.6,col,.5);mk(w,0xffffff,.9);
+  // 곁가지 두세 개
+  for(let k=0;k<2+Math.floor(Math.random()*2);k++){const i=1+Math.floor(Math.random()*(n-1)),f=pts[i],fd=new THREE.Vector3(Math.random()-.5,Math.random()-.5,Math.random()-.5).normalize().multiplyScalar(.5+Math.random()*.9);
+    const e=f.clone().add(fd);const pos=[];const cp=camera.position;const toC=cp.clone().sub(f).normalize(),side=fd.clone().normalize().cross(toC).normalize().multiplyScalar(w*.5);
+    pos.push(f.x+side.x,f.y+side.y,f.z+side.z,f.x-side.x,f.y-side.y,f.z-side.z,e.x,e.y,e.z);const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+    const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.7,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));m.renderOrder=7;scene.add(m);fx.push({m,t:0,dur:dur*.8,ring:true,op:.7});}}
 // 번개 줄기: 두 점 사이를 지그재그로 잇는 짧은 빛
 function boltFx(a,b,col,w=1){const len=a.distanceTo(b),n=Math.max(8,Math.floor(len*5)),d=b.clone().sub(a);
   const draw=(life,jit)=>{let prev=null;const pts=[];for(let i=0;i<=n;i++){const t=i/n,q=a.clone().addScaledVector(d,t);if(i&&i<n){const j=jit*(1-Math.abs(t-.5)*.6);q.x+=(Math.random()-.5)*j;q.y+=(Math.random()-.5)*j;q.z+=(Math.random()-.5)*j;}pts.push(q);}
@@ -8504,7 +8518,8 @@ function boltFx(a,b,col,w=1){const len=a.distanceTo(b),n=Math.max(8,Math.floor(l
       for(let s=0;s<seg;s++){const q=p0.clone().lerp(p1,s/seg);VFX.emit(0,q.x,q.y,q.z,0,0,0,0xdfefff,life,0,0);if((i*seg+s)%3===0)VFX.emit(1,q.x,q.y,q.z,0,0,0,0x2f6fe0,life*.8,0,0);}
       if(Math.random()<.22*w){const f=p0.clone(),fd=new THREE.Vector3((Math.random()-.5),(Math.random()-.5),(Math.random()-.5)).normalize().multiplyScalar(.5+Math.random()*.7);   // 곁가지
         for(let s=0;s<5;s++){const q=f.clone().addScaledVector(fd,s/5);q.x+=(Math.random()-.5)*.1;q.y+=(Math.random()-.5)*.1;VFX.emit(0,q.x,q.y,q.z,0,0,0,col,life*.7,0,0);}}}};
-  draw(.26,.55);setTimeout(()=>draw(.2,.4),80);setTimeout(()=>draw(.16,.3),170);
+  draw(.2,.55);setTimeout(()=>draw(.14,.4),90);
+  boltRibbon(a,b,col,.07*w,.3);setTimeout(()=>boltRibbon(a,b,col,.055*w,.24),70);setTimeout(()=>boltRibbon(a,b,col,.045*w,.18),150);
   for(let i=0;i<5;i++)VFX.emit(0,b.x,b.y,b.z,(Math.random()-.5)*4,(Math.random()-.5)*4,(Math.random()-.5)*4,0x9fc8ff,.25,2,2);}
 // 조준한 파티원 (시야 가운데 근처, 가까운 순)
 function aimOther(maxD=14,cosMin=.95){if(!party)return null;const o0=camera.position,d=camDir();let best=null,bc=cosMin;
@@ -10269,7 +10284,7 @@ function updateBossBar(){
 
 function updateFx(dt){
   for(let i=fx.length-1;i>=0;i--){const f=fx[i];f.t+=dt;const k=f.t/f.dur;
-    if(f.ring){f.m.material.opacity=.8*(1-k);f.m.scale.setScalar(1+k*.08);}
+    if(f.ring){f.m.material.opacity=(f.op||.8)*(1-k);if(f.op===undefined)f.m.scale.setScalar(1+k*.08);}
     else{f.m.scale.setScalar(.15+f.size*k);f.m.material.opacity=.85*(1-k);}
     if(k>=1){scene.remove(f.m);f.m.geometry.dispose();f.m.material.dispose();fx.splice(i,1);}}
 }
