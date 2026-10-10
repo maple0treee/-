@@ -4333,6 +4333,8 @@ function pmAttach(g,job,gear,ap){
 const ACC_KIND=['ring','neck','amulet','ring','neck','ring','amulet','neck','ring','amulet','heart'];
 // 손가락: 무기를 쥔 손은 손잡이를 꽉 감아쥐고, 빈손은 힘을 빼 살짝 편다 (구운 주먹 자세에서 더 감거나 푼다)
 function pmFingers(A,sd,mode){const gi=A.grip&&A.grip[sd],H=A.by('J_Bip_'+sd+'_Hand');if(!gi||!H)return;
+  if(!A.fRest)A.fRest=A.rest.map(r=>r.q.clone());A.fMode=A.fMode||{};if(A.fMode[sd]===mode)return;A.fMode[sd]=mode;
+  const isF=new RegExp('_'+sd+'_(Index|Middle|Ring|Little|Thumb)\\d');A.bones.forEach((b,i)=>{if(isF.test(b.name))A.rest[i].q.copy(A.fRest[i]);});
   A.bones.forEach((b,i)=>{b.position.copy(A.rest[i].p);b.quaternion.copy(A.rest[i].q);});A.root.updateMatrixWorld(true);
   const c=new THREE.Vector3().fromArray(gi.c).applyMatrix4(H.matrixWorld);const hq=new THREE.Quaternion();H.getWorldQuaternion(hq);const ax=new THREE.Vector3().fromArray(gi.a).applyQuaternion(hq).normalize();
   const W=n=>{const v=new THREE.Vector3();A.by(n).getWorldPosition(v);return v;};
@@ -4343,7 +4345,7 @@ function pmFingers(A,sd,mode){const gi=A.grip&&A.grip[sd],H=A.by('J_Bip_'+sd+'_H
     const q0=b.quaternion.clone();rotW(b,.2);const d1=tip().distanceTo(c);b.quaternion.copy(q0);rotW(b,-.2);const d2=tip().distanceTo(c);b.quaternion.copy(q0);b.updateMatrixWorld(true);
     const sg=d1<d2?1:-1;rotW(b,sg*AMT[k]);}
   if(mode!=='tight'){const t1=A.by('J_Bip_'+sd+'_Thumb2');if(t1){const q=t1.quaternion.clone();t1.quaternion.slerp(new THREE.Quaternion(),.35);}}
-  A.bones.forEach((b,i)=>{if(/_(Index|Middle|Ring|Little|Thumb)\d/.test(b.name))A.rest[i].q.copy(b.quaternion);});}
+  A.bones.forEach((b,i)=>{if(isF.test(b.name))A.rest[i].q.copy(b.quaternion);});}
 function pmAccessory(A,t){const kind=ACC_KIND[Math.max(0,Math.min(10,t))];const col=t>=10?0xff3020:tierCol(Math.min(9,t));
   const gold=new THREE.MeshStandardMaterial({color:t>=6?0xe8c060:0xc8ccd4,metalness:.85,roughness:.25});
   const gem=new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:t>=4?.9:.4,metalness:.3,roughness:.2});
@@ -4396,7 +4398,7 @@ function pmFPPose(A,vm,hands){
     let fist=null;
     if(vis){goal=new THREE.Vector3();h.getWorldPosition(goal);const w=h.userData.wpn||h;const q=new THREE.Quaternion();w.getWorldQuaternion(q);wAx=new THREE.Vector3(0,1,0).applyQuaternion(q);
       // 맨주먹: 주먹등(손가락 마디)은 앞으로, 검지는 안쪽으로
-      if(!h.userData.wpn){fist=[new THREE.Vector3(0,-.25,-1).normalize().applyQuaternion(q),new THREE.Vector3(-sg,0,0).applyQuaternion(q)];}}
+      if(!h.userData.wpn){const row=h.userData.fistRow||[-sg,0,0];fist=[new THREE.Vector3(0,-.25,-1).normalize().applyQuaternion(q),new THREE.Vector3().fromArray(row).applyQuaternion(q)];}}
     else goal=vm.localToWorld(new THREE.Vector3(sg*.32,-.95,.12));
     const pole=vm.localToWorld(new THREE.Vector3(sg*.55,-1,.3)).sub(vm.localToWorld(new THREE.Vector3()));
     const ws=new THREE.Vector3();A.root.getWorldScale(ws);const [a0,b0]=A.fp.len[sd];
@@ -4993,12 +4995,12 @@ function verbFP(v,o,style){
         r(t0+(t1-t0)*.8,{x:.1,y:-.02,z:-.55,rx:.5});l(t0+(t1-t0)*.8,{x:-.1,y:-.02,z:-.55,rx:.5});}
       break;
     case 'bowdraw':
-      r(.12,{x:.0,y:-.14,z:-.72});l(.12,{x:.04,y:-.12,z:-.84,rz:.1});
-      r(.88,{x:.1,y:-.15,z:-.34,ry:-.2});l(.88,{x:.08,y:-.14,z:-.84,rz:.1});
-      r(.995,{x:.1,y:-.15,z:-.34,ry:-.2});l(.995,{x:.08,y:-.14,z:-.84,rz:.1});break;
+      r(.12,{x:.0,y:-.14,z:-.6});l(.12,{x:.04,y:-.13,z:-.68,rz:.1});
+      r(.88,{x:.1,y:-.15,z:-.3,ry:-.2});l(.88,{x:.07,y:-.14,z:-.62,rz:.1});
+      r(.995,{x:.1,y:-.15,z:-.3,ry:-.2});l(.995,{x:.07,y:-.14,z:-.62,rz:.1});break;
     case 'bowshot':
-      r(.001,{x:.1,y:-.15,z:-.34,ry:-.2});l(.001,{x:.08,y:-.14,z:-.84,rz:.1});
-      r(.1,{x:.26,y:-.16,z:-.34,ry:-.5});l(.1,{x:.07,y:-.13,z:-.86,rz:.1});
+      r(.001,{x:.1,y:-.15,z:-.3,ry:-.2});l(.001,{x:.07,y:-.14,z:-.62,rz:.1});
+      r(.1,{x:.26,y:-.16,z:-.3,ry:-.5});l(.1,{x:.06,y:-.13,z:-.66,rz:.1});
       r(.5,{x:.2,y:-.26,z:-.42,ry:-.2});l(.5,{x:-.1,y:-.2,z:-.8,rz:.3});break;
     case 'shoot':case 'quick':
       r(.2,{x:-.1,y:-.12,z:-.68});l(.2,{x:-.12,y:-.09,z:-.82,rz:.12});
@@ -7320,6 +7322,7 @@ function updateViewModel(dt,moving){
   if(u.kIn)u.kIn.rotation.y=Math.PI/2+(myMoId==='reap'&&swingT<1?reapTwist(swingT):myMoId==='reap2'&&swingT<1?reapTwist2(swingT):0);
   if(u.arrow){const bd=myMo&&swingT<1&&myMo.v==='bowdraw',bs=myMo&&swingT<1&&myMo.v==='bowshot';u.arrow.visible=bd?swingT>.1:bs?swingT<.05:(swingT>.12&&swingT<.6);}
   if(u.bow){const on=u.arrow.visible&&myMo&&swingT<1&&(myMo.v==='bowdraw'||myMo.v==='bowshot');
+    if(u.A){const grip=!!(myMo&&swingT<1&&myMo.v==='bowdraw');u.R.userData.fistRow=grip?[0,-1,0]:null;try{pmFingers(u.A,u.A.fp.side.R,grip?'tight':'open');}catch(e){}}
     if(on){viewModel.updateMatrixWorld(true);const q=_bq1;u.R.getWorldQuaternion(q);const cq=_bq2;camera.getWorldQuaternion(cq);u.arrow.quaternion.copy(q.invert()).multiply(cq).multiply(_bqY);}
     else u.arrow.rotation.set(0,Math.PI,0);
     bowStringSync(u.bow,u.arrow,on);}
