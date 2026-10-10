@@ -593,6 +593,11 @@ body.touch.inv-open #hotbar{display:none}
 #buffs{display:none!important}
 #hideFx{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;backdrop-filter:grayscale(.65);-webkit-backdrop-filter:grayscale(.65);background:radial-gradient(ellipse at center,rgba(140,140,150,.22) 35%,rgba(60,60,70,.62) 100%)}
 #hideFx.on{opacity:1}
+#bowHud{position:fixed;left:50%;top:50%;transform:translate(-50%,-52px);text-align:center;pointer-events:none;color:#efe4cc;text-shadow:0 0 3px #000,0 1px 2px #000;font-size:13px;letter-spacing:.02em;white-space:nowrap}
+#bowHud[hidden]{display:none}
+#bowHud .bar{width:84px;height:4px;margin:4px auto 0;background:rgba(0,0,0,.45);border:1px solid rgba(239,228,204,.5);border-radius:2px;overflow:hidden}
+#bowHud .bar i{display:block;height:100%;width:0;background:#f3cf6a}
+#bowHud.full{color:#ffd86a}#bowHud.full .bar i{background:#ffd86a}
 #buffBar{position:fixed;display:flex;gap:4px;pointer-events:auto;z-index:4}
 #buffBar[hidden]{display:none}
 #buffBar .bf{position:relative;width:30px;height:30px;border-radius:5px;overflow:hidden;background:var(--bc);border:1px solid rgba(255,255,255,.35);box-shadow:0 2px 6px rgba(0,0,0,.4)}
@@ -627,6 +632,7 @@ body.talking #buffBar{visibility:hidden}
 <div id="app">
   <canvas id="c" tabindex="0" aria-label="오를란도 3D 월드"></canvas>
   <div id="hideFx" aria-hidden="true"></div>
+  <div id="bowHud" hidden><span></span><div class="bar"><i></i></div></div>
   <div id="tags"></div>
 
   <div id="hud" hidden>
@@ -8392,7 +8398,7 @@ function fireProj(o){
   else if(o.arrow){m.geometry=new THREE.BufferGeometry();m.material.opacity=0;const ar=arrowMesh();ar.position.z=-.4;m.add(ar);m.scale.setScalar(1);}   // 활: 빛나는 구슬 대신 진짜 화살
   else m.scale.set(o.size,o.size,o.size*(o.size<.16?6:1.6));
   m.position.copy(start);m.lookAt(start.clone().add(dir));scene.add(m);
-  projs.push({m,vel:dir.multiplyScalar(o.speed),life:1.3,o,hit:new Set()});
+  projs.push({m,vel:dir.multiplyScalar(o.speed),life:o.life||1.3,o,hit:new Set()});
 }
 function endProj(p,i){
   VFX.burst(p.m.position,p.o.rim!=null?p.o.rim:p.o.color,p.o.size>=.18?18:7,p.o.size>=.18?4:2.5,.45,{mix:0xffffff});
@@ -8451,17 +8457,20 @@ function skillBusy(){return !!P&&((P.skN===swingN&&swingT<1)||!!P.dash);}
 // 동작을 끝까지 돌리지 않고 멈춰 두는 경우: 약탈자 처형 붙잡기, 활시위 당긴 채 유지
 function swingCap(){if(!P)return 1;if(P.reapHold&&myMoId==='reap1')return .97;if(P.bowDraw&&myMoId==='bdraw')return .99;return 1;}
 // 활 기본공격: 마우스를 누르면 시위를 당기기 시작하고, 떼면 쏜다. 오래 당길수록 치명타 확률이 오른다 (최대 +BOW_CRIT)
-const BOW_CRIT=.35;
+const BOW_CRIT=.35,BOW_DMG=[.6,1.6],BOW_SPD=[22,52],BOW_G=7,BOW_LIFE=[.8,1.8];   // 당김 0→1: 대미지 배율, 화살 속도, 중력(끝까지 당기면 0), 사거리(초)
+function bowStat(dp){return{dmg:BOW_DMG[0]+(BOW_DMG[1]-BOW_DMG[0])*dp,crit:dp*BOW_CRIT,spd:BOW_SPD[0]+(BOW_SPD[1]-BOW_SPD[0])*dp,g:BOW_G*(1-dp),life:BOW_LIFE[0]+(BOW_LIFE[1]-BOW_LIFE[0])*dp};}
+function bowHud(){const h=$('#bowHud');if(!h)return;const on=!!(P&&P.bowDraw&&myMoId==='bdraw'&&mode==='world');if(h.hidden!==!on)h.hidden=!on;if(!on)return;
+  const dp=bowDrawP(),s=bowStat(dp);h.firstChild.textContent=`대미지 ${Math.round(s.dmg*100)}% · 치명타 +${Math.round(s.crit*100)}%`;h.querySelector('.bar i').style.width=(dp*100).toFixed(0)+'%';h.classList.toggle('full',dp>=1);}
 function bowDrawP(){return P&&P.bowDraw&&myMoId==='bdraw'?clamp((swingT-.12)/.76,0,1):0;}
 function bowStart(){P.bowDraw={seen:tAll};swingT=0;swingN++;myMoId='bdraw';myMo=motionFor('bow','bdraw');}
-function bowCancel(){P.bowDraw=null;if(myMoId==='bdraw'){swingT=1;myMo=null;myMoId='';}}
+function bowCancel(){P.bowDraw=null;if(myMoId==='bdraw'){swingT=1;myMo=null;myMoId='';}bowHud();}
 function bowTick(){const D=P.bowDraw;if(!D)return;
   if(myMoId!=='bdraw'||P.hp<=0||!P.equip.weapon||JOBS[P.job].weapon!=='bow'){P.bowDraw=null;return;}   // 스킬 등으로 끊김
   if(tAll-D.seen>.3){bowCancel();return;}   // 창을 여는 동안 멈춰 있었으면 쏘지 않고 내린다
   D.seen=tAll;if(attackHeld)return;
   const dp=bowDrawP();P.bowDraw=null;const B=BASIC.bow;
   basicCd=B.cd*(P.equip.weapon&&JOBS[P.job].aspd||1)/(1+famLv()*.05*(P.famN||0));swingT=0;swingN++;myMoId='bshot';myMo=motionFor('bow','bshot');sfx('bow');
-  fireProj({color:B.color,speed:B.speed,size:B.size,mult:B.mult,arrow:true,opt:{crit:dp*BOW_CRIT}});}
+  const s=bowStat(dp);fireProj({color:B.color,speed:s.spd,size:B.size,mult:B.mult*s.dmg,arrow:true,g:s.g,life:s.life,opt:{crit:s.crit}});bowHud();}
 function basicAttackInner(){
   if(basicCd>0||!P||P.guardT>0||P.pushPrep||P.leap||skillBusy())return;
   if(P.deepToss&&tAll<P.deepToss)return; // 깊게 찌르기: 단검이 공중에 있는 동안은 칠 수 없다
@@ -8971,7 +8980,7 @@ function netFx(o){
 function playRemoteFx(d){
   const n=(v,a,b,def=0)=>clamp(num(v,def),a,b);
   const col=Math.floor(n(d.c,0,0xffffff,0xffffff));
-  if(d.k==='p'){sfx(n(d.g,0,20)>0?'bow':'cast',{x:n(d.x,-WB,WB),z:n(d.z,-WB,WB)},.45);
+  if(d.k==='p'){sfx(d.a||n(d.g,0,20)>0?'bow':'cast',{x:n(d.x,-WB,WB),z:n(d.z,-WB,WB)},.45);
     const dir=new THREE.Vector3(n(d.dx,-1,1),n(d.dy,-1,1),n(d.dz,-1,1));if(dir.lengthSq()<.01)return;
     fireProj({visual:true,start:new THREE.Vector3(n(d.x,-WB,WB),n(d.y,-50,200),n(d.z,-WB,WB)),dir,speed:n(d.sp,5,80,30),size:n(d.s,.05,.6,.2),color:col,g:n(d.g,0,20),...(d.r!=null?{rim:n(d.r,0,0xffffff,0)}:{}),...(d.a?{arrow:true}:{})});
   }else if(d.k==='r'){spawnRing(col,new THREE.Vector3(n(d.x,-WB,WB),0,n(d.z,-WB,WB)),n(d.s,.5,8,2),n(d.d,.1,2,.5));}
@@ -9310,7 +9319,7 @@ function updateWorld(dt){
   // 재사용 대기
   {basicCd=Math.max(0,basicCd-dt*(P.buffs.rage?1.4:1));for(const k in cds)cds[k]=Math.max(0,cds[k]-dt);}
   if(P.buffs.rage){if(P.hp>1)P.hp=Math.max(1,P.hp-P.maxhp*.03*dt);P.rageFx=(P.rageFx||0)+dt;if(P.rageFx>.25){P.rageFx=0;const q=player.position;VFX.burst(new THREE.Vector3(q.x,q.y+1,q.z),0xd83020,3,1.2,.45,{up:.6});}}
-  if(P.bowDraw)bowTick();else if(attackHeld)basicAttack();
+  if(P.bowDraw)bowTick();else if(attackHeld)basicAttack();bowHud();
   // 회복
   hurtT+=dt;
   const inV=z==='village'||z==='town';
