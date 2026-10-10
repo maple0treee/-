@@ -1697,7 +1697,7 @@ const SKILLS={
     {id:'meteor',name:'메테오',req:35,mp:30,cd:14,type:'zone',mult:4,radius:6,delay:.9,color:0xff5a1f,desc:'하늘에서 운석을 떨어뜨린다. 공격력 400%'}],
   archer:[
     {id:'rapid',name:'속사',req:1,mp:6,cd:12,type:'buff',buff:{draw:2},dur:6,desc:'6초 동안 시위를 두 배 빠르게 당긴다'},
-    {id:'roll',name:'구르기',req:2,mp:5,cd:6,type:'dash',dist:4.5,ddur:.6,roll:true,mult:0,color:0xf5e2b0,desc:'앞으로 구른다. 다음 화살의 치명타 피해 2.2배'}],
+    {id:'roll',name:'구르기',req:2,mp:5,cd:6,type:'dash',dist:4.5,ddur:.6,roll:true,moveDir:true,mult:0,color:0xf5e2b0,desc:'앞으로 구른다. 다음 화살의 치명타 피해 2.2배'}],
   hunter:[
     {id:'trap',name:'덫',req:30,mp:10,cd:10,type:'zone',mult:.8,radius:3,stun:3,delay:.2,color:0xc9a46a,desc:'조준한 곳의 적을 3초 동안 묶는다'},
     {id:'venom',name:'독화살',req:32,mp:10,cd:5,type:'proj',mult:1.4,dot:[.6,5],speed:45,size:.12,color:0x9be05a,desc:'140% 피해, 5초 동안 중독'},
@@ -3953,7 +3953,7 @@ function shdApply(mesh,st){const D=mesh&&mesh.userData.stick&&mesh.userData.stic
   for(const m of [D.sc,D.pa])if(m)m.traverse(o=>{if(o.isMesh)o.visible=true;});}
 function kiteShield(){return makeShield('tower',0);}
 // 활시위 당기기: d만큼(활 기준) 시위 가운데를 뒤로 끌어 두 토막이 V자가 된다
-const _bv1=new THREE.Vector3(),_bv2=new THREE.Vector3(),_bq1=new THREE.Quaternion(),_bq2=new THREE.Quaternion(),_bz=new THREE.Vector3(0,0,1),_bqY=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI);
+const _rv=new THREE.Vector3(),_ay=new THREE.Vector3(0,1,0),_bv1=new THREE.Vector3(),_bv2=new THREE.Vector3(),_bq1=new THREE.Quaternion(),_bq2=new THREE.Quaternion(),_bz=new THREE.Vector3(0,0,1),_bqY=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI);
 function setBowDraw(bow,d,ny=0){const s=bow&&bow.userData.string;if(!s)return;if(d<.01){d=0;ny=0;}if(s.d===d&&s.ny===ny)return;s.d=d;s.ny=ny;
   for(const [m,sg] of [[s.up,1],[s.dn,-1]]){const h=sg*s.half-ny;const L=Math.hypot(h,d);m.scale.y=L;m.position.set(0,(sg*s.half+ny)/2,-d/2);m.rotation.x=sg*Math.atan2(d,Math.abs(h));}}
 // 시위를 화살 끝(시위 손)에 걸어 늘인다: 화살 끝이 활 기준 어디에 있는지 재서 시위 가운데를 그곳으로
@@ -4089,8 +4089,10 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   if(S.fwd){q=q.slice();if(atk&&mo&&mo.k3)q[8]=(q[8]||0)+1.5;else if(!atk)q[8]=0;}
   // 몸 전체: 회전, 뜨기, 웅크리기
   {const sp=ex?ex.sp:0,lf=ex?Math.max(0,ex.lf):0,cr=ex?ex.cr:0;
-    const rl=ex&&ex.rl?ex.rl:0,RH=.78-cr*.3;   // 앞구르기: 몸 가운데를 축으로 x축 회전 (웅크릴수록 축이 낮아진다)
-    S.rollY=rl?RH*(1-Math.cos(rl)):0;S.body.rotation.set(rl,sp,0);S.body.position.y=lf-cr*.32+S.rollY;S.body.position.z=rl?-RH*Math.sin(rl):0;
+    const rl=ex&&ex.rl?ex.rl:0,RH=.78-cr*.3,phi=mo&&mo.dir!=null?mo.dir*Math.PI/4:0;   // 구르기: 몸 가운데를 축으로, 구르는 방향에 직각인 축으로 회전 (웅크릴수록 축이 낮아진다)
+    S.rollY=rl?RH*(1-Math.cos(rl)):0;S.rollAng=rl;S.rollPhi=phi;S.spin=sp;
+    _bq1.setFromAxisAngle(_rv.set(Math.cos(phi),0,-Math.sin(phi)),rl);S.body.quaternion.setFromAxisAngle(_ay,sp).premultiply(_bq1);
+    S.body.position.set(rl?-RH*Math.sin(phi)*Math.sin(rl):0,lf-cr*.32+S.rollY,rl?-RH*Math.cos(phi)*Math.sin(rl):0);
     if(cr>0&&!air){S.L.hip.rotation.x+=-cr*1.3;S.R.hip.rotation.x+=-cr*1.1;S.L.knee.rotation.x+=cr*2.4;S.R.knee.rotation.x+=cr*2.2;}
     if(lf>.15&&!air){S.L.hip.rotation.x=-.6;S.L.knee.rotation.x=1.1;S.R.hip.rotation.x=.1;S.R.knee.rotation.x=.6;}
     const kr=ex&&ex.kr?ex.kr:0;if(kr>0){S.R.hip.rotation.x=-kr*1.35;S.R.knee.rotation.x=kr*1.5;S.L.knee.rotation.x=Math.max(S.L.knee.rotation.x,kr*.2);}}
@@ -4103,7 +4105,7 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   S.AL.sh.rotation.set(q[3]-(S.style==='bow'||S.shield?sw*.3:sw),twL,q[4]-(air&&!atk?.4:0));S.AL.el.rotation.x=q[5];
   S.upper.rotation.set(q[7]+k*.08,q[6],0);
   S.AR.hand.rotation.y=ex&&ex.wy?ex.wy:0;S.AR.hand.rotation.z=0;if(S.fwd&&S.w)S.w.rotation.y=-THIEF_KY+(atk&&mo&&mo.v==='reap'?reapTwist(swing):atk&&mo&&mo.v==='reapOut'?reapTwist2(swing):0);
-  S.head.position.y=.88+Math.sin(t*2)*.012*(1-k);S.head.rotation.y=-q[6]*.6;S.head.rotation.x=ex&&ex.rl>.2&&ex.rl<6?.7:0;   // 구르는 동안 턱 당기기
+  S.head.position.y=.88+Math.sin(t*2)*.012*(1-k);S.head.rotation.y=-q[6]*.6;S.head.rotation.x=ex&&ex.rl>.2&&ex.rl<6?.7:0;   // 구르는 동안 턱 당기기 (몸 축 방향과 무관하게 앞으로)
   // 활과 지팡이는 손 방향과 상관없이 세워 든다
   if(S.style==='bow'){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.w.rotation.set(-lx,0,-S.AL.sh.rotation.z);
     if(S.nock)S.nock.visible=atk&&(mo&&mo.k3&&mo.v==='bowdraw'?swing>.1:mo&&mo.k3&&mo.v==='bowshot'?swing<.05:(swing>.15&&swing<.6));
@@ -4257,7 +4259,7 @@ function pmAim(A,b,c,dir){
 // 모델 공간 축으로 뼈를 돌린다
 function pmRot(A,b,axis,ang){if(!b||!ang)return;const pq=new THREE.Quaternion();b.parent.getWorldQuaternion(pq);const rq=new THREE.Quaternion();A.root.getWorldQuaternion(rq);pq.premultiply(rq.invert());
   const d=_q2.setFromAxisAngle(axis,ang);b.quaternion.premultiply(pq.clone().invert().multiply(d).multiply(pq));}
-const _down=new THREE.Vector3(0,-1,0),_ax={x:new THREE.Vector3(1,0,0),y:new THREE.Vector3(0,1,0)};
+const _rax=new THREE.Vector3(),_down=new THREE.Vector3(0,-1,0),_ax={x:new THREE.Vector3(1,0,0),y:new THREE.Vector3(0,1,0)};
 // 막대 마디(j)의 아래 방향(-Y)을 메시(g) 기준 방향으로
 function pmStickDir(g,j,out){const q=new THREE.Quaternion();j.getWorldQuaternion(q);const gq=new THREE.Quaternion();g.getWorldQuaternion(gq);q.premultiply(gq.invert());return out.copy(_down).applyQuaternion(q);}
 function pmPose(g,A,dt){
@@ -4267,8 +4269,8 @@ function pmPose(g,A,dt){
   const hips=A.by('J_Bip_C_Hips');
   // 몸 전체: 회전·뜨기·웅크리기 (막대 몸 높이 0.96 기준)
   hips.position.y=A.hipRestY+(S.body.position.y-(S.rollY||0))*(A.hipH/.96)/A.root.scale.y;   // 앞구르기 보정값은 뺀다 (애니 몸은 엉덩이뼈를 축으로 돌아서 필요 없다)
-  pmRot(A,hips,_ax.y,S.body.rotation.y);
-  if(S.body.rotation.x)pmRot(A,hips,_ax.x,S.body.rotation.x);
+  pmRot(A,hips,_ax.y,S.spin||0);
+  if(S.rollAng)pmRot(A,hips,_rax.set(Math.cos(S.rollPhi||0),0,-Math.sin(S.rollPhi||0)),S.rollAng);
   // 허리: 숙이기(x)·비틀기(y)를 등뼈와 가슴에 나눠서
   const ux=S.upper.rotation.x,uy=S.upper.rotation.y;
   for(const [n,w] of [['J_Bip_C_Spine',.45],['J_Bip_C_Chest',.35],['J_Bip_C_UpperChest',.2]]){const b=A.by(n);if(!b)continue;pmRot(A,b,_ax.x,ux*w);pmRot(A,b,_ax.y,uy*w);}
@@ -4458,7 +4460,7 @@ const MOTION_OF={
   pierce2:{v:'shoot',dur:.8,c:.35},blast:{v:'quick',n:1,dur:.5,a:1.25},precise:{v:'channel',dur:.8,a:.6,sd:-1},scatter:{v:'multi',n:2,dur:.75},doom:{v:'shoot',dur:1.15,c:.38,a:1.35},
 };
 // 활 기본공격: 시위 당기기(누르고 있는 동안 .99에서 멈춘다) → 쏘기
-Object.assign(MOTION_OF,{bdraw:{v:'bowdraw',dur:.8},bshot:{v:'bowshot',dur:.42},rapid:{v:'pump',dur:.5,a:.7},roll:{v:'roll',dur:.7}});
+Object.assign(MOTION_OF,{bdraw:{v:'bowdraw',dur:.8},bshot:{v:'bowshot',dur:.42},rapid:{v:'pump',dur:.5,a:.7},roll:{v:'roll',dur:.7},roll0:{v:'roll',dur:.7,dir:0},roll1:{v:'roll',dur:.7,dir:1},roll2:{v:'roll',dur:.7,dir:2},roll3:{v:'roll',dur:.7,dir:3},roll4:{v:'roll',dur:.7,dir:4},roll5:{v:'roll',dur:.7,dir:5},roll6:{v:'roll',dur:.7,dir:6},roll7:{v:'roll',dur:.7,dir:7}});
 const M3=['rx','rz','re','lx','lz','le','tw','ln','wr','sp','lf','cr','wy','kr','rl'];
 // 3인칭 열쇠 자세들
 function verb3(v,o,style){
@@ -5040,7 +5042,7 @@ function reapTwist(p){return -1.57*(p<.42?0:p<.75?(p-.42)/.33:p<.92?1-(p-.75)/.1
 const _motionCache={};
 function motionFor(style,id){
   const o=MOTION_OF[id];if(!o)return null;const key=style+':'+id;
-  if(!_motionCache[key]){const k3=verb3(o.v,o,style),fp=verbFP(o.v,o,style);_motionCache[key]={k3,fp,dur:o.dur||.6,v:o.v,two:!!o.two};}
+  if(!_motionCache[key]){const k3=verb3(o.v,o,style),fp=verbFP(o.v,o,style);_motionCache[key]={k3,fp,dur:o.dur||.6,v:o.v,two:!!o.two,dir:o.dir};}
   return _motionCache[key];
 }
 // 열쇠 사이를 부드럽게 섞기 (빠진 값은 쉬는 자세)
@@ -8611,7 +8613,10 @@ function useSkillInner(i){
       if(S.prep){P.pushPrep={t:S.prep,S,pw,opt,fx:0};sfx('block');fxAt=player.position.clone().add(new THREE.Vector3(0,1,0));break;}
       let f=flatFwd();if(S.moveDir){const mv=moveDir();if(mv)f=mv;}const dd=S.ddur||.25;
       P.dash={t:dd,dur:dd,dist:S.dist,mult:S.mult*pw,opt,hit:new Set(),f,push:!!S.push,roll:!!S.roll};if(S.push)P.dashFx=S.color;if(S.moveDir)P.dashFx=0xdff4ff;
-      if(S.roll){bowCancel();P.buffs.roll={v:1,t:8,max:8};sfx('whoosh',null,.8,1.1);dustPuffs(player.position.clone(),.6,6);setTimeout(()=>{if(mode==='world'&&P)dustPuffs(player.position.clone(),.7,7);},520);}}invuln=Math.max(invuln,.35);fxAt=player.position.clone().add(new THREE.Vector3(0,1,0));break;
+      if(S.roll){bowCancel();P.buffs.roll={v:1,t:8,max:8};P.dashFx=null;
+        // 구르는 방향(몸 기준 각도)을 45도 단위로 모션 id에 담는다: 다른 플레이어도 같은 방향으로 구르는 걸 본다
+        const fw=flatFwd(),rx=Math.cos(cam.yaw),rz=-Math.sin(cam.yaw),phi=Math.atan2(-(f.x*rx+f.z*rz),f.x*fw.x+f.z*fw.z),k=((Math.round(phi/(Math.PI/4))%8)+8)%8;
+        myMoId='roll'+k;myMo=motionFor(JOBS[P.job].weapon,myMoId);sfx('whoosh',null,.8,1.1);dustPuffs(player.position.clone(),.6,6);setTimeout(()=>{if(mode==='world'&&P)dustPuffs(player.position.clone(),.7,7);},520);}}invuln=Math.max(invuln,.35);fxAt=player.position.clone().add(new THREE.Vector3(0,1,0));break;
     case 'barb':fxAt=barbSkill(S,id,pw,opt,bc);break;
     case 'fowl':fxAt=fowlSkill(S,id,pw,opt);break;
     case 'loot':fxAt=lootSkill(S,id,pw,opt);break;
@@ -9316,7 +9321,8 @@ function updatePlayer(dt){
   const bobY=(moving&&jumpY===0?Math.sin(cam.bob)*.06:0)-(cam.land||0);
   camera.rotation.set(cam.pitch,cam.yaw,0);
   let rollA=0,rollCr=0;if(myMo&&myMo.v==='roll'&&swingT<1){const v=blendKeys(myMo.k3,swingT,{},M3);rollA=v[14]||0;rollCr=v[11]||0;}   // 1인칭 구르기: 시야도 같이 한 바퀴
-  if(rollA&&!cam.third)camera.rotation.set(cam.pitch-rollA-(rollA>.2&&rollA<6?.5:0),cam.yaw,0);
+  const rollPhi=myMo&&myMo.dir!=null?myMo.dir*Math.PI/4:0;
+  if(rollA&&!cam.third){camera.quaternion.multiply(_bq1.setFromAxisAngle(_rv.set(-Math.cos(rollPhi),0,Math.sin(rollPhi)),rollA));if(rollA>.2&&rollA<6)camera.quaternion.multiply(_bq2.setFromAxisAngle(_rv.set(1,0,0),-.5));}
   if(cam.third){
     player.visible=true;if(viewModel)viewModel.visible=false;
     {const u=player.userData;u.sitK=Math.max(0,Math.min(1,(u.sitK||0)+(sitting?dt:-dt)*4));}
@@ -9331,7 +9337,8 @@ function updatePlayer(dt){
   }else{
     player.visible=false;if(viewModel)viewModel.visible=true;
     camera.position.set(player.position.x,player.position.y+1.62+bobY-(player.userData.sitK||0)*.95,player.position.z);
-    if(rollA){const f=flatFwd(),RH=.78-rollCr*.3-rollCr*.32,HR=.84-rollCr*.42;camera.position.set(player.position.x+f.x*HR*Math.sin(rollA),player.position.y+RH+HR*Math.cos(rollA),player.position.z+f.z*HR*Math.sin(rollA));}
+    if(rollA){const f=flatFwd(),RH=.78-rollCr*.3-rollCr*.32,HR=.84-rollCr*.42,lx=HR*Math.sin(rollPhi)*Math.sin(rollA),lz=HR*Math.cos(rollPhi)*Math.sin(rollA),rx=Math.cos(cam.yaw),rz=-Math.sin(cam.yaw);
+      camera.position.set(player.position.x-lx*rx+lz*f.x,player.position.y+RH+HR*Math.cos(rollA),player.position.z-lx*rz+lz*f.z);}
     {const u=player.userData;u.sitK=Math.max(0,Math.min(1,(u.sitK||0)+(sitting?dt:-dt)*4));}
     updateViewModel(dt,moving&&jumpY===0);
   }
