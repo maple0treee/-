@@ -1642,7 +1642,7 @@ const SKILLS={
     {id:'guardcut',needSword:true,name:'막고 치기',req:32,mp:12,cd:8,type:'block',dur:.5,pct:.12,color:0xbfe3ff,desc:'검으로 몸을 막아 0.5초 동안 적의 공격을 완전히 막는다. 막아내면 HP를 12% 회복'},
     {id:'downcut',needSword:true,name:'내려찍기',req:35,mp:14,cd:6,type:'melee',single:true,mult:3.6,range:3,desc:'검을 내려쳐 바로 앞의 적 하나에게 360% 피해'}],
   swordmaster:[
-    {id:'thrust2',name:'찌르기',req:60,mp:14,cd:5,type:'melee',single:true,needSword:true,mult:4.6,range:3.2,desc:'검으로 바로 앞의 적 하나에게 강력한 피해. 공격력 460%'},
+    {id:'thrust2',name:'찌르기2',req:60,mp:0,cd:0,type:'passive',desc:'(지속) 찌르기가 330% 피해로 5m까지 뻗어 일직선의 적을 모두 꿰뚫는다. 보스는 꿰뚫지 못하고 거기서 멈춘다'},
     {id:'guardstrike',name:'막기',req:62,mp:12,cd:9,type:'block',counter:true,needSword:true,dur:.5,pct:0,cmult:2.8,crange:4.2,cheal:.15,color:0xbfe3ff,desc:'칼을 가로로 눕혀 0.5초 동안 적의 공격을 완전히 막는다. 막아내면 3초 동안 이 스킬이 쳐내기로 바뀐다 — 앞쪽 적들을 떨쳐내며 280% 피해, HP 15% 회복, 막기의 남은 재사용 시간 60% 감소'},
     {id:'dashcut',name:'돌진하며 베기',req:65,mp:14,cd:7,type:'dash',moveDir:true,needSword:true,mult:2.6,dist:10,desc:'움직이던 방향으로 돌진하며 지나친 적에게 260% 피해'},
     {id:'duel',name:'결투 신청',req:68,mp:20,cd:30,type:'buff',buff:{atk:1.25,def:1.25},dur:10,duel:30,needSword:true,desc:'10초 동안 공격력·방어력 25% 증가. 가장 가까운 몬스터와 주변 무작위 몬스터 2마리에 30초 동안 표식 — 표식 대상에게 주는 피해 20% 증가(보스는 10%)'},
@@ -8396,6 +8396,11 @@ function meleeHit(range,mult,o={}){
   return n;
 }
 // 바로 앞의 적 하나만
+// 찌르기2: 앞쪽 일직선(폭 1.2m)의 적을 가까운 순으로 모두 꿰뚫는다. 보스를 만나면 거기서 멈춘다
+function lineThrust(range,mult,o={}){const f=flatFwd(),q=player.position,list=[];
+  for(const m of alive()){const dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,al=dx*f.x+dz*f.z;if(al<-.2||al>range+m.r)continue;const side=Math.abs(dx*f.z-dz*f.x);if(side>.6+m.r)continue;list.push([al,m]);}
+  list.sort((a,b)=>a[0]-b[0]);let n=0;for(const [,m] of list){damageMonster(m,mult,o);n++;if(m.D.boss||m.D.dragon)break;}
+  if(n){const p=q.clone();p.y+=1.2;VFX.thrust(p,cam.yaw,0xdff4ff,{len:range,dur:.18});}return n;}
 function singleHit(range,mult,o={}){
   const f=flatFwd();let best=null,bd=1e9;
   for(const m of alive()){const dx=m.mesh.position.x-player.position.x,dz=m.mesh.position.z-player.position.z,d=Math.hypot(dx,dz);
@@ -8620,7 +8625,7 @@ function useSkillInner(i){
   const pw=1+.25*(lvl-1),opt={stun:S.stun,dot:S.dot,crit:S.crit,execute:S.execute,steal:S.steal,color:S.color};
   let fxAt=null;
   switch(S.type){
-    case 'melee':{const hits=S.hits||1,mo0=MOTION_OF[id]||{},hd=mo0.v==='chop'?mo0.dur*560:0;for(let h=0;h<hits;h++)setTimeout(()=>{if(mode==='world'){shared(()=>S.single?singleHit(S.range||2.8,S.mult*pw,opt):meleeHit(S.range||2.8,S.mult*pw,opt));}},h*140+hd);
+    case 'melee':{const hits=S.hits||1,mo0=MOTION_OF[id]||{},hd=mo0.v==='chop'?mo0.dur*560:0,t2=id==='thrust1'&&P.skills.thrust2;for(let h=0;h<hits;h++)setTimeout(()=>{if(mode==='world'){shared(()=>t2?lineThrust(5,S.mult*1.5*pw,opt):S.single?singleHit(S.range||2.8,S.mult*pw,opt):meleeHit(S.range||2.8,S.mult*pw,opt));}},h*140+hd);
       const f=flatFwd();fxAt=player.position.clone().add(new THREE.Vector3(f.x*1.8,1.2,f.z*1.8));spawnFx(0xffe0b0,fxAt,1.1,.25);break;}
     case 'front':{if(id==='swing')setTimeout(()=>{if(mode==='world'&&P&&P.hp>0)shared(()=>meleeHit(S.range,S.mult*pw,opt));},260);else shared(()=>meleeHit(S.range,S.mult*pw,opt));if(S.buff)for(const [k,v] of Object.entries(S.buff))P.buffs[k]={v:1+(v-1)*pw,t:S.dur};
       const f=flatFwd();fxAt=player.position.clone().add(new THREE.Vector3(f.x*1.6,1.1,f.z*1.6));break;}
@@ -8764,7 +8769,7 @@ function useItem(id){
 function useQuick(i){if(mode!=='world'||!P)return;const id=P.quick[i];if(!id){toast(`${i+1}번 칸에 등록된 아이템이 없어요`);return;}useItem(id);}
 function setQuick(i,id){if(!ITEMS[id]||ITEMS[id].kind!=='use')return;const cur=P.quick.indexOf(id);if(cur>=0)P.quick[cur]=null;P.quick[i]=id;invDirty();save();}
 // 지금 직업에 없는 스킬은 SP를 돌려주고 칸에서 뺀다
-const SKILL_VER=8;
+const SKILL_VER=9;
 function fixSkills(why){const valid=new Set(treeOf(P.job).map(s=>s.id));let back=0;
   // 전직하며 내려놓은 스킬은 몇 단계였는지 기록해 둔다 (스킬창의 지난 직업 탭에서 본다)
   const inChain=new Set(jobChain(P.job).flatMap(j=>SKILLS[j].map(s=>s.id)));P.pastSkills=P.pastSkills||{};
