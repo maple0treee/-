@@ -4139,9 +4139,12 @@ const _pmOl={};
 const PM_COVER_GLSL='attribute float cover;uniform float uMask;float pmCov(float c,float m){float r=0.;for(int i=0;i<8;i++){float b=pow(2.,float(i));if(mod(floor(c/b),2.)>.5&&mod(floor(m/b),2.)>.5)r=1.;}return r;}\n';
 const PM_BIT={shirt:1,pants:2,shoes:4,a0:8,a1:16,a2:32,b0:64,b1:128};
 function pmMaskOf(show){let m=0;for(const k in PM_BIT)if(show.has(k))m|=PM_BIT[k];return m;}
+const PM_OL_PUSH=.025;
 function pmOutline(c,w,morph,mask){const k=c+'_'+w+(morph?'m':'')+(mask!=null?'c'+mask:'');if(_pmOl[k])return _pmOl[k];const m=new THREE.MeshBasicMaterial({color:c,side:THREE.BackSide,skinning:true,morphTargets:!!morph});
   m.onBeforeCompile=s=>{if(mask!=null){s.uniforms.uMask={value:mask};s.vertexShader=PM_COVER_GLSL+s.vertexShader.replace('#include <begin_vertex>','vec3 transformed = position + normal * '+w.toFixed(4)+' - normal*.014*pmCov(cover,uMask);');}
-    else s.vertexShader=s.vertexShader.replace('#include <begin_vertex>','vec3 transformed = position + normal * '+w.toFixed(4)+';');};m.customProgramCacheKey=()=>'pmol'+w+(mask!=null?'c':'');return _pmOl[k]=m;}
+    else s.vertexShader=s.vertexShader.replace('#include <begin_vertex>','vec3 transformed = position + normal * '+w.toFixed(4)+';');
+    // 외곽선 껍질을 카메라 반대쪽으로 살짝 밀어, 얼굴 안쪽(눈가·눈썹)으로 비쳐 보풀처럼 보이지 않고 윤곽에만 남게
+    s.vertexShader=s.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\nmvPosition.xyz+=normalize(mvPosition.xyz)*'+PM_OL_PUSH.toFixed(4)+';gl_Position=projectionMatrix*mvPosition;');};m.customProgramCacheKey=()=>'pmol'+w+(mask!=null?'c':'')+'p';return _pmOl[k]=m;}
 // 투구를 쓰면 머리카락을 투구 안쪽(반구)으로 눌러 넣는다 (뾰족 머리·긴 머리가 투구를 뚫고 나오지 않게)
 function pmHelmBox(geo){if(geo.userData.hb)return geo.userData.hb;const p=geo.attributes.position.array,n=p.length/3,xs=[],ys=[],zs=[];
   for(let i=0;i<n;i++){xs.push(p[i*3]);ys.push(p[i*3+1]);zs.push(p[i*3+2]);}
@@ -4181,7 +4184,7 @@ function pmMat(d,geo,ap,tint,mask){const k=geo.userData.kind,morph=geo.userData.
     if(/^(a1|a2|h1|h2|b1)$/.test(pc))return new THREE.MeshStandardMaterial({vertexColors:true,skinning:true,color:tint||0xffffff,metalness:.45,roughness:.36});
     return new THREE.MeshToonMaterial({vertexColors:true,skinning:true,color:tint||0xffffff});}
   if(k==='hairvc')return new THREE.MeshToonMaterial({vertexColors:true,skinning:true,color:new THREE.Color(ap.h).multiplyScalar(1.15)});
-  const m=new THREE.MeshToonMaterial({map:d.tex,skinning:true,morphTargets:morph,transparent:k==='blend',alphaTest:k==='mask'?.5:0,depthWrite:k!=='blend'});
+  const m=new THREE.MeshToonMaterial({map:d.tex,skinning:true,morphTargets:morph,transparent:k==='blend',alphaTest:k==='mask'?.5:0,alphaToCoverage:k==='mask',depthWrite:k!=='blend'});
   if(k==='hair'){m.color=new THREE.Color(ap.h).multiplyScalar(1.6);}
   if(geo.userData.cover&&mask){m.onBeforeCompile=s=>{s.uniforms.uMask={value:mask};s.vertexShader=PM_COVER_GLSL+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ntransformed -= objectNormal*.014*pmCov(cover,uMask);');};m.customProgramCacheKey=()=>'pmcov'+mask;}
   if(k==='iris'){const T=new THREE.Color(ap.e).convertSRGBToLinear();m.onBeforeCompile=s=>{s.uniforms.uTint={value:T};
