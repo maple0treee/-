@@ -110,7 +110,8 @@
     function hurt(m, dmg, from) {
       if (m.boss && m.vuln > 0) dmg *= 1.6;
       m.hp -= dmg; m.dirty = true; m.lastHit = Date.now();
-      if (from) { m.hitBy.add(from); if (!m.boss) m.aggroOn = from; }
+      // 도발당한 몬스터는 다른 사람이 때려도 노리는 대상을 바꾸지 않는다
+      if (from) { m.hitBy.add(from); if (!m.boss && !(m.taunt > 0)) m.aggroOn = from; }
       if (m.hp <= 0) kill(m);
     }
 
