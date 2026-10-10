@@ -3947,10 +3947,13 @@ function shdApply(mesh,st){const D=mesh&&mesh.userData.stick&&mesh.userData.stic
   for(const m of [D.sc,D.pa])if(m)m.traverse(o=>{if(o.isMesh)o.visible=true;});}
 function kiteShield(){return makeShield('tower',0);}
 // 활시위 당기기: d만큼(활 기준) 시위 가운데를 뒤로 끌어 두 토막이 V자가 된다
-const _bv1=new THREE.Vector3(),_bv2=new THREE.Vector3(),_bq1=new THREE.Quaternion(),_bq2=new THREE.Quaternion(),_bz=new THREE.Vector3(0,0,1);
-function setBowDraw(bow,d){const s=bow&&bow.userData.string;if(!s||s.d===d)return;s.d=d;
-  const L=Math.hypot(s.half,d),ang=Math.atan2(d,s.half);
-  for(const [m,sg] of [[s.up,1],[s.dn,-1]]){m.scale.y=L;m.position.set(0,sg*s.half/2,-d/2);m.rotation.x=sg*ang;}}
+const _bv1=new THREE.Vector3(),_bv2=new THREE.Vector3(),_bq1=new THREE.Quaternion(),_bq2=new THREE.Quaternion(),_bz=new THREE.Vector3(0,0,1),_bqY=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI);
+function setBowDraw(bow,d,ny=0){const s=bow&&bow.userData.string;if(!s)return;if(d<.01){d=0;ny=0;}if(s.d===d&&s.ny===ny)return;s.d=d;s.ny=ny;
+  for(const [m,sg] of [[s.up,1],[s.dn,-1]]){const h=sg*s.half-ny;const L=Math.hypot(h,d);m.scale.y=L;m.position.set(0,(sg*s.half+ny)/2,-d/2);m.rotation.x=sg*Math.atan2(d,Math.abs(h));}}
+// 시위를 화살 끝(시위 손)에 걸어 늘인다: 화살 끝이 활 기준 어디에 있는지 재서 시위 가운데를 그곳으로
+function bowStringSync(bow,nock,on){if(!bow||!nock)return;if(!on){setBowDraw(bow,0);return;}
+  bow.updateWorldMatrix(true,false);nock.updateWorldMatrix(true,false);const p=bow.worldToLocal(nock.getWorldPosition(_bv1));const z0=bow.userData.string.g.position.z;
+  setBowDraw(bow,Math.max(0,z0-p.z),clamp(p.y,-bow.userData.string.half*.8,bow.userData.string.half*.8));}
 // 활 당김 정도 (활 기준 거리): 당기기 동작은 서서히, 쏘기 동작은 처음에 탁 풀린다
 function bowPull(mo,swing){if(!mo||swing>=1)return 0;if(mo.v==='bowdraw')return clamp((swing-.12)/.76,0,1)*.42;if(mo.v==='bowshot')return swing<.05?.42*(1-swing/.05):0;return 0;}
 function arrowMesh(){
@@ -4097,10 +4100,10 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   // 활과 지팡이는 손 방향과 상관없이 세워 든다
   if(S.style==='bow'){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.w.rotation.set(-lx,0,-S.AL.sh.rotation.z);
     if(S.nock)S.nock.visible=atk&&(mo&&mo.k3&&mo.v==='bowdraw'?swing>.1:mo&&mo.k3&&mo.v==='bowshot'?swing<.05:(swing>.15&&swing<.6));
-    setBowDraw(S.w.children[0],atk&&mo&&mo.k3?bowPull(mo,swing):0);
-    if(S.nock&&S.nock.visible){if(mo&&mo.k3&&(mo.v==='bowdraw'||mo.v==='bowshot')){   // 시위 손에서 활 손 쪽으로: 화살이 활에 걸쳐 있게
-        mesh.updateMatrixWorld(true);const a=_bv1,bq=_bv2;S.AR.hand.getWorldPosition(a);S.AL.hand.getWorldPosition(bq);const q=_bq1;S.AR.hand.getWorldQuaternion(q);const d=bq.sub(a);
-        if(d.lengthSq()>1e-4)S.nock.quaternion.copy(q.invert()).multiply(_bq2.setFromUnitVectors(_bz,d.normalize()));}
+    S.bowDrawOn=!!(atk&&mo&&mo.k3&&(mo.v==='bowdraw'?swing>.1:mo.v==='bowshot'?swing<.05:false));
+    if(S.nock&&S.nock.visible){if(mo&&mo.k3&&(mo.v==='bowdraw'||mo.v==='bowshot')){   // 화살은 몸이 보는 앞쪽을 똑바로 향한다
+        mesh.updateMatrixWorld(true);const q=_bq1;S.AR.hand.getWorldQuaternion(q);const mq=_bq2;mesh.getWorldQuaternion(mq);
+        S.nock.quaternion.copy(q.invert()).multiply(mq);}
       else{const rx=S.AR.sh.rotation.x+S.AR.el.rotation.x;S.nock.rotation.set(-rx,0,0);}}}
   if(S.shield){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.shield.rotation.set(-lx,-twL+(atk&&mo&&mo.v==='pedge'?pedgeTwist(swing):0),-S.AL.sh.rotation.z);}
   if(S.style==='staff'){const rx=S.AR.sh.rotation.x+S.AR.el.rotation.x;S.w.rotation.set(-rx*.82,0,-S.AR.sh.rotation.z*.8);}
@@ -4273,12 +4276,14 @@ function pmPose(g,A,dt){
   // 무기를 쥔 손: 주먹 축을 무기 축에 맞추고, 무기는 주먹 가운데로
   for(const [W,proxy,sd] of A.hold){if(!W||!proxy)continue;
     const H=A.by('J_Bip_'+sd+'_Hand'),gi=A.grip[sd];if(!H||!gi)continue;
+    if(W===S.nock)H.updateMatrixWorld(true);   // 활 화살: 손목은 그대로 두고 주먹 가운데로만 옮긴다
+    else{
     // 무기 축 (무기의 +Y)
     const wq=new THREE.Quaternion();W.getWorldQuaternion(wq);const wAx=new THREE.Vector3(0,1,0).applyQuaternion(wq);
     const hq=new THREE.Quaternion();H.getWorldQuaternion(hq);const gAx=new THREE.Vector3().fromArray(gi.a).applyQuaternion(hq).normalize();
     if(gAx.dot(wAx)<-.2)wAx.negate();
     const R=new THREE.Quaternion().setFromUnitVectors(gAx,wAx);const pq=new THREE.Quaternion();H.parent.getWorldQuaternion(pq);
-    H.quaternion.premultiply(pq.clone().invert().multiply(R).multiply(pq));H.updateMatrixWorld(true);
+    H.quaternion.premultiply(pq.clone().invert().multiply(R).multiply(pq));H.updateMatrixWorld(true);}
     const c=new THREE.Vector3().fromArray(gi.c).applyMatrix4(H.matrixWorld);
     // 프록시(무기 묶음)의 위치: 막대 손 대신 애니 주먹 가운데
     const src=proxy.userData.src;const sq=new THREE.Quaternion();src.getWorldQuaternion(sq);
@@ -4763,13 +4768,14 @@ function verb3(v,o,style){
         k(t0+(t1-t0)*.85,{rx:-2.5,rz:.25,re:-1.0,lx:-2.6,lz:.05,tw:.3,ln:-.35,lf:j*.5});}
       break;
     case 'bowdraw':   // 양궁: 옆으로 서서 활팔을 쭉 뻗고, 시위 손을 뺨(앵커)까지 끌어온다
-      k(.12,{rx:-1.3,rz:-.15,re:-1.0,lx:-1.15,lz:.1,le:-.35,tw:.15,cr:.02});
-      k(.88,{rx:-1.5,rz:-.05,re:-2.45,lx:-1.58,lz:.02,le:0,tw:.46,ln:.03,cr:.03});
-      k(.995,{rx:-1.5,rz:-.05,re:-2.45,lx:-1.58,lz:.02,le:0,tw:.46,ln:.03,cr:.03});break;
+      k(.12,{rx:-1.35,rz:-.15,re:-1.0,lx:-1.3,lz:.1,le:-.3,tw:.15,cr:.02});
+      k(.5,{rx:-1.58,rz:-.1,re:-1.8,lx:-1.6,lz:.05,le:-.1,tw:.34,ln:.02,cr:.03});
+      k(.88,{rx:-1.62,rz:-.05,re:-2.5,lx:-1.72,lz:.02,le:0,tw:.46,ln:.03,cr:.03});
+      k(.995,{rx:-1.62,rz:-.05,re:-2.5,lx:-1.72,lz:.02,le:0,tw:.46,ln:.03,cr:.03});break;
     case 'bowshot':   // 놓기: 시위 손이 뒤로 튕겨 열리고, 활팔은 살짝 앞으로 밀린 뒤 내려온다
-      k(.001,{rx:-1.5,rz:-.05,re:-2.45,lx:-1.58,lz:.02,le:0,tw:.46,ln:.03,cr:.03});
-      k(.1,{rx:-1.45,rz:.35,re:-1.05,lx:-1.62,lz:0,le:0,tw:.48,ln:.0,cr:.02});
-      k(.5,{rx:-1.25,rz:.2,re:-1.3,lx:-1.45,lz:.05,le:-.15,tw:.3,cr:0});break;
+      k(.001,{rx:-1.62,rz:-.05,re:-2.5,lx:-1.72,lz:.02,le:0,tw:.46,ln:.03,cr:.03});
+      k(.1,{rx:-1.55,rz:.35,re:-1.1,lx:-1.76,lz:0,le:0,tw:.48,ln:.0,cr:.02});
+      k(.5,{rx:-1.3,rz:.2,re:-1.3,lx:-1.5,lz:.05,le:-.15,tw:.3,cr:0});break;
     case 'quick':
       k(.3,{rx:-1.5,rz:-.2,re:-2.0*a,lx:-1.55,lz:.05,tw:.3});
       k(.42,{rx:-1.5,rz:.25,re:-1.1,lx:-1.55,lz:.05,tw:.3,ln:.05});break;
@@ -4981,13 +4987,13 @@ function verbFP(v,o,style){
         r(t0+(t1-t0)*.8,{x:.1,y:-.02,z:-.55,rx:.5});l(t0+(t1-t0)*.8,{x:-.1,y:-.02,z:-.55,rx:.5});}
       break;
     case 'bowdraw':
-      r(.12,{x:-.1,y:-.12,z:-.7});l(.12,{x:-.12,y:-.09,z:-.82,rz:.12});
-      r(.88,{x:.17,y:-.16,z:-.36,ry:-.35});l(.88,{x:-.16,y:-.1,z:-.86,rz:.1});
-      r(.995,{x:.17,y:-.16,z:-.36,ry:-.35});l(.995,{x:-.16,y:-.1,z:-.86,rz:.1});break;
+      r(.12,{x:.0,y:-.14,z:-.72});l(.12,{x:.04,y:-.12,z:-.84,rz:.1});
+      r(.88,{x:.1,y:-.15,z:-.34,ry:-.2});l(.88,{x:.08,y:-.14,z:-.84,rz:.1});
+      r(.995,{x:.1,y:-.15,z:-.34,ry:-.2});l(.995,{x:.08,y:-.14,z:-.84,rz:.1});break;
     case 'bowshot':
-      r(.001,{x:.17,y:-.16,z:-.36,ry:-.35});l(.001,{x:-.16,y:-.1,z:-.86,rz:.1});
-      r(.1,{x:.3,y:-.17,z:-.36,ry:-.6});l(.1,{x:-.17,y:-.09,z:-.88,rz:.1});
-      r(.5,{x:.2,y:-.26,z:-.42,ry:-.2});l(.5,{x:-.14,y:-.18,z:-.8,rz:.3});break;
+      r(.001,{x:.1,y:-.15,z:-.34,ry:-.2});l(.001,{x:.08,y:-.14,z:-.84,rz:.1});
+      r(.1,{x:.26,y:-.16,z:-.34,ry:-.5});l(.1,{x:.07,y:-.13,z:-.86,rz:.1});
+      r(.5,{x:.2,y:-.26,z:-.42,ry:-.2});l(.5,{x:-.1,y:-.2,z:-.8,rz:.3});break;
     case 'shoot':case 'quick':
       r(.2,{x:-.1,y:-.12,z:-.68});l(.2,{x:-.12,y:-.09,z:-.82,rz:.12});
       r(v==='quick'?.32:.7,{x:-.07,y:-.12,z:-.4});l(.76,{x:-.12,y:-.09,z:-.82,rz:.12});r(v==='quick'?.42:.78,{x:.06,y:-.1,z:-.38});break;
@@ -7184,7 +7190,8 @@ let sitting=false; // Ctrl로 앉기
 function animPlayer(mesh,speed,t,swing,air,alt,mo){
   if(mesh.userData.stick){animStick(mesh,speed,t,swing,air,alt,mo);
     const u=mesh.userData;if(!u.anime&&u.ap&&PM.data[u.ap.g])pmAttach(mesh,u.job,u.gear,u.ap);
-    if(u.anime&&mesh.visible){const dt=Math.min(.1,Math.max(0,t-(u.lastT||t)));u.lastT=t;pmPose(mesh,u.anime,dt);}return;}
+    if(u.anime&&mesh.visible){const dt=Math.min(.1,Math.max(0,t-(u.lastT||t)));u.lastT=t;pmPose(mesh,u.anime,dt);}
+    if(u.stick.style==='bow'&&mesh.visible)bowStringSync(u.stick.w.children[0],u.stick.nock,u.stick.bowDrawOn);return;}
   animBiped(mesh,speed,t);if(swing<1&&mesh.userData.armR)mesh.userData.armR.rotation.x=-Math.sin(swing*Math.PI)*2;
 }
 
@@ -7306,10 +7313,10 @@ function updateViewModel(dt,moving){
   if(u.style==='dagger'){const w=u.R.userData.wpn;if(w){if(w.userData.rx0===undefined)w.userData.rx0=w.rotation.x;w.rotation.x=w.userData.rx0+(P&&P.deepHold&&!(myMoId==='deepstab'&&swingT<.82)?Math.PI:0);}}
   if(u.kIn)u.kIn.rotation.y=Math.PI/2+(myMoId==='reap'&&swingT<1?reapTwist(swingT):myMoId==='reap2'&&swingT<1?reapTwist2(swingT):0);
   if(u.arrow){const bd=myMo&&swingT<1&&myMo.v==='bowdraw',bs=myMo&&swingT<1&&myMo.v==='bowshot';u.arrow.visible=bd?swingT>.1:bs?swingT<.05:(swingT>.12&&swingT<.6);}
-  if(u.bow){setBowDraw(u.bow,myMo&&swingT<1?bowPull(myMo,swingT):0);
-    if(u.arrow.visible&&myMo&&swingT<1&&(myMo.v==='bowdraw'||myMo.v==='bowshot')){viewModel.updateMatrixWorld(true);const a=_bv1,bq=_bv2;u.R.getWorldPosition(a);u.bow.getWorldPosition(bq);const q=_bq1;u.R.getWorldQuaternion(q);const d=bq.sub(a);
-      if(d.lengthSq()>1e-4)u.arrow.quaternion.copy(q.invert()).multiply(_bq2.setFromUnitVectors(_bz,d.normalize()));}
-    else u.arrow.rotation.set(0,Math.PI,0);}
+  if(u.bow){const on=u.arrow.visible&&myMo&&swingT<1&&(myMo.v==='bowdraw'||myMo.v==='bowshot');
+    if(on){viewModel.updateMatrixWorld(true);const q=_bq1;u.R.getWorldQuaternion(q);const cq=_bq2;camera.getWorldQuaternion(cq);u.arrow.quaternion.copy(q.invert()).multiply(cq).multiply(_bqY);}
+    else u.arrow.rotation.set(0,Math.PI,0);
+    bowStringSync(u.bow,u.arrow,on);}
   if(u.orb){const g=swingT<1?Math.sin(swingT*Math.PI):0;u.orb.scale.setScalar(1+g*.6);u.orb.rotation.y+=dt*2;if(u.ring)u.ring.rotation.z+=dt*(1.5+g*8);}
 }
 
