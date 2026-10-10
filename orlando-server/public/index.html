@@ -642,6 +642,7 @@ body.talking #buffBar{visibility:hidden}
       <div class="bar mp"><i id="sMpBar"></i><span><em>MP</em><b class="num" id="sMp">0/0</b></span></div>
       <div class="bar exp"><i id="sExpBar"></i><span><em>EXP</em><b class="num" id="sExp">0/0</b></span></div>
       <div class="meta"><span>공격 <b class="num" id="sAtk">0</b> · 방어 <b class="num" id="sDef">0</b></span><span>SP <b class="num" id="sSp">0</b></span></div>
+      <div class="meta"><span>치명타 <b class="num" id="sCrit">0%</b> · 치명 피해 <b class="num" id="sCritD">160%</b></span><span>이동 <b class="num" id="sSpd">100%</b></span></div>
       <div id="buffs"></div>
       <div id="party" hidden aria-label="파티"></div>
     </section>
@@ -7383,6 +7384,8 @@ function updateHud(){{const h=$('#hint');if(h&&P)h.hidden=P.lv>=3;}
   $('#sMp').textContent=`${Math.floor(P.mp)}/${P.maxmp}`;$('#sMpBar').style.width=(P.mp/P.maxmp*100)+'%';
   const ne=needExp(P.lv);$('#sExp').textContent=`${P.exp}/${ne}`;$('#sExpBar').style.width=(P.exp/ne*100)+'%';
   $('#sAtk').textContent=Math.round(P.atk*buffV('atk'));$('#sDef').textContent=Math.round(P.def*buffV('def'));$('#sSp').textContent=P.sp;
+  $('#sCrit').textContent=Math.round((JOBS[P.job].crit+P.critBonus+(P.buffs.crit?P.buffs.crit.v:0)+(P.bowDraw?bowStat(bowDrawP()).crit:0))*100)+'%';
+  $('#sCritD').textContent=Math.round((P.buffs.roll?2.2:1.6)*100)+'%';$('#sSpd').textContent=Math.round(moveSpeedMul()*100)+'%';
   const b=$('#buffs');const txt=Object.entries(P.buffs).map(([k,v])=>`${BUFF_NAME[k]} ${Math.ceil(v.t)}초`).join('|');
   if(b.dataset.t!==txt){b.dataset.t=txt;b.innerHTML='';txt&&txt.split('|').forEach(s=>{const e=document.createElement('span');e.textContent=s;b.appendChild(e);});}
 }
@@ -8451,6 +8454,8 @@ function basicColor(job,B){if(JOBS[job].weapon!=='staff')return B.color;return j
 function basicRim(job){if(JOBS[job].weapon!=='staff')return null;return job==='cleric'?0xd08a10:job==='wizard'?0x6a20d0:0x2f6fe0;}
 // 익숙한 감각: 배운 단계만큼 조금씩 강해진다 (1단계 = 1)
 function famLv(){return P&&P.skills.familiar?1+.25*(P.skills.familiar-1):0;}
+// 이동 속도 배율 (버프·장비·익숙한 감각·은신·직업·활 당기기)
+function moveSpeedMul(){if(!P)return 1;return buffV('speed')*(1+(P.spdBonus||0))*(1+famLv()*.03*(P.buffs.fam?P.famN||0:0))*(P.hideT>tAll?1.4:1)*(jobChain(P.job).includes('mage')?.9:1)*(P.bowDraw?.5:1);}
 // 움직이던 방향 (키 입력 기준, 없으면 null)
 function moveDir(){let f=0,r=0;if(keys.KeyW||keys.ArrowUp)f+=1;if(keys.KeyS||keys.ArrowDown)f-=1;if(keys.KeyD||keys.ArrowRight)r+=1;if(keys.KeyA||keys.ArrowLeft)r-=1;f-=joy.y;r+=joy.x;
   const l=Math.hypot(f,r);if(l<.1)return null;f/=l;r/=l;const fx=-Math.sin(cam.yaw),fz=-Math.cos(cam.yaw),rx=Math.cos(cam.yaw),rz=-Math.sin(cam.yaw);return{x:fx*f+rx*r,z:fz*f+rz*r};}
@@ -8475,13 +8480,13 @@ function bowHud(){const h=$('#bowHud');if(!h)return;const on=!!(P&&P.bowDraw&&my
   const dp=bowDrawP(),s=bowStat(dp);h.firstChild.textContent=`대미지 ${Math.round(s.dmg*100)}%\n치명타 +${Math.round(s.crit*100)}%`;h.firstChild.style.whiteSpace='pre';h.querySelector('.bar i').style.width=(dp*100).toFixed(0)+'%';h.classList.toggle('full',dp>=1);}
 function bowDrawP(){return P&&P.bowDraw&&myMoId==='bdraw'?clamp((swingT-.12)/.76,0,1):0;}
 function bowStart(){P.bowDraw={seen:tAll};swingT=0;swingN++;myMoId='bdraw';const m=motionFor('bow','bdraw');myMo=buffV('draw')>1?{...m,dur:m.dur/buffV('draw')}:m;sfx('bw_draw');}   // 속사: 두 배 빠르게 당긴다
-function bowCancel(){P.bowDraw=null;if(myMoId==='bdraw'){swingT=1;myMo=null;myMoId='';}bowHud();}
+function bowCancel(){P.bowDraw=null;if(myMoId==='bdraw'){swingT=1;myMo=null;myMoId='';}sfxStop('bw_draw');bowHud();}
 function bowTick(){const D=P.bowDraw;if(!D)return;
-  if(myMoId!=='bdraw'||P.hp<=0||!P.equip.weapon||JOBS[P.job].weapon!=='bow'){P.bowDraw=null;return;}   // 스킬 등으로 끊김
+  if(myMoId!=='bdraw'||P.hp<=0||!P.equip.weapon||JOBS[P.job].weapon!=='bow'){P.bowDraw=null;sfxStop('bw_draw');return;}   // 스킬 등으로 끊김
   if(tAll-D.seen>.3){bowCancel();return;}   // 창을 여는 동안 멈춰 있었으면 쏘지 않고 내린다
   D.seen=tAll;if(attackHeld)return;
   const dp=bowDrawP();P.bowDraw=null;const B=BASIC.bow;
-  basicCd=B.cd*(P.equip.weapon&&JOBS[P.job].aspd||1)/(1+famLv()*.05*(P.famN||0));swingT=0;swingN++;myMoId='bshot';myMo=motionFor('bow','bshot');sfx('bw_fire');
+  basicCd=B.cd*(P.equip.weapon&&JOBS[P.job].aspd||1)/(1+famLv()*.05*(P.famN||0));swingT=0;swingN++;myMoId='bshot';myMo=motionFor('bow','bshot');sfxStop('bw_draw');sfx('bw_fire');
   const s=bowStat(dp),opt={crit:s.crit};if(P.buffs.roll){opt.critMul=2.2;delete P.buffs.roll;}
   fireProj({color:B.color,speed:s.spd,size:B.size,mult:B.mult*s.dmg,arrow:true,g:s.g,life:s.life,opt});bowHud();}
 function basicAttackInner(){
@@ -9249,7 +9254,7 @@ function updatePlayer(dt){
   if(sitting&&(Math.hypot(f,r)>.1||keys.Space||attackHeld||P.dash))sitting=false;
   player.userData.sit=sitting;
   const len=Math.hypot(f,r);
-  const sp=((keys.ShiftLeft||keys.ShiftRight||Math.hypot(joy.x,joy.y)>.95)?11:7)*buffV('speed')*(1+(P.spdBonus||0))*(1+famLv()*.03*(P.buffs.fam?P.famN||0:0))*(false&&chargingFoe(dt)?1.25:1)*(P.hideT>tAll?1.4:1)*(jobChain(P.job).includes('mage')?.9:1);
+  const sp=((keys.ShiftLeft||keys.ShiftRight||Math.hypot(joy.x,joy.y)>.95)?11:7)*moveSpeedMul();
   let moving=0;
   const pos=player.position;
   const g0=floorAt(pos.x,pos.z,pos.y);
@@ -9304,6 +9309,8 @@ function updatePlayer(dt){
   if(moving&&jumpY===0){const st0=Math.floor(cam.bob/Math.PI);cam.bob+=dt*moving*9;if(Math.floor(cam.bob/Math.PI)!==st0&&!(P.dash||P.leap))sfx('step',null,1,.9+Math.random()*.2);}
   const bobY=(moving&&jumpY===0?Math.sin(cam.bob)*.06:0)-(cam.land||0);
   camera.rotation.set(cam.pitch,cam.yaw,0);
+  const rollA=myMo&&myMo.v==='roll'&&swingT<1?blendKeys(myMo.k3,swingT,{},M3)[14]||0:0;   // 1인칭 구르기: 시야도 같이 한 바퀴
+  if(rollA&&!cam.third)camera.rotation.set(cam.pitch-rollA,cam.yaw,0);
   if(cam.third){
     player.visible=true;if(viewModel)viewModel.visible=false;
     {const u=player.userData;u.sitK=Math.max(0,Math.min(1,(u.sitK||0)+(sitting?dt:-dt)*4));}
@@ -9318,6 +9325,7 @@ function updatePlayer(dt){
   }else{
     player.visible=false;if(viewModel)viewModel.visible=true;
     camera.position.set(player.position.x,player.position.y+1.62+bobY-(player.userData.sitK||0)*.95,player.position.z);
+    if(rollA){const f=flatFwd(),RH=.78,HR=.84;camera.position.set(player.position.x+f.x*HR*Math.sin(rollA),player.position.y+RH+HR*Math.cos(rollA),player.position.z+f.z*HR*Math.sin(rollA));}
     {const u=player.userData;u.sitK=Math.max(0,Math.min(1,(u.sitK||0)+(sitting?dt:-dt)*4));}
     updateViewModel(dt,moving&&jumpY===0);
   }
