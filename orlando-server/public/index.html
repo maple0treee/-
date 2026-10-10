@@ -1697,7 +1697,7 @@ const SKILLS={
     {id:'meteor',name:'메테오',req:35,mp:30,cd:14,type:'zone',mult:4,radius:6,delay:.9,color:0xff5a1f,desc:'하늘에서 운석을 떨어뜨린다. 공격력 400%'}],
   archer:[
     {id:'rapid',name:'속사',req:1,mp:6,cd:12,type:'buff',buff:{draw:2},dur:6,desc:'6초 동안 시위를 두 배 빠르게 당긴다'},
-    {id:'roll',name:'구르기',req:2,mp:5,cd:6,type:'dash',dist:4.5,ddur:.45,roll:true,mult:0,color:0xf5e2b0,desc:'앞으로 구른다. 다음 화살의 치명타 피해 2.2배'}],
+    {id:'roll',name:'구르기',req:2,mp:5,cd:6,type:'dash',dist:4.5,ddur:.6,roll:true,mult:0,color:0xf5e2b0,desc:'앞으로 구른다. 다음 화살의 치명타 피해 2.2배'}],
   hunter:[
     {id:'trap',name:'덫',req:30,mp:10,cd:10,type:'zone',mult:.8,radius:3,stun:3,delay:.2,color:0xc9a46a,desc:'조준한 곳의 적을 3초 동안 묶는다'},
     {id:'venom',name:'독화살',req:32,mp:10,cd:5,type:'proj',mult:1.4,dot:[.6,5],speed:45,size:.12,color:0x9be05a,desc:'140% 피해, 5초 동안 중독'},
@@ -4089,7 +4089,7 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   if(S.fwd){q=q.slice();if(atk&&mo&&mo.k3)q[8]=(q[8]||0)+1.5;else if(!atk)q[8]=0;}
   // 몸 전체: 회전, 뜨기, 웅크리기
   {const sp=ex?ex.sp:0,lf=ex?Math.max(0,ex.lf):0,cr=ex?ex.cr:0;
-    const rl=ex&&ex.rl?ex.rl:0,RH=.78;   // 앞구르기: 몸 가운데(높이 .78)를 축으로 x축 회전
+    const rl=ex&&ex.rl?ex.rl:0,RH=.78-cr*.3;   // 앞구르기: 몸 가운데를 축으로 x축 회전 (웅크릴수록 축이 낮아진다)
     S.rollY=rl?RH*(1-Math.cos(rl)):0;S.body.rotation.set(rl,sp,0);S.body.position.y=lf-cr*.32+S.rollY;S.body.position.z=rl?-RH*Math.sin(rl):0;
     if(cr>0&&!air){S.L.hip.rotation.x+=-cr*1.3;S.R.hip.rotation.x+=-cr*1.1;S.L.knee.rotation.x+=cr*2.4;S.R.knee.rotation.x+=cr*2.2;}
     if(lf>.15&&!air){S.L.hip.rotation.x=-.6;S.L.knee.rotation.x=1.1;S.R.hip.rotation.x=.1;S.R.knee.rotation.x=.6;}
@@ -4103,7 +4103,7 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   S.AL.sh.rotation.set(q[3]-(S.style==='bow'||S.shield?sw*.3:sw),twL,q[4]-(air&&!atk?.4:0));S.AL.el.rotation.x=q[5];
   S.upper.rotation.set(q[7]+k*.08,q[6],0);
   S.AR.hand.rotation.y=ex&&ex.wy?ex.wy:0;S.AR.hand.rotation.z=0;if(S.fwd&&S.w)S.w.rotation.y=-THIEF_KY+(atk&&mo&&mo.v==='reap'?reapTwist(swing):atk&&mo&&mo.v==='reapOut'?reapTwist2(swing):0);
-  S.head.position.y=.88+Math.sin(t*2)*.012*(1-k);S.head.rotation.y=-q[6]*.6;
+  S.head.position.y=.88+Math.sin(t*2)*.012*(1-k);S.head.rotation.y=-q[6]*.6;S.head.rotation.x=ex&&ex.rl>.2&&ex.rl<6?.7:0;   // 구르는 동안 턱 당기기
   // 활과 지팡이는 손 방향과 상관없이 세워 든다
   if(S.style==='bow'){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.w.rotation.set(-lx,0,-S.AL.sh.rotation.z);
     if(S.nock)S.nock.visible=atk&&(mo&&mo.k3&&mo.v==='bowdraw'?swing>.1:mo&&mo.k3&&mo.v==='bowshot'?swing<.05:(swing>.15&&swing<.6));
@@ -4272,7 +4272,7 @@ function pmPose(g,A,dt){
   // 허리: 숙이기(x)·비틀기(y)를 등뼈와 가슴에 나눠서
   const ux=S.upper.rotation.x,uy=S.upper.rotation.y;
   for(const [n,w] of [['J_Bip_C_Spine',.45],['J_Bip_C_Chest',.35],['J_Bip_C_UpperChest',.2]]){const b=A.by(n);if(!b)continue;pmRot(A,b,_ax.x,ux*w);pmRot(A,b,_ax.y,uy*w);}
-  {const h=A.by('J_Bip_C_Head');pmRot(A,h,_ax.y,S.head.rotation.y);}
+  {const h=A.by('J_Bip_C_Head');pmRot(A,h,_ax.y,S.head.rotation.y);if(S.head.rotation.x)pmRot(A,h,_ax.x,S.head.rotation.x);}
   A.root.updateMatrixWorld(true);
   // 팔다리 방향 맞추기 (위에서 아래로)
   const d=new THREE.Vector3();const mir=A.mirror;
@@ -4458,7 +4458,7 @@ const MOTION_OF={
   pierce2:{v:'shoot',dur:.8,c:.35},blast:{v:'quick',n:1,dur:.5,a:1.25},precise:{v:'channel',dur:.8,a:.6,sd:-1},scatter:{v:'multi',n:2,dur:.75},doom:{v:'shoot',dur:1.15,c:.38,a:1.35},
 };
 // 활 기본공격: 시위 당기기(누르고 있는 동안 .99에서 멈춘다) → 쏘기
-Object.assign(MOTION_OF,{bdraw:{v:'bowdraw',dur:.8},bshot:{v:'bowshot',dur:.42},rapid:{v:'pump',dur:.5,a:.7},roll:{v:'roll',dur:.5}});
+Object.assign(MOTION_OF,{bdraw:{v:'bowdraw',dur:.8},bshot:{v:'bowshot',dur:.42},rapid:{v:'pump',dur:.5,a:.7},roll:{v:'roll',dur:.7}});
 const M3=['rx','rz','re','lx','lz','le','tw','ln','wr','sp','lf','cr','wy','kr','rl'];
 // 3인칭 열쇠 자세들
 function verb3(v,o,style){
@@ -4777,10 +4777,13 @@ function verb3(v,o,style){
         k(t0+(t1-t0)*.5,{rx:-2.5,rz:-.2,re:-2.0,lx:-2.6,lz:.05,le:0,tw:.3,ln:-.35,lf:j});
         k(t0+(t1-t0)*.85,{rx:-2.5,rz:.25,re:-1.0,lx:-2.6,lz:.05,tw:.3,ln:-.35,lf:j*.5});}
       break;
-    case 'roll':   // 앞구르기: 웅크려 몸을 공처럼 말고 한 바퀴
-      k(.12,{rx:-.9,re:-1.6,lx:-.9,le:-1.6,ln:.55,cr:.5,rl:.4});
-      k(.5,{rx:-1.1,re:-2.3,lx:-1.1,le:-2.3,ln:.7,cr:.65,rl:3.6});
-      k(.82,{rx:-.6,re:-1.4,lx:-.6,le:-1.4,ln:.3,cr:.3,rl:6.28});break;
+    case 'roll':   // 앞구르기: 숙이며 손을 짚고 → 턱을 당겨 몸을 공처럼 말아 등으로 구르고 → 발로 받아 일어선다
+      k(.1,{rx:-.75,rz:.15,re:-.3,lx:-.75,lz:-.15,le:-.3,ln:.75,cr:.55,rl:.35});       // 손 짚기
+      k(.24,{rx:-1.1,rz:.1,re:-1.8,lx:-1.1,lz:-.1,le:-1.8,ln:.85,cr:.8,rl:1.5});       // 말기 시작
+      k(.42,{rx:-1.2,re:-2.5,lx:-1.2,le:-2.5,ln:.9,cr:.9,rl:3.5});                      // 공처럼
+      k(.6,{rx:-1.1,re:-2.3,lx:-1.1,le:-2.3,ln:.8,cr:.85,rl:5.2});                      // 등에서 발로
+      k(.76,{rx:-.9,rz:.2,re:-.9,lx:-.9,lz:-.2,le:-.9,ln:.5,cr:.55,rl:6.28});           // 착지(웅크림)
+      k(.92,{rx:-.4,rz:.15,re:-.4,lx:-.4,lz:-.15,le:-.4,ln:.15,cr:.15,rl:6.28});break;  // 일어서기
     case 'bowdraw':   // 양궁: 옆으로 서서 활팔을 쭉 뻗고, 시위 손을 뺨(앵커)까지 끌어온다
       k(.12,{rx:-1.35,rz:-.15,re:-1.0,lx:-1.3,lz:.1,le:-.3,tw:.15,cr:.02});
       k(.5,{rx:-1.58,rz:-.1,re:-1.8,lx:-1.6,lz:.05,le:-.1,tw:.34,ln:.02,cr:.03});
@@ -5001,7 +5004,10 @@ function verbFP(v,o,style){
         r(t0+(t1-t0)*.8,{x:.1,y:-.02,z:-.55,rx:.5});l(t0+(t1-t0)*.8,{x:-.1,y:-.02,z:-.55,rx:.5});}
       break;
     case 'roll':
-      r(.15,{x:.25,y:-.55,z:-.5,rx:-.6});l(.15,{x:-.25,y:-.55,z:-.5,rx:-.6});r(.6,{x:.25,y:-.6,z:-.5,rx:-.6});l(.6,{x:-.25,y:-.6,z:-.5,rx:-.6});break;
+      r(.1,{x:.26,y:-.42,z:-.62,rx:-.9});l(.1,{x:-.26,y:-.42,z:-.62,rx:-.9});
+      r(.3,{x:.22,y:-.72,z:-.3,rx:-1.3});l(.3,{x:-.22,y:-.72,z:-.3,rx:-1.3});
+      r(.62,{x:.22,y:-.72,z:-.3,rx:-1.3});l(.62,{x:-.22,y:-.72,z:-.3,rx:-1.3});
+      r(.82,{x:.3,y:-.4,z:-.55,rx:-.3});l(.82,{x:-.3,y:-.4,z:-.55,rx:-.3});break;
     case 'bowdraw':
       r(.12,{x:.0,y:-.14,z:-.6});l(.12,{x:.04,y:-.13,z:-.68,rz:.1});
       r(.88,{x:.11,y:-.18,z:-.36,ry:-.2});l(.88,{x:.07,y:-.15,z:-.64,rz:.1});
@@ -8605,7 +8611,7 @@ function useSkillInner(i){
       if(S.prep){P.pushPrep={t:S.prep,S,pw,opt,fx:0};sfx('block');fxAt=player.position.clone().add(new THREE.Vector3(0,1,0));break;}
       let f=flatFwd();if(S.moveDir){const mv=moveDir();if(mv)f=mv;}const dd=S.ddur||.25;
       P.dash={t:dd,dur:dd,dist:S.dist,mult:S.mult*pw,opt,hit:new Set(),f,push:!!S.push,roll:!!S.roll};if(S.push)P.dashFx=S.color;if(S.moveDir)P.dashFx=0xdff4ff;
-      if(S.roll){bowCancel();P.buffs.roll={v:1,t:8,max:8};sfx('whoosh',null,.8,1.1);dustPuffs(player.position.clone(),.6,6);}}invuln=Math.max(invuln,.35);fxAt=player.position.clone().add(new THREE.Vector3(0,1,0));break;
+      if(S.roll){bowCancel();P.buffs.roll={v:1,t:8,max:8};sfx('whoosh',null,.8,1.1);dustPuffs(player.position.clone(),.6,6);setTimeout(()=>{if(mode==='world'&&P)dustPuffs(player.position.clone(),.7,7);},520);}}invuln=Math.max(invuln,.35);fxAt=player.position.clone().add(new THREE.Vector3(0,1,0));break;
     case 'barb':fxAt=barbSkill(S,id,pw,opt,bc);break;
     case 'fowl':fxAt=fowlSkill(S,id,pw,opt);break;
     case 'loot':fxAt=lootSkill(S,id,pw,opt);break;
@@ -9309,8 +9315,8 @@ function updatePlayer(dt){
   if(moving&&jumpY===0){const st0=Math.floor(cam.bob/Math.PI);cam.bob+=dt*moving*9;if(Math.floor(cam.bob/Math.PI)!==st0&&!(P.dash||P.leap))sfx('step',null,1,.9+Math.random()*.2);}
   const bobY=(moving&&jumpY===0?Math.sin(cam.bob)*.06:0)-(cam.land||0);
   camera.rotation.set(cam.pitch,cam.yaw,0);
-  const rollA=myMo&&myMo.v==='roll'&&swingT<1?blendKeys(myMo.k3,swingT,{},M3)[14]||0:0;   // 1인칭 구르기: 시야도 같이 한 바퀴
-  if(rollA&&!cam.third)camera.rotation.set(cam.pitch-rollA,cam.yaw,0);
+  let rollA=0,rollCr=0;if(myMo&&myMo.v==='roll'&&swingT<1){const v=blendKeys(myMo.k3,swingT,{},M3);rollA=v[14]||0;rollCr=v[11]||0;}   // 1인칭 구르기: 시야도 같이 한 바퀴
+  if(rollA&&!cam.third)camera.rotation.set(cam.pitch-rollA-(rollA>.2&&rollA<6?.5:0),cam.yaw,0);
   if(cam.third){
     player.visible=true;if(viewModel)viewModel.visible=false;
     {const u=player.userData;u.sitK=Math.max(0,Math.min(1,(u.sitK||0)+(sitting?dt:-dt)*4));}
@@ -9325,7 +9331,7 @@ function updatePlayer(dt){
   }else{
     player.visible=false;if(viewModel)viewModel.visible=true;
     camera.position.set(player.position.x,player.position.y+1.62+bobY-(player.userData.sitK||0)*.95,player.position.z);
-    if(rollA){const f=flatFwd(),RH=.78,HR=.84;camera.position.set(player.position.x+f.x*HR*Math.sin(rollA),player.position.y+RH+HR*Math.cos(rollA),player.position.z+f.z*HR*Math.sin(rollA));}
+    if(rollA){const f=flatFwd(),RH=.78-rollCr*.3-rollCr*.32,HR=.84-rollCr*.42;camera.position.set(player.position.x+f.x*HR*Math.sin(rollA),player.position.y+RH+HR*Math.cos(rollA),player.position.z+f.z*HR*Math.sin(rollA));}
     {const u=player.userData;u.sitK=Math.max(0,Math.min(1,(u.sitK||0)+(sitting?dt:-dt)*4));}
     updateViewModel(dt,moving&&jumpY===0);
   }
