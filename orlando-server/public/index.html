@@ -7962,7 +7962,7 @@ function updateHud(){{const h=$('#hint');if(h&&P)h.hidden=P.lv>=3;}
   $('#sHp').textContent=`${Math.ceil(P.hp)}/${P.maxhp}`;$('#sHpBar').style.width=(P.hp/P.maxhp*100)+'%';
   $('#sMp').textContent=`${Math.floor(P.mp)}/${P.maxmp}`;$('#sMpBar').style.width=(P.mp/P.maxmp*100)+'%';
   const ne=needExp(P.lv);$('#sExp').textContent=`${P.exp}/${ne}`;$('#sExpBar').style.width=(P.exp/ne*100)+'%';
-  $('#sAtk').textContent=Math.round(P.atk*buffV('atk'));$('#sDef').textContent=Math.round(P.def*buffV('def'));$('#sSp').textContent=P.sp;
+  $('#sAtk').textContent=Math.round(P.atk*buffV('atk'));$('#sDef').textContent=Math.round(P.def*buffV('def'));$('#sSp').textContent=spAll();
   $('#sCrit').textContent=Math.round((JOBS[P.job].crit+P.critBonus+(P.buffs.crit?P.buffs.crit.v:0)+(P.bowDraw?bowStat(bowDrawP()).crit:0))*100)+'%';
   $('#sCritD').textContent=Math.round((P.buffs.roll?2.2:1.6)*100)+'%';$('#sSpd').textContent=(7*moveSpeedMul()).toFixed(1);   // 걷는 속도 (m/s)
   const b=$('#buffs');const txt=Object.entries(P.buffs).map(([k,v])=>`${BUFF_NAME[k]} ${Math.ceil(v.t)}초`).join('|');
@@ -8360,7 +8360,7 @@ function renderChars(){
     row.append(b,d);box.appendChild(row);
   }
 }
-function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:P.sp,skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mentorReady:P.mentorReady,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap)}:null;}
+function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:spAll(),skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mentorReady:P.mentorReady,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap)}:null;}
 function save(){const s=snapshotP();if(!s)return;const list=loadChars();const i=list.findIndex(c=>c.id===s.id);if(i>=0)list[i]=s;else list.push(s);storeChars(list);}
 
 /* ---------- 메뉴 ---------- */
@@ -8416,7 +8416,7 @@ function startGameNow(data){
   while(P.slots.length<NSK)P.slots.push(null);P.sp=data.sp??P.lv;
   // 바뀐 스킬: 지금 직업에 없는 스킬은 SP를 돌려주고 칸에서 뺀다
   if(data.skv!==SKILL_VER){fixSkills('스킬이 새로 바뀌어');}P.skv=SKILL_VER;grantTraits();
-  {let back=0;for(const id in P.skills){const mx=skMax(SK[id]);if(P.skills[id]>mx){back+=P.skills[id]-mx;P.skills[id]=mx;}}if(back){P.sp+=back;setTimeout(()=>log(`최대 단계가 바뀐 스킬이 있어 SP ${back}을(를) 돌려받았다.`,'sys'),500);}}
+  {let back=0;for(const id in P.skills){const mx=skMax(SK[id]);if(P.skills[id]>mx){back+=P.skills[id]-mx;P.skills[id]=mx;}}if(back){setTimeout(()=>log(`최대 단계가 바뀐 스킬이 있어 SP ${back}을(를) 돌려받았다.`,'sys'),500);}}
   P.advSp={...(data.advSp||{})};P.pastSkills={...(data.pastSkills||{})};
   // 직업에 맞지 않는 장비는 가방으로
   for(const s of ['weapon','sub']){const id=P.equip[s];if(id&&!canWear(id,P.job)){P.bag.push(bagGear(id,P.enh[s]));P.equip[s]=null;P.enh[s]=0;}}
@@ -8447,7 +8447,7 @@ function closeSkills(){$('#skills').hidden=true;mode='world';canvas.focus();sync
 $('#skClose').onclick=closeSkills;
 let skTab=null;
 function renderSkills(){
-  $('#skTitle').textContent=`${JOBS[P.job].name}의 스킬`;$('#skSp').textContent=`SP ${P.sp}`;
+  $('#skTitle').textContent=`${JOBS[P.job].name}의 스킬`;
   const body=$('#skBody');body.innerHTML='';
   // 메이플처럼 차수별 탭: 1차·2차·3차… 전직 전에 배운 스킬도 정리해서 본다
   const full=jobChain(P.job),usable=new Set(treeOf(P.job).map(s=>s.id));
@@ -8457,7 +8457,7 @@ function renderSkills(){
     const t=document.createElement('small');t.textContent=k?`${k}차`:'기본';const n=document.createElement('b');n.textContent=JOBS[j].name;b.append(t,n);
     if(!SKILLS[j].some(s=>usable.has(s.id)))b.classList.add('past');
     b.onclick=()=>{skTab=j;renderSkills();};tabs.appendChild(b);});
-  const list=SKILLS[skTab]||[];const past=!list.some(s=>usable.has(s.id));
+  const list=SKILLS[skTab]||[];const past=!list.some(s=>usable.has(s.id));$('#skSp').textContent=`SP ${spOf(full.indexOf(skTab))}`;
   const wrap=document.createElement('div');wrap.className='sk-list';body.appendChild(wrap);
   for(const S of list){
     const lvl=past?(P.pastSkills&&P.pastSkills[S.id]||0):(P.skills[S.id]||0),locked=P.lv<skReq(S);
@@ -8470,7 +8470,7 @@ function renderSkills(){
     const btn=document.createElement('button');btn.className='learn';btn.type='button';
     if(past){btn.textContent=lvl?`${lvl}단계`:'—';btn.disabled=true;}
     else if(isTrait(S)){btn.textContent='특성';btn.disabled=true;}
-    else{btn.textContent=lvl===0?'배우기':lvl>=skMax(S)?'최대':'강화';btn.disabled=locked||lvl>=skMax(S)||P.sp<1;btn.onclick=()=>learn(S.id);}
+    else{btn.textContent=lvl===0?'배우기':lvl>=skMax(S)?'최대':'강화';btn.disabled=locked||lvl>=skMax(S)||spOf(skTier(S.id))<1;btn.onclick=()=>learn(S.id);}
     const p=document.createElement('p');p.textContent=S.desc+(lvl>1?` (강화 +${(lvl-1)*25}%)`:'');
     card.append(nm,btn,p);
     if(!past&&lvl>0&&S.type!=='passive'){
@@ -8483,8 +8483,8 @@ function renderSkills(){
   }
 }
 function learn(id){
-  const S=SK[id];const lvl=P.skills[id]||0;if(isTrait(S)||P.sp<1||lvl>=skMax(S)||P.lv<skReq(S))return;
-  P.sp--;P.skills[id]=lvl+1;
+  const S=SK[id];const lvl=P.skills[id]||0;if(isTrait(S)||spOf(skTier(id))<1||lvl>=skMax(S)||P.lv<skReq(S))return;
+  P.skills[id]=lvl+1;
   if(lvl===0){const e=S.type==='passive'?-1:P.slots.indexOf(null);if(e>=0)P.slots[e]=id;log(`${S.name}을(를) 배웠다${e>=0?` · ${SLOT_KEYS[e]}에 등록`:''}`,'sys');}
   else log(`${S.name} ${lvl+1}단계로 강화`,'sys');
   renderSkills();updateHud();save();
@@ -8710,7 +8710,7 @@ function npcAct(act){
     const spent=Object.entries(P.skills).reduce((a,[,l])=>a+l,0);const cost=Math.max(100,P.lv*40);
     renderNpc(spent?`배운 스킬을 모두 잊고 SP ${spent}을(를) 돌려받겠느냐? ${cost} 골드가 든다.`:'아직 잊을 것이 없구나.',box=>{
       if(!spent)return;npcBtn(box,`되돌리기 (${cost} 골드)`,()=>{if(P.gold<cost){renderNpc('골드가 모자라는구나.');return;}
-        P.gold-=cost;P.sp+=spent;P.skills={};P.slots=Array(NSK).fill(null);log(`스킬을 되돌렸다. SP +${spent}`,'sys');updateHud();save();renderNpc('다 비웠다. 스킬창(K)에서 새로 배우거라.');},'pri wide');});
+        P.gold-=cost;P.skills={};P.slots=Array(NSK).fill(null);log(`스킬을 되돌렸다. SP +${spent}`,'sys');updateHud();save();renderNpc('다 비웠다. 스킬창(K)에서 새로 배우거라.');},'pri wide');});
     return;}
   if(act==='travel'){
     const here=zoneAt(player.position.x,player.position.z);
@@ -8907,6 +8907,14 @@ $('#mLater').onclick=closeMentor;
 const spentSp=()=>Object.entries(P.skills||{}).reduce((a,[id,v])=>a+(isTrait(SK[id])?0:(v|0)),0);
 const needSp=()=>treeOf(P.job).reduce((a,s)=>a+(isTrait(s)?0:skMax(s)),0);
 function spCapped(){return P.sp+spentSp()>=needSp();}
+/* 차수별 SP: 기본(Lv 2~30 짝수) · 1차(Lv 32~60 짝수) · 2차(Lv 62~ 짝수). 그 차수 스킬에만 쓴다.
+   남은 SP = 그 차수 구간에서 받은 SP(그 차수 스킬을 다 올릴 만큼까지) - 그 차수 스킬에 쓴 SP */
+function skTier(id){const c=jobChain(P.job);for(let t=0;t<c.length;t++)if(SKILLS[c[t]].some(s=>s.id===id))return t;return -1;}
+function spOf(t){const c=jobChain(P.job);if(t<0||t>=c.length)return 0;
+  const lo=t?advLv(c[t-1]):0,hi=advLv(c[t])??Infinity,ent=Math.max(0,Math.floor(Math.min(P.lv,hi)/2)-Math.floor(lo/2));
+  let need=0,spent=0;for(const s of SKILLS[c[t]]){if(isTrait(s))continue;need+=skMax(s);spent+=P.skills[s.id]|0;}
+  return Math.max(0,Math.min(ent,need)-spent);}
+function spAll(){let n=0;for(let t=0;t<jobChain(P.job).length;t++)n+=spOf(t);return n;}
 // 특성: 직업 스킬 목록에 있는 특성은 바로 배운 상태가 된다
 function grantTraits(){if(!P)return;for(const s of treeOf(P.job))if(isTrait(s)&&!P.skills[s.id]){P.skills[s.id]=1;log(`특성 ${s.name}이(가) 열렸다.`,'sys');}}
 // 레벨에 맞는 SP: 1 + 짝수 레벨마다 1. 전직 전 스킬을 다 올려 더 받지 못했던 SP는 전직하면(또는 접속할 때) 채워 준다
@@ -8989,7 +8997,7 @@ function gainExp(n){
   if(P.lv>=MAX_LV){P.exp=0;updateHud();return;}
   n=Math.round(n*expMul());P.exp+=n;
   while(P.lv<MAX_LV&&P.exp>=needExp(P.lv)){
-    P.exp-=needExp(P.lv);P.lv++;if(P.lv%2===0&&!spCapped())P.sp++;computeStats(P);P.hp=P.maxhp;P.mp=P.maxmp;
+    P.exp-=needExp(P.lv);P.lv++;computeStats(P);P.hp=P.maxhp;P.mp=P.maxmp;
     log(`레벨 업! Lv ${P.lv}`,'sys');levelUpFx(P.lv);
     spawnFx(0xf3cf6a,player.position.clone().add(new THREE.Vector3(0,1,0)),2.4,.8);
     if(advLv(P.job)!=null&&P.lv>=advLv(P.job)&&!P.mentorReady){P.mentorReady=true;summonMentor();}
@@ -9805,7 +9813,7 @@ function fixSkills(why){const valid=new Set(treeOf(P.job).map(s=>s.id));let back
   for(const id in P.skills)if(isTrait(SK[id])&&P.skills[id]>1){back+=P.skills[id]-1;P.skills[id]=1;}   // 예전에 SP로 배운 특성은 돌려준다
   grantTraits();
   P.slots=P.slots.map(id=>id&&valid.has(id)&&P.skills[id]?id:null);
-  if(back){P.sp+=back;setTimeout(()=>log(`${why} SP ${back}을(를) 돌려받았다.`,'sys'),600);}}
+  if(back){setTimeout(()=>log(`${why} SP ${back}을(를) 돌려받았다.`,'sys'),600);}}
 function bagGear(id,enh){return enh>0?{id,n:1,enh:enh|0}:{id,n:1};}
 function canWear(id,job){const I=ITEMS[id];if(!I)return false;if(I.jobs&&!I.jobs.includes(job))return false;if(I.cls&&I.cls!=='basic'&&!jobChain(job).includes(I.cls))return false;if(I.slot==='sub'&&!JOBS[job].sub)return false;return true;}
 // 직업에 맞는 장비를 한 번씩 준다: 전사는 나무 방패, 검사는 검사의 장검, 방패병은 방패병의 방패
