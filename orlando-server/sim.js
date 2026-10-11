@@ -438,10 +438,10 @@
           const d = Math.hypot(t.x - m.x, t.z - m.z);
           // 단단한 감각(쉴더): 노리던 쉴더는 더 멀리 가도 놓치지 않는다
           if (t.dc && t.id !== m.aggroOn) continue;
-          const far = t.sd && t.id === m.aggroOn;
+          const far = false;   // (단단한 감각은 없어졌다)
           if ((homeD > (far ? 80 : 45) && !m.summon) || d > (far ? 55 : 30)) continue;
           const pri = t.id === m.aggroOn ? d - 6 : d;
-          if ((d < 9 || t.id === m.aggroOn) && pri < best) { best = pri; tgt = t; }
+          if ((d < (t.sd ? 16 : 9) || t.id === m.aggroOn) && pri < best) { best = pri; tgt = t; }
         }
         if (m.taunt > 0) { m.taunt -= TICK; const tt = ts.find((q) => q.id === m.aggroOn && (dun ? q.rot : !q.dun)); if (tt) tgt = tt; }
         if (!tgt) m.aggroOn = null;
