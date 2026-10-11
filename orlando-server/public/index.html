@@ -598,6 +598,11 @@ body.touch.inv-open #hotbar{display:none}
 #bowHud .bar{width:84px;height:4px;margin:4px 0 0;background:rgba(0,0,0,.45);border:1px solid rgba(239,228,204,.5);border-radius:2px;overflow:hidden}
 #bowHud .bar i{display:block;height:100%;width:0;background:#f3cf6a}
 #bowHud.full{color:#ffd86a}#bowHud.full .bar i{background:#ffd86a}
+#rayHud{position:fixed;left:50%;top:50%;transform:translate(-50%,28px);text-align:center;pointer-events:none;color:#fff3d6;font-weight:700;font-size:11px;line-height:1.3;white-space:nowrap;text-shadow:0 0 2px #000,0 0 5px #000}
+#rayHud[hidden]{display:none}
+#rayHud .bar{width:96px;height:5px;margin:3px auto 0;background:rgba(0,0,0,.45);border:1px solid rgba(239,228,204,.5);border-radius:3px;overflow:hidden}
+#rayHud .bar i{display:block;height:100%;width:0;background:#ffe08a;transition:width .08s linear}
+#rayHud.hot .bar i{background:#ff7a50}#rayHud.hot{color:#ffb090}
 #buffBar{position:fixed;display:flex;gap:4px;pointer-events:auto}
 #buffBar[hidden]{display:none}
 #buffBar .bf{position:relative;width:30px;height:30px;border-radius:5px;overflow:hidden;background:var(--bc);border:1px solid rgba(255,255,255,.35);box-shadow:0 2px 6px rgba(0,0,0,.4)}
@@ -633,6 +638,7 @@ body.talking #buffBar{visibility:hidden}
   <canvas id="c" tabindex="0" aria-label="오를란도 3D 월드"></canvas>
   <div id="hideFx" aria-hidden="true"></div>
   <div id="bowHud" hidden><span></span><div class="bar"><i></i></div></div>
+  <div id="rayHud" hidden><span></span><div class="bar"><i></i></div></div>
   <div id="tags"></div>
 
   <div id="hud" hidden>
@@ -1710,7 +1716,7 @@ const SKILLS={
     {id:'heal2',name:'강화마법-치유2',req:60,mp:0,cd:0,type:'passive',max:5,desc:'(지속) 기본 공격으로 아군(나 포함)을 치유하면 그 아군이 5초 동안 치유 중 상태가 되어 0.5초마다 최대 HP의 1%를 회복한다. 단계마다 +0.25%'},
     {id:'holy2',name:'빛마법2',req:60,mp:0,cd:0,type:'passive',max:5,desc:'(지속) 빛마법의 범위가 30% 넓어지고, 빛이 닿은 자리에 6초 동안 빛의 지형이 남는다. 그 위에 선 아군은 공격력이 15% 오른다. 단계마다 범위 +10%, 공격력 +5%'},
     {id:'angel',name:'소환마법',req:60,mp:30,cd:25,type:'summon',dur:20,mult:1.2,range:14,color:0xfff2a8,desc:'20초 동안 곁을 나는 천사를 부른다. 천사는 14m 안의 적에게 1.2초마다 빛의 화살을 쏜다(공격력 120%)'},
-    {id:'holyray',name:'빛의 광선',req:60,mp:4,cd:3,type:'ray',drain:7,tick:.25,mult:.5,range:18,color:0xfff2a8,desc:'키를 누르고 있는 동안 지팡이에서 빛의 광선을 뿜어 닿는 적을 태운다. 0.25초마다 공격력 50%, 초당 MP 7'},
+    {id:'holyray',name:'빛의 광선',req:60,mp:0,cd:0,type:'ray',drain:0,tick:.25,mult:.5,range:18,color:0xfff2a8,desc:'키를 누르고 있는 동안 지팡이에서 빛의 광선을 뿜어 닿는 적을 태운다. 0.25초마다 공격력 50%. 빛 게이지를 쓰며(4초 분량), 다 쓰면 식을 때까지 쏠 수 없다. 쏘지 않을 때 게이지가 찬다'},
     {id:'cycle',name:'순환의 감각',req:60,mp:0,cd:0,type:'passive',trait:true,desc:'(지속) 나와 내가 치유한 아군은 체력을 회복할 때마다 주변 3.5m의 적에게 회복량의 절반만큼 피해를 준다'}],
   monk:[],
   wizz:[
@@ -8649,6 +8655,7 @@ function atkPow(){const b=P&&jobChain(P.job).includes('guardian')?P.atk*.5+P.max
 const SWORD_SKILL_HIT=new Set(['thrust1','thrust2','swing','downcut','dashcut','guardcut','guardstrike','axechop','axechopF','axespin','batswing']);
 function damageMonster(m,mult,o={}){
   if(m.dying!==null)return 0;
+  if(P&&!o.byPet){P.lastHit=m;P.lastHitT=tAll;}   /* 사제의 천사: 내가 치는 적을 먼저 노린다 */
   if(m.D.boss&&!(Math.hypot(player.position.x-DUN.x,player.position.z-DUN.z)<DUN.R-1.5))return 0; // 본실에 들어가야 싸울 수 있다
   if(m.D.dragon&&!inArenaOf(m))return 0; // 둥지 안에 들어가야 싸울 수 있다
   const J=JOBS[P.job];
@@ -9150,7 +9157,8 @@ function angelEnd(){const A=P.angel;if(!A)return;P.angel=null;VFX.burst(A.g.posi
 function angelTick(dt){const A=P.angel;if(!A)return;A.t-=dt;if(A.t<=0||mode!=='world'||P.hp<=0){angelEnd();return;}
   const g=A.g,q=player.position;A.ph+=dt*.7;A.bob+=dt;
   // 목표: 사거리 안에서 가장 가까운 적
-  let tgt=null,bd=A.S.range;for(const m of alive()){const d=Math.hypot(m.mesh.position.x-q.x,m.mesh.position.z-q.z);if(d<bd){bd=d;tgt=m;}}
+  let tgt=null,bd=A.S.range;const lh=P.lastHit;if(lh&&lh.dying===null&&tAll-(P.lastHitT||-9)<5&&Math.hypot(lh.mesh.position.x-q.x,lh.mesh.position.z-q.z)<A.S.range+4)tgt=lh;
+  else for(const m of alive()){const d=Math.hypot(m.mesh.position.x-q.x,m.mesh.position.z-q.z);if(d<bd){bd=d;tgt=m;}}
   let want;if(tgt){const c=mCenter(tgt),v=new THREE.Vector3(q.x-c.x,0,q.z-c.z).normalize();want=c.clone().addScaledVector(v,3).setY(c.y+2.2);}
   else want=new THREE.Vector3(q.x+Math.cos(A.ph)*1.6,q.y+2.3+Math.sin(A.bob*2)*.15,q.z+Math.sin(A.ph)*1.6);
   g.position.lerp(want,Math.min(1,dt*3));
@@ -9158,13 +9166,17 @@ function angelTick(dt){const A=P.angel;if(!A)return;A.t-=dt;if(A.t<=0||mode!=='w
   for(const w of g.userData.wings)w.m.rotation.y=w.sx*(.5+Math.sin(A.bob*9)*.45);
   if(Math.random()<dt*14)VFX.emit(0,g.position.x+(Math.random()-.5)*.4,g.position.y-.2+Math.random()*.3,g.position.z+(Math.random()-.5)*.4,0,-.6,0,0xfff2a8,.7,.3,.8);
   A.cd-=dt;if(tgt&&A.cd<=0){A.cd=1.2;const st=g.position.clone().add(new THREE.Vector3(0,.2,0)),dir=mCenter(tgt).sub(st).normalize();
-    fireProj({start:st,dir,color:0xfff2a8,rim:0xffd060,speed:26,size:.22,g:0,mult:A.S.mult*A.pw,opt:{...A.opt,bhit:0},target:tgt,life:1.5});sfx('cast',st,.5,1.3);}}
+    fireProj({start:st,dir,color:0xfff2a8,rim:0xffd060,speed:26,size:.22,g:0,mult:A.S.mult*A.pw,opt:{...A.opt,bhit:0,byPet:1},target:tgt,life:1.5});sfx('cast',st,.5,1.3);}}
 // 빛의 광선: 누르고 있는 동안 지팡이 끝에서 빛줄기가 뻗어 닿는 적을 태운다
 function rayEnd(){const Rr=P&&P.ray;if(!Rr)return;P.ray=null;if(Rr.g){scene.remove(Rr.g);Rr.g.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});}if(myMoId==='holyray'){swingT=1;myMo=null;myMoId='';}}
-function rayTick(dt){const Rr=P.ray;if(!Rr)return;const S=Rr.S;Rr.t+=dt;
+// 빛 게이지: 쏘면 초당 25 줄고, 쉬면 초당 20 찬다. 0이 되면 과열: 30까지 찰 때까지 못 쏜다
+function rayGaugeTick(dt){if(P.rayG===undefined)P.rayG=100;if(!P.ray){P.rayG=Math.min(100,P.rayG+20*dt);if(P.rayHot&&P.rayG>=30)P.rayHot=false;}
+  const h=$('#rayHud');if(!h)return;const on=!!(P.skills.holyray&&hasClsW('priest')&&mode==='world'&&(P.ray||P.rayG<100));if(h.hidden!==!on)h.hidden=!on;if(!on)return;
+  h.firstChild.textContent=P.rayHot?'과열':'빛 게이지';h.querySelector('.bar i').style.width=P.rayG.toFixed(0)+'%';h.classList.toggle('hot',!!P.rayHot);}
+function rayTick(dt){rayGaugeTick(dt);const Rr=P.ray;if(!Rr)return;const S=Rr.S;Rr.t+=dt;
   const held=Rr.i===1||Rr.i===2?Rr.t<1.5:!!skHeld[Rr.i];
-  if(!held||P.mp<=0||mode!=='world'||P.hp<=0||myMoId!=='holyray'||Rr.t>6){rayEnd();return;}
-  P.mp=Math.max(0,P.mp-S.drain*dt);swingT=Math.min(swingT,.8);
+  if(!held||mode!=='world'||P.hp<=0||myMoId!=='holyray'||P.rayG<=0){if(P.rayG<=0){P.rayHot=true;toast('빛이 다 타올랐다. 잠시 식혀야 해요');}rayEnd();return;}
+  P.rayG=Math.max(0,P.rayG-25*dt);swingT=Math.min(swingT,.8);
   const o=staffTip(),dir=aimPoint(S.range).sub(o).normalize();let end=S.range;const q=new THREE.Vector3();for(let d=1;d<S.range;d+=.5){q.copy(o).addScaledVector(dir,d);if(q.y<heightAt(q.x,q.z)){end=d;break;}}
   const e=o.clone().addScaledVector(dir,end);
   if(!Rr.g){const g=new THREE.Group();const mk=(r,c,op)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,1,10,1,true),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:op,depthWrite:false,side:THREE.DoubleSide}));m.rotation.x=Math.PI/2;m.position.z=.5;g.add(m);return m;};
@@ -9335,7 +9347,7 @@ function useSkillInner(i){
     case 'closein':{const m=closeTarget(S.range),q=player.position,dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz),f={x:dx/d,z:dz/d},dist=Math.max(0,d-(m.r+.9)),dd=Math.max(.05,dist/110);
       P.dash={t:dd,dur:dd,dist,mult:S.mult*pw,opt:{...opt,stun:S.stun},hit:new Set(),f,push:false,tgt:m,stop:m.r+.9};P.dashFx=S.color;invuln=Math.max(invuln,dd+.05);fxAt=player.position.clone().add(new THREE.Vector3(0,1,0));break;}
     case 'summon':{summonAngel(S,pw,opt);fxAt=player.position.clone().add(new THREE.Vector3(0,1.5,0));break;}
-    case 'ray':{P.ray={S,pw,opt,i,t:0,tick:0};sfx('lc_cast',null,.9,1.2);fxAt=null;break;}
+    case 'ray':{if(P.rayHot||(P.rayG!==undefined&&P.rayG<=0)){toast('빛이 아직 식지 않았어요');swingT=1;myMo=null;myMoId='';fxAt=null;break;}P.ray={S,pw,opt,i,t:0,tick:0};sfx('lc_cast',null,.9,1.2);fxAt=null;break;}
     case 'grasp':{const pt=graspPoint(S.range);spawnRing(S.color,pt,S.radius,.35);fxAt=pt;const R=S.radius,mul=S.mult*pw,hold=S.hold,o2={...opt};
       setTimeout(()=>{if(mode!=='world'||!P)return;graspFx(pt,R,hold);sfx('heavy',pt,.9,.8);sfx('mg_boom',pt,.5,1.4);shakeT=Math.max(shakeT,.14);
         shared(()=>{for(const m of alive()){const dx=pt.x-m.mesh.position.x,dz=pt.z-m.mesh.position.z,d=Math.hypot(dx,dz);if(d>R+m.r)continue;const k=Math.max(0,d-.7);
