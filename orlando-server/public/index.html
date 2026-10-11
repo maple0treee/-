@@ -1715,7 +1715,7 @@ const SKILLS={
   priest:[
     {id:'heal2',name:'강화마법-치유2',req:60,mp:0,cd:0,type:'passive',max:5,desc:'(지속) 기본 공격으로 아군(나 포함)을 치유하면 그 아군이 5초 동안 치유 중 상태가 되어 0.5초마다 최대 HP의 1%를 회복한다. 단계마다 +0.25%'},
     {id:'holy2',name:'빛마법2',req:60,mp:0,cd:0,type:'passive',max:5,desc:'(지속) 빛마법의 범위가 30% 넓어지고, 빛이 닿은 자리에 6초 동안 빛의 지형이 남는다. 그 위에 선 아군은 공격력이 15% 오른다. 단계마다 범위 +10%, 공격력 +5%'},
-    {id:'angel',name:'소환마법',req:60,mp:30,cd:25,type:'summon',dur:20,mult:1.2,range:14,color:0xfff2a8,desc:'20초 동안 곁을 나는 천사를 부른다. 천사는 14m 안의 적에게 1.2초마다 빛의 화살을 쏜다(공격력 120%)'},
+    {id:'angel',name:'소환마법',req:60,mp:30,cd:25,type:'summon',dur:30,mult:2.2,range:18,color:0xfff2a8,desc:'30초 동안 곁을 나는 천사를 부른다. 천사는 18m 안의 적에게 0.7초마다 빛의 화살을 쏜다(공격력 220%)'},
     {id:'holyray',name:'빛의 광선',req:60,mp:0,cd:0,type:'ray',drain:0,tick:.25,mult:.5,range:18,color:0xfff2a8,desc:'키를 누르고 있는 동안 지팡이에서 빛의 광선을 뿜어 닿는 적을 태운다. 0.25초마다 공격력 50%. 게이지를 쓰며(4초 분량), 다 쓰면 30%가 찰 때까지 쏠 수 없다'},
     {id:'cycle',name:'순환의 감각',req:60,mp:0,cd:0,type:'passive',trait:true,desc:'(지속) 나와 내가 치유한 아군은 체력을 회복할 때마다 주변 3.5m의 적에게 회복량의 절반만큼 피해를 준다'}],
   monk:[],
@@ -9149,12 +9149,15 @@ function makeAngel(){const g=new THREE.Group();const white=new THREE.MeshStandar
   const halo=new THREE.Mesh(new THREE.TorusGeometry(.11,.012,6,24),gold);halo.rotation.x=Math.PI/2;halo.position.y=.68;g.add(halo);
   const wings=[];for(const sx of [-1,1]){const sh=new THREE.Shape();sh.moveTo(0,0);sh.quadraticCurveTo(sx*.25,.35,sx*.62,.42);sh.quadraticCurveTo(sx*.5,.22,sx*.58,.05);sh.quadraticCurveTo(sx*.4,.0,sx*.5,-.2);sh.quadraticCurveTo(sx*.25,-.12,0,-.08);
     const w=new THREE.Mesh(new THREE.ShapeGeometry(sh,8),wing);w.position.set(sx*.08,.32,-.08);g.add(w);wings.push({m:w,sx});}
-  const light=new THREE.PointLight(0xffe8b0,.8,6,2);light.position.y=.4;g.add(light);
-  g.userData={wings,t:0};g.traverse(o=>{if(o.isMesh)o.castShadow=true;});return g;}
-function summonAngel(S,pw,opt){if(P.angel)angelEnd();const g=makeAngel();const q=player.position;g.position.set(q.x,q.y+2.4,q.z);scene.add(g);
+  g.userData={wings,t:0};g.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false;}});return g;}
+let ANGEL_G=null;
+function summonAngel(S,pw,opt){if(P.angel)angelEnd();if(!ANGEL_G)ANGEL_G=makeAngel();const g=ANGEL_G;g.visible=true;const q=player.position;g.position.set(q.x,q.y+2.4,q.z);scene.add(g);
   P.angel={g,t:S.dur,S,pw,opt,cd:.6,ph:Math.random()*6.28,bob:0};VFX.burst(g.position,0xfff2a8,24,3,.5,{mix:0xffffff,up:.4});VFX.pillar(q,0xfff2a8,.6,5,.5);}
-function angelEnd(){const A=P.angel;if(!A)return;P.angel=null;VFX.burst(A.g.position,0xfff2a8,20,2.5,.5,{mix:0xffffff,up:.6});scene.remove(A.g);A.g.traverse(o=>{if(o.geometry)o.geometry.dispose();});}
-function angelTick(dt){const A=P.angel;if(!A)return;A.t-=dt;if(A.t<=0||mode!=='world'||P.hp<=0){angelEnd();return;}
+function angelEnd(){const A=P.angel;if(!A)return;P.angel=null;VFX.burst(A.g.position,0xfff2a8,20,2.5,.5,{mix:0xffffff,up:.6});scene.remove(A.g);}
+let ANGEL_WARM=0;
+function angelTick(dt){if(!ANGEL_G&&mode==='world'){ANGEL_G=makeAngel();ANGEL_G.position.set(player.position.x,player.position.y-40,player.position.z);scene.add(ANGEL_G);ANGEL_WARM=.5;}
+  if(ANGEL_WARM>0){ANGEL_WARM-=dt;if(ANGEL_WARM<=0&&!P.angel)scene.remove(ANGEL_G);}
+  const A=P.angel;if(!A)return;A.t-=dt;if(A.t<=0||mode!=='world'||P.hp<=0){angelEnd();return;}
   const g=A.g,q=player.position;A.ph+=dt*.7;A.bob+=dt;
   // 목표: 사거리 안에서 가장 가까운 적
   let tgt=null,bd=A.S.range;const lh=P.lastHit;if(lh&&lh.dying===null&&tAll-(P.lastHitT||-9)<5&&Math.hypot(lh.mesh.position.x-q.x,lh.mesh.position.z-q.z)<A.S.range+4)tgt=lh;
@@ -9165,8 +9168,8 @@ function angelTick(dt){const A=P.angel;if(!A)return;A.t-=dt;if(A.t<=0||mode!=='w
   const look=tgt?mCenter(tgt):new THREE.Vector3(q.x+Math.cos(A.ph+1.57),g.position.y,q.z+Math.sin(A.ph+1.57));g.lookAt(look.x,g.position.y,look.z);
   for(const w of g.userData.wings)w.m.rotation.y=w.sx*(.5+Math.sin(A.bob*9)*.45);
   if(Math.random()<dt*14)VFX.emit(0,g.position.x+(Math.random()-.5)*.4,g.position.y-.2+Math.random()*.3,g.position.z+(Math.random()-.5)*.4,0,-.6,0,0xfff2a8,.7,.3,.8);
-  A.cd-=dt;if(tgt&&A.cd<=0){A.cd=1.2;const st=g.position.clone().add(new THREE.Vector3(0,.2,0)),dir=mCenter(tgt).sub(st).normalize();
-    fireProj({start:st,dir,color:0xfff2a8,rim:0xffd060,speed:26,size:.22,g:0,mult:A.S.mult*A.pw,opt:{...A.opt,bhit:0,byPet:1},target:tgt,life:1.5});sfx('cast',st,.5,1.3);}}
+  A.cd-=dt;if(tgt&&A.cd<=0){A.cd=.7;const st=g.position.clone().add(new THREE.Vector3(0,.2,0)),dir=mCenter(tgt).sub(st).normalize();
+    fireProj({start:st,dir,color:0xfff2a8,rim:0xffd060,speed:34,size:.26,g:0,mult:A.S.mult*A.pw,opt:{...A.opt,bhit:0,byPet:1},target:tgt,life:1.5});sfx('cast',st,.5,1.3);}}
 // 빛의 광선: 누르고 있는 동안 지팡이 끝에서 빛줄기가 뻗어 닿는 적을 태운다
 function rayEnd(){const Rr=P&&P.ray;if(!Rr)return;P.ray=null;if(Rr.g){scene.remove(Rr.g);Rr.g.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});}if(myMoId==='holyray'){swingT=1;myMo=null;myMoId='';}}
 // 빛 게이지: 쏘면 초당 25 줄고, 쉬면 초당 20 찬다. 0이 되면 과열: 30까지 찰 때까지 못 쏜다
