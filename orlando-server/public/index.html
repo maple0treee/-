@@ -1950,6 +1950,7 @@ const mat=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughn
 const colliders=[];
 // 점프로 넘거나 올라설 수 있는 것(바위·낮은 담): 발이 꼭대기보다 높으면 지나가고, 위에 서면 그 높이를 바닥으로 쓴다
 const JUMP_SURF=[],JUMP_GRID=new Map();
+const ROOFS=[];   // 올라서서 걸을 수 있는 지붕 {x,z,r,y} (원형 근사)
 function jumpable(x,z,r,top){colliders.push({x,z,r,y0:-1e3,y1:top-.12,jump:true});const s={x,z,rr:r*.78,y:top};JUMP_SURF.push(s);
   const C=4;for(let i=Math.floor((x-r)/C);i<=Math.floor((x+r)/C);i++)for(let j=Math.floor((z-r)/C);j<=Math.floor((z+r)/C);j++){const k=i+','+j;if(!JUMP_GRID.has(k))JUMP_GRID.set(k,[]);JUMP_GRID.get(k).push(s);}}
 function jumpFloor(x,z,y,g){const L=JUMP_GRID.get(Math.floor(x/4)+','+Math.floor(z/4));if(!L)return g;for(const s of L)if(s.y>g&&s.y<=y+.6&&(x-s.x)**2+(z-s.z)**2<s.rr*s.rr)g=s.y;return g;}
@@ -1998,7 +1999,7 @@ function jumpFloor(x,z,y,g){const L=JUMP_GRID.get(Math.floor(x/4)+','+Math.floor
       if(zoneAt(x,z)!==zone)continue;
       if(Math.min(Math.abs(x),Math.abs(z))<4)continue;
       if(tooClose(x,z,minR))continue;
-      const s=sr(.8,1.4);arr.push({x,z,s});colliders.push({x,z,r:.45*s});
+      const s=sr(.8,1.4);arr.push({x,z,s});colliders.push({x,z,r:.45*s,h:5*s});
     }
   };
   // 마을 먼저
@@ -2090,7 +2091,7 @@ function buildVillage(){
     const a=i/n*Math.PI*2+Math.PI/n,r=17.5,x=Math.cos(a)*r,z=Math.sin(a)*r;
     const w=sr(3.6,4.4),dpt=sr(3.4,4),h=sr(2.6,3.2);
     addHouse(x,heightAt(x,z),z,Math.atan2(-x,-z),{w,d:dpt,floors:1,h1:h,roof:roofs[i],wall:[0xd8cdb1,0xe2d6b8,0xcfc2a2][i%3],seed:i});
-    colliders.push({x,z,r:Math.max(w,dpt)*.62});
+    colliders.push({x,z,r:Math.max(w,dpt)*.62,h:h+2.8});
     MAP_HOUSES.push({x,z,r:Math.max(w,dpt)*.55});
   }
   flushHouses();
@@ -5572,7 +5573,7 @@ const lavaPools=[];
       if(zoneAt(x,z)!==zone)continue;if(Math.abs(z)<7&&x<C2.x)continue;
       if(extra&&!extra(x,z))continue;
       if(tooClose(x,z,minR))continue;
-      const s=sr(.8,1.4);out.push({x,z,s});if(colR)colliders.push({x,z,r:colR*s});}
+      const s=sr(.8,1.4);out.push({x,z,s});if(colR)colliders.push({x,z,r:colR*s,h:6*s});}
     return out;};
   const M4=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler(),v=new THREE.Vector3(),sv=new THREE.Vector3(),col=new THREE.Color();
   const inst=(geo,material,list,fn,colorFn)=>{const m=new THREE.InstancedMesh(geo,material,list.length);
@@ -5825,7 +5826,7 @@ function addMudHouse(x,y,z,ry,o){
       hbPush(B.op,new THREE.SphereGeometry(.17,6,4),M(px,H+.56,pz,0,0,0,1,.7,1),mudL);}}
   // 2층: 반쯤 물러난 작은 덩어리 (계단식)
   let top=H;
-  if(o.floors>1){const w2=W*(.5+rnd(1)*.15),d2=D*(.55+rnd(2)*.15),ox=(rnd(3)<.5?-1:1)*(W-w2)/2*.8,oz=-(D-d2)/2*.8,h2=o.h2||2.6;
+  if(o.floors>1){const w2=W*(.5+rnd(1)*.15),d2=D*(.55+rnd(2)*.15),ox=(rnd(3)<.5?-1:1)*(W-w2)/2*.8,oz=-(D-d2)/2*.8,h2=o.h2||2.6;o._ox=ox;o._oz=oz;
     mass(w2,d2,h2,mud,ox,H,oz);box(w2*.94,.14,d2*.94,mudD,ox,H+h2+.02,oz);
     for(const [sx,sz] of [[0,1],[0,-1],[1,0],[-1,0]])box(sz?w2*.94:.2,.42,sz?.2:d2*.94,mudL,ox+sx*(w2*.47-.1),H+h2+.26,oz+sz*(d2*.47-.1));
     for(let i=0;i<3;i++)hbPush(B.op,new THREE.CylinderGeometry(.06,.06,.6,5),M(ox-w2*.35+i*w2*.35,H+h2-.25,oz+d2/2+.12,Math.PI/2,0,0),beam);
@@ -5847,6 +5848,9 @@ function addMudHouse(x,y,z,ry,o){
   // 가끔 지붕 위 야자잎 그늘막
   if(rnd(6)<.45){const px=(rnd(7)-.5)*W*.4,pz=(rnd(8)-.5)*D*.3;for(const [a,b] of [[-.7,-.5],[.7,-.5],[-.7,.5],[.7,.5]])hbPush(B.op,new THREE.CylinderGeometry(.04,.04,1.5,4),M(px+a,top+.75,pz+b),beam);
     box(1.7,.08,1.3,0x8a7a4a,px,top+1.5,pz);}
+  // 평평한 지붕: 올라설 수 있다 (1층 지붕과 2층 지붕)
+  ROOFS.push({x,z,r:Math.min(W,D)*.52,y:y+H+.16});if(o.floors>1){const c=new THREE.Vector3(o._ox||0,0,o._oz||0).applyMatrix4(world);ROOFS.push({x:c.x,z:c.z,r:Math.min(W,D)*.3,y:y+top+.16});}
+  return y+top+.4;
 }
 // 대추야자: 마디진 줄기가 살짝 휘고, 꼭대기에 늘어진 잎과 열매 송이
 function addPalm(x,y,z,h,seed){
@@ -5892,8 +5896,8 @@ function addPalm(x,y,z,h,seed){
   for(let k=0;k<16;k++){const a=k/16*Math.PI*2+Math.PI/16;if([0,Math.PI/2,Math.PI,-Math.PI/2,Math.PI*1.5].some(g=>Math.abs(Math.atan2(Math.sin(a-g),Math.cos(a-g)))<.2))continue;spots.push([a,31.5,k+3]);}
   for(const [a,rr,k] of spots){
     const x=cx+Math.cos(a)*rr,z=cz+Math.sin(a)*rr,y=heightAt(x,z);if(inBld(x,z,4.2))continue;
-    addMudHouse(x,y,z,Math.atan2(cx-x,cz-z),{w:5.6,d:4.8,floors:k%3?2:1,h:3.2+(k%2)*.4,h2:2.4,mud:[0xc9a774,0xbf9a68,0xd4b285,0xb8915f,0xcfae7c][k%5],seed:k+20});
-    colliders.push({x,z,r:3.4});MAP_HOUSES.push({x,z,r:2.9});
+    const topY=addMudHouse(x,y,z,Math.atan2(cx-x,cz-z),{w:5.6,d:4.8,floors:k%3?2:1,h:3.2+(k%2)*.4,h2:2.4,mud:[0xc9a774,0xbf9a68,0xd4b285,0xb8915f,0xcfae7c][k%5],seed:k+20});
+    colliders.push({x,z,r:3.4,h:(k%3?3.2+(k%2)*.4:topY-y)+.1});   /* 1층 지붕 높이까지만 막는다 (2층 집은 1층 지붕 위를 걸을 수 있게) */MAP_HOUSES.push({x,z,r:2.9});
   }
   // 대추야자: 광장 둘레, 큰길가, 성벽 안쪽 빈자리
   {let ps=1;const pal=(x,z,h)=>{if(Math.abs(x-cx)<2.6||Math.abs(z-cz)<2.6)return;addPalm(x,heightAt(x,z),z,h,ps++);};
@@ -5966,6 +5970,7 @@ function floorAt(x,z,y){
   for(const s of SURFACES){if(x<s.x0||x>s.x1||z<s.z0||z>s.z1)continue;
     let h=s.y;if(s.ramp==='x')h=s.ya+(s.yb-s.ya)*(x-s.x0)/(s.x1-s.x0);
     if(h<=y+.6&&h>g)g=h;}
+  for(const s of ROOFS){if(s.y<=y+.6&&s.y>g&&(x-s.x)**2+(z-s.z)**2<s.r*s.r)g=s.y;}
   return jumpFloor(x,z,y,g);
 }
 (function buildArchive(){return; // 하레나가 시와 오아시스처럼 바뀌며 기록관은 없앴다
@@ -8693,7 +8698,7 @@ function aoeHit(center,radius,mult,o={}){
 }
 function fireProj(o){
   const dir=o.dir?o.dir.clone().normalize():camDir();
-  if(P&&P.fly&&!o.visual){dir.applyAxisAngle(new THREE.Vector3(0,1,0),(Math.random()-.5)*.3);dir.y+=(Math.random()-.5)*.22;dir.normalize();}   /* 비행 중: 조준이 흔들린다 */
+  if(P&&P.fly&&!o.visual){if(!o.start){o.start=staffTip();if(!o.dir){const aim=aimPoint(45);dir.copy(aim.sub(o.start).normalize());}}dir.applyAxisAngle(new THREE.Vector3(0,1,0),(Math.random()-.5)*.3);dir.y+=(Math.random()-.5)*.22;dir.normalize();}   /* 비행 중: 타고 있는 지팡이 끝에서, 조준은 흔들린다 */
   if(o.yawOff){dir.applyAxisAngle(new THREE.Vector3(0,1,0),o.yawOff);}
   const start=o.start?o.start.clone():camera.position.clone().addScaledVector(dir,.7);if(!o.start)start.y-=.12;
   if(o.g===undefined)o.g=o.size<.16?7:0; // 화살·단검은 중력을 받아 살짝 떨어진다
@@ -8809,6 +8814,7 @@ function detonateFx(at,r,col){const g=new THREE.Vector3(at.x,heightAt(at.x,at.z)
   spawnFx(col,at,r*.9,.35);}
 // 지팡이 끝의 세계 좌표 (1인칭이면 손에 든 지팡이, 3인칭이면 몸의 지팡이)
 function staffTip(){const v=new THREE.Vector3();
+  if(P&&P.fly&&player.userData.ride){player.updateMatrixWorld(true);const w=player.userData.ride.children[0];return (w||player.userData.ride).localToWorld(v.set(0,1.55,0));}
   if(!cam.third&&viewModel&&viewModel.userData.orb){viewModel.updateMatrixWorld(true);return viewModel.userData.orb.getWorldPosition(v);}
   const st=player&&player.userData.stick;const w=st&&st.w&&st.w.children[0];if(w&&w.userData.orb){player.updateMatrixWorld(true);return w.userData.orb.getWorldPosition(v);}
   const f=flatFwd(),q=player.position;return v.set(q.x+f.x*.6,q.y+1.9,q.z+f.z*.6);}
@@ -8863,10 +8869,10 @@ function beamCircle(S){const tex=beamCircleTex(),col=S.color;
   const mk=(r,op)=>new THREE.Mesh(new THREE.PlaneGeometry(r*2,r*2),new THREE.MeshBasicMaterial({map:tex,color:col,transparent:true,opacity:op,depthWrite:false,side:THREE.DoubleSide}));
   const g=new THREE.Group(),a=mk(.34,.95),b=mk(.24,.8),glow=new THREE.Mesh(new THREE.CircleGeometry(.26,24),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.0,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));
   b.position.z=.03;b.rotation.z=.4;glow.position.z=-.01;g.add(a,b,glow);
-  const fp=()=>!cam.third;let inCam=fp();const place=()=>{if(inCam){camera.add(g);g.position.set(.12,-.08,-1.6);g.rotation.set(0,0,0);}else{scene.add(g);}};place();
+  const fp=()=>!cam.third&&!(P&&P.fly);let inCam=fp();const place=()=>{if(inCam){camera.add(g);g.position.set(.12,-.08,-1.6);g.rotation.set(0,0,0);}else{scene.add(g);}};place();
   let fired=false,done=false,t=0,fireT=0;
   const upd=(k,sh)=>{t=sh.t;if(done)return;if(fp()!==inCam){g.parent&&g.parent.remove(g);inCam=fp();place();}
-    if(!inCam){const d=camDir(),q=player.position;g.position.set(q.x+d.x*1.4,q.y+1.35+d.y*1.4,q.z+d.z*1.4);g.lookAt(g.position.clone().add(d));}
+    if(!inCam){const d=camDir();if(P&&P.fly){g.position.copy(staffTip()).addScaledVector(d,.5);}else{const q=player.position;g.position.set(q.x+d.x*1.4,q.y+1.35+d.y*1.4,q.z+d.z*1.4);}g.lookAt(g.position.clone().add(d));}
     const grow=Math.min(1,t/.25),e=1-Math.pow(1-grow,3);let sc=e*(1+Math.sin(t*20)*.03);
     if(fired){const f=Math.max(0,1-(t-fireT)/.3);sc*=1+(1-f)*.4;a.material.opacity=.95*f;b.material.opacity=.8*f;glow.material.opacity=.35*f;}
     else{a.material.opacity=.95*e;b.material.opacity=.8*e;glow.material.opacity=.12*e+.08*Math.max(0,Math.sin(t*9));}
@@ -8973,11 +8979,21 @@ function boomFx(at,R,o={}){const gy=heightAt(at.x,at.z),c=new THREE.Vector3(at.x
   setTimeout(()=>magicCircle(at,R*.9,C2,4+big*3,{grow:false,hold:.3,spin:.3,lift:.04}),(1.0+big*.5)*1000);
 }
 // 폭발마법-근거리
-function lblastFx(at,R){boomFx(at,R,{c1:0xff9a20,c2:0xe02aa0,c3:0xff5a10});}
+function lblastFx(at,R){boomFx(at,R,{c1:0xffa820,c2:0xff3a10,c3:0xff7a20});}
 // 폭발마법-원거리: 세 겹 마법진, 더 많은 리본·고리, 보라와 하늘빛을 섞어
-function farblastFx(c0,R){boomFx(c0,R,{big:1,c1:0xff7a20,c2:0xb020f0,c3:0x20b8ff});}
+function farblastFx(c0,R){const gy=heightAt(c0.x,c0.z),c=new THREE.Vector3(c0.x,gy+R*.25,c0.z);boomFx(c0,R,{big:1,c1:0xffb020,c2:0xff4a10,c3:0xff8a30});
+  // 불꽃 기둥: 불빛 스프라이트가 줄지어 솟아오른다
+  for(let i=0;i<18;i++){const d=.05+i*.06;setTimeout(()=>{const s=new THREE.Sprite(new THREE.SpriteMaterial({map:fxTex('glow'),color:i%2?0xffb020:0xff5a10,transparent:true,opacity:.85,depthWrite:false}));s.position.set(c.x+(Math.random()-.5)*R*.3,gy+.3,c.z+(Math.random()-.5)*R*.3);
+    VFX.anim(s,.9+Math.random()*.4,(k)=>{const sc=R*(.5+k*.5);s.scale.set(sc,sc*1.3,1);s.position.y=gy+.3+k*R*2.6;s.material.opacity=.85*(1-k*k);});},d*1000);}
+  // 두 번째 울림: 조금 뒤 더 큰 고리와 빛살이 한 번 더
+  setTimeout(()=>{if(mode!=='world')return;tiltRing(c,R*2.2,0xffb020,.9,[Math.PI/2,0,0],0);tiltRing(c,R*2.0,0xff4a10,1.0,[Math.PI/2+.7,.3,0],80);tiltRing(c,R*2.0,0xff8a30,1.0,[Math.PI/2-.7,-.6,0],160);rays(c.clone().setY(c.y+R*.6),R*2.4,0xffb020,14,.6);coreGlow(c.clone().setY(c.y+R*.5),R*.9,0xff5a10,.6);flashLight(c,0xffa030,10,R*5,.8);
+    VFX.burst(c,0xffb020,40,R*3,1.0,{up:.6,mix:0xff4a10,grav:2,drag:1.4});},420);
+  // 떨어지는 불씨: 위에서 쏟아져 내리는 불빛
+  for(let i=0;i<40;i++){const a=Math.random()*6.283,rr=Math.sqrt(Math.random())*R*1.3,d=.5+Math.random()*1.6;setTimeout(()=>VFX.emit(i%3?0:1,c.x+Math.cos(a)*rr,gy+R*1.8+Math.random()*R,c.z+Math.sin(a)*rr,(Math.random()-.5)*.6,-1.5-Math.random()*2,(Math.random()-.5)*.6,i%2?0xffb020:0xff6a20,1.2+Math.random()*.8,2,.5),d*1000);}
+  // 오래 남는 불 마법진
+  setTimeout(()=>magicCircle(c0,R*1.3,0xff6a20,6,{col2:0xffb020,grow:false,hold:.4,spin:.4,lift:.05}),1200);}
 // 폭발마법-원거리: 떨어질 자리를 미리 표시 (마법진이 천천히 돌며 점점 밝아진다)
-function farMark(at,R,dur){const g=magicCircle(at,R,0xff7a30,dur+.15,{col2:0xd040ff,spin:.5,hold:.9,pulse:1,lift:.1});
+function farMark(at,R,dur){const g=magicCircle(at,R,0xff7a30,dur+.15,{col2:0xffb020,spin:.5,hold:.9,pulse:1,lift:.1});
   const m=new THREE.Mesh(new THREE.RingGeometry(.92,1,48),magicMat(0xffb060,.8));m.rotation.x=-Math.PI/2;m.position.set(at.x,heightAt(at.x,at.z)+.12,at.z);
   VFX.anim(m,dur+.15,(k)=>{const p=(k*dur*2)%1;m.scale.setScalar(R*(1.15-p*.35));m.material.opacity=.8*p*(1-Math.max(0,(k-.9)/.1));});}
 let dtLast=1/60;
@@ -9181,7 +9197,7 @@ function useSkillInner(i){
   if(S.type==='leap'&&(jumpY>.05||P.leap||P.dash)){toast('땅에 발을 딛고 있어야 해요');return;}
   if(S.type==='smack'&&!frontTarget(S.range)){toast('바로 앞에 적이 있어야 해요');return;}
   if(S.type==='closein'&&!closeTarget(S.range)){toast('가까운 적이 없어요');return;}
-  if(S.type==='backblast'&&(jumpY>.05||P.leap||P.dash)){toast('땅에 발을 딛고 있어야 해요');return;}
+  if(S.type==='backblast'&&(P.leap||P.dash))return;   /* 공중(점프 중)에서도 쓸 수 있다 */
   if(S.type==='farblast'&&P.fly){toast('지팡이 위에서는 쓸 수 없어요');return;}
   if(S.type==='chainz'&&!aimTarget(P.skills.agile?S.range/4:S.range,.96)){toast('적을 조준해야 해요');return;}
   {const sj=SKJOB[id];if(sj&&JOBS[sj].from&&!hasClsW(sj)){toast(`${JOBS[sj].name}의 무기를 들어야 해요`);return;}}   // 전직 스킬: 그 직업 류 무기
@@ -9189,7 +9205,7 @@ function useSkillInner(i){
   if(emp){endGuard();P.empShield=true;}
   const bc=S.type==='barb'?barbCombo(id):'';
   if(P.fly&&Math.random()<.3){P.mp-=S.mp;cds[id]=Math.min(S.cd,1.5);swingT=0;swingN++;myMoId='fizzle';myMo=motionFor(JOBS[P.job].weapon,'fizzle');const tp=staffTip();VFX.burst(tp,0x9a90b0,10,1.5,.3,{mix:0xffffff,up:.2});for(let k=0;k<6;k++)VFX.emit(0,tp.x,tp.y,tp.z,(Math.random()-.5)*2,(Math.random()-.5)*2,(Math.random()-.5)*2,0x6a6080,.5,3,1);sfx('mg_basic',null,.4,.6);toast('지팡이 위라 마법이 흔들렸다');updateHud();return;}   /* 비행 중: 마법이 종종 불발 */
-  P.mp-=S.mp;cds[id]=S.cd;if(P.hideT>tAll)P.hideT=0;agileStack();swingT=0;swingN++;myMoId=bc==='bat'?'batswing':bc==='spinchop'?'axechopF':id;myMo=motionFor(JOBS[P.job].weapon,emp&&id==='push'?'pushE':myMoId);P.skN=swingN;sfxSkill(S,id);
+  P.mp-=S.mp;cds[id]=S.cd;if(P.hideT>tAll)P.hideT=0;agileStack();swingN++;if(!P.fly){swingT=0;myMoId=bc==='bat'?'batswing':bc==='spinchop'?'axechopF':id;myMo=motionFor(JOBS[P.job].weapon,emp&&id==='push'?'pushE':myMoId);}P.skN=swingN;sfxSkill(S,id);   /* 타고 있을 땐 동작 없이 지팡이 끝에서 바로 */
   const pw=1+.25*(lvl-1),opt={stun:S.stun,dot:S.dot,crit:S.crit,execute:S.execute,steal:S.steal,color:S.color};
   let fxAt=null;
   switch(S.type){
@@ -9225,7 +9241,10 @@ function useSkillInner(i){
         fireProj({color:0xffb050,rim:0xff4a10,speed:S.speed,size:.62,g:0,mult:mul*.3,opt:o2,start:st.addScaledVector(dir,.3),dir,life:3,big:1,onEnd:boom});},1100);break;}
     case 'smack':{const m=frontTarget(S.range),q=player.position,dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz)||1;setTimeout(()=>{if(mode!=='world'||!P)return;pvel.x=-dx/d*11;pvel.z=-dz/d*11;vy=Math.max(vy,7.5);sitting=false;},210);   /* 반동: 손바닥이 닿는 순간 튕겨 나가듯 뒤로 */
       setTimeout(()=>{if(mode!=='world'||m.dying!==null)return;shared(()=>damageMonster(m,S.mult*pw,{...opt,kb:[+(dx/d*S.kb).toFixed(2),+(dz/d*S.kb).toFixed(2)]}));const c=mCenter(m);counterFx(c,dx/d,dz/d,m.r);sfx('heavy',c,.9);shakeT=Math.max(shakeT,.1);},210);fxAt=null;break;}
-    case 'backblast':{const org=player.position.clone(),f=flatFwd();vy=15;pvel.x=-f.x*6.5;pvel.z=-f.z*6.5;sitting=false;invuln=Math.max(invuln,.9);
+    case 'backblast':{if(P.fly){const R=S.radius,mul=S.mult*pw,o2={...opt,noKnock:true},st=staffTip(),aim=aimPoint(60),dir=aim.clone().sub(st).normalize();
+        const boom=at=>{const c=at.clone();c.y=Math.max(c.y,heightAt(c.x,c.z)+.1);shared(()=>aoeHit(c,R,mul,o2));lblastFx(c,R);sfx('bm_boom',c,1);shakeT=Math.max(shakeT,.18);};
+        fireProj({color:0xffb040,rim:0xff4a10,speed:30,size:.36,g:0,mult:mul*.5,opt:o2,start:st.addScaledVector(dir,.3),dir,life:2.5,onEnd:boom});sfx('mg_basic',null,.9,.8);fxAt=null;break;}
+      const org=player.position.clone();org.y=heightAt(org.x,org.z);const f=flatFwd();vy=jumpY>.3?Math.max(vy,0)*.3+11:15;   /* 공중에서 쓰면 조금만 더 솟는다, 폭발은 발밑 땅 */pvel.x=-f.x*6.5;pvel.z=-f.z*6.5;sitting=false;invuln=Math.max(invuln,.9);
       spawnRing(S.color,org,S.radius,.45);P.lblast={org,S,pw,opt:{...opt,noKnock:true},fired:false};
       fxAt=null;break;}
     case 'burst':{const q=player.position;let n=0;for(const m of alive()){const dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz);if(d>S.radius+m.r)continue;const ux=d>1e-3?dx/d:1,uz=d>1e-3?dz/d:0;
@@ -9897,7 +9916,7 @@ const clock=new THREE.Clock();let tAll=0;
 const targetSky=new THREE.Color(),_sunC=new THREE.Color(),_zenC=new THREE.Color(),_skyBlue=new THREE.Color();
 // 비행 중 충돌: 높이 범위가 없는 것(벽·나무·집)은 그 높이(h, 없으면 7m) 위로는 넘어간다
 function pushOutFly(p,r){for(const c of colliders){if(c.y0!==undefined){if(p.y<c.y0||p.y>c.y1)continue;}else if(p.y>heightAt(c.x,c.z)+(c.h||7))continue;const dx=p.x-c.x,dz=p.z-c.z,d=Math.hypot(dx,dz),mn=c.r+r;if(d<mn&&d>1e-4){p.x=c.x+dx/d*mn;p.z=c.z+dz/d*mn;}}}
-function pushOut(p,r){for(const c of colliders){if(c.y0!==undefined&&(p.y===undefined||p.y<c.y0||p.y>c.y1))continue;const dx=p.x-c.x,dz=p.z-c.z,d=Math.hypot(dx,dz),mn=c.r+r;if(d<mn&&d>1e-4){p.x=c.x+dx/d*mn;p.z=c.z+dz/d*mn;}}}
+function pushOut(p,r){for(const c of colliders){if(c.y0!==undefined&&(p.y===undefined||p.y<c.y0||p.y>c.y1))continue;if(c.h!==undefined&&p.y!==undefined&&p.y>heightAt(c.x,c.z)+c.h-.25)continue;const dx=p.x-c.x,dz=p.z-c.z,d=Math.hypot(dx,dz),mn=c.r+r;if(d<mn&&d>1e-4){p.x=c.x+dx/d*mn;p.z=c.z+dz/d*mn;}}}
 
 function updatePlayer(dt){
   let f=0,r=0;
@@ -9930,7 +9949,7 @@ function updatePlayer(dt){
     if(dl<=acc){pvel.x=wx;vy=wy;pvel.z=wz;}else{pvel.x+=dvx/dl*acc;vy+=dvy/dl*acc;pvel.z+=dvz/dl*acc;}
     {const st=Math.hypot(pvel.x,pvel.z)*dt,ns=Math.max(1,Math.ceil(st/.25));for(let i=0;i<ns;i++){pos.x+=pvel.x*dt/ns;pos.z+=pvel.z*dt/ns;pushOutFly(pos,.5);}}
     moving=Math.hypot(pvel.x,pvel.z)>.4?2:0;
-    if(myMo==null||myMoId===''){myMoId='ride';myMo=motionFor(JOBS[P.job].weapon,'ride');swingT=.5;}
+    if(myMo==null||myMoId===''){myMoId='ride';myMo=motionFor(JOBS[P.job].weapon,'ride');swingT=.5;}if(myMoId==='ride'&&swingT<.5)swingT=.5;
     fitRide(player);rideTrail(player,dt);
     // 가끔 균형을 잃고 떨어진다 (오래 탈수록·맞으면 더 자주)
     P.flyT=(P.flyT||0)+dt;if(P.flyFall||(P.flyT>4&&Math.random()<dt/28)){P.flyFall=false;flyFall();}
@@ -9970,7 +9989,7 @@ function updatePlayer(dt){
   for(const m of alive()){if(!(m.D.boss||m.D.dragon))continue;const dx=pos.x-m.mesh.position.x,dz=pos.z-m.mesh.position.z,d=Math.hypot(dx,dz),mn=m.r+.5;if(d<mn&&d>1e-4){pos.x=m.mesh.position.x+dx/d*mn;pos.z=m.mesh.position.z+dz/d*mn;}}   // 보스 몸은 통과하지 못한다
   OR.worldClamp(pos,.5);
   // 부딪히면 그 방향 속도는 사라진다
-  if(dt>0){const cx=(pos.x-bx)/dt,cz=(pos.z-bz)/dt;if(Math.abs(cx)>.01||Math.abs(cz)>.01){pvel.x+=cx*.9;pvel.z+=cz*.9;}}
+  if(dt>0){let cx=(pos.x-bx)/dt,cz=(pos.z-bz)/dt;const cl=Math.hypot(cx,cz);if(cl>6){cx*=6/cl;cz*=6/cl;}if(Math.abs(cx)>.01||Math.abs(cz)>.01){pvel.x+=cx*.9;pvel.z+=cz*.9;}}   /* 큰 물체 안에서 밀려날 때 튕겨 나가지 않게 */
   // 중력과 착지 (내리막에서는 땅에 붙어서 걷고, 절벽에서는 떨어진다)
   const ground=floorAt(pos.x,pos.z,pos.y);
   if(P.fly){const zn=zoneAt(pos.x,pos.z),cap=ground+(zn==='dungeon'||zn==='hall'?2.6:45);let py=pos.y+vy*dt;if(py>cap){py=cap;vy=Math.min(vy,0);}
