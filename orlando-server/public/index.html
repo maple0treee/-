@@ -598,7 +598,7 @@ body.touch.inv-open #hotbar{display:none}
 #bowHud .bar{width:84px;height:4px;margin:4px 0 0;background:rgba(0,0,0,.45);border:1px solid rgba(239,228,204,.5);border-radius:2px;overflow:hidden}
 #bowHud .bar i{display:block;height:100%;width:0;background:#f3cf6a}
 #bowHud.full{color:#ffd86a}#bowHud.full .bar i{background:#ffd86a}
-#buffBar{position:fixed;display:flex;gap:4px;pointer-events:auto;z-index:4}
+#buffBar{position:fixed;display:flex;gap:4px;pointer-events:auto}
 #buffBar[hidden]{display:none}
 #buffBar .bf{position:relative;width:30px;height:30px;border-radius:5px;overflow:hidden;background:var(--bc);border:1px solid rgba(255,255,255,.35);box-shadow:0 2px 6px rgba(0,0,0,.4)}
 #buffBar .bf svg{position:absolute;inset:4px;width:22px;height:22px}
@@ -1906,13 +1906,13 @@ const canvas=$('#c');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMapping=THREE.LinearToneMapping;renderer.toneMappingExposure=.86;   /* 전체 밝기를 조금 낮춘다 (색은 그대로) */
 const scene=new THREE.Scene();
 const skyCol=new THREE.Color(ZONES.village.sky);
 scene.background=skyCol.clone();scene.fog=new THREE.Fog(skyCol.clone(),38,140);
 const camera=new THREE.PerspectiveCamera(60,1,.1,400);
-const hemi=new THREE.HemisphereLight(0xe4ecf0,0x4d4128,.8);scene.add(hemi);
-const sun=new THREE.DirectionalLight(0xfff0d4,1.05);
+const hemi=new THREE.HemisphereLight(0xe4ecf0,0x4d4128,.62);scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xfff0d4,.88);
 sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
 const sc=sun.shadow.camera;sc.left=-36;sc.right=36;sc.top=36;sc.bottom=-36;sc.near=1;sc.far=140;sun.shadow.bias=-.0006;
 scene.add(sun,sun.target);
@@ -1934,6 +1934,7 @@ void main(){vec3 d=normalize(vD);float h=d.y;
     float n=fbm(uv),c=smoothstep(1.-uCloud,1.-uCloud+.3,n)*smoothstep(0.,.18,h);
     float lit=.85+.25*pow(sd,4.);vec3 cc=mix(uHor*1.08,vec3(1.),.6)*lit;cc=mix(cc,cc*.82,smoothstep(.55,.95,fbm(uv*1.8+3.1)));
     col=mix(col,cc,c*.9);}
+  col*=.86;
   gl_FragColor=vec4(col,1.);
   #include <encodings_fragment>
 }`,side:THREE.BackSide,depthWrite:false,depthTest:false,fog:false}));
@@ -8930,6 +8931,8 @@ function useSkillInner(i){
     VFX.burst(new THREE.Vector3(me.x+f.x*1.6,me.y+1.1,me.z+f.z*1.6),0xdff4ff,22,5,.5,{mix:0xffffff});if(cds[id]>0)cds[id]*=.4;updateHud();return;}
   // 워리어: 스킬 도중에 누른 스킬은 지금 스킬이 끝나자마자 나간다
   if(id==='reap'&&P.reapHold){reapPull();return;}
+  if(id==='counterm'&&P.dash&&P.dash.tgt){P.cmQ={i,t:tAll};return;}   // 접근하기 → 반격마법 콤보: 돌진 중에 누르면 도착하자마자 나간다
+  if(id==='counterm'&&!P.dash&&myMoId==='approach'&&swingT<1){swingT=1;myMo=null;myMoId='';}
   if(skillBusy()){if(P.job==='barbarian')P.skQ={i,t:tAll};return;}
   if(S.type==='shd'){shdUse(S,lvl);return;}
   if(P.job==='shielder'&&!shdHandKind()&&SKJOB[id]!=='shielder'){toast('방패를 들고 있어야 쓸 수 있어요');return;}   // 손에 든 방패가 없으면 방패병·전사 방패 스킬은 못 쓴다
@@ -8969,7 +8972,7 @@ function useSkillInner(i){
       else{empowerMe(S.pct,S.dur,S.buff);fxAt=player.position.clone().add(new THREE.Vector3(0,1,0));}break;}
     case 'closein':{const m=closeTarget(S.range),q=player.position,dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz),f={x:dx/d,z:dz/d},dist=Math.max(0,d-(m.r+.9)),dd=Math.max(.1,dist/42);
       P.dash={t:dd,dur:dd,dist,mult:S.mult*pw,opt:{...opt,stun:S.stun},hit:new Set(),f,push:false,tgt:m,stop:m.r+.9};P.dashFx=S.color;invuln=Math.max(invuln,dd+.05);fxAt=player.position.clone().add(new THREE.Vector3(0,1,0));break;}
-    case 'smack':{const m=frontTarget(S.range),q=player.position,dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz)||1;setTimeout(()=>{if(mode!=='world'||!P)return;pvel.x=-dx/d*6.5;pvel.z=-dz/d*6.5;vy=Math.max(vy,6.5);sitting=false;},210);   /* 반동: 손바닥이 닿는 순간 튕겨 나가듯 뒤로 */
+    case 'smack':{const m=frontTarget(S.range),q=player.position,dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz)||1;setTimeout(()=>{if(mode!=='world'||!P)return;pvel.x=-dx/d*11;pvel.z=-dz/d*11;vy=Math.max(vy,7.5);sitting=false;},210);   /* 반동: 손바닥이 닿는 순간 튕겨 나가듯 뒤로 */
       setTimeout(()=>{if(mode!=='world'||m.dying!==null)return;shared(()=>damageMonster(m,S.mult*pw,{...opt,kb:[+(dx/d*S.kb).toFixed(2),+(dz/d*S.kb).toFixed(2)]}));const c=mCenter(m);counterFx(c,dx/d,dz/d,m.r);sfx('heavy',c,.9);shakeT=Math.max(shakeT,.1);},210);fxAt=null;break;}
     case 'backblast':{const org=player.position.clone(),f=flatFwd();vy=15;pvel.x=-f.x*6.5;pvel.z=-f.z*6.5;sitting=false;invuln=Math.max(invuln,.9);
       spawnRing(S.color,org,S.radius,.45);P.lblast={org,S,pw,opt:{...opt,noKnock:true},fired:false};
@@ -9667,7 +9670,7 @@ function updatePlayer(dt){
       if(Math.random()<.5)dustPuffs({x:pos.x,y:floorAt(pos.x,pos.z,pos.y+.5),z:pos.z},.5,1);}
     else if(!D.roll)for(const m of alive()){if(D.hit.has(m))continue;if(Math.hypot(m.mesh.position.x-pos.x,m.mesh.position.z-pos.z)<(D.wide?2.7:1.6)+m.r){D.hit.add(m);const kd=D.push?D.dist*Math.max(0,D.t)/D.dur+1.6:0;damageMonster(m,D.mult,D.push?{...D.opt,kb:[+(D.f.x*kd).toFixed(2),+(D.f.z*kd).toFixed(2)]}:D.opt);if(D.push){const q=mCenter(m);VFX.burst(q,0xdde8ff,14,4,.4,{mix:0xffffff});sfx('block',q,.8);}spawnFx(0xffe0b0,mCenter(m),.9,.25);}}
     if(P.dashFx){const q=player.position;for(let k=0;k<3;k++)VFX.emit(k%2,q.x+(Math.random()-.5)*.6,q.y+.4+Math.random()*1.2,q.z+(Math.random()-.5)*.6,0,.4,0,P.dashFx,.4,0,1);}
-    D.t-=dt;if(D.t<=0){P.dash=null;P.dashFx=null;if(D.wide)P.empShield=false;if(D.tgt){pvel.x=0;pvel.z=0;}}moving=2;   /* 접근하기는 멈추면 미끄러지지 않는다 */
+    D.t-=dt;if(D.t<=0){P.dash=null;P.dashFx=null;if(D.wide)P.empShield=false;if(D.tgt){pvel.x=0;pvel.z=0;if(P.cmQ){const q=P.cmQ;P.cmQ=null;if(tAll-q.t<1.5){swingT=1;myMo=null;myMoId='';useSkill(q.i);}}}}moving=2;   /* 접근하기는 멈추면 미끄러지지 않는다 */
   }else{
     // 원하는 속도 쪽으로 가속 (땅에서는 빠르게, 공중에서는 조금만 방향을 바꿀 수 있다)
     let wx=0,wz=0;
@@ -9792,7 +9795,7 @@ function updateWorld(dt){
     if(it)b.textContent='F · '+(it.startsWith('player:')?`${(others.get(bestP)||{}).name||'모험가'}에게 말 걸기`:it.startsWith('npc:')?(bestN.role?`${bestN.name} (${bestN.role})`:bestN.name):(it.startsWith('chest:')?'상자 열기':it.startsWith('portal:')?(q=>it.endsWith(':x')?`${q.label} (Lv ${q.minLv})`:q.label)(PORTALS[+it.split(':')[1]]):{shop:'상인과 거래',mentor:'스승과 대화',door_in:'석문 열기',door_out:'석굴에서 나가기'}[it]));}
   targetSky.set(ZONES[z].sky);scene.background.lerp(targetSky,z==='dungeon'||z==='hall'?1:dt*1.2);scene.fog.color.copy(scene.background);
   scene.fog.near=z==='dungeon'?14:z==='hall'?30:38;scene.fog.far=z==='dungeon'?60:z==='hall'?95:140;
-  {const inH=z==='hall',inD=z==='dungeon'||inH,inT=z==='town',kk=Math.min(1,dt*3);hemi.intensity+=((inH?.4:inD?.32:inT?.95:.8)-hemi.intensity)*kk;sun.intensity+=((inD?.15:inT?1.25:1.05)-sun.intensity)*kk;
+  {const inH=z==='hall',inD=z==='dungeon'||inH,inT=z==='town',kk=Math.min(1,dt*3);hemi.intensity+=((inH?.36:inD?.28:inT?.72:.62)-hemi.intensity)*kk;sun.intensity+=((inD?.13:inT?1.0:.88)-sun.intensity)*kk;
     sun.color.lerp(_sunC.set(inT?0xfff6e4:0xfff0d4),kk);
     // 하늘 돔: 지평선은 안개색, 꼭대기는 짙은 하늘색. 사막(하레나)은 구름이 적고 햇무리가 세다
     skyDome.visible=!inD;skyDome.position.copy(camera.position);SKY.t.value=tAll;SKY.hor.value.copy(scene.background);
