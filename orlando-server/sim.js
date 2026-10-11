@@ -50,7 +50,8 @@
     function randPointIn(zone) {
       for (let i = 0; i < 400; i++) {
         let x, z;
-        if (zone === 'road') { x = rnd(ROAD.x0 + 10, ROAD.x1 - 6); z = rnd(-3, 3); }
+        if (OR.ISLES[zone]) { const I = OR.ISLES[zone]; const a = rnd(-Math.PI, Math.PI), d = rnd(6, I.R - 8); x = I.x + Math.cos(a) * d; z = I.z + Math.sin(a) * d; if (Math.hypot(x - I.entry.x, z - I.entry.z) < 16) continue; }
+        else if (zone === 'road') { x = rnd(ROAD.x0 + 10, ROAD.x1 - 6); z = rnd(-3, 3); }
         else if (['wwest', 'wnorth', 'wsouth', 'weast'].includes(zone)) {
           const a = rnd(-Math.PI, Math.PI), d = rnd(TOWN_R + 5, R2 - 4); x = C2.x + Math.cos(a) * d; z = C2.z + Math.sin(a) * d;
           if (Math.abs(z) < 6 && x < C2.x) continue; // 도시로 가는 길은 비워 둔다
