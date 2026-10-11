@@ -1716,7 +1716,7 @@ const SKILLS={
     {id:'heal2',name:'강화마법-치유2',req:60,mp:0,cd:0,type:'passive',max:5,desc:'(지속) 기본 공격으로 아군(나 포함)을 치유하면 그 아군이 5초 동안 치유 중 상태가 되어 0.5초마다 최대 HP의 1%를 회복한다. 단계마다 +0.25%'},
     {id:'holy2',name:'빛마법2',req:60,mp:0,cd:0,type:'passive',max:5,desc:'(지속) 빛마법의 범위가 30% 넓어지고, 빛이 닿은 자리에 6초 동안 빛의 지형이 남는다. 그 위에 선 아군은 공격력이 15% 오른다. 단계마다 범위 +10%, 공격력 +5%'},
     {id:'angel',name:'소환마법',req:60,mp:30,cd:25,type:'summon',dur:20,mult:1.2,range:14,color:0xfff2a8,desc:'20초 동안 곁을 나는 천사를 부른다. 천사는 14m 안의 적에게 1.2초마다 빛의 화살을 쏜다(공격력 120%)'},
-    {id:'holyray',name:'빛의 광선',req:60,mp:0,cd:0,type:'ray',drain:0,tick:.25,mult:.5,range:18,color:0xfff2a8,desc:'키를 누르고 있는 동안 지팡이에서 빛의 광선을 뿜어 닿는 적을 태운다. 0.25초마다 공격력 50%. 빛 게이지를 쓰며(4초 분량), 다 쓰면 식을 때까지 쏠 수 없다. 쏘지 않을 때 게이지가 찬다'},
+    {id:'holyray',name:'빛의 광선',req:60,mp:0,cd:0,type:'ray',drain:0,tick:.25,mult:.5,range:18,color:0xfff2a8,desc:'키를 누르고 있는 동안 지팡이에서 빛의 광선을 뿜어 닿는 적을 태운다. 0.25초마다 공격력 50%. 게이지를 쓰며(4초 분량), 다 쓰면 30%가 찰 때까지 쏠 수 없다'},
     {id:'cycle',name:'순환의 감각',req:60,mp:0,cd:0,type:'passive',trait:true,desc:'(지속) 나와 내가 치유한 아군은 체력을 회복할 때마다 주변 3.5m의 적에게 회복량의 절반만큼 피해를 준다'}],
   monk:[],
   wizz:[
@@ -9172,10 +9172,10 @@ function rayEnd(){const Rr=P&&P.ray;if(!Rr)return;P.ray=null;if(Rr.g){scene.remo
 // 빛 게이지: 쏘면 초당 25 줄고, 쉬면 초당 20 찬다. 0이 되면 과열: 30까지 찰 때까지 못 쏜다
 function rayGaugeTick(dt){if(P.rayG===undefined)P.rayG=100;if(!P.ray){P.rayG=Math.min(100,P.rayG+20*dt);if(P.rayHot&&P.rayG>=30)P.rayHot=false;}
   const h=$('#rayHud');if(!h)return;const on=!!(P.skills.holyray&&hasClsW('priest')&&mode==='world'&&(P.ray||P.rayG<100));if(h.hidden!==!on)h.hidden=!on;if(!on)return;
-  h.firstChild.textContent=P.rayHot?'과열':'빛 게이지';h.querySelector('.bar i').style.width=P.rayG.toFixed(0)+'%';h.classList.toggle('hot',!!P.rayHot);}
+  h.firstChild.textContent='';h.querySelector('.bar i').style.width=P.rayG.toFixed(0)+'%';h.classList.toggle('hot',!!P.rayHot);}
 function rayTick(dt){rayGaugeTick(dt);const Rr=P.ray;if(!Rr)return;const S=Rr.S;Rr.t+=dt;
   const held=Rr.i===1||Rr.i===2?Rr.t<1.5:!!skHeld[Rr.i];
-  if(!held||mode!=='world'||P.hp<=0||myMoId!=='holyray'||P.rayG<=0){if(P.rayG<=0){P.rayHot=true;toast('빛이 다 타올랐다. 잠시 식혀야 해요');}rayEnd();return;}
+  if(!held||mode!=='world'||P.hp<=0||myMoId!=='holyray'||P.rayG<=0){if(P.rayG<=0)P.rayHot=true;rayEnd();return;}
   P.rayG=Math.max(0,P.rayG-25*dt);swingT=Math.min(swingT,.8);
   const o=staffTip(),dir=aimPoint(S.range).sub(o).normalize();let end=S.range;const q=new THREE.Vector3();for(let d=1;d<S.range;d+=.5){q.copy(o).addScaledVector(dir,d);if(q.y<heightAt(q.x,q.z)){end=d;break;}}
   const e=o.clone().addScaledVector(dir,end);
@@ -9347,7 +9347,7 @@ function useSkillInner(i){
     case 'closein':{const m=closeTarget(S.range),q=player.position,dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz),f={x:dx/d,z:dz/d},dist=Math.max(0,d-(m.r+.9)),dd=Math.max(.05,dist/110);
       P.dash={t:dd,dur:dd,dist,mult:S.mult*pw,opt:{...opt,stun:S.stun},hit:new Set(),f,push:false,tgt:m,stop:m.r+.9};P.dashFx=S.color;invuln=Math.max(invuln,dd+.05);fxAt=player.position.clone().add(new THREE.Vector3(0,1,0));break;}
     case 'summon':{summonAngel(S,pw,opt);fxAt=player.position.clone().add(new THREE.Vector3(0,1.5,0));break;}
-    case 'ray':{if(P.rayHot||(P.rayG!==undefined&&P.rayG<=0)){toast('빛이 아직 식지 않았어요');swingT=1;myMo=null;myMoId='';fxAt=null;break;}P.ray={S,pw,opt,i,t:0,tick:0};sfx('lc_cast',null,.9,1.2);fxAt=null;break;}
+    case 'ray':{if(P.rayHot||(P.rayG!==undefined&&P.rayG<=0)){swingT=1;myMo=null;myMoId='';fxAt=null;break;}P.ray={S,pw,opt,i,t:0,tick:0};sfx('lc_cast',null,.9,1.2);fxAt=null;break;}
     case 'grasp':{const pt=graspPoint(S.range);spawnRing(S.color,pt,S.radius,.35);fxAt=pt;const R=S.radius,mul=S.mult*pw,hold=S.hold,o2={...opt};
       setTimeout(()=>{if(mode!=='world'||!P)return;graspFx(pt,R,hold);sfx('heavy',pt,.9,.8);sfx('mg_boom',pt,.5,1.4);shakeT=Math.max(shakeT,.14);
         shared(()=>{for(const m of alive()){const dx=pt.x-m.mesh.position.x,dz=pt.z-m.mesh.position.z,d=Math.hypot(dx,dz);if(d>R+m.r)continue;const k=Math.max(0,d-.7);
