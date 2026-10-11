@@ -2091,7 +2091,7 @@ function buildVillage(){
     const a=i/n*Math.PI*2+Math.PI/n,r=17.5,x=Math.cos(a)*r,z=Math.sin(a)*r;
     const w=sr(3.6,4.4),dpt=sr(3.4,4),h=sr(2.6,3.2);
     addHouse(x,heightAt(x,z),z,Math.atan2(-x,-z),{w,d:dpt,floors:1,h1:h,roof:roofs[i],wall:[0xd8cdb1,0xe2d6b8,0xcfc2a2][i%3],seed:i});
-    colliders.push({x,z,r:Math.max(w,dpt)*.62,h:h+2.8});
+    colliders.push({x,z,r:Math.max(w,dpt)*.62,h:.42+h+1.9+.2});
     MAP_HOUSES.push({x,z,r:Math.max(w,dpt)*.55});
   }
   flushHouses();
@@ -5708,6 +5708,8 @@ function addHouse(x,y,z,ry,o){
     box(RW,.2,.06,tim,0,my-(sl/2)*Math.sin(ang)-.04,f*(hz+ov)+f*.02);
   }
   box(RW+.1,.24,.36,roofDark,0,top+rise+.14,0);               // 용마루
+  // 용마루 근처는 올라설 수 있다 (지붕 가운데 띠)
+  {const c=new THREE.Vector3(0,0,0).applyMatrix4(world);ROOFS.push({x:c.x,z:c.z,r:Math.min(RW,UD)*.3,y:y+top+rise+.26});}
   // 박공 삼각벽 (좌우)
   {const tri=new THREE.Shape();tri.moveTo(-hz,0);tri.lineTo(hz,0);tri.lineTo(0,rise);tri.lineTo(-hz,0);
     const dep=UW-.04,tg=new THREE.ExtrudeGeometry(tri,{depth:dep,bevelEnabled:false});tg.rotateY(Math.PI/2);tg.translate(-dep/2,0,0);
@@ -5849,8 +5851,8 @@ function addMudHouse(x,y,z,ry,o){
   if(rnd(6)<.45){const px=(rnd(7)-.5)*W*.4,pz=(rnd(8)-.5)*D*.3;for(const [a,b] of [[-.7,-.5],[.7,-.5],[-.7,.5],[.7,.5]])hbPush(B.op,new THREE.CylinderGeometry(.04,.04,1.5,4),M(px+a,top+.75,pz+b),beam);
     box(1.7,.08,1.3,0x8a7a4a,px,top+1.5,pz);}
   // 평평한 지붕: 올라설 수 있다 (1층 지붕과 2층 지붕)
-  ROOFS.push({x,z,r:Math.min(W,D)*.52,y:y+H+.16});if(o.floors>1){const c=new THREE.Vector3(o._ox||0,0,o._oz||0).applyMatrix4(world);ROOFS.push({x:c.x,z:c.z,r:Math.min(W,D)*.3,y:y+top+.16});}
-  return y+top+.4;
+  ROOFS.push({x,z,r:Math.min(W,D)*.52,y:y+H+.16});if(o.floors>1){const c=new THREE.Vector3(o._ox||0,0,o._oz||0).applyMatrix4(world);ROOFS.push({x:c.x,z:c.z,r:Math.min(W,D)*.3,y:y+top+.16});colliders.push({x:c.x,z:c.z,r:Math.min(W,D)*.3+.1,h:top+.2});}
+  return H+.1;
 }
 // 대추야자: 마디진 줄기가 살짝 휘고, 꼭대기에 늘어진 잎과 열매 송이
 function addPalm(x,y,z,h,seed){
@@ -5897,7 +5899,7 @@ function addPalm(x,y,z,h,seed){
   for(const [a,rr,k] of spots){
     const x=cx+Math.cos(a)*rr,z=cz+Math.sin(a)*rr,y=heightAt(x,z);if(inBld(x,z,4.2))continue;
     const topY=addMudHouse(x,y,z,Math.atan2(cx-x,cz-z),{w:5.6,d:4.8,floors:k%3?2:1,h:3.2+(k%2)*.4,h2:2.4,mud:[0xc9a774,0xbf9a68,0xd4b285,0xb8915f,0xcfae7c][k%5],seed:k+20});
-    colliders.push({x,z,r:3.4,h:(k%3?3.2+(k%2)*.4:topY-y)+.1});   /* 1층 지붕 높이까지만 막는다 (2층 집은 1층 지붕 위를 걸을 수 있게) */MAP_HOUSES.push({x,z,r:2.9});
+    colliders.push({x,z,r:3.4,h:topY});   /* 1층 지붕 높이까지만 막는다 (2층 덩어리는 자기 충돌체가 따로) */MAP_HOUSES.push({x,z,r:2.9});
   }
   // 대추야자: 광장 둘레, 큰길가, 성벽 안쪽 빈자리
   {let ps=1;const pal=(x,z,h)=>{if(Math.abs(x-cx)<2.6||Math.abs(z-cz)<2.6)return;addPalm(x,heightAt(x,z),z,h,ps++);};
@@ -9916,7 +9918,7 @@ const clock=new THREE.Clock();let tAll=0;
 const targetSky=new THREE.Color(),_sunC=new THREE.Color(),_zenC=new THREE.Color(),_skyBlue=new THREE.Color();
 // 비행 중 충돌: 높이 범위가 없는 것(벽·나무·집)은 그 높이(h, 없으면 7m) 위로는 넘어간다
 function pushOutFly(p,r){for(const c of colliders){if(c.y0!==undefined){if(p.y<c.y0||p.y>c.y1)continue;}else if(p.y>heightAt(c.x,c.z)+(c.h||7))continue;const dx=p.x-c.x,dz=p.z-c.z,d=Math.hypot(dx,dz),mn=c.r+r;if(d<mn&&d>1e-4){p.x=c.x+dx/d*mn;p.z=c.z+dz/d*mn;}}}
-function pushOut(p,r){for(const c of colliders){if(c.y0!==undefined&&(p.y===undefined||p.y<c.y0||p.y>c.y1))continue;if(c.h!==undefined&&p.y!==undefined&&p.y>heightAt(c.x,c.z)+c.h-.25)continue;const dx=p.x-c.x,dz=p.z-c.z,d=Math.hypot(dx,dz),mn=c.r+r;if(d<mn&&d>1e-4){p.x=c.x+dx/d*mn;p.z=c.z+dz/d*mn;}}}
+function pushOut(p,r){for(const c of colliders){if(c.y0!==undefined&&(p.y===undefined||p.y<c.y0||p.y>c.y1))continue;if(c.h!==undefined&&p.y!==undefined&&p.y>heightAt(c.x,c.z)+c.h-.7)continue;const dx=p.x-c.x,dz=p.z-c.z,d=Math.hypot(dx,dz),mn=c.r+r;if(d<mn&&d>1e-4){p.x=c.x+dx/d*mn;p.z=c.z+dz/d*mn;}}}
 
 function updatePlayer(dt){
   let f=0,r=0;
