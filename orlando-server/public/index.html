@@ -5326,7 +5326,9 @@ const VFX=(function(){
     shapes.push({m:g,t:0,dur:o.dur||.18,fn:(k)=>{const e=1-Math.pow(1-k,3);g.scale.set(1-k*.5,1-k*.5,.35+e*.9);outer.material.opacity=.55*(1-k);core.material.opacity=.9*(1-k);}});
     const tip=origin.clone().add(new THREE.Vector3(-Math.sin(yaw)*L,0,-Math.cos(yaw)*L));burst(tip,color,6,2.2,.3,{glow:false,grav:2});
   }
-  return{burst,ringSparks,aura,rainDown,update,slash,shock,pillar,emit,thrust};
+  // 직접 만든 모양을 시간에 따라 움직이고 사라지게 한다 (fn(k) k:0→1)
+  function anim(m,dur,fn){scene.add(m);shapes.push({m,t:0,dur,fn});return m;}
+  return{burst,ringSparks,aura,rainDown,update,slash,shock,pillar,emit,thrust,anim,addMat};
 })();
 // 무기마다 다른 베기 궤적
 function slashFx(origin,yaw,style,color,alt,big){
@@ -8554,6 +8556,32 @@ let fowlN=0,fowlAt=0,asnN=0,asnAt=0,rgN=0,rgAt=0;
 function basicAttack(){return shared(basicAttackInner);}
 // 스킬을 쓰는 동안(동작이 끝날 때까지, 돌진 중)은 평타도 다른 스킬도 못 쓴다
 function skillBusy(){return !!P&&((P.skN===swingN&&swingT<1)||!!P.dash);}
+// 빛마법: 바닥에 금빛 마법진이 그려지며 돌고, 하늘에서 가는 빛줄기들이 내려와 모인다
+function holyGlyph(r){const g=new THREE.Group(),M=(c,o)=>new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:o,depthWrite:false,side:THREE.DoubleSide});   // 밝은 땅에서도 보이게 더하기가 아닌 진한 금색 선
+  const ring=(a,b,c,o,s=64)=>{const m=new THREE.Mesh(new THREE.RingGeometry(a,b,s),M(c,o));m.rotation.x=-Math.PI/2;g.add(m);return m;};
+  const outer=ring(r*.95,r,0xe0a020,.9),inner=ring(r*.61,r*.65,0xf0b830,.85),core=ring(r*.19,r*.23,0xffd860,.9);ring(r*.9,r*.92,0xc88a18,.7);
+  const rot=new THREE.Group();g.add(rot);
+  for(let i=0;i<12;i++){const a=i/12*Math.PI*2,t=new THREE.Mesh(new THREE.PlaneGeometry(r*.03,r*.22),M(0xe0a020,.85));t.rotation.set(-Math.PI/2,0,-a);t.position.set(Math.sin(a)*r*.8,0,Math.cos(a)*r*.8);rot.add(t);}   // 바깥 눈금
+  for(let i=0;i<6;i++){const a=i/6*Math.PI*2,b=a+Math.PI/3*2;const p1=new THREE.Vector3(Math.sin(a)*r*.63,0,Math.cos(a)*r*.63),p2=new THREE.Vector3(Math.sin(b)*r*.63,0,Math.cos(b)*r*.63);   // 육각별
+    const d=p2.clone().sub(p1),L=d.length(),m=new THREE.Mesh(new THREE.PlaneGeometry(r*.024,L),M(0xf0b830,.85));m.position.copy(p1.clone().add(p2).multiplyScalar(.5));m.rotation.set(-Math.PI/2,0,Math.atan2(d.x,d.z));rot.add(m);}
+  const fill=new THREE.Mesh(new THREE.CircleGeometry(r,48),VFX.addMat(0xffd870,.18));fill.rotation.x=-Math.PI/2;g.add(fill);
+  return {g,rot,outer,inner,core,fill};}
+function holyCast(pt,r,d){const y=heightAt(pt.x,pt.z)+.12,G=holyGlyph(r);G.g.position.set(pt.x,y,pt.z);
+  VFX.anim(G.g,d+.12,k=>{const e=Math.min(1,k*1.6);G.g.scale.setScalar(.3+.7*(1-Math.pow(1-e,3)));G.rot.rotation.y=k*2.2;G.inner.rotation.z=-k*1.5;
+    for(const m of [G.outer,G.inner,G.core])m.material.opacity=.9*Math.min(1,k*3);G.rot.children.forEach(c=>c.material.opacity=.8*Math.min(1,k*2.5));G.fill.material.opacity=.1+.2*k;});
+  // 바깥 고리에서 빛 알갱이가 떠오르고, 하늘에서 가는 빛줄기가 내려온다
+  const n=8;for(let i=0;i<n;i++)setTimeout(()=>{const a=Math.random()*Math.PI*2,rr=r*(.3+Math.random()*.7),x=pt.x+Math.cos(a)*rr,z=pt.z+Math.sin(a)*rr;
+    VFX.emit(0,x,heightAt(x,z)+9+Math.random()*3,z,0,-26,0,0xfff0c0,.38,0,0);VFX.emit(1,x,heightAt(x,z)+.2,z,0,1.5,0,0xffe090,.5,-1,1);},i*d*1000/n);
+  VFX.ringSparks({x:pt.x,y,z:pt.z},0xffe6a0,r*.97,24);}
+// 빛마법 터짐: 하늘에서 큰 빛기둥이 꽂히고, 마법진이 번쩍인 뒤 바깥으로 퍼지며, 금빛 깃털 같은 빛가루가 흩날린다
+function holyImpact(pt,r){const y=heightAt(pt.x,pt.z);const top=pt.clone().setY(y+.6);
+  VFX.pillar(pt,0xf0b040,Math.min(2.2,r*.4),18,.7);setTimeout(()=>VFX.pillar(pt,0xfff4d0,Math.min(.9,r*.16),22,.4),30);
+  VFX.shock(pt,0xffd060,r*.7,.3);setTimeout(()=>{VFX.shock(pt,0xffe6a0,r*1.15,.55);VFX.shock(pt,0xfff4d0,r*.9,.45);},70);
+  const G=holyGlyph(r);G.g.position.set(pt.x,y+.14,pt.z);VFX.anim(G.g,.7,k=>{G.g.scale.setScalar(1+k*.25);G.rot.rotation.y=2.2+k*1.5;const o=1-k;for(const m of [G.outer,G.inner,G.core])m.material.opacity=o;G.rot.children.forEach(c=>c.material.opacity=.9*o);G.fill.material.opacity=.45*o*o;});
+  VFX.burst(top,0xffffff,24,4,.5,{up:1.2,mix:0xffe6a0,grav:-1,drag:1.6});
+  for(let i=0;i<26;i++){const a=Math.random()*Math.PI*2,rr=Math.random()*r,x=pt.x+Math.cos(a)*rr,z=pt.z+Math.sin(a)*rr;   // 흩날리는 금빛 가루
+    VFX.emit(i%5?0:1,x,y+.2+Math.random()*.6,z,Math.cos(a)*1.4,2.5+Math.random()*3.5,Math.sin(a)*1.4,i%3?0xffe090:0xffffff,.9+Math.random()*.7,-.6,1.4);}
+  VFX.ringSparks({x:pt.x,y,z:pt.z},0xffffff,r,36);shakeT=Math.max(shakeT,.14);}
 // 마법폭발: 섬광 → 바닥 충격파 두 겹 → 사방으로 튀는 불티와 느리게 번지는 빛무리
 function detonateFx(at,r,col){const g=new THREE.Vector3(at.x,heightAt(at.x,at.z)+.06,at.z);
   VFX.burst(at,0xffffff,8,.5,.16,{up:0,glow:true});spawnFx(0xffffff,at,r*.22,.12);
@@ -8828,7 +8856,7 @@ function skillFlourish(S,id,at){
         const to=pt.clone().setY(heightAt(pt.x,pt.z)+.5),from=to.clone().add(new THREE.Vector3(-4,22,-4));ob.position.copy(from);scene.add(ob);hazards.push({type:'fall',mesh:ob,from,to,t:0,d:Math.max(.2,d),trail:0xff8a2a});}
       else if(k==='ice')for(let q=0;q<6;q++)setTimeout(()=>VFX.rainDown(pt,0xe8f6ff,r,14,6),q*d*160);
       else if(k==='arrows')for(let q=0;q<6;q++)setTimeout(()=>VFX.rainDown(pt,col,r,10,22,true),q*d*150);
-      else if(k==='light')VFX.aura(pt.clone().setY(heightAt(pt.x,pt.z)),0xfff0b0,30,r*.8,.3);
+      else if(k==='light'){if(id==='holycircle')holyCast(pt,r,d);else VFX.aura(pt.clone().setY(heightAt(pt.x,pt.z)),0xfff0b0,30,r*.8,.3);}
       break;}
     case 'dash':if(!S.prep)P.dashFx=col;else{VFX.aura(me,col,22,.7,1.2);}break;
     case 'heal':VFX.aura(me,S.color||0x7fd0b4,46,1,1.8);VFX.shock(me,S.color||0x7fd0b4,2.6,.6);break;
@@ -8838,6 +8866,7 @@ function zoneBoom(pt,S){
   const k=ZONE_KIND(S.id),r=S.radius||3,col=S.color||0xffffff;
   VFX.shock(pt,col,r*1.1,.55);
   if(k==='meteor'){VFX.burst(pt.clone().setY(pt.y+.6),0xff7a20,60,10,.9,{mix:0xffd060,up:.5,grav:8});VFX.shock(pt,0xffd080,r*1.6,.7);shakeT=Math.max(shakeT,.3);sfx('boom',pt,1);}
+  else if(k==='light'&&S.id==='holycircle')holyImpact(pt,r);
   else if(k==='light'){VFX.pillar(pt,col,Math.min(2.5,r*.45),14,.8);VFX.burst(pt.clone().setY(pt.y+.5),0xffffff,30,5,.7,{mix:col,up:.6,grav:-1});}
   else if(k==='ice'){VFX.burst(pt.clone().setY(pt.y+.4),0xd8f4ff,40,6,.8,{mix:0x9ad7ff,up:.4});}
   else if(k==='smoke'){VFX.burst(pt.clone().setY(pt.y+.5),0x9a9a9a,30,3,1.2,{layer:1,up:.4,grav:-1,glow:false});}
