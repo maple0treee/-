@@ -7550,9 +7550,32 @@ function makeCitizens(cx,cz){
   const Z=id=>PL.zone(id);
   const nearHouse=(mx,my,m)=>{const x=cx+mx,z=cz+my;for(const h of MAP_HOUSES){if(h.x<x-20||h.x>x+20||h.z<z-20||h.z>z+20)continue;if(Math.hypot(h.x-x,h.z-z)<h.r+m)return true;}return false;};
   const big=(mx,my,m,allow)=>PL.zones.some(z=>!/farm|pasture|lumber|residential|artisans|commerce|inns|nobles/.test(z.kind)&&z.id!==allow&&PL.inZone(z,mx,my,m));
+  const inWallFree=(mx,my)=>PL.wallDist(mx,my)<-6&&PL.waterDepth(mx,my)<=0&&PL.hillH(mx,my)<.3;
   const free=(mx,my,allow)=>PL.wallDist(mx,my)<-6&&PL.waterDepth(mx,my)<=0&&PL.riverDist(mx,my)>MARCUS_RIVER_W/2+2&&!nearHouse(mx,my,1.2)&&!big(mx,my,1,allow)&&PL.hillH(mx,my)<.3;
   /* 한 명 추가. k: 'pl'(길 왕복) 'circ'(원) 'st'(제자리) */
   const add=o=>{o.type=ti(o.id);delete o.id;o.ph=rnd()*6.28;o.off=rnd()*1000;o.sc=rr(.94,1.08);o.pause=o.pause??(1.5+rnd()*3);o.mode=o.mode||'walk';o.sp=o.sp??(1.05+rnd()*.5);o.I=null;o.d=1e9;L.push(o);return o;};
+  /* 길 그물: 길들이 만나는 자리를 마디로 삼아, 사람마다 제멋대로 길을 고르며 다니게 한다 */
+  const GR=(()=>{const segs=[];PL.streets.forEach((st,si)=>{for(let i=0;i<st.p.length-1;i++)segs.push({si,a:st.p[i],b:st.p[i+1],w:st.w});});
+    const nodes=[],key=(x,y)=>Math.round(x/3)+','+Math.round(y/3),nk=new Map();const node=(x,y)=>{const k=key(x,y);let n=nk.get(k);if(n===undefined){n=nodes.length;nodes.push({x,y,e:[]});nk.set(k,n);}return n;};
+    const edges=[];const addE=(a,b,w)=>{if(a===b)return;const L=Math.hypot(nodes[a].x-nodes[b].x,nodes[a].y-nodes[b].y);if(L<2)return;const e=edges.length;edges.push({a,b,L,w});nodes[a].e.push(e);nodes[b].e.push(e);};
+    const X=(p,q,r,s2)=>{const d=(q[0]-p[0])*(s2[1]-r[1])-(q[1]-p[1])*(s2[0]-r[0]);if(Math.abs(d)<1e-6)return null;const t=((r[0]-p[0])*(s2[1]-r[1])-(r[1]-p[1])*(s2[0]-r[0]))/d,u=((r[0]-p[0])*(q[1]-p[1])-(r[1]-p[1])*(q[0]-p[0]))/d;if(t<-.02||t>1.02||u<-.02||u>1.02)return null;return [t,u];};
+    /* 각 토막마다 끊기는 자리(t)들을 모은다 */
+    const cuts=segs.map(()=>[0,1]);
+    for(let i=0;i<segs.length;i++)for(let j=i+1;j<segs.length;j++){if(segs[i].si===segs[j].si)continue;const r=X(segs[i].a,segs[i].b,segs[j].a,segs[j].b);if(r){cuts[i].push(Math.max(0,Math.min(1,r[0])));cuts[j].push(Math.max(0,Math.min(1,r[1])));}}
+    segs.forEach((sg,i)=>{const ts=[...new Set(cuts[i].map(t=>Math.round(t*200)/200))].sort((a,b)=>a-b);let prev=null;for(const t of ts){const n=node(sg.a[0]+(sg.b[0]-sg.a[0])*t,sg.a[1]+(sg.b[1]-sg.a[1])*t);if(prev!==null)addE(prev,n,sg.w);prev=n;}});
+    return {nodes,edges};})();
+  /* 사람 하나의 하루: 길 그물 위를 멋대로 걷다가 멈춰 서고, 다시 걷는다 (왕복 아님). 일정은 시계로 되풀이된다 */
+  const roam=(ids,mode,home)=>{const N=GR.nodes,E=GR.edges;if(!E.length)return null;
+    let e0;if(home!==undefined){let best=0,bd=1e9;for(let k=0;k<E.length;k++){const q=E[k],mx=(N[q.a].x+N[q.b].x)/2,my=(N[q.a].y+N[q.b].y)/2,d=Math.hypot(mx-home[0],my-home[1]);if(d<bd){bd=d;best=k;}}e0=best;}else e0=Math.floor(rnd()*E.length);
+    let cur=rnd()<.5?E[e0].a:E[e0].b,prevE=-1;const pts=[cur];let total=0;
+    for(let k=0;k<14&&total<380;k++){const out=N[cur].e.filter(e=>e!==prevE);const e=out.length?out[Math.floor(rnd()*out.length)]:prevE;if(e<0)break;const q=E[e];const nxt=q.a===cur?q.b:q.a;pts.push(nxt);total+=q.L;prevE=e;cur=nxt;}
+    if(pts.length<3)return null;
+    /* 갔던 길을 되돌아와 처음 자리로 (끊김 없이 되풀이) */
+    const loop=pts.concat(pts.slice(0,-1).reverse());
+    const sp=.75+rnd()*.85,side=(rnd()<.5?-1:1)*(1.2+rnd()*2.2);const sch=[];let P=0;
+    for(let i=0;i<loop.length-1;i++){const a=N[loop[i]],b=N[loop[i+1]],L=Math.hypot(b.x-a.x,b.y-a.y),dur=L/sp;sch.push({t:'w',x0:cx+a.x,z0:cz+a.y,x1:cx+b.x,z1:cz+b.y,dur,L,st:P});P+=dur;
+      if(rnd()<.32){const d=2+rnd()*9;sch.push({t:'s',x:cx+b.x,z:cz+b.y,dur:d,st:P,mode:pick(['stand','talk','stand','lean','wave']),yaw:rnd()*6.28});P+=d;}}
+    return add({k:'rt',sch,P,sp,side,id:pick(ids),mode});};
   const walkerOn=(st,ids,mode)=>{const pts=st.p.map(([x,y])=>[cx+x,cz+y]),cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));const T=cum[cum.length-1];
     const span=Math.min(T,40+rnd()*90),s0=rnd()*(T-span),side=(rnd()<.5?-1:1)*(st.w/2-1.6-rnd()*1.2);return add({k:'pl',l:{pts,cum,T},s0,span,side,id:pick(ids),mode});};
   const standAt=(mx,my,ids,mode,yaw,o={})=>add({k:'st',x:cx+mx,z:cz+my,yaw:yaw??rnd()*6.28,id:pick(ids),mode,...o});
@@ -7568,9 +7591,13 @@ function makeCitizens(cx,cz){
   /* 1. 길을 걷는 사람 */
   const streets=PL.streets.map(s=>({...s,len:s.p.reduce((a,p,i)=>i?a+Math.hypot(p[0]-s.p[i-1][0],p[1]-s.p[i-1][1]):0,0)})),tot=streets.reduce((a,s)=>a+s.len,0);
   const zoneOfStreet=s=>{const m=s.p[Math.floor(s.p.length/2)];for(const z of PL.zones)if(PL.inZone(z,m[0],m[1],6))return z.kind;return '';};
-  for(let i=0;i<1900;i++){let u=rnd()*tot,k=0;for(;k<streets.length-1;k++){u-=streets[k].len;if(u<0)break;}const st=streets[k],zk=zoneOfStreet(st);
+  for(let i=0;i<1700;i++){let u=rnd()*tot,k=0;for(;k<streets.length-1;k++){u-=streets[k].len;if(u<0)break;}const st=streets[k],zk=zoneOfStreet(st);
     const ids=zk==='nobles'?RICH:zk==='commerce'?MKT:zk==='artisans'?ART:zk==='warehouse'||zk==='docks'?PORT:zk==='knights'||zk==='barracks'||zk==='training'?ARMED:zk==='garden'||zk==='palace'?RICH.concat(ARMED):COMMON;
-    const u2=rnd();walkerOn(st,ids,u2<.08?'carry':u2<.14?'shoulder':'walk');}
+    const u2=rnd(),m=st.p[Math.floor(st.p.length/2)];if(!roam(ids,u2<.08?'carry':u2<.14?'shoulder':'walk',m))walkerOn(st,ids,'walk');}
+  /* 길가에 서성이는 사람: 가게 앞, 모퉁이 */
+  for(let i=0;i<420;i++){let u=rnd()*tot,k=0;for(;k<streets.length-1;k++){u-=streets[k].len;if(u<0)break;}const st=streets[k];const j=Math.floor(rnd()*(st.p.length-1)),a=st.p[j],b=st.p[j+1],tt=rnd(),ux=b[0]-a[0],uy=b[1]-a[1],L=Math.hypot(ux,uy)||1;
+    const sd=rnd()<.5?-1:1,mx=a[0]+ux*tt-uy/L*sd*(st.w/2-1),my=a[1]+uy*tt+ux/L*sd*(st.w/2-1);if(!inWallFree(mx,my))continue;
+    standAt(mx,my,zoneOfStreet(st)==='nobles'?RICH:COMMON,pick(['stand','talk','lean','stand','wave']),Math.atan2(-uy/L*sd,-ux/L*sd)+rr(-.6,.6));}
   /* 2. 중앙 광장: 무리 지어 서서 이야기, 둘러 걷기, 벤치에 앉기 */
   {const p=Z('plaza');for(let g=0;g<42;g++){const a=rnd()*6.28,r=14+rnd()*26;group(p.x+Math.cos(a)*r,p.y+Math.sin(a)*r,2+Math.floor(rnd()*4),COMMON.concat(RICH),rnd()<.6?'talk':'stand');}
     for(let i=0;i<110;i++)circ(p.x,p.y,13+rnd()*28,COMMON,'walk');
@@ -7617,6 +7644,9 @@ function makeCitizens(cx,cz){
 /* 주민 한 명의 지금 자리: 시계로 정한다 */
 function citPose(c,t){
   if(c.k==='st')return {x:c.x,z:c.z,vx:Math.sin(c.yaw),vz:Math.cos(c.yaw),walk:false,s:0};
+  if(c.k==='rt'){const u=((t+c.off)%c.P+c.P)%c.P;const S=c.sch;let lo=0,hi=S.length-1;while(lo<hi){const m=(lo+hi+1)>>1;if(S[m].st<=u)lo=m;else hi=m-1;}const it=S[lo];
+    if(it.t==='s')return {x:it.x,z:it.z,vx:Math.sin(it.yaw),vz:Math.cos(it.yaw),walk:false,s:0,mode:it.mode};
+    const k=Math.min(1,(u-it.st)/it.dur),ux=(it.x1-it.x0)/it.L,uz=(it.z1-it.z0)/it.L;return {x:it.x0+(it.x1-it.x0)*k-uz*c.side,z:it.z0+(it.z1-it.z0)*k+ux*c.side,vx:ux,vz:uz,walk:true,s:0};}
   const sp=c.sp;
   if(c.k==='circ'){const L=2*Math.PI*c.r,s=((t+c.off)*sp)%L;const a=c.a0+c.dir*s/c.r;return {x:c.x+Math.cos(a)*c.r,z:c.z+Math.sin(a)*c.r,vx:-Math.sin(a)*c.dir,vz:Math.cos(a)*c.dir,walk:true,s};}
   const L=c.span,Tw=L/sp,P=2*Tw+2*c.pause,u=((t+c.off)%P+P)%P;let s,dir=1,walk=true;
@@ -7664,15 +7694,15 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
     for(const c of M.list)if(c.I&&!want.has(c)&&(c.d>M.NEAR+8||near.indexOf(c)>M.MAXM+4)){scene.remove(c.I.g);CITM.pool[c.I.id].push(c.I);c.I=null;}
     let made=0;for(const c of near){if(!want.has(c)||c.I)continue;if(made>=2)break;c.I=citInstance(CITM.tmpl[CITM.ids[c.type]]);c.I.g.rotation.y=Math.atan2(c.q.vx,c.q.vz);c.I.g.scale.setScalar(c.sc);scene.add(c.I.g);made++;}
     near.forEach((c,k)=>{if(!c.I)return;const sh=k<10;if(c.I.sh!==sh){c.I.sh=sh;c.I.g.traverse(o=>{if(o.isSkinnedMesh&&o.material!==_citOl)o.castShadow=sh&&!o.material.transparent;});}});
-    for(const c of M.list){if(c.I||c.d>M.FAR||n>=M.cap)continue;const q=c.q;const fr=CIT_FRAME_OF[c.mode]||[0,0];
+    for(const c of M.list){if(c.I||c.d>M.FAR||n>=M.cap)continue;const q=c.q;const fr=CIT_FRAME_OF[q.mode||c.mode]||[0,0];
       aP[n*3]=q.x;aP[n*3+1]=heightAt(q.x,q.z)+(c.y||0);aP[n*3+2]=q.z;aI[n*4]=c.type;aI[n*4+1]=Math.atan2(q.vx,q.vz);aI[n*4+2]=c.sc;aI[n*4+3]=c.ph;
-      const walking=c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder';const idle=walking&&!q.walk;aF[n*3]=idle?0:fr[0];aF[n*3+1]=idle?0:fr[1];aF[n*3+2]=c.mode==='hoe'||c.mode==='hammer'?1.1:walking?c.sp*1.6:.6;n++;}
+      const walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const idle=walking&&!q.walk;aF[n*3]=idle?0:fr[0];aF[n*3+1]=idle?0:fr[1];aF[n*3+2]=c.mode==='hoe'||c.mode==='hammer'?1.1:walking?c.sp*1.6:.6;n++;}
     M.aPos.needsUpdate=M.aInf.needsUpdate=M.aF.needsUpdate=true;M.mesh.geometry.instanceCount=n;M.drawn=n;}
   for(const c of M.list){if(!c.I)continue;const q=refresh?c.q:citPose(c,t);const G=c.I.g;G.position.set(q.x,heightAt(q.x,q.z)+(c.y||0),q.z);
     const want=Math.atan2(q.vx,q.vz);let dr=Math.atan2(Math.sin(want-G.rotation.y),Math.cos(want-G.rotation.y));G.rotation.y+=dr*Math.min(1,dt*8);
-    const walking=c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder';c.w=(c.w??0)+(((walking&&q.walk)?1:0)-(c.w??0))*Math.min(1,dt*5);
-    if(walking){if(q.walk)c.ph+=dt*c.sp*4.2;citPoseBones(c.I,c.ph,c.w,t+c.off,c.mode==='walk'||c.w<.05&&c.mode!=='carry'?'walk':c.mode);}
-    else{c.ph+=dt*(c.mode==='hoe'?3.2:c.mode==='hammer'?4.5:c.mode==='reap'?2:1.5);citPoseBones(c.I,c.ph,0,t+c.off,c.mode);}}}
+    const mode=q.mode||c.mode,walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');c.w=(c.w??0)+(((walking&&q.walk)?1:0)-(c.w??0))*Math.min(1,dt*5);
+    if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2;citPoseBones(c.I,c.ph,c.w,t+c.off,c.mode==='walk'||c.w<.05&&c.mode!=='carry'?'walk':c.mode);}
+    else{c.ph+=dt*(mode==='hoe'?3.2:mode==='hammer'?4.5:mode==='reap'?2:1.5);citPoseBones(c.I,c.ph,0,t+c.off,mode);}}}
 let _mcT=0;
 function marcusTick(dt){if(!MARCUS.ready||!player)return;const p=player.position,inM=p.x>2000;
   _mcT-=dt;if(_mcT<=0){_mcT=.25;for(const C of MARCUS.cells.values()){const v=inM&&Math.hypot(C.x-p.x,C.z-p.z)<260;if(C.g.visible!==v)C.g.visible=v;}for(const D of MARCUS.details){const v=inM&&Math.hypot(D.x-p.x,D.z-p.z)<75;if(D.g.visible!==v)D.g.visible=v;}}
@@ -7844,7 +7874,9 @@ function updateIsles(t,dt){
   marcusTick(dt);
   if(ISLE_FX.water&&x>1300&&x<1700)ISLE_FX.water.position.y=KAOLIS_WY+Math.sin(t*.9)*.06;
   if(x>1650&&x<1950)for(const c of ISLE_FX.crystals)c.L.intensity=c.i*(.85+Math.sin(t*1.7+c.ph)*.15);
-  const G=window.__hallGate;if(G&&G.on&&P&&P.lv>=100){G.on=false;G.g.visible=false;for(const c of G.cols){const i=colliders.indexOf(c);if(i>=0)colliders.splice(i,1);}}
+  /* 지하실 계단의 쇠창살: Lv 100 아래면 내려와 막고, 100이 되면 천천히 올라간다 (다른 캐릭터로 바꾸면 다시 내려온다) */
+  const G=window.__hallGate;if(G&&P){const open=P.lv>=100;G.h=G.h||0;const want=open?4.3:0;if(G.h!==want){G.h+=Math.sign(want-G.h)*Math.min(Math.abs(want-G.h),dt*1.6);G.g.position.y=G.h;}
+    const shouldBlock=G.h<3.6;if(shouldBlock!==G.on){G.on=shouldBlock;if(shouldBlock){for(const c of G.cols)if(!colliders.includes(c))colliders.push(c);}else{for(const c of G.cols){const i=colliders.indexOf(c);if(i>=0)colliders.splice(i,1);}}}}
 }
 
 /* ---------- 맵 꾸미기: 풀, 꽃, 덤불, 버섯, 돌멩이, 마을 소품 ----------
