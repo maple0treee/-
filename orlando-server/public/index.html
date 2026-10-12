@@ -6056,6 +6056,10 @@ function floorAt(x,z,y){
     let h=s.y;if(s.ramp==='x')h=s.ya+(s.yb-s.ya)*(x-s.x0)/(s.x1-s.x0);else if(s.ramp==='z')h=s.ya+(s.yb-s.ya)*(z-s.z0)/(s.z1-s.z0);
     if(h<=y+.6&&h>g)g=h;}
   for(const s of ROOFS){if(s.y<=y+.6&&s.y>g&&(x-s.x)**2+(z-s.z)**2<s.r*s.r)g=s.y;}
+  // 높이(h)가 있는 물체(상자·탁자·우물 등)는 위에 올라서면 그 꼭대기를 평평한 바닥으로 쓴다 (전에는 바닥이 없어 미끄러져 내려왔다)
+  for(const c of colliders){if(c.h===undefined||c.y0!==undefined)continue;const dx=x-c.x,dz=z-c.z;if(Math.abs(dx)>c.r||Math.abs(dz)>c.r)continue;
+    if(c.box){const lx=dx*c.cs-dz*c.sn,lz=dx*c.sn+dz*c.cs;if(Math.abs(lx)>c.hw+.15||Math.abs(lz)>c.hd+.15)continue;}else if(dx*dx+dz*dz>(c.r+.15)*(c.r+.15))continue;
+    const top=heightAt(c.x,c.z)+c.h;if(top<=y+.6&&top>g)g=top;}
   return jumpFloor(x,z,y,g);
 }
 (function buildArchive(){return; // 하레나가 시와 오아시스처럼 바뀌며 기록관은 없앴다
@@ -6797,8 +6801,8 @@ const CIT_ATLAS={cols:44,rows:88,ang:8,frames:CIT_FRAMES.length};
 /* ---------- 마르쿠스 주민 (걷는 애니 모델) ----------
    citbake/<id>.json: 옷·머리색까지 다 구운 '뼈가 있는' 모델. 파르보스·하레나 NPC와 같은 바탕(VRoid 공개 모델).
    가까운 주민 몇십 명에게만 모델을 입히고, 다리·팔·허리 뼈를 돌려 걷게 한다. 먼 주민은 보이지 않는다. */
-const CITM={ver:'6',dir:'citbake/',ids:['c_merchant','c_worker','c_guard','c_noble_m','c_elder','c_youth','c_monk','c_baker','c_boy','c_maid','c_lady','c_vendor','c_flower','c_weaver','c_granny','c_girl','c_knight','c_merc','c_archer_f','c_squire','c_farmer_m','c_farmer_f','c_shepherd','c_sailor','c_fisher','c_smith','c_dock','c_priest','c_scholar','c_rich','c_beggar','c_innkeeper'],
-  skirt:{c_elder:1,c_monk:1,c_maid:1,c_lady:1,c_vendor:1,c_flower:1,c_weaver:1,c_granny:1,c_girl:1,c_farmer_f:1,c_priest:1,c_scholar:1,c_innkeeper:1},slow:{c_elder:1,c_granny:1,c_beggar:1,c_fisher:1,c_priest:1},
+const CITM={ver:'7',dir:'citbake/',ids:['c_merchant','c_worker','c_guard','c_noble_m','c_elder','c_youth','c_clerk','c_baker','c_boy','c_maid','c_lady','c_vendor','c_flower','c_weaver','c_granny','c_girl','c_knight','c_merc','c_archer_f','c_squire','c_farmer_m','c_farmer_f','c_shepherd','c_sailor','c_fisher','c_smith','c_dock','c_apothecary','c_scholar','c_rich','c_beggar','c_innkeeper','c_wife','c_nurse','c_fishwife','c_noble_f','c_herbalist','c_laundress','c_cooper','c_mason','c_tailor','c_bard','c_old_knight','c_boy2'],
+  skirt:{c_elder:1,c_maid:1,c_lady:1,c_vendor:1,c_flower:1,c_weaver:1,c_granny:1,c_girl:1,c_farmer_f:1,c_apothecary:1,c_scholar:1,c_innkeeper:1,c_wife:1,c_nurse:1,c_fishwife:1,c_noble_f:1,c_herbalist:1,c_laundress:1},slow:{c_elder:1,c_granny:1,c_beggar:1,c_fisher:1,c_apothecary:1,c_old_knight:1},
   tmpl:{},loading:{},pool:{},started:false,any:false,MAX:24,NEAR:70,FAR:78,TALL:1.08};
 function citGeo(g){const u8=b=>{const s=atob(b),a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a;};
   const n=g.n,q=new Uint16Array(u8(g.p).buffer),pos=new Float32Array(n*3);for(let i=0;i<n;i++)for(let k=0;k<3;k++)pos[i*3+k]=g.mn[k]+q[i*3+k]/65535*(g.mx[k]-g.mn[k]);
@@ -7161,6 +7165,12 @@ function buildMarcus(H){
   for(const st of PL.streets){if(st.w<10)continue;for(let i=0;i<st.p.length-1;i++){const [ax,ay]=st.p[i],[bx,by]=st.p[i+1],L=Math.hypot(bx-ax,by-ay),ux=(bx-ax)/L,uy=(by-ay)/L;
       for(let t=10;t<L-6;t+=26)for(const sd of [-1,1]){const mx=ax+ux*t-uy*sd*(st.w/2-.7),my=ay+uy*t+ux*sd*(st.w/2-.7);if(!inWall(mx,my,6)||bigZone(mx,my,1)||PL.waterDepth(mx,my)>0)continue;
         if(PL.streets.some(o=>o!==st&&o.p.some((q,k)=>k<o.p.length-1&&PL.segDist(mx,my,q,o.p[k+1])<o.w/2+.5)))continue;lamp(cx+mx,cz+my,Math.atan2(uy*sd,-ux*sd));}}}
+  /* 길가 벤치: 가로등 사이사이, 길 쪽을 보고 놓는다. 주민들은 이 벤치에만 앉는다 */
+  const bench=(x,z,ry)=>{const B=frame(x,z,ry);B.P(BOX,0,.45,0,2.6,.18,.7,MAR2);for(const s2 of [-1,1])B.P(BOX,s2*1.05,.22,0,.3,.45,.6,MAR2);B.P(BOX,0,.8,-.3,2.6,.5,.12,MAR2);B.box(0,0,2.6,.8,.6);MARCUS.benches.push({x,z,ry});};
+  MARCUS.benches=[];
+  for(const st of PL.streets){if(st.w<7)continue;for(let i=0;i<st.p.length-1;i++){const [ax,ay]=st.p[i],[bx,by]=st.p[i+1],L=Math.hypot(bx-ax,by-ay),ux=(bx-ax)/L,uy=(by-ay)/L;
+      for(let t=23;t<L-8;t+=(st.w>=10?26:34)){const sd=Math.round(t/26)%2?-1:1;const mx=ax+ux*t-uy*sd*(st.w/2-.95),my=ay+uy*t+ux*sd*(st.w/2-.95);if(!inWall(mx,my,6)||bigZone(mx,my,1)||PL.waterDepth(mx,my)>0||PL.riverDist(mx,my)<RVW/2+3)continue;
+        if(PL.streets.some(o=>o!==st&&o.p.some((q,k)=>k<o.p.length-1&&PL.segDist(mx,my,q,o.p[k+1])<o.w/2+2)))continue;if(colliders.some(c=>Math.abs(c.x-cx-mx)<2.2&&Math.abs(c.z-cz-my)<2.2))continue;bench(cx+mx,cz+my,Math.atan2(uy*sd,-ux*sd));}}}
   /* ===== 집: 구역마다 다른 피렌체식 집 ===== */
   const districtOf=(mx,my)=>{for(const z of PL.zones)if(/residential|artisans|commerce|inns|nobles/.test(z.kind)&&PL.inZone(z,mx,my,0))return z.kind;return 'residential';};
   const houses=[];
@@ -7264,8 +7274,8 @@ function buildMarcus(H){
     F.P(BOX,0,5.6,d/2+.3,2,2.2,.25,kind==='trade'?0x2a5a8a:0x8a2a2a,{b:'sh'});F.P(SPH,0,5.6,d/2+.45,.5,.5,.1,GOLD,{b:'sh'});
     /* 안 */
     carpet(F,0,0,w*.5,d*.5,kind==='treasury'?0x3a4a7a:0x8a3a2a,0xc8a050);chandelier(F,0,6.5,0,1.3);
-    if(kind==='archive'||kind==='library'){for(let k=0;k<Math.floor((w-6)/3.2);k++)for(const sd of [-1,1])shelf(F,-w/2+4+k*3.2,sd*(d/2-1.4),0,2.8);table(F,0,0,5,1.6);table(F,0,d*.28,4,1.4);}
-    else if(kind==='clinic'){for(let k=0;k<Math.floor((w-4)/2.4);k++)for(const sd of [-1,1])bed(F,-w/2+2.6+k*2.4,sd*(d/2-2.2),sd>0?PI:0);table(F,0,0,2.2,1.2);}
+    if(kind==='archive'||kind==='library'){for(let k=0;k<Math.floor((w-6)/3.2);k++)for(const sd of [-1,1]){const lx=-w/2+4+k*3.2;if(sd>0&&Math.abs(lx)<3.4)continue;/* 문(+d/2 가운데) 앞은 비워 둔다 */shelf(F,lx,sd*(d/2-1.4),0,2.8);}table(F,0,0,5,1.6);table(F,0,d*.28,4,1.4);}
+    else if(kind==='clinic'){for(let k=0;k<Math.floor((w-4)/2.4);k++)for(const sd of [-1,1]){const lx=-w/2+2.6+k*2.4;if(sd>0&&Math.abs(lx)<3)continue;bed(F,lx,sd*(d/2-2.2),sd>0?PI:0);}table(F,0,0,2.2,1.2);}
     else if(kind==='treasury'){for(let k=0;k<4;k++)for(const sd of [-1,1]){F.P(BOX,-w/2+3+k*(w-6)/3,.55,sd*(d/2-1.6),1.6,1.1,1,0x5a3a22,IP);F.P(BOX,-w/2+3+k*(w-6)/3,1.1,sd*(d/2-1.6),1.7,.15,1.1,GOLD,IP);colliders.push({...F.W(-w/2+3+k*(w-6)/3,sd*(d/2-1.6)),r:1,h:1.2});}table(F,0,0,4,1.6);}
     else if(kind==='chamber'){table(F,0,0,w*.5,2.2);for(let k=0;k<3;k++)painting(F,-w*.3+k*w*.3,5.5,-d/2+1.06,0,2.4,1.8,[0x5a3a2a,0x3a4a6a,0x6a5a3a][k]);}
     else{table(F,-w*.25,-d*.2,3,1.4);table(F,w*.25,-d*.2,3,1.4);table(F,0,d*.25,4,1.4);for(let k=0;k<Math.floor((w-4)/3.2);k++)shelf(F,-w/2+3+k*3.2,-d/2+1.4,0,2.8);}
@@ -7541,12 +7551,21 @@ function buildMarcus(H){
    2) 160m 안: 스프라이트(8방향 그림판) 한 번에 그리기 — 수천 명이어도 한 번의 그리기
    3) 집 안에 있는 사람들: 그리지 않는다 (수만 센다)
    자리는 시계로 정하므로 모든 플레이어가 같은 사람을 같은 곳에서 본다. */
-const CROWD={total:10000,list:[],near:[],mesh:null,tex:null,cap:1800,ready:false,FAR:170,NEAR:42,MAXM:24,lastT:0,acc:0};
+const CROWD={total:3500,list:[],near:[],mesh:null,tex:null,cap:1000,ready:false,FAR:130,NEAR:40,MAXM:22,lastT:0,acc:0};
 const CIT_T0=1.7e9;
 function makeCitizens(cx,cz){
   const PL=marcusPlan(),PI=Math.PI,ids=CITM.ids,ti=id=>Math.max(0,ids.indexOf(id));
   const rnd=(()=>{let s=4242;return()=>(s=(s*16807)%2147483647)/2147483647;})(),rr=(a,b)=>a+rnd()*(b-a),pick=a=>a[Math.floor(rnd()*a.length)];
   const L=CROWD.list;
+  /* 벽·담장·좌판·나무 등 부딪히는 것들을 격자에 담아, 사람 자리와 길이 그것들을 뚫지 않는지 본다 */
+  const CG=(()=>{const C=6,m=new Map();for(const c of colliders){if(c.x<cx-520||c.x>cx+520||c.z<cz-520||c.z>cz+520)continue;if(c.h!==undefined&&c.h<.45)continue;
+      if(c.y0!==undefined){const g=heightAt(c.x,c.z);if(c.y0>g+1.2||c.y1<g+.3)continue;}
+      const r=c.r+.6;for(let i=Math.floor((c.x-r)/C);i<=Math.floor((c.x+r)/C);i++)for(let j=Math.floor((c.z-r)/C);j<=Math.floor((c.z+r)/C);j++){const k=i+','+j;let a=m.get(k);if(!a){a=[];m.set(k,a);}a.push(c);}}
+    return {C,m};})();
+  const hit=(x,z,r=.45)=>{const a=CG.m.get(Math.floor(x/CG.C)+','+Math.floor(z/CG.C));if(!a)return false;for(const c of a){const dx=x-c.x,dz=z-c.z;if(Math.abs(dx)>c.r+r||Math.abs(dz)>c.r+r)continue;
+      if(c.box){const lx=dx*c.cs-dz*c.sn,lz=dx*c.sn+dz*c.cs;if(Math.abs(lx)<c.hw+r&&Math.abs(lz)<c.hd+r)return true;}else if(dx*dx+dz*dz<(c.r+r)*(c.r+r))return true;}return false;};
+  const hitSeg=(x0,z0,x1,z1,r=.45)=>{const L=Math.hypot(x1-x0,z1-z0),n=Math.max(1,Math.ceil(L/.8));for(let i=0;i<=n;i++){const t=i/n;if(hit(x0+(x1-x0)*t,z0+(z1-z0)*t,r))return true;}return false;};
+  const hitLoop=(pts,r=.45)=>{for(let i=0;i<pts.length-1;i++)if(hitSeg(pts[i][0],pts[i][1],pts[i+1][0],pts[i+1][1],r))return true;return false;};
   const Z=id=>PL.zone(id);
   const nearHouse=(mx,my,m)=>{const x=cx+mx,z=cz+my;for(const h of MAP_HOUSES){if(h.x<x-20||h.x>x+20||h.z<z-20||h.z>z+20)continue;if(Math.hypot(h.x-x,h.z-z)<h.r+m)return true;}return false;};
   const big=(mx,my,m,allow)=>PL.zones.some(z=>!/farm|pasture|lumber|residential|artisans|commerce|inns|nobles/.test(z.kind)&&z.id!==allow&&PL.inZone(z,mx,my,m));
@@ -7567,74 +7586,85 @@ function makeCitizens(cx,cz){
   /* 사람 하나의 하루: 길 그물 위를 멋대로 걷다가 멈춰 서고, 다시 걷는다 (왕복 아님). 일정은 시계로 되풀이된다 */
   const roam=(ids,mode,home)=>{const N=GR.nodes,E=GR.edges;if(!E.length)return null;
     let e0;if(home!==undefined){let best=0,bd=1e9;for(let k=0;k<E.length;k++){const q=E[k],mx=(N[q.a].x+N[q.b].x)/2,my=(N[q.a].y+N[q.b].y)/2,d=Math.hypot(mx-home[0],my-home[1]);if(d<bd){bd=d;best=k;}}e0=best;}else e0=Math.floor(rnd()*E.length);
-    let cur=rnd()<.5?E[e0].a:E[e0].b,prevE=-1;const pts=[cur];let total=0;
-    for(let k=0;k<14&&total<380;k++){const out=N[cur].e.filter(e=>e!==prevE);const e=out.length?out[Math.floor(rnd()*out.length)]:prevE;if(e<0)break;const q=E[e];const nxt=q.a===cur?q.b:q.a;pts.push(nxt);total+=q.L;prevE=e;cur=nxt;}
+    let cur=rnd()<.5?E[e0].a:E[e0].b,prevE=-1;const pts=[cur],ws=[];let total=0;
+    const sd=(rnd()<.5?-1:1),so=.7+rnd()*1.6;
+    for(let k=0;k<14&&total<300;k++){const out=N[cur].e.filter(e=>e!==prevE);const e=out.length?out[Math.floor(rnd()*out.length)]:prevE;if(e<0)break;const q=E[e];const nxt=q.a===cur?q.b:q.a;
+      /* 이 토막을 길가 쪽으로 비켜 걸었을 때 벽·담장·집에 닿으면 여기서 멈춘다 */
+      const a=N[cur],b=N[nxt],Ln=Math.hypot(b.x-a.x,b.y-a.y),ux=(b.x-a.x)/Ln,uz=(b.y-a.y)/Ln,side=sd*Math.min(so,Math.max(.4,q.w/2-1));
+      if(hitSeg(cx+a.x-uz*side,cz+a.y+ux*side,cx+b.x-uz*side,cz+b.y+ux*side))break;
+      pts.push(nxt);ws.push(side);total+=q.L;prevE=e;cur=nxt;}
     if(pts.length<3)return null;
     /* 갔던 길을 되돌아와 처음 자리로 (끊김 없이 되풀이) */
-    const loop=pts.concat(pts.slice(0,-1).reverse());
-    const sp=.75+rnd()*.85,side=(rnd()<.5?-1:1)*(1.2+rnd()*2.2);const sch=[];let P=0;
-    for(let i=0;i<loop.length-1;i++){const a=N[loop[i]],b=N[loop[i+1]],L=Math.hypot(b.x-a.x,b.y-a.y),dur=L/sp;sch.push({t:'w',x0:cx+a.x,z0:cz+a.y,x1:cx+b.x,z1:cz+b.y,dur,L,st:P});P+=dur;
-      if(rnd()<.32){const d=2+rnd()*9;sch.push({t:'s',x:cx+b.x,z:cz+b.y,dur:d,st:P,mode:pick(['stand','talk','stand','lean','wave']),yaw:rnd()*6.28});P+=d;}}
-    return add({k:'rt',sch,P,sp,side,id:pick(ids),mode});};
+    const loop=pts.concat(pts.slice(0,-1).reverse()),lws=ws.concat(ws.slice().reverse().map(v=>-v));
+    const sp=.75+rnd()*.85;const sch=[];let P=0;
+    for(let i=0;i<loop.length-1;i++){const a=N[loop[i]],b=N[loop[i+1]],L=Math.hypot(b.x-a.x,b.y-a.y),dur=L/sp,ux=(b.x-a.x)/L,uz=(b.y-a.y)/L,side=lws[i];
+      sch.push({t:'w',x0:cx+a.x-uz*side,z0:cz+a.y+ux*side,x1:cx+b.x-uz*side,z1:cz+b.y+ux*side,dur,L,st:P});P+=dur;
+      if(rnd()<.32){const d=2+rnd()*9;sch.push({t:'s',x:cx+b.x-uz*side,z:cz+b.y+ux*side,dur:d,st:P,mode:pick(['stand','talk','stand','lean','wave']),yaw:rnd()*6.28});P+=d;}}
+    return add({k:'rt',sch,P,sp,side:0,id:pick(ids),mode});};
   const walkerOn=(st,ids,mode)=>{const pts=st.p.map(([x,y])=>[cx+x,cz+y]),cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));const T=cum[cum.length-1];
-    const span=Math.min(T,40+rnd()*90),s0=rnd()*(T-span),side=(rnd()<.5?-1:1)*(st.w/2-1.6-rnd()*1.2);return add({k:'pl',l:{pts,cum,T},s0,span,side,id:pick(ids),mode});};
-  const standAt=(mx,my,ids,mode,yaw,o={})=>add({k:'st',x:cx+mx,z:cz+my,yaw:yaw??rnd()*6.28,id:pick(ids),mode,...o});
-  const circ=(mx,my,r,ids,mode)=>add({k:'circ',x:cx+mx,z:cz+my,r,a0:rnd()*6.28,dir:rnd()<.5?-1:1,id:pick(ids),mode,sp:.7+rnd()*.4});
+    const span=Math.min(T,40+rnd()*90),s0=rnd()*(T-span),side=(rnd()<.5?-1:1)*Math.max(.3,st.w/2-1.6-rnd()*1.2);
+    const off=pts.map((p,i)=>{const q=pts[Math.min(pts.length-1,Math.max(1,i))],o=pts[Math.min(pts.length-1,Math.max(1,i))-1],l=Math.hypot(q[0]-o[0],q[1]-o[1])||1,ux=(q[0]-o[0])/l,uz=(q[1]-o[1])/l;return [p[0]-uz*side,p[1]+ux*side];});
+    if(hitLoop(off))return null;return add({k:'pl',l:{pts,cum,T},s0,span,side,id:pick(ids),mode});};
+  const standAt=(mx,my,ids,mode,yaw,o={})=>{if(mode==='sit')mode='stand';/* 앉는 건 벤치에서만 */if(!o.force&&hit(cx+mx,cz+my,.35))return null;return add({k:'st',x:cx+mx,z:cz+my,yaw:yaw??rnd()*6.28,id:pick(ids),mode,...o});};
+  const circ=(mx,my,r,ids,mode)=>{const n=Math.max(8,Math.ceil(2*Math.PI*r/.8));for(let i=0;i<n;i++){const a=i/n*6.28;if(hit(cx+mx+Math.cos(a)*r,cz+my+Math.sin(a)*r))return null;}return add({k:'circ',x:cx+mx,z:cz+my,r,a0:rnd()*6.28,dir:rnd()<.5?-1:1,id:pick(ids),mode,sp:.7+rnd()*.4});};
   /* 구역 안 빈자리 찾기 */
   const spot=(z,allow,tries=30)=>{for(let k=0;k<tries;k++){let mx,my;if(z.shape==='circle'){const a=rnd()*6.28,r=Math.sqrt(rnd())*z.r;mx=z.x+Math.cos(a)*r;my=z.y+Math.sin(a)*r;}else if(z.shape==='rect'){mx=z.x+rr(-z.w/2,z.w/2);my=z.y+rr(-z.h/2,z.h/2);}else{const xs=z.pts.map(p=>p[0]),ys=z.pts.map(p=>p[1]);mx=rr(Math.min(...xs),Math.max(...xs));my=rr(Math.min(...ys),Math.max(...ys));if(!PL.inPoly(z.pts,mx,my))continue;}
-      if(free(mx,my,allow))return [mx,my];}return null;};
+      if(free(mx,my,allow)&&!hit(cx+mx,cz+my,.5))return [mx,my];}return null;};
   const group=(mx,my,n,ids,mode)=>{for(let k=0;k<n;k++){const a=k/n*6.28+rnd()*.5,r=.75+n*.12;standAt(mx+Math.cos(a)*r,my+Math.sin(a)*r,ids,mode,Math.atan2(-Math.cos(a),-Math.sin(a)));}};
-  const COMMON=['c_merchant','c_worker','c_youth','c_maid','c_vendor','c_flower','c_weaver','c_boy','c_girl','c_elder','c_granny','c_baker','c_monk','c_lady','c_beggar','c_innkeeper'];
-  const RICH=['c_noble_m','c_lady','c_rich','c_scholar','c_priest','c_squire'],ARMED=['c_knight','c_merc','c_archer_f','c_guard','c_squire','c_merc','c_knight'];
-  const FARM=['c_farmer_m','c_farmer_f','c_farmer_m','c_farmer_f','c_worker','c_boy'],PORT=['c_sailor','c_fisher','c_dock','c_worker','c_merchant','c_sailor'];
-  const ART=['c_smith','c_worker','c_weaver','c_baker','c_youth','c_maid'],MKT=['c_vendor','c_merchant','c_maid','c_lady','c_flower','c_baker','c_youth','c_boy','c_girl','c_rich'];
+  const COMMON=['c_merchant','c_worker','c_youth','c_maid','c_vendor','c_flower','c_weaver','c_boy','c_girl','c_elder','c_granny','c_baker','c_clerk','c_lady','c_beggar','c_innkeeper','c_wife','c_nurse','c_fishwife','c_herbalist','c_laundress','c_cooper','c_mason','c_tailor','c_bard','c_boy2','c_wife','c_laundress'];
+  const RICH=['c_noble_m','c_lady','c_rich','c_scholar','c_apothecary','c_squire','c_noble_f','c_bard','c_tailor'],ARMED=['c_knight','c_merc','c_archer_f','c_guard','c_squire','c_merc','c_knight','c_old_knight'];
+  const FARM=['c_farmer_m','c_farmer_f','c_farmer_m','c_farmer_f','c_worker','c_boy','c_wife','c_boy2'],PORT=['c_sailor','c_fisher','c_dock','c_worker','c_merchant','c_sailor'];
+  const ART=['c_smith','c_worker','c_weaver','c_baker','c_youth','c_maid','c_cooper','c_mason','c_tailor','c_laundress'],MKT=['c_vendor','c_merchant','c_maid','c_lady','c_flower','c_baker','c_youth','c_boy','c_girl','c_rich','c_fishwife','c_wife','c_herbalist','c_boy2'];
   /* 1. 길을 걷는 사람 */
   const streets=PL.streets.map(s=>({...s,len:s.p.reduce((a,p,i)=>i?a+Math.hypot(p[0]-s.p[i-1][0],p[1]-s.p[i-1][1]):0,0)})),tot=streets.reduce((a,s)=>a+s.len,0);
   const zoneOfStreet=s=>{const m=s.p[Math.floor(s.p.length/2)];for(const z of PL.zones)if(PL.inZone(z,m[0],m[1],6))return z.kind;return '';};
-  for(let i=0;i<1700;i++){let u=rnd()*tot,k=0;for(;k<streets.length-1;k++){u-=streets[k].len;if(u<0)break;}const st=streets[k],zk=zoneOfStreet(st);
+  for(let i=0;i<850;i++){let u=rnd()*tot,k=0;for(;k<streets.length-1;k++){u-=streets[k].len;if(u<0)break;}const st=streets[k],zk=zoneOfStreet(st);
     const ids=zk==='nobles'?RICH:zk==='commerce'?MKT:zk==='artisans'?ART:zk==='warehouse'||zk==='docks'?PORT:zk==='knights'||zk==='barracks'||zk==='training'?ARMED:zk==='garden'||zk==='palace'?RICH.concat(ARMED):COMMON;
     const u2=rnd(),m=st.p[Math.floor(st.p.length/2)];if(!roam(ids,u2<.08?'carry':u2<.14?'shoulder':'walk',m))walkerOn(st,ids,'walk');}
   /* 길가에 서성이는 사람: 가게 앞, 모퉁이 */
-  for(let i=0;i<420;i++){let u=rnd()*tot,k=0;for(;k<streets.length-1;k++){u-=streets[k].len;if(u<0)break;}const st=streets[k];const j=Math.floor(rnd()*(st.p.length-1)),a=st.p[j],b=st.p[j+1],tt=rnd(),ux=b[0]-a[0],uy=b[1]-a[1],L=Math.hypot(ux,uy)||1;
+  for(let i=0;i<200;i++){let u=rnd()*tot,k=0;for(;k<streets.length-1;k++){u-=streets[k].len;if(u<0)break;}const st=streets[k];const j=Math.floor(rnd()*(st.p.length-1)),a=st.p[j],b=st.p[j+1],tt=rnd(),ux=b[0]-a[0],uy=b[1]-a[1],L=Math.hypot(ux,uy)||1;
     const sd=rnd()<.5?-1:1,mx=a[0]+ux*tt-uy/L*sd*(st.w/2-1),my=a[1]+uy*tt+ux/L*sd*(st.w/2-1);if(!inWallFree(mx,my))continue;
     standAt(mx,my,zoneOfStreet(st)==='nobles'?RICH:COMMON,pick(['stand','talk','lean','stand','wave']),Math.atan2(-uy/L*sd,-ux/L*sd)+rr(-.6,.6));}
   /* 2. 중앙 광장: 무리 지어 서서 이야기, 둘러 걷기, 벤치에 앉기 */
-  {const p=Z('plaza');for(let g=0;g<42;g++){const a=rnd()*6.28,r=14+rnd()*26;group(p.x+Math.cos(a)*r,p.y+Math.sin(a)*r,2+Math.floor(rnd()*4),COMMON.concat(RICH),rnd()<.6?'talk':'stand');}
-    for(let i=0;i<110;i++)circ(p.x,p.y,13+rnd()*28,COMMON,'walk');
-    for(let k=0;k<12;k++){const a=k/12*6.28+PI/12;for(const s2 of [-.8,.8]){const bx=p.x+Math.cos(a)*18,bz=p.y+Math.sin(a)*18,ry=Math.atan2(p.x-bx,p.y-bz);standAt(bx+Math.cos(ry)*s2,bz-Math.sin(ry)*s2,COMMON,'sit',ry,{y:.42});}}
-    for(let i=0;i<30;i++){const s=spot(p,'plaza');if(s)standAt(s[0],s[1],COMMON,rnd()<.3?'wave':'stand');}
+  {const p=Z('plaza');for(let g=0;g<24;g++){const a=rnd()*6.28,r=14+rnd()*26;group(p.x+Math.cos(a)*r,p.y+Math.sin(a)*r,2+Math.floor(rnd()*4),COMMON.concat(RICH),rnd()<.6?'talk':'stand');}
+    for(let i=0;i<48;i++)circ(p.x,p.y,13+rnd()*28,COMMON,'walk');
+    for(let k=0;k<12;k++){const a=k/12*6.28+PI/12;for(const s2 of [-.8,.8]){const bx=p.x+Math.cos(a)*18,bz=p.y+Math.sin(a)*18,ry=Math.atan2(p.x-bx,p.y-bz);if(rnd()<.7)standAt(bx+Math.cos(ry)*s2,bz-Math.sin(ry)*s2,COMMON,'stand',ry,{y:.42,force:1,mode:'sit'});}}
+    for(let i=0;i<16;i++){const s=spot(p,'plaza');if(s)standAt(s[0],s[1],COMMON,rnd()<.3?'wave':'stand');}
     for(let i=0;i<8;i++){const a=i/8*6.28;standAt(p.x+Math.cos(a)*(p.r-3),p.y+Math.sin(a)*(p.r-3),['c_guard','c_knight'],'guard',Math.atan2(-Math.cos(a),-Math.sin(a)));}}
   /* 3. 시장: 좌판 뒤 상인, 구경꾼 */
   {const m=Z('market');for(let i=0;i<10;i++)for(const sd of [-1,1]){const sx=m.x-m.w/2+5+i*(m.w-10)/9,sz=m.y+sd*(m.h/2-4.6);standAt(sx,sz,['c_vendor','c_merchant','c_baker','c_flower'],'stand',sd>0?0:PI);
       for(let q=0;q<2;q++)if(rnd()<.8)standAt(sx+rr(-1.2,1.2),m.y+sd*(m.h/2-7.6),MKT,rnd()<.5?'talk':'stand',sd>0?PI:0);}
-    for(let i=0;i<120;i++)circ(m.x+rr(-m.w*.3,m.w*.3),m.y+rr(-m.h*.2,m.h*.2),2.5+rnd()*5,MKT,rnd()<.15?'carry':'walk');
-    for(let g=0;g<16;g++){const s=spot(m,'market');if(s)group(s[0],s[1],2+Math.floor(rnd()*3),MKT,'talk');}}
+    for(let i=0;i<60;i++)circ(m.x+rr(-m.w*.3,m.w*.3),m.y+rr(-m.h*.2,m.h*.2),2.5+rnd()*5,MKT,rnd()<.15?'carry':'walk');
+    for(let g=0;g<9;g++){const s=spot(m,'market');if(s)group(s[0],s[1],2+Math.floor(rnd()*3),MKT,'talk');}}
   /* 4. 항구·선착장·창고: 짐 나르기 */
-  {const hb=PL.harbor,a=hb[0],b=hb[1];for(let i=0;i<50;i++){const t=rnd(),mx=a[0]+(b[0]-a[0])*t,my=a[1]+(b[1]-a[1])*t-4;standAt(mx,my,PORT,rnd()<.5?'carry':rnd()<.5?'shoulder':'talk');}
-    const quay={w:10,p:[[a[0]+4,a[1]-5],[b[0]-4,b[1]-5]]};for(let i=0;i<45;i++)walkerOn(quay,PORT,rnd()<.6?'shoulder':'carry');
-    const dk=Z('docks');for(let i=0;i<30;i++){const s=spot(dk,'docks',10)||[dk.x+rr(-dk.w/2,dk.w/2),dk.y-rr(0,14)];standAt(s[0],s[1],['c_sailor','c_fisher','c_dock'],pick(['stand','talk','lean','sit']));}
-    const wz=Z('warehouse');for(let i=0;i<40;i++){const s=spot(wz,'warehouse');if(s)standAt(s[0],s[1],PORT,pick(['carry','shoulder','stand','talk']));}}
+  {const hb=PL.harbor,a=hb[0],b=hb[1];for(let i=0;i<26;i++){const t=rnd(),mx=a[0]+(b[0]-a[0])*t,my=a[1]+(b[1]-a[1])*t-4;standAt(mx,my,PORT,rnd()<.5?'carry':rnd()<.5?'shoulder':'talk');}
+    const quay={w:10,p:[[a[0]+4,a[1]-5],[b[0]-4,b[1]-5]]};for(let i=0;i<22;i++)walkerOn(quay,PORT,rnd()<.6?'shoulder':'carry');
+    const dk=Z('docks');for(let i=0;i<16;i++){const s=spot(dk,'docks',10)||[dk.x+rr(-dk.w/2,dk.w/2),dk.y-rr(0,14)];standAt(s[0],s[1],['c_sailor','c_fisher','c_dock'],pick(['stand','talk','lean','sit']));}
+    const wz=Z('warehouse');for(let i=0;i<20;i++){const s=spot(wz,'warehouse');if(s)standAt(s[0],s[1],PORT,pick(['carry','shoulder','stand','talk']));}}
   /* 5. 농장·목장: 괭이질·베기·짐 나르기 */
   for(const [x,z] of MARCUS.farmSpots){const u=rnd();add({k:'st',x,z,yaw:rnd()*6.28,id:pick(FARM),mode:u<.55?'hoe':u<.85?'reap':'stand'});}
-  for(const f of PL.zones.filter(z=>z.kind==='farm')){const P=f.pts;for(let i=0;i<10;i++){const a=P[i%P.length],b=P[(i+1)%P.length];walkerOn({w:4,p:[a,b]},FARM,rnd()<.5?'shoulder':'walk');}}
-  {const p=Z('pasture');for(let i=0;i<14;i++){const s=spot(p,'pasture',40)||[p.x,p.y];standAt(s[0],s[1],['c_shepherd','c_farmer_m','c_boy'],pick(['stand','lean','sit','guard']));}}
-  {const lz=Z('lumber');for(let i=0;i<30;i++){const s=spot(lz,'lumber',40)||[lz.x+rr(-30,30),lz.y+rr(-20,20)];standAt(s[0],s[1],['c_worker','c_dock','c_smith'],pick(['hammer','shoulder','carry','stand']));}}
+  for(const f of PL.zones.filter(z=>z.kind==='farm')){const P0=f.pts,c0=P0.reduce((a,p)=>[a[0]+p[0]/P0.length,a[1]+p[1]/P0.length],[0,0]);const P=P0.map(p=>{const d=Math.hypot(p[0]-c0[0],p[1]-c0[1])||1,k=Math.max(0,1-4/d);return [c0[0]+(p[0]-c0[0])*k,c0[1]+(p[1]-c0[1])*k];});/* 울타리 안쪽 4m */
+    for(let i=0;i<8;i++){const a=P[i%P.length],b=P[(i+1)%P.length];walkerOn({w:3,p:[a,b]},FARM,rnd()<.5?'shoulder':'walk');}}
+  {const p=Z('pasture');for(let i=0;i<9;i++){const s=spot(p,'pasture',40)||[p.x,p.y];standAt(s[0],s[1],['c_shepherd','c_farmer_m','c_boy'],pick(['stand','lean','sit','guard']));}}
+  {const lz=Z('lumber');for(let i=0;i<16;i++){const s=spot(lz,'lumber',40)||[lz.x+rr(-30,30),lz.y+rr(-20,20)];standAt(s[0],s[1],['c_worker','c_dock','c_smith'],pick(['hammer','shoulder','carry','stand']));}}
   /* 6. 길드홀·기사단·훈련장·병영: 무장한 사람들 */
-  {const g=Z('guild');for(let i=0;i<24;i++){const a=rnd()*6.28,r=g.w/2+4+rnd()*10;const mx=g.x+Math.cos(a)*r,my=g.y+Math.sin(a)*r;if(!free(mx,my,'guild'))continue;standAt(mx,my,ARMED,pick(['guard','talk','stand','lean','talk']));}
-    for(let i=0;i<14;i++)circ(g.x,g.y+g.h/2+12,6+rnd()*8,ARMED,'walk');for(let q=0;q<4;q++){const mx=g.x-g.w/2+8+q*(g.w-16)/3;standAt(mx,g.y+g.h/2+1.8,['c_knight','c_merc','c_guard'],'guard',PI);}}
+  {const g=Z('guild');for(let i=0;i<14;i++){const a=rnd()*6.28,r=g.w/2+4+rnd()*10;const mx=g.x+Math.cos(a)*r,my=g.y+Math.sin(a)*r;if(!free(mx,my,'guild'))continue;standAt(mx,my,ARMED,pick(['guard','talk','stand','lean','talk']));}
+    for(let i=0;i<7;i++)circ(g.x,g.y+g.h/2+12,6+rnd()*8,ARMED,'walk');for(let q=0;q<4;q++){const mx=g.x-g.w/2+8+q*(g.w-16)/3;standAt(mx,g.y+g.h/2+1.8,['c_knight','c_merc','c_guard'],'guard',PI);}}
   {const k=Z('knights');for(let i=0;i<14;i++){const mx=k.x+rr(-k.w/2-6,k.w/2+6),my=k.y+rr(-k.h/2-6,k.h/2+6);if(!free(mx,my,'knights'))continue;standAt(mx,my,['c_knight','c_squire','c_guard'],pick(['guard','talk','stand']));}
     standAt(k.x-5,k.y+k.h/2+1.5,['c_knight'],'guard',0);standAt(k.x+5,k.y+k.h/2+1.5,['c_knight'],'guard',0);}
   {const t=Z('training');for(let i=0;i<6;i++){const px=t.x-t.w/2+8+i*(t.w-16)/5,pz=t.y-t.h/2+10;standAt(px,pz+2.2,['c_squire','c_merc','c_knight'],'hammer',PI);}
     for(let i=0;i<4;i++){const px=t.x+t.w/2-6,pz=t.y-t.h/2+14+i*10;standAt(px-9,pz,['c_archer_f'],'guard',PI/2);}
-    for(let i=0;i<18;i++){const s=spot(t,'training');if(s)standAt(s[0],s[1],ARMED,pick(['hammer','guard','talk','stand','sit']));}for(let i=0;i<8;i++)circ(t.x,t.y,8+rnd()*16,ARMED,'walk');}
-  {const b=Z('barracks');for(let i=0;i<22;i++){const mx=b.x+rr(-b.w/2-8,b.w/2+8),my=b.y+rr(-b.h/2-8,b.h/2+8);if(!free(mx,my,'barracks'))continue;standAt(mx,my,['c_guard','c_squire','c_merc'],pick(['guard','sit','talk','stand']));}}
+    for(let i=0;i<10;i++){const s=spot(t,'training');if(s)standAt(s[0],s[1],ARMED,pick(['hammer','guard','talk','stand','sit']));}for(let i=0;i<4;i++)circ(t.x,t.y,8+rnd()*16,ARMED,'walk');}
+  {const b=Z('barracks');for(let i=0;i<12;i++){const mx=b.x+rr(-b.w/2-8,b.w/2+8),my=b.y+rr(-b.h/2-8,b.h/2+8);if(!free(mx,my,'barracks'))continue;standAt(mx,my,['c_guard','c_squire','c_merc'],pick(['guard','sit','talk','stand']));}}
   /* 7. 궁전·정원·관청: 귀족, 학자, 근위 */
-  {const g=Z('garden');for(let i=0;i<34;i++){const s=spot(g,'garden');if(s)standAt(s[0],s[1],RICH,pick(['stand','talk','sit','lean']));}for(let i=0;i<20;i++)circ(g.x+rr(-30,30),g.y+rr(-25,25),4+rnd()*8,RICH,'walk');
+  {const g=Z('garden');for(let i=0;i<18;i++){const s=spot(g,'garden');if(s)standAt(s[0],s[1],RICH,pick(['stand','talk','sit','lean']));}for(let i=0;i<10;i++)circ(g.x+rr(-30,30),g.y+rr(-25,25),4+rnd()*8,RICH,'walk');
     const p=Z('palace');for(let i=0;i<10;i++){const a=rnd()*6.28,r=p.w/2+5+rnd()*12;const mx=p.x+Math.cos(a)*r,my=p.y+Math.sin(a)*r;if(PL.wallDist(mx,my)>-6)continue;standAt(mx,my,['c_knight','c_guard'],'guard',rnd()*6.28);}
-    for(const id of ['archive','chamber','admin','treasury','library','council','clinic','trade']){const z=Z(id);for(let i=0;i<7;i++){const a=rnd()*6.28,r=Math.max(z.w,z.h)/2+3+rnd()*6;const mx=z.x+Math.cos(a)*r,my=z.y+Math.sin(a)*r;if(!free(mx,my,id))continue;standAt(mx,my,id==='clinic'?COMMON:RICH.concat(['c_monk']),pick(['talk','stand','lean']));}}}
+    for(const id of ['archive','chamber','admin','treasury','library','council','clinic','trade']){const z=Z(id);for(let i=0;i<4;i++){const a=rnd()*6.28,r=Math.max(z.w,z.h)/2+3+rnd()*6;const mx=z.x+Math.cos(a)*r,my=z.y+Math.sin(a)*r;if(!free(mx,my,id))continue;standAt(mx,my,id==='clinic'?COMMON:RICH.concat(['c_clerk']),pick(['talk','stand','lean']));}}}
   /* 8. 동네마다: 서성이기, 이야기, 비질, 대장간 망치질 */
-  const distr=[['residential',230,COMMON,['talk','stand','sweep','lean','sit','wave']],['commerce',260,MKT,['talk','stand','carry','sweep','lean']],['artisans',150,ART,['hammer','sweep','carry','talk','stand']],['inns',110,COMMON.concat(['c_innkeeper','c_merc','c_beggar']),['talk','lean','sit','stand','wave']],['nobles',90,RICH,['talk','stand','lean','sit']]];
+  const distr=[['residential',110,COMMON,['talk','stand','sweep','lean','wave']],['commerce',130,MKT,['talk','stand','carry','sweep','lean']],['artisans',80,ART,['hammer','sweep','carry','talk','stand']],['inns',55,COMMON.concat(['c_innkeeper','c_merc','c_beggar']),['talk','lean','stand','wave']],['nobles',45,RICH,['talk','stand','lean']]];
   for(const [id,n,ids,modes] of distr){const z=Z(id);let made=0;for(let i=0;i<n*3&&made<n;i++){const s=spot(z,id,8);if(!s)continue;if(rnd()<.3)group(s[0],s[1],2+Math.floor(rnd()*3),ids,'talk');else standAt(s[0],s[1],ids,pick(modes));made++;}}
+  /* 8b. 길가 벤치: 앉는 사람은 벤치에만 */
+  for(const b of MARCUS.benches||[]){if(rnd()<.35)continue;const n=rnd()<.4?2:1;const ss=n===2?[-.8,.8]:[rnd()<.5?-.7:.7];for(const s2 of ss){const px=b.x+Math.cos(b.ry)*s2,pz=b.z-Math.sin(b.ry)*s2;add({k:'st',x:px,z:pz,yaw:b.ry,id:pick(rnd()<.2?RICH:COMMON),mode:'sit',y:.42});}}
   /* 9. 집 안에 있는 사람들 (그리지 않는다) */
   CROWD.indoor=Math.max(0,CROWD.total-L.length);
   /* 스프라이트 한 번에 그리기 */
