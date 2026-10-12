@@ -38,7 +38,7 @@
     if (x >= 800) return isleAt(x, z).id;
     if (z > 300) return 'dungeon';
     if (z < -300) return x > 100 ? 'wlair' : 'hall';
-    if (x > ROAD.x0 && x < ROAD.x1 && Math.abs(z) < 12 && Math.hypot(x - C2.x, z - C2.z) > R2 - 2) return 'road';
+    if (x > ROAD.x0 && x < C2.x - TOWN_R + 2 && Math.abs(z) < 12 && Math.hypot(x - C2.x, z - C2.z) >= TOWN_R) return 'road';   // 하레나 서문에서 사냥터까지 (초보도 걸어갈 수 있다)
     const d2 = Math.hypot(x - C2.x, z - C2.z);
     if (x > 150) {
       if (d2 < TOWN_R) return 'town';
@@ -49,7 +49,6 @@
       return a < 0 ? 'wnorth' : 'wsouth';
     }
     const d = Math.hypot(x, z);
-    if (d < 26) return 'village';
     const a = Math.atan2(z, x) + Math.sin(d * 0.11) * 0.12;
     if (a >= -0.75 * PI && a < -0.25 * PI) return 'forest';
     if (a >= -0.25 * PI && a < 0.25 * PI) return 'plains';
@@ -160,7 +159,7 @@
   }
   const ZONE_MON = {
     forest: ['slime', 'slime', 'wolf'], plains: ['boar', 'goblin'], swamp: ['toad', 'lizard'], ruins: ['skeleton', 'skeleton', 'ogre'],
-    road: ['dog', 'bandit'],
+    road: ['slime', 'slime', 'wolf'],
     wwest: ['jackal', 'bandit', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'salamander', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
     silva: ['silvawolf', 'mossslime', 'treant'], arbus: ['snowwolf', 'frostslime', 'yeti'], kaolis: ['seahound', 'tideslime', 'merman'], subcus: ['darkhound', 'crystalslime', 'cavetroll'],
   };
@@ -171,7 +170,7 @@
     const f = (a, b, lo, hi) => Math.round(lo + (hi - lo) * clampN((d2 - a) / (b - a), 0, 1));
     if (ISLES[zone] && ZONE_LEVELS[zone]) { const I = ISLES[zone], L = ZONE_LEVELS[zone]; const d = Math.hypot(x - I.entry.x, z - I.entry.z); return Math.round(L[0] + (L[1] - L[0]) * clampN((d - 12) / (I.R * 1.7 - 12), 0, 1)); }   // 들어온 자리에서 멀수록 강하다
     switch (zone) {
-      case 'road': return 12 + Math.round(clampN((x - ROAD.x0) / (ROAD.x1 - ROAD.x0), 0, 1) * 4);
+      case 'road': return 1 + Math.round(clampN((C2.x - TOWN_R - x) / (C2.x - TOWN_R - ROAD.x0), 0, 1) * 2);
       case 'wwest': return f(138, TOWN_R, 20, 30);   // 길에서 들어오는 쪽이 약하다
       case 'wnorth': return f(TOWN_R, 138, 28, 40);
       case 'wsouth': return f(TOWN_R, 138, 38, 50);
@@ -179,17 +178,17 @@
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 4], plains: [4, 7], swamp: [7, 11], ruins: [11, 15], dungeon: [18, 22], road: [12, 16], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [20, 30], wnorth: [28, 40], wsouth: [38, 50], weast: [48, 60], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0] };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 4], plains: [4, 7], swamp: [7, 11], ruins: [11, 15], dungeon: [18, 22], road: [1, 3], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [20, 30], wnorth: [28, 40], wsouth: [38, 50], weast: [48, 60], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0] };
 
   // ---------- 의뢰 게시판 포스터 ----------
   // 의뢰를 주는 NPC마다 게시판이 따로 있다. 포스터는 마을 사람(실제 NPC)이 이유를 적어 붙인 것
   // {m}: 몬스터 이름, {z}: 지역 이름
   const G = (n, r, why) => ({ n, r, why });
   const BOARDS = {
-    marta: { title: '파르보스 의뢰 게시판', cap: 5, zones: ['forest', 'plains', 'swamp', 'ruins', 'road'], givers: [
-      G('마르타', '파르보스 의뢰인', ['나무꾼들이 {z}에 들어가질 못하고 있어요. {m} 때문에 겨울 땔감이 모자랄 지경이에요.', '아이들이 {z} 쪽 들판으로 놀러 갔다가 {m}에게 쫓겨 왔어요. 다시는 그런 일이 없게 해 주세요.']),
+    marta: { title: '마르타의 의뢰 게시판', cap: 5, zones: ['forest', 'plains', 'swamp', 'ruins', 'road'], givers: [
+      G('마르타', '의뢰인', ['나무꾼들이 {z}에 들어가질 못하고 있어요. {m} 때문에 겨울 땔감이 모자랄 지경이에요.', '아이들이 {z} 쪽 들판으로 놀러 갔다가 {m}에게 쫓겨 왔어요. 다시는 그런 일이 없게 해 주세요.']),
       G('엘리스', '순간이동 술사', ['별빛 길을 여는 수정을 {z}에 두고 왔는데, {m}이(가) 그 주변에 진을 쳤어요. 길을 터 주면 수정을 찾으러 갈게요.']),
-      G('토르간', '하레나 대장장이', ['파르보스에서 오는 숯 마차가 {z}에서 {m}에게 습격당했어. 불이 꺼지면 망치도 멈춘다고.'])] },
+      G('토르간', '하레나 대장장이', ['숲에서 오는 숯 마차가 {z}에서 {m}에게 습격당했어. 불이 꺼지면 망치도 멈춘다고.'])] },
     kyle: { title: '사냥꾼 길드 게시판', cap: 9, zones: ['wwest', 'wnorth', 'wsouth', 'weast'], givers: [
       G('카일', '사냥꾼 길드장', ['{z}의 {m} 무리가 길드 사냥꾼 둘을 다치게 했다. 무리의 수를 확 줄여 놓게.', '{z}에 {m}이(가) 부쩍 늘었다. 이대로 두면 하레나 성벽까지 내려올 거다.']),
       G('브론', '무기상', ['칼날 재료를 실은 상단이 {z}에서 {m}에게 습격당했소. 길이 안전해져야 좋은 무기를 들여올 수 있지.']),
