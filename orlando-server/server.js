@@ -26,6 +26,7 @@ const files = {
 };
 // 미리 구운 NPC 모델 (public/npcbake/*.json)
 // 플레이어 애니 모델 (public/pmodel/*.json)
+try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'icon'))) if (/^[a-z0-9_-]+\.png$/.test(fn)) files['/icon/' + fn] = { file: 'icon/' + fn, type: 'image/png', cache: 'public, max-age=604800' }; } catch (e) {}
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'pmodel'))) if (/^[a-z0-9_]+\.json$/.test(fn)) files['/pmodel/' + fn] = { file: 'pmodel/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; } catch (e) {}
 // 마르쿠스 주민 모델 (public/citbake/*.json)
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'citbake'))) { if (/^[a-z0-9_]+\.json$/.test(fn)) files['/citbake/' + fn] = { file: 'citbake/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; else if (/^[a-z0-9_]+\.webp$/.test(fn)) files['/citbake/' + fn] = { file: 'citbake/' + fn, type: 'image/webp', cache: 'public, max-age=86400' }; } } catch (e) {}
