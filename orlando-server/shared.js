@@ -24,7 +24,7 @@
     arbus:  { x: 1200, z: 0, R: 110 },   // 설산
     kaolis: { x: 1500, z: 0, R: 110 },   // 바다
     subcus: { x: 1800, z: 0, R: 100 },   // 지하 동굴
-    marcus: { x: 2150, z: 0, R: 150 },   // 왕국 (성벽 반지름 110)
+    marcus: { x: 2600, z: 0, R: 475 },   // 왕국 (성벽 반지름 350)
   };
   const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus'];
   for (const k of ISLE_ORDER) { const I = ISLES[k]; I.id = k; I.entry = { x: I.x, z: I.z + I.R - 12 }; }   // 들어오는 자리 (남쪽 가장자리)
