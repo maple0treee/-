@@ -51,10 +51,10 @@
       for (let i = 0; i < 400; i++) {
         let x, z;
         if (OR.ISLES[zone]) { const I = OR.ISLES[zone]; const a = rnd(-Math.PI, Math.PI), d = rnd(6, I.R - 8); x = I.x + Math.cos(a) * d; z = I.z + Math.sin(a) * d; if (Math.hypot(x - I.entry.x, z - I.entry.z) < 16) continue; }
-        else {   // 하레나 둘레: 안쪽 고리(숲·들판·늪·폐허)와 바깥 고리(네 황야)
-          const outer = ['wwest', 'wnorth', 'wsouth', 'weast'].includes(zone), IN = OR.INNER;
-          const a = rnd(-Math.PI, Math.PI), d = outer ? rnd(IN + 3, R2 - 4) : rnd(TOWN_R + 5, IN - 3); x = C2.x + Math.cos(a) * d; z = C2.z + Math.sin(a) * d;
-          if (Math.min(Math.abs(z - C2.z), Math.abs(x - C2.x)) < 5) continue; // 네 성문에서 뻗는 길은 비워 둔다
+        else {   // 하레나 둘레 길: 그 구역의 4분의 1 바퀴 안에서 고른다
+          const SP = OR.SP, i = SP.ZONES.indexOf(zone); if (i < 0) return null;
+          const t = i * SP.Q + rnd(0.12, SP.Q - 0.12), q = OR.spPos(t, rnd(-(SP.HW - 3), SP.HW - 3)); x = q.x; z = q.z;
+          if (Math.hypot(x - OR.EPORTAL.x, z - OR.EPORTAL.z) < 10) continue;
         }
         if (zoneAt(x, z) !== zone) continue;
         if (Math.hypot(x - PIT.x, z - PIT.z) < 13) continue;

@@ -7,17 +7,50 @@
 
   // ---------- 지도 ----------
   const R1 = 103;                                   // 첫 지역(마을 주변) 반지름
-  const C2 = { x: 360, z: 0 }, R2 = 138;            // 두 번째 지역(도시 주변)
+  const C2 = { x: 360, z: 0 }, R2 = 160;            // 하레나와 둘레 (바깥 산줄기 안쪽)
   const ROAD = { x0: 95, x1: 226, half: 4.5 };      // 두 지역을 잇는 길 (z≈0)
   const TOWN_R = 40;                                // 도시 안전 지대 반지름
   const INNER = 82;                                 // 하레나 둘레 안쪽 고리(Lv1~15)와 바깥 고리(Lv16~60)의 경계
   const TOWN_BLD = { x: 18, z: -21, w: 16, d: 12 }; // 도시 기록관 (3층, 들어갈 수 있다) - 도시 중심 기준
-  const PIT = { x: 262, z: -42, r: 12, depth: 3.6 }; // 석굴 입구 (하레나 서북서 바깥 고리)
+  // ---------- 하레나 둘레: 서문에서 성을 두 바퀴 감아 나가는 길 하나 ----------
+  // t: 길을 따라 간 정도 (0 = 서문 앞, 2π = 한 바퀴, 4π = 끝). 각도 = π + t (서 → 북 → 동 → 남, 북쪽 = -z)
+  // 구역 8개: 한 구역 = 4분의 1 바퀴, 사이는 좁은 협곡 문
+  const SP = { R0: 62, PITCH: 38, HW: 15, T: 4 * PI, Q: PI / 2,
+    ZONES: ['forest', 'plains', 'swamp', 'ruins', 'wwest', 'wnorth', 'wsouth', 'weast'] };
+  const spR = (t) => SP.R0 + SP.PITCH * t / (2 * PI);
+  const spHW = (t) => { const k = Math.round(t / SP.Q), d = Math.abs(t - k * SP.Q); return (k > 0 && k < 8 && d < 0.07) ? SP.HW - 9.5 * Math.pow(1 - d / 0.07, 0.6) : SP.HW; };
+  const spPos = (t, off = 0) => { const a = PI + t, r = spR(t) + off; return { x: C2.x + Math.cos(a) * r, z: C2.z + Math.sin(a) * r }; };
+  // 가장 가까운 길 자리: t, off(길 가운데에서 바깥쪽 +), e(길 가장자리 밖으로 나간 거리, 음수면 길 안)
+  function spNear(x, z) {
+    const dx = x - C2.x, dz = z - C2.z, d = Math.hypot(dx, dz);
+    let t0 = Math.atan2(dz, dx) - PI; t0 = ((t0 % (2 * PI)) + 2 * PI) % (2 * PI);
+    let best = null;
+    for (let k = 0; k < 3; k++) { const t = t0 + 2 * PI * k; if (t > SP.T) break; const off = d - spR(t), e = Math.abs(off) - spHW(t); if (!best || e < best.e) best = { t, off, e }; }
+    return best;
+  }
+  const PIT = (() => { const p = spPos(2 * PI + 0.6, SP.HW + 9); return { x: p.x, z: p.z, r: 12, depth: 3.6 }; })();   // 석굴 입구: 5번 구역 바깥쪽 움푹한 곳
+  const EPORTAL = spPos(SP.T - 0.25, 0);                                                                       // 길 끝: 지하실로 가는 포탈
+  const ENTRY = { x0: C2.x - SP.R0 + SP.HW - 3, x1: C2.x - TOWN_R + 2, hz: 5 };                                 // 서문에서 길로 나가는 목
+  // 걸어 다닐 수 있는 곳인가 (도시 · 서문 목 · 길 · 석굴 입구)
+  function hInside(x, z, rad = 0) {
+    const d2 = Math.hypot(x - C2.x, z - C2.z);
+    if (d2 < TOWN_R + 1.5 - rad) return true;
+    if (x > ENTRY.x0 && x < ENTRY.x1 && Math.abs(z - C2.z) < ENTRY.hz - rad) return true;
+    if (Math.hypot(x - PIT.x, z - PIT.z) < PIT.r + 1 - rad) return true;
+    const n = spNear(x, z); return !!n && n.e <= -rad;
+  }
+  // 길 밖으로 나간 거리 (땅 높이·색에 쓴다)
+  function hOutside(x, z) {
+    const d2 = Math.hypot(x - C2.x, z - C2.z); let e = d2 - TOWN_R - 1.5;
+    const ex = Math.max(ENTRY.x0 - x, x - ENTRY.x1, Math.abs(z - C2.z) - ENTRY.hz); if (ex < e) e = ex;
+    const ep = Math.hypot(x - PIT.x, z - PIT.z) - PIT.r - 1; if (ep < e) e = ep;
+    const n = spNear(x, z); if (n && n.e < e) e = n.e;
+    return e;
+  }
   const DUN = { x: 0, z: 422, R: 14, corZ0: 394, corZ1: 409, corW: 3.2 };
   const BOSS_HOME = { x: 0, z: 421 };
   const LAIR = { x: 470, z: 0, r: 18 };              // 심연 끝 붉은 용의 둥지
   const HALL = { x: 0, z: -500, R: 24 };             // 동쪽 황야 끝 포탈 너머: 지하실 (둥근 방, 천장이 막혀 있다)
-  const EPORTAL = { x: 484, z: 24 };
   const WLAIR = { x: 200, z: -520, r: 22 };
   // 지하실 포탈 너머의 다섯 땅 (동쪽 멀리, 한 줄로)
   const ISLES = {
@@ -40,14 +73,10 @@
     if (x >= 800) return isleAt(x, z).id;
     if (z > 300) return 'dungeon';
     if (z < -300) return x > 100 ? 'wlair' : 'hall';
-    // 하레나와 둘레 황야 (옛 첫 지역과 길은 없앴다: 하레나에서 시작해 60레벨까지 키운다)
-    const d2 = Math.hypot(x - C2.x, z - C2.z);
-    if (d2 < TOWN_R) return 'town';
-    // 도시를 중심으로 네 방향 (북쪽 = -z). 안쪽 고리는 숲·들판·늪·폐허, 바깥 고리는 네 황야
-    const a = Math.atan2(z - C2.z, x - C2.x), inner = d2 < INNER;
-    if (Math.abs(a) <= PI / 4) return inner ? 'ruins' : 'weast';
-    if (Math.abs(a) >= PI * 3 / 4) return inner ? 'forest' : 'wwest';
-    return a < 0 ? (inner ? 'plains' : 'wnorth') : (inner ? 'swamp' : 'wsouth');
+    // 하레나와 둘레 길 (옛 첫 지역은 없앴다: 하레나에서 시작해 60레벨까지 키운다)
+    if (Math.hypot(x - C2.x, z - C2.z) < TOWN_R) return 'town';
+    const n = spNear(x, z); const i = n ? clampN(Math.floor(n.t / SP.Q), 0, 7) : 0;
+    return SP.ZONES[i];
   }
   const SAFE = { village: 1, town: 1, hall: 1, marcus: 1, milgol: 1, fort: 1, coachway: 1 };
 
@@ -66,9 +95,22 @@
     if (p.z > 300) return roomClamp(p, rad);
     if (p.z < -300 && p.x <= 100 && inHallAnnex(p, rad)) return;
     if (p.z < -300) { const A = p.x > 100 ? { x: WLAIR.x, z: WLAIR.z, R: WLAIR.r } : HALL; const d = Math.hypot(p.x - A.x, p.z - A.z), r = A.R - rad; if (d > r) { p.x = A.x + (p.x - A.x) * r / d; p.z = A.z + (p.z - A.z) * r / d; } return; }
-    const d2 = Math.hypot(p.x - C2.x, p.z - C2.z), r2 = R2 - rad;
-    if (d2 <= r2) return;
-    p.x = C2.x + (p.x - C2.x) * r2 / d2; p.z = C2.z + (p.z - C2.z) * r2 / d2;
+    // 하레나 둘레: 도시 · 서문 목 · 길 · 석굴 입구 안으로 (가장 가까운 자리로 민다)
+    if (hInside(p.x, p.z, rad)) return;
+    const c = [], d2 = Math.hypot(p.x - C2.x, p.z - C2.z);
+    { const r = TOWN_R + 1.5 - rad - 0.05; c.push({ x: C2.x + (p.x - C2.x) * r / Math.max(d2, 1e-4), z: C2.z + (p.z - C2.z) * r / Math.max(d2, 1e-4) }); }
+    c.push({ x: clampN(p.x, ENTRY.x0 + 0.05, ENTRY.x1 - 0.05), z: clampN(p.z, C2.z - ENTRY.hz + rad + 0.05, C2.z + ENTRY.hz - rad - 0.05) });
+    { const dp = Math.hypot(p.x - PIT.x, p.z - PIT.z), r = PIT.r + 1 - rad - 0.05; c.push({ x: PIT.x + (p.x - PIT.x) * r / Math.max(dp, 1e-4), z: PIT.z + (p.z - PIT.z) * r / Math.max(dp, 1e-4) }); }
+    const a = Math.atan2(p.z - C2.z, p.x - C2.x);
+    for (let k = 0; k < 3; k++) {   // 같은 각도의 길 고리들
+      const t = (((a - PI) % (2 * PI)) + 2 * PI) % (2 * PI) + 2 * PI * k; if (t > SP.T) break;
+      const R = spR(t), h = Math.max(0.2, spHW(t) - rad - 0.05), r = clampN(d2, R - h, R + h);
+      c.push({ x: C2.x + Math.cos(a) * r, z: C2.z + Math.sin(a) * r });
+    }
+    for (const t of [0.004, SP.T - 0.004]) { const R = spR(t), h = SP.HW - rad - 0.05; c.push(spPos(t, clampN(d2 - R, -h, h))); }   // 길의 처음과 끝
+    let best = null, bd = 1e9;
+    for (const q of c) { if (!hInside(q.x, q.z, rad * 0.9)) continue; const dd = Math.hypot(q.x - p.x, q.z - p.z); if (dd < bd) { bd = dd; best = q; } }
+    if (best) { p.x = best.x; p.z = best.z; }
   }
   // 몬스터가 들어가면 안 되는 안전 지대 밖으로 밀어낸다
   function keepOutOfSafe(p, rad) {
@@ -147,21 +189,16 @@
     wwest: ['jackal', 'bandit', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'salamander', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
     silva: ['silvawolf', 'mossslime', 'treant'], arbus: ['snowwolf', 'frostslime', 'yeti'], kaolis: ['seahound', 'tideslime', 'merman'], subcus: ['darkhound', 'crystalslime', 'cavetroll'],
   };
-  const ZONE_COUNT = { forest: 16, plains: 16, swamp: 15, ruins: 14, wwest: 34, wnorth: 34, wsouth: 34, weast: 34, silva: 40, arbus: 40, kaolis: 40, subcus: 40 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 40, arbus: 40, kaolis: 40, subcus: 40 };
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
     const d2 = Math.hypot(x - C2.x, z - C2.z);
     const f = (a, b, lo, hi) => Math.round(lo + (hi - lo) * clampN((d2 - a) / (b - a), 0, 1));
     if (ISLES[zone] && ZONE_LEVELS[zone]) { const I = ISLES[zone], L = ZONE_LEVELS[zone]; const d = Math.hypot(x - I.entry.x, z - I.entry.z); return Math.round(L[0] + (L[1] - L[0]) * clampN((d - 12) / (I.R * 1.7 - 12), 0, 1)); }   // 들어온 자리에서 멀수록 강하다
     switch (zone) {
-      case 'forest': return f(TOWN_R, INNER, 1, 3);
-      case 'plains': return f(TOWN_R, INNER, 4, 6);
-      case 'swamp': return f(TOWN_R, INNER, 8, 10);
-      case 'ruins': return f(TOWN_R, INNER, 12, 15);
-      case 'wwest': return f(INNER, 138, 16, 27);
-      case 'wnorth': return f(INNER, 138, 31, 39);
-      case 'wsouth': return f(INNER, 138, 42, 49);
-      case 'weast': return f(INNER, 138, 52, 59);
+      case 'forest': case 'plains': case 'swamp': case 'ruins': case 'wwest': case 'wnorth': case 'wsouth': case 'weast': {   // 길을 따라 갈수록 강하다
+        const n = spNear(x, z), L = ZONE_LEVELS[zone], i = SP.ZONES.indexOf(zone), fr = n ? clampN((n.t - i * SP.Q) / SP.Q, 0, 1) : 0;
+        return Math.round(L[0] + (L[1] - L[0]) * fr); }
       default: return 1;
     }
   }
@@ -203,6 +240,6 @@
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { R1, C2, R2, ROAD, TOWN_R, INNER, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
