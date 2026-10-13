@@ -38,7 +38,7 @@
       const c = clients.get(id); if (c) c.send(msg);
     };
     const broadcast = (msg, except) => { for (const [id, c] of clients) if (id !== except) c.send(msg); };
-    const inRotunda = (p) => p.z > 300 && Math.hypot(p.x - DUN.x, p.z - DUN.z) < DUN.R - 1.5;
+    const inRotunda = (p) => p.z > 300 && p.x < 800 && Math.hypot(p.x - DUN.x, p.z - DUN.z) < DUN.R - 1.5;
     const inLair = (p) => Math.hypot(p.x - LAIR.x, p.z - LAIR.z) < LAIR.r - 0.5;
     // 용 같은 큰 보스는 자기 둥지(원) 안에서만 싸운다
     const arenaOf = (m) => (m.D && m.D.arena === 'WLAIR' ? WLAIR : LAIR);
@@ -132,7 +132,7 @@
         const p = c.pres;
         if (!p.on || !p.al || p.hd) continue;
         if (SAFE[zoneAt(p.x, p.z)]) continue;
-        out.push({ id, x: p.x, z: p.z, dun: p.z > 300, rot: inRotunda(p), sd: !!p.sd });
+        out.push({ id, x: p.x, z: p.z, dun: p.z > 300 && p.x < 800, rot: inRotunda(p), sd: !!p.sd });
         if (Array.isArray(p.dc)) { const q = { x: p.dc[0], z: p.dc[1] }; if (!SAFE[zoneAt(q.x, q.z)]) out.push({ id: 'dc:' + id, x: q.x, z: q.z, dun: q.z > 300, rot: inRotunda(q), sd: true, dc: true }); }
       }
       return out;
