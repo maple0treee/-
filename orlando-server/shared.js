@@ -54,15 +54,15 @@
   const WLAIR = { x: 200, z: -520, r: 22 };
   // 지하실 포탈 너머의 다섯 땅 (동쪽 멀리, 한 줄로)
   const ISLES = {
-    silva:  { x: 900,  z: 0, R: 110 },   // 숲
-    arbus:  { x: 1200, z: 0, R: 110 },   // 설산
-    kaolis: { x: 1500, z: 0, R: 110 },   // 바다
-    subcus: { x: 1800, z: 0, R: 100 },   // 지하 동굴
+    silva:  { x: 900,  z: 0, R: 80 },   // 숲
+    arbus:  { x: 1200, z: 0, R: 80 },   // 설산
+    kaolis: { x: 1500, z: 0, R: 80 },   // 바다
+    subcus: { x: 1800, z: 0, R: 75 },   // 지하 동굴
     marcus: { x: 2600, z: 0, R: 475 },   // 왕국 (성벽 반지름 350)
     milgol: { x: 3500, z: 0, R: 230 },   // 밀골: 밀 농사 마을 + 왕실 곡창
     fort:   { x: 4150, z: 0, R: 190 },   // 통로 요새
     coachway: { x: 5300, z: 0, R: 400 }, // 왕도: 마차가 달리는 고리 길 (타고 가는 동안만 머문다)
-    castle: { x: 6400, z: 0, R: 300 },   // 엑시즈 성: 지하실 위층 계단을 올라가면 나온다
+    castle: { x: 6400, z: 0, R: 300 },   // 엑시즈 성: 엑시즈 시내 왕궁 남문으로 들어가면 나온다
   };
   const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle'];
   for (const k of ISLE_ORDER) { const I = ISLES[k]; I.id = k; I.entry = { x: I.x, z: I.z + I.R - 12 }; }   // 들어오는 자리 (남쪽 가장자리)
@@ -165,9 +165,8 @@
     frostslime:{ name: '서리 슬라임', lv: 76, build: 'slime', color: 0xb8e0f8, hpM: 1.35, atkM: 1.05, scale: 1.45, glow: 0x60b0ff },
     yeti:     { name: '예티', lv: 79, build: 'biped', color: 0xe8ecf0, hpM: 1.9, atkM: 1.35, scale: 2.0, club: true },
     // 카올리스 (Lv 80–90)
-    seahound: { name: '바다 사냥개', lv: 83, build: 'quad', color: 0x3a8a9a, hpM: 1.05, atkM: 1.25, scale: 1.15 },
+    mackerel: { name: '화난 고등어', lv: 84, build: 'quad', color: 0x2a5a78, hpM: 1.15, atkM: 1.3, scale: 1.25 },
     tideslime:{ name: '파도 슬라임', lv: 86, build: 'slime', color: 0x40a0c0, hpM: 1.4, atkM: 1.1, scale: 1.5, glow: 0x30c0e0 },
-    merman:   { name: '어인 전사', lv: 89, build: 'biped', color: 0x2a6a7a, hpM: 1.3, atkM: 1.4, tail: true, sword: true, scale: 1.15 },
     // 숩쿠스 (Lv 90–100)
     darkhound:{ name: '어둠 사냥개', lv: 93, build: 'quad', color: 0x2a2630, hpM: 1.1, atkM: 1.3, scale: 1.2 },
     crystalslime:{ name: '수정 슬라임', lv: 96, build: 'slime', color: 0x9a60e0, hpM: 1.5, atkM: 1.15, scale: 1.5, glow: 0xb070ff },
@@ -191,9 +190,9 @@
   const ZONE_MON = {
     forest: ['slime', 'slime', 'wolf'], plains: ['boar', 'goblin'], swamp: ['toad', 'lizard'], ruins: ['skeleton', 'skeleton', 'ogre'],
     wwest: ['jackal', 'bandit', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'salamander', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
-    silva: ['silvawolf', 'mossslime', 'treant'], arbus: ['snowwolf', 'frostslime', 'yeti'], kaolis: ['seahound', 'tideslime', 'merman'], subcus: ['darkhound', 'crystalslime', 'cavetroll'],
+    silva: ['silvawolf', 'mossslime', 'treant'], arbus: ['snowwolf', 'frostslime', 'yeti'], kaolis: ['mackerel', 'tideslime'], subcus: ['darkhound', 'crystalslime', 'cavetroll'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 40, arbus: 40, kaolis: 40, subcus: 40 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30 };
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
     const d2 = Math.hypot(x - C2.x, z - C2.z);
