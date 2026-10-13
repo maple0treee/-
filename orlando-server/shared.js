@@ -10,8 +10,9 @@
   const C2 = { x: 360, z: 0 }, R2 = 138;            // 두 번째 지역(도시 주변)
   const ROAD = { x0: 95, x1: 226, half: 4.5 };      // 두 지역을 잇는 길 (z≈0)
   const TOWN_R = 40;                                // 도시 안전 지대 반지름
+  const INNER = 82;                                 // 하레나 둘레 안쪽 고리(Lv1~15)와 바깥 고리(Lv16~60)의 경계
   const TOWN_BLD = { x: 18, z: -21, w: 16, d: 12 }; // 도시 기록관 (3층, 들어갈 수 있다) - 도시 중심 기준
-  const PIT = { x: -64, z: 10, r: 12, depth: 3.6 }; // 폐허 석굴 입구
+  const PIT = { x: 262, z: -42, r: 12, depth: 3.6 }; // 석굴 입구 (하레나 서북서 바깥 고리)
   const DUN = { x: 0, z: 422, R: 14, corZ0: 394, corZ1: 409, corW: 3.2 };
   const BOSS_HOME = { x: 0, z: 421 };
   const LAIR = { x: 470, z: 0, r: 18 };              // 심연 끝 붉은 용의 둥지
@@ -39,22 +40,14 @@
     if (x >= 800) return isleAt(x, z).id;
     if (z > 300) return 'dungeon';
     if (z < -300) return x > 100 ? 'wlair' : 'hall';
-    if (x > ROAD.x0 && x < C2.x - TOWN_R + 2 && Math.abs(z) < 12 && Math.hypot(x - C2.x, z - C2.z) >= TOWN_R) return 'road';   // 하레나 서문에서 사냥터까지 (초보도 걸어갈 수 있다)
+    // 하레나와 둘레 황야 (옛 첫 지역과 길은 없앴다: 하레나에서 시작해 60레벨까지 키운다)
     const d2 = Math.hypot(x - C2.x, z - C2.z);
-    if (x > 150) {
-      if (d2 < TOWN_R) return 'town';
-      // 도시를 중심으로 네 방향 황야 (북쪽 = -z)
-      const a = Math.atan2(z - C2.z, x - C2.x);
-      if (Math.abs(a) <= PI / 4) return 'weast';
-      if (Math.abs(a) >= PI * 3 / 4) return 'wwest';
-      return a < 0 ? 'wnorth' : 'wsouth';
-    }
-    const d = Math.hypot(x, z);
-    const a = Math.atan2(z, x) + Math.sin(d * 0.11) * 0.12;
-    if (a >= -0.75 * PI && a < -0.25 * PI) return 'forest';
-    if (a >= -0.25 * PI && a < 0.25 * PI) return 'plains';
-    if (a >= 0.25 * PI && a < 0.75 * PI) return 'swamp';
-    return 'ruins';
+    if (d2 < TOWN_R) return 'town';
+    // 도시를 중심으로 네 방향 (북쪽 = -z). 안쪽 고리는 숲·들판·늪·폐허, 바깥 고리는 네 황야
+    const a = Math.atan2(z - C2.z, x - C2.x), inner = d2 < INNER;
+    if (Math.abs(a) <= PI / 4) return inner ? 'ruins' : 'weast';
+    if (Math.abs(a) >= PI * 3 / 4) return inner ? 'forest' : 'wwest';
+    return a < 0 ? (inner ? 'plains' : 'wnorth') : (inner ? 'swamp' : 'wsouth');
   }
   const SAFE = { village: 1, town: 1, hall: 1, marcus: 1, milgol: 1, fort: 1, coachway: 1 };
 
@@ -73,21 +66,12 @@
     if (p.z > 300) return roomClamp(p, rad);
     if (p.z < -300 && p.x <= 100 && inHallAnnex(p, rad)) return;
     if (p.z < -300) { const A = p.x > 100 ? { x: WLAIR.x, z: WLAIR.z, R: WLAIR.r } : HALL; const d = Math.hypot(p.x - A.x, p.z - A.z), r = A.R - rad; if (d > r) { p.x = A.x + (p.x - A.x) * r / d; p.z = A.z + (p.z - A.z) * r / d; } return; }
-    const d1 = Math.hypot(p.x, p.z), d2 = Math.hypot(p.x - C2.x, p.z - C2.z);
-    const r1 = R1 - rad, r2 = R2 - rad, hw = ROAD.half - rad;
-    if (d1 <= r1 || d2 <= r2 || (p.x >= ROAD.x0 && p.x <= ROAD.x1 && Math.abs(p.z) <= hw)) return;
-    const c = [];
-    c.push({ x: p.x * r1 / d1, z: p.z * r1 / d1 });
-    c.push({ x: C2.x + (p.x - C2.x) * r2 / d2, z: C2.z + (p.z - C2.z) * r2 / d2 });
-    c.push({ x: clampN(p.x, ROAD.x0, ROAD.x1), z: clampN(p.z, -hw, hw) });
-    let best = c[0], bd = 1e9;
-    for (const q of c) { const dd = Math.hypot(q.x - p.x, q.z - p.z); if (dd < bd) { bd = dd; best = q; } }
-    p.x = best.x; p.z = best.z;
+    const d2 = Math.hypot(p.x - C2.x, p.z - C2.z), r2 = R2 - rad;
+    if (d2 <= r2) return;
+    p.x = C2.x + (p.x - C2.x) * r2 / d2; p.z = C2.z + (p.z - C2.z) * r2 / d2;
   }
   // 몬스터가 들어가면 안 되는 안전 지대 밖으로 밀어낸다
   function keepOutOfSafe(p, rad) {
-    const d1 = Math.hypot(p.x, p.z);
-    if (d1 < 28 + rad) { const k = (28 + rad) / Math.max(d1, 1e-4); p.x *= k; p.z *= k; }
     const d2 = Math.hypot(p.x - C2.x, p.z - C2.z);
     if (d2 < TOWN_R + 2 + rad) { const k = (TOWN_R + 2 + rad) / Math.max(d2, 1e-4); p.x = C2.x + (p.x - C2.x) * k; p.z = C2.z + (p.z - C2.z) * k; }
   }
@@ -160,33 +144,35 @@
   }
   const ZONE_MON = {
     forest: ['slime', 'slime', 'wolf'], plains: ['boar', 'goblin'], swamp: ['toad', 'lizard'], ruins: ['skeleton', 'skeleton', 'ogre'],
-    road: ['slime', 'slime', 'wolf'],
     wwest: ['jackal', 'bandit', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'salamander', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
     silva: ['silvawolf', 'mossslime', 'treant'], arbus: ['snowwolf', 'frostslime', 'yeti'], kaolis: ['seahound', 'tideslime', 'merman'], subcus: ['darkhound', 'crystalslime', 'cavetroll'],
   };
-  const ZONE_COUNT = { forest: 25, plains: 24, swamp: 21, ruins: 18, road: 17, wwest: 40, wnorth: 40, wsouth: 40, weast: 40, silva: 40, arbus: 40, kaolis: 40, subcus: 40 };
+  const ZONE_COUNT = { forest: 16, plains: 16, swamp: 15, ruins: 14, wwest: 34, wnorth: 34, wsouth: 34, weast: 34, silva: 40, arbus: 40, kaolis: 40, subcus: 40 };
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
     const d2 = Math.hypot(x - C2.x, z - C2.z);
     const f = (a, b, lo, hi) => Math.round(lo + (hi - lo) * clampN((d2 - a) / (b - a), 0, 1));
     if (ISLES[zone] && ZONE_LEVELS[zone]) { const I = ISLES[zone], L = ZONE_LEVELS[zone]; const d = Math.hypot(x - I.entry.x, z - I.entry.z); return Math.round(L[0] + (L[1] - L[0]) * clampN((d - 12) / (I.R * 1.7 - 12), 0, 1)); }   // 들어온 자리에서 멀수록 강하다
     switch (zone) {
-      case 'road': return 1 + Math.round(clampN((C2.x - TOWN_R - x) / (C2.x - TOWN_R - ROAD.x0), 0, 1) * 2);
-      case 'wwest': return f(138, TOWN_R, 20, 30);   // 길에서 들어오는 쪽이 약하다
-      case 'wnorth': return f(TOWN_R, 138, 28, 40);
-      case 'wsouth': return f(TOWN_R, 138, 38, 50);
-      case 'weast': return f(TOWN_R, 138, 48, 60);
+      case 'forest': return f(TOWN_R, INNER, 1, 3);
+      case 'plains': return f(TOWN_R, INNER, 4, 6);
+      case 'swamp': return f(TOWN_R, INNER, 8, 10);
+      case 'ruins': return f(TOWN_R, INNER, 12, 15);
+      case 'wwest': return f(INNER, 138, 16, 27);
+      case 'wnorth': return f(INNER, 138, 31, 39);
+      case 'wsouth': return f(INNER, 138, 42, 49);
+      case 'weast': return f(INNER, 138, 52, 59);
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 4], plains: [4, 7], swamp: [7, 11], ruins: [11, 15], dungeon: [18, 22], road: [1, 3], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [20, 30], wnorth: [28, 40], wsouth: [38, 50], weast: [48, 60], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0], coachway: [0, 0] };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0], coachway: [0, 0] };
 
   // ---------- 의뢰 게시판 포스터 ----------
   // 의뢰를 주는 NPC마다 게시판이 따로 있다. 포스터는 마을 사람(실제 NPC)이 이유를 적어 붙인 것
   // {m}: 몬스터 이름, {z}: 지역 이름
   const G = (n, r, why) => ({ n, r, why });
   const BOARDS = {
-    marta: { title: '마르타의 의뢰 게시판', cap: 5, zones: ['forest', 'plains', 'swamp', 'ruins', 'road'], givers: [
+    marta: { title: '마르타의 의뢰 게시판', cap: 5, zones: ['forest', 'plains', 'swamp', 'ruins'], givers: [
       G('마르타', '의뢰인', ['나무꾼들이 {z}에 들어가질 못하고 있어요. {m} 때문에 겨울 땔감이 모자랄 지경이에요.', '아이들이 {z} 쪽 들판으로 놀러 갔다가 {m}에게 쫓겨 왔어요. 다시는 그런 일이 없게 해 주세요.']),
       G('엘리스', '순간이동 술사', ['별빛 길을 여는 수정을 {z}에 두고 왔는데, {m}이(가) 그 주변에 진을 쳤어요. 길을 터 주면 수정을 찾으러 갈게요.']),
       G('토르간', '하레나 대장장이', ['숲에서 오는 숯 마차가 {z}에서 {m}에게 습격당했어. 불이 꺼지면 망치도 멈춘다고.'])] },
@@ -217,6 +203,6 @@
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { R1, C2, R2, ROAD, TOWN_R, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { R1, C2, R2, ROAD, TOWN_R, INNER, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -51,13 +51,12 @@
       for (let i = 0; i < 400; i++) {
         let x, z;
         if (OR.ISLES[zone]) { const I = OR.ISLES[zone]; const a = rnd(-Math.PI, Math.PI), d = rnd(6, I.R - 8); x = I.x + Math.cos(a) * d; z = I.z + Math.sin(a) * d; if (Math.hypot(x - I.entry.x, z - I.entry.z) < 16) continue; }
-        else if (zone === 'road') { x = rnd(ROAD.x0 + 10, ROAD.x1 - 6); z = rnd(-3, 3); }
-        else if (['wwest', 'wnorth', 'wsouth', 'weast'].includes(zone)) {
-          const a = rnd(-Math.PI, Math.PI), d = rnd(TOWN_R + 5, R2 - 4); x = C2.x + Math.cos(a) * d; z = C2.z + Math.sin(a) * d;
-          if (Math.abs(z) < 6 && x < C2.x) continue; // 도시로 가는 길은 비워 둔다
-        } else { const a = rnd(-Math.PI, Math.PI), d = rnd(34, 100); x = Math.cos(a) * d; z = Math.sin(a) * d; }
+        else {   // 하레나 둘레: 안쪽 고리(숲·들판·늪·폐허)와 바깥 고리(네 황야)
+          const outer = ['wwest', 'wnorth', 'wsouth', 'weast'].includes(zone), IN = OR.INNER;
+          const a = rnd(-Math.PI, Math.PI), d = outer ? rnd(IN + 3, R2 - 4) : rnd(TOWN_R + 5, IN - 3); x = C2.x + Math.cos(a) * d; z = C2.z + Math.sin(a) * d;
+          if (Math.min(Math.abs(z - C2.z), Math.abs(x - C2.x)) < 5) continue; // 네 성문에서 뻗는 길은 비워 둔다
+        }
         if (zoneAt(x, z) !== zone) continue;
-        if (zone !== 'road' && Math.min(Math.abs(x), Math.abs(z)) < 4 && x < 110) continue;
         if (Math.hypot(x - PIT.x, z - PIT.z) < 13) continue;
         if (blocked(x, z, 1)) continue;
         let near = false;
