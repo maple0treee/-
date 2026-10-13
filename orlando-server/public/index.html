@@ -2388,7 +2388,7 @@ const InstChunks={list:[],
         ids.forEach((id,j)=>{m.getMatrixAt(id,M);c.setMatrixAt(j,M);v.setFromMatrixPosition(M);box.expandByPoint(v);sMax=Math.max(sMax,M.getMaxScaleOnAxis());if(m.instanceColor){m.getColorAt(id,col);c.setColorAt(j,col);}});
         if(c.instanceColor)c.instanceColor.needsUpdate=true;
         const sph=new THREE.Sphere();box.getBoundingSphere(sph);sph.radius+=gr*sMax;
-        scene.add(c);this.list.push({m:c,s:sph,maxD:m.userData.maxD});
+        scene.add(c);{const sz=gr*sMax;this.list.push({m:c,s:sph,maxD:m.userData.maxD||(sz<.9?45:sz<1.6?80:0)});}
       }
       scene.remove(m);
     }
@@ -2398,7 +2398,9 @@ const InstChunks={list:[],
     if(!this.list.length)return;
     this.pm.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);this.fr.setFromProjectionMatrix(this.pm);
     const far=camera.far;
-    for(const q of this.list){const d=q.s.center.distanceTo(p)-q.s.radius;q.m.visible=q.maxD?(d<q.maxD&&(d<20||this.fr.intersectsSphere(q.s))):(d<40||(d<far&&this.fr.intersectsSphere(q.s)));}
+    // 하레나 안에 있으면 둘레 산줄기 밖의 것은 보이지 않는다
+    const inHa=Math.hypot(p.x-OR.C2.x,p.z-OR.C2.z)<OR.R2+25;
+    for(const q of this.list){const d=q.s.center.distanceTo(p)-q.s.radius;if(inHa&&Math.hypot(q.s.center.x-OR.C2.x,q.s.center.z-OR.C2.z)-q.s.radius>OR.R2+70){q.m.visible=false;continue;}q.m.visible=q.maxD?(d<q.maxD&&(d<20||this.fr.intersectsSphere(q.s))):(d<40||(d<far&&this.fr.intersectsSphere(q.s)));}
   }
 };
 // 멀리 있는 몬스터는 그리지 않는다 (visible은 죽음·숨김에 쓰이니 건드리지 않고 '층'으로 끈다)
@@ -5727,7 +5729,7 @@ const HZ=[   // 구역: 바닥색, 바닥 짙은색, 능선색, 깃발색
     if(m.instanceColor)m.instanceColor.needsUpdate=true;m.castShadow=shadow;m.receiveShadow=true;scene.add(m);return m;};
   const std=(c,o={})=>mat(c,o);
   /* 가져온 모델(Quaternius CC0)로 놓을 것: 자리만 여기서 정하고, 모델이 받아지면 harenaModels 가 그린다 */
-  const HPL=[],put=(m,x,z,sx,sy,sz,ry,tint,k,dy=0)=>HPL.push({m,x,z,y:heightAt(x,z)+dy,sx,sy,sz,ry,tint,seg:k});
+  const HPL=[],put=(m,x,z,sx,sy,sz,ry,tint,k,dy=0,ns=0)=>HPL.push({m,x,z,y:heightAt(x,z)+dy,sx,sy,sz,ry,tint,seg:k,ns});
   const ROCKM=['Rock_Medium_1','Rock_Medium_2','Rock_Medium_3','Rock_Medium_4'],ROCKB=['Rock_Big_1','Rock_Big_2'],DEADT=['DeadTree_1','DeadTree_2','DeadTree_3','DeadTree_4','DeadTree_5'];
   const pickA=a=>a[Math.floor(srand()*a.length)%a.length];
 
@@ -5781,7 +5783,7 @@ const HZ=[   // 구역: 바닥색, 바닥 짙은색, 능선색, 깃발색
     for(let i=0;i<n;i++)for(const sd of [-1,1]){const t=k*Q+(i+srand()*.7)/n*Q,off=sd*(SP.HW+sr(.5,3.5)),p=OR.spPos(t,off),s=sr(1.3,2.6)*(1+k*.08);
       if(Math.hypot(p.x-PIT.x,p.z-PIT.z)<PIT.r+3||Math.hypot(p.x-OR.EPORTAL.x,p.z-OR.EPORTAL.z)<9)continue;
       if(Math.abs(t-Math.round(t/Q)*Q)<.09&&Math.round(t/Q)>0)continue;   /* 협곡 문 자리는 비운다 */
-      const big=srand()<.25;put(big?pickA(ROCKB):pickA(ROCKM),p.x,p.z,s*(big?.75:1),s*sr(.8,1.3)*(big?.75:1),s*(big?.75:1),srand()*6.28,HZ[k].rock,k,-s*.35);}}
+      const big=srand()<.25;put(big?pickA(ROCKB):pickA(ROCKM),p.x,p.z,s*(big?.75:1),s*sr(.8,1.3)*(big?.75:1),s*(big?.75:1),srand()*6.28,HZ[k].rock,k,-s*.35,1);   /* 벽 밑 바위는 그림자를 그리지 않는다 (가볍게) */}}
   /* 협곡 문: 좁은 목 양쪽 돌기둥 + 다음 구역 깃발 */
   {const stone=mat(0xbdb29a),pole=mat(0x3a2818);
     for(let k=1;k<8;k++){const t=k*Q;
@@ -5802,22 +5804,28 @@ const HZ=[   // 구역: 바닥색, 바닥 짙은색, 능선색, 깃발색
 })();
 
 /* 하레나 풍경 모델 그리기: models/harena.glb (Quaternius Stylized Nature MegaKit, CC0)
-   같은 모델·같은 빛깔·같은 구역끼리 하나의 인스턴스 묶음으로, 플레이어에게서 먼 구역 묶음은 그리지 않는다 */
+   64m 칸마다, 같은 재질끼리 한 덩어리로 합친다 (빛깔은 꼭짓점 색으로) → 칸 하나에 그리기 몇 번. 먼 칸은 그리지 않는다 */
 const HMOD={groups:[],ready:false};
 function harenaModels(list){if(!THREE.GLTFLoader){console.warn('harena: no GLTFLoader');return;}
   new THREE.GLTFLoader().load('models/harena.glb.wasm?v=1',g=>{
     let kids=[...g.scene.children];while(kids.length===1&&kids[0].children.length>1&&!kids[0].isMesh)kids=[...kids[0].children];
     const parts={};for(const c of kids){c.updateMatrixWorld(true);const ms=[];c.traverse(o=>{if(o.isMesh)ms.push(o);});parts[c.name]=ms;}
-    const mcache=new Map(),matFor=(m,tint)=>{const k=m.uuid+'|'+tint;if(!mcache.has(k)){const n=m.clone();if(tint!=null)n.color.multiply(new THREE.Color(tint));n.roughness=1;n.metalness=0;if(n.map)n.map.anisotropy=4;mcache.set(k,n);}return mcache.get(k);};
-    const by=new Map();for(const p of list){if(!parts[p.m])continue;const k=p.m+'|'+p.tint+'|'+Math.floor(p.x/40)+','+Math.floor(p.z/40);   /* 40m 칸마다 묶어 멀리 있는 칸은 그리지 않는다 */if(!by.has(k))by.set(k,[]);by.get(k).push(p);}
-    const M4=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler(),v=new THREE.Vector3(),sv=new THREE.Vector3();
-    for(const [k,ps] of by){const [name,tint]=k.split('|');const tn=tint==='null'?null:+tint;
-      let cx=0,cz=0;for(const p of ps){cx+=p.x;cz+=p.z;}cx/=ps.length;cz/=ps.length;let rad=0;for(const p of ps)rad=Math.max(rad,Math.hypot(p.x-cx,p.z-cz)+12*Math.max(p.sx,p.sy));
-      for(const src of parts[name]){const geo=new THREE.BufferGeometry();for(const a in src.geometry.attributes)geo.setAttribute(a,src.geometry.attributes[a]);if(src.geometry.index)geo.setIndex(src.geometry.index);
-        const mm=Array.isArray(src.material)?src.material[0]:src.material,im=new THREE.InstancedMesh(geo,matFor(mm,tn),ps.length);
-        ps.forEach((p,i)=>{e.set(0,p.ry,0);q.setFromEuler(e);sv.set(p.sx,p.sy,p.sz);v.set(p.x,p.y,p.z);M4.compose(v,q,sv);M4.multiply(src.matrixWorld);im.setMatrixAt(i,M4);});
-        geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(cx,ps[0].y,cz),rad);im.castShadow=!/Grass|Pebble/.test(name);im.receiveShadow=true;scene.add(im);
-        HMOD.groups.push({im,x:cx,z:cz,r:rad,far:/Grass/.test(name)?60:/Tree/.test(name)?110:160});}}
+    const mats=new Map(),matFor=m=>{if(!mats.has(m.uuid)){const n=m.clone();n.vertexColors=true;n.color.set(0xffffff);n.roughness=1;n.metalness=0;if(n.map)n.map.anisotropy=4;mats.set(m.uuid,n);}return mats.get(m.uuid);};
+    const cells=new Map(),cellOf=p=>Math.floor(p.x/64)+','+Math.floor(p.z/64);
+    const M4=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler(),v=new THREE.Vector3(),sv=new THREE.Vector3(),N3=new THREE.Matrix3(),c=new THREE.Color(),pp=new THREE.Vector3();
+    for(const p of list){const src=parts[p.m];if(!src)continue;const ck=cellOf(p);if(!cells.has(ck))cells.set(ck,new Map());const cell=cells.get(ck);
+      e.set(0,p.ry,0);q.setFromEuler(e);sv.set(p.sx,p.sy,p.sz);v.set(p.x,p.y,p.z);c.set(p.tint==null?0xffffff:p.tint);
+      for(const sm of src){const mm=Array.isArray(sm.material)?sm.material[0]:sm.material,key=mm.uuid+'|'+(p.ns?1:0)+'|'+(/Grass/.test(p.m)?'g':/Tree/.test(p.m)?'t':'r');
+        if(!cell.has(key))cell.set(key,{mat:matFor(mm),P:[],Nn:[],U:[],C:[],I:[],ns:p.ns,kind:key.slice(-1),minx:1e9,maxx:-1e9,minz:1e9,maxz:-1e9});const B=cell.get(key);
+        M4.compose(v,q,sv).multiply(sm.matrixWorld);N3.getNormalMatrix(M4);const G=sm.geometry,PA=G.attributes.position,NA=G.attributes.normal,UA=G.attributes.uv,base=B.P.length/3;
+        for(let i=0;i<PA.count;i++){pp.fromBufferAttribute(PA,i).applyMatrix4(M4);B.P.push(pp.x,pp.y,pp.z);if(pp.x<B.minx)B.minx=pp.x;if(pp.x>B.maxx)B.maxx=pp.x;if(pp.z<B.minz)B.minz=pp.z;if(pp.z>B.maxz)B.maxz=pp.z;
+          if(NA){pp.fromBufferAttribute(NA,i).applyMatrix3(N3).normalize();B.Nn.push(pp.x,pp.y,pp.z);}if(UA)B.U.push(UA.getX(i),UA.getY(i));B.C.push(c.r,c.g,c.b);}
+        if(G.index){const ia=G.index.array;for(let i=0;i<ia.length;i++)B.I.push(base+ia[i]);}else for(let i=0;i<PA.count;i++)B.I.push(base+i);}}
+    for(const [ck,cell] of cells)for(const [key,B] of cell){const geo=new THREE.BufferGeometry();
+      geo.setAttribute('position',new THREE.Float32BufferAttribute(B.P,3));if(B.Nn.length)geo.setAttribute('normal',new THREE.Float32BufferAttribute(B.Nn,3));if(B.U.length)geo.setAttribute('uv',new THREE.Float32BufferAttribute(B.U,2));
+      geo.setAttribute('color',new THREE.Float32BufferAttribute(B.C,3));geo.setIndex(B.P.length/3>65535?new THREE.Uint32BufferAttribute(B.I,1):new THREE.Uint16BufferAttribute(B.I,1));geo.computeBoundingSphere();
+      const m=new THREE.Mesh(geo,B.mat);m.castShadow=!B.ns&&B.kind!=='g';m.receiveShadow=true;scene.add(m);
+      const cx=(B.minx+B.maxx)/2,cz=(B.minz+B.maxz)/2;HMOD.groups.push({im:m,x:cx,z:cz,r:Math.hypot(B.maxx-cx,B.maxz-cz),far:B.kind==='g'?40:B.kind==='t'?85:110});}
     HMOD.ready=true;},undefined,e=>console.warn('harena models',e));}
 setInterval(()=>{if(!HMOD.ready||!player)return;const px=player.position.x,pz=player.position.z,far=px>800||Math.abs(pz)>300;
   for(const G of HMOD.groups){const v=!far&&Math.hypot(px-G.x,pz-G.z)-G.r<G.far;if(G.im.visible!==v)G.im.visible=v;}},400);
@@ -6981,7 +6989,9 @@ const CIT_ANIM=['J_Bip_C_Hips','J_Bip_C_Spine','J_Bip_C_Chest','J_Bip_L_UpperLeg
 function citBoneMap(bones){const inv=new THREE.Quaternion(),X=new THREE.Vector3(1,0,0),Y=new THREE.Vector3(0,1,0),Zv=new THREE.Vector3(0,0,1),A={};
   for(const n of CIT_ANIM){const b=bones.find(q=>q.name===n);if(!b)continue;b.getWorldQuaternion(inv);inv.invert();
     A[n]={b,q0:b.quaternion.clone(),p0:b.position.clone(),ax:X.clone().applyQuaternion(inv),ay:Y.clone().applyQuaternion(inv),az:Zv.clone().applyQuaternion(inv)};}return A;}
-const _cq=new THREE.Quaternion();let _citK=1;   /* _citK: 자세 세기 (일하다 쉴 때 천천히 풀린다) */
+const _cq=new THREE.Quaternion();let _citK=1;
+/* 굽는 자세(T자에서 팔을 내린 각도)가 몸에서 20도쯤 벌어져 있어, 서 있거나 걸을 때 팔을 몸 쪽으로 더 붙인다 (왼팔 -z, 오른팔 +z) */
+const ARM_IN=.3;   /* _citK: 자세 세기 (일하다 쉴 때 천천히 풀린다) */
 function _citRot(e,ang,axis){if(!e)return;e.b.quaternion.copy(e.q0);ang*=_citK;if(ang){_cq.setFromAxisAngle(axis==='y'?e.ay:axis==='z'?e.az:e.ax,ang);e.b.quaternion.multiply(_cq);}}
 function _citRot2(e,ax,ay,az){if(!e)return;e.b.quaternion.copy(e.q0);ax*=_citK;ay*=_citK;az*=_citK;if(ax){_cq.setFromAxisAngle(e.ax,ax);e.b.quaternion.multiply(_cq);}if(ay){_cq.setFromAxisAngle(e.ay,ay);e.b.quaternion.multiply(_cq);}if(az){_cq.setFromAxisAngle(e.az,az);e.b.quaternion.multiply(_cq);}}
 /* 이미 돌린 뼈에 조금 더 돌리기 (덧붙임) */
@@ -7002,7 +7012,7 @@ function citPoseBones(I,ph,w,t,mode='walk'){const A=I.A,V=I.v||{amp:1,arm:1,lean
     _citRot(A.J_Bip_L_LowerLeg,Math.max(0,-Math.sin(ph-1.1))*amp*1.3);_citRot(A.J_Bip_R_LowerLeg,Math.max(0,Math.sin(ph-1.1))*amp*1.3);
     _citRot(A.J_Bip_L_Foot,Math.max(0,s)*amp*.35);_citRot(A.J_Bip_R_Foot,Math.max(0,-s)*amp*.35);
     /* 팔: 다리와 반대로 흔들고 팔꿈치는 살짝 굽힌다. 몸통·머리는 흔들지 않고 똑바로 (흔들림을 넣으면 비틀거려 보인다) */
-    const arm=(I.slow?.16:.26)*w*V.arm;_citRot2(A.J_Bip_L_UpperArm,s*arm,0,-.04*w);_citRot2(A.J_Bip_R_UpperArm,-s*arm,0,.04*w);
+    const arm=(I.slow?.16:.26)*w*V.arm,ai=ARM_IN*(I.skirt?.8:1);_citRot2(A.J_Bip_L_UpperArm,s*arm,0,-ai);_citRot2(A.J_Bip_R_UpperArm,-s*arm,0,ai);
     _citRot(A.J_Bip_L_LowerArm,-(.12+Math.max(0,-s)*.12)*w);_citRot(A.J_Bip_R_LowerArm,-(.12+Math.max(0,s)*.12)*w);
     _citRot2(A.J_Bip_C_Spine,(.03+V.lean*.5)*w,0,0);_citRot2(A.J_Bip_C_Chest,0,-s*.025*w,0);_citRot(A.J_Bip_C_Neck,0);
     if(w<.5)look(1-w*2);else _citRot(A.J_Bip_C_Head,0);
@@ -7024,14 +7034,14 @@ function citPoseBones(I,ph,w,t,mode='walk'){const A=I.A,V=I.v||{amp:1,arm:1,lean
     _citRot2(A.J_Bip_C_Spine,.1+V.lean*.5,0,0);look(.6);if(H)H.b.position.y-=.44;return;}
   if(mode==='talk'){/* 손짓은 불규칙하게, 말하는 손이 가끔 바뀐다 */const g1=_cn(t*.9,S),g2=_cn(t*1.1,S+7),who=_cn(t*.07,S+3)>0?1:-1;
     const R=who>0?A.J_Bip_R_UpperArm:A.J_Bip_L_UpperArm,RL=who>0?A.J_Bip_R_LowerArm:A.J_Bip_L_LowerArm,L=who>0?A.J_Bip_L_UpperArm:A.J_Bip_R_UpperArm,LL=who>0?A.J_Bip_L_LowerArm:A.J_Bip_R_LowerArm;
-    const act=Math.max(0,g1);_citRot2(R,-.2-act*.5,0,who*(.15+act*.2));_citRot(RL,-.5-act*.9+g2*.15);_citRot2(L,-.06,0,-who*.06);_citRot(LL,-.2-Math.max(0,-g1)*.4);
+    const act=Math.max(0,g1);_citRot2(R,-.2-act*.5,0,who*(.15+act*.2));_citRot(RL,-.5-act*.9+g2*.15);_citRot2(L,-.06,0,-who*ARM_IN);_citRot(LL,-.2-Math.max(0,-g1)*.4);
     _citRot2(A.J_Bip_C_Head,Math.max(0,_cn(t*1.7,S+2))*.12,_cn(t*.3,S+6)*.25+V.head,0);_citRot2(A.J_Bip_C_Spine,V.lean,.04*g1,0);
     _citRot(A.J_Bip_L_UpperLeg,.05*V.side);_citRot(A.J_Bip_R_LowerLeg,V.side>0?.12:0);_citRot(A.J_Bip_L_LowerLeg,V.side<0?.12:0);return;}
   if(mode==='carry'){/* 가슴 앞에 짐 */_citRot(A.J_Bip_L_UpperArm,-.55);_citRot(A.J_Bip_R_UpperArm,-.55);_citRot2(A.J_Bip_L_LowerArm,-1.7,0,.25);_citRot2(A.J_Bip_R_LowerArm,-1.7,0,-.25);_citRot2(A.J_Bip_C_Spine,-.08,s*.04*w,0);
     const k=.42*w*V.amp;_citRot(A.J_Bip_L_UpperLeg,-s*k);_citRot(A.J_Bip_R_UpperLeg,s*k);_citRot(A.J_Bip_L_LowerLeg,Math.max(0,-Math.sin(ph-1.1))*k*1.3);_citRot(A.J_Bip_R_LowerLeg,Math.max(0,Math.sin(ph-1.1))*k*1.3);look(.5);if(H)H.b.position.y+=(Math.abs(c)*.024-.013)*w;return;}
   if(mode==='shoulder'){/* 어깨에 자루 */_citRot2(A.J_Bip_R_UpperArm,-2.6,0,.3);_citRot(A.J_Bip_R_LowerArm,-.8);_citRot2(A.J_Bip_C_Spine,-.06,0,.08);
     const k=.4*w*V.amp;_citRot(A.J_Bip_L_UpperLeg,-s*k);_citRot(A.J_Bip_R_UpperLeg,s*k);_citRot(A.J_Bip_L_LowerLeg,Math.max(0,-Math.sin(ph-1.1))*k*1.3);_citRot(A.J_Bip_R_LowerLeg,Math.max(0,Math.sin(ph-1.1))*k*1.3);_citRot(A.J_Bip_L_UpperArm,s*.2*w);_citRot(A.J_Bip_L_LowerArm,-.15);look(.5);return;}
-  if(mode==='guard'){/* 차렷이지만 숨을 쉬고 가끔 무게를 옮긴다 */_citRot2(A.J_Bip_R_UpperArm,-.08,0,.08);_citRot(A.J_Bip_R_LowerArm,-.08);_citRot2(A.J_Bip_L_UpperArm,-.08,0,-.08);_citRot(A.J_Bip_L_LowerArm,-.06);
+  if(mode==='guard'){/* 차렷이지만 숨을 쉬고 가끔 무게를 옮긴다 */_citRot2(A.J_Bip_R_UpperArm,-.08,0,ARM_IN);_citRot(A.J_Bip_R_LowerArm,-.08);_citRot2(A.J_Bip_L_UpperArm,-.08,0,-ARM_IN);_citRot(A.J_Bip_L_LowerArm,-.06);
     _citRot(A.J_Bip_C_Spine,-.04+Math.sin(t*1.1+S)*.012);_citRot2(A.J_Bip_C_Head,0,Math.abs(_cn(t*.2,S))>.55?_cn(t*.2,S)*.5:0,0);if(H)_citAdd(H,_cn(t*.08,S)*.025,'z');return;}
   if(mode==='hammer'){const u=(Math.sin(ph*1.5)+1)/2;_citRot(A.J_Bip_C_Spine,.2+u*.15);_citRot2(A.J_Bip_R_UpperArm,-2.2+u*1.4,0,.2);_citRot(A.J_Bip_R_LowerArm,-.9+u*.5);_citRot(A.J_Bip_L_UpperArm,-.5);_citRot2(A.J_Bip_L_LowerArm,-1.2,0,.4);
     _citRot(A.J_Bip_L_UpperLeg,-.2);_citRot(A.J_Bip_R_UpperLeg,.2);_citRot(A.J_Bip_C_Head,-.2);return;}
@@ -7042,7 +7052,7 @@ function citPoseBones(I,ph,w,t,mode='walk'){const A=I.A,V=I.v||{amp:1,arm:1,lean
   /* 'stand': 숨 쉬며 무게를 한쪽 다리에 싣고, 가끔 반대로 옮긴다. 팔은 힘을 빼고 고개는 이따금 돌아간다 */
   const sh=Math.tanh(_cn(t*.06,S+11)*3)*V.side,br=Math.sin(t*1.15+S)*.018;   /* sh: -1 왼다리, +1 오른다리 */
   _citRot2(A.J_Bip_C_Spine,br+V.lean,0,-sh*.03);_citRot2(A.J_Bip_C_Chest,br*.6,0,0);look(1);
-  _citRot2(A.J_Bip_L_UpperArm,-.05+_cn(t*.4,S+1)*.03,0,-.05);_citRot2(A.J_Bip_R_UpperArm,-.05+_cn(t*.43,S+2)*.03,0,.05);_citRot(A.J_Bip_L_LowerArm,-V.elbow);_citRot(A.J_Bip_R_LowerArm,-V.elbow);
+  {const ai=ARM_IN*(I.skirt?.8:1);_citRot2(A.J_Bip_L_UpperArm,-.05+_cn(t*.4,S+1)*.03,0,-ai);_citRot2(A.J_Bip_R_UpperArm,-.05+_cn(t*.43,S+2)*.03,0,ai);}_citRot(A.J_Bip_L_LowerArm,-V.elbow);_citRot(A.J_Bip_R_LowerArm,-V.elbow);
   const rl=Math.max(0,sh),ll=Math.max(0,-sh);   /* 힘 뺀 다리: 무릎이 살짝 굽고 앞으로 나온다 */
   _citRot(A.J_Bip_L_UpperLeg,-.06*rl);_citRot(A.J_Bip_L_LowerLeg,.14*rl);_citRot(A.J_Bip_R_UpperLeg,-.06*ll);_citRot(A.J_Bip_R_LowerLeg,.14*ll);
   if(H){_citAdd(H,sh*.035,'z');H.b.position.y-=.008*Math.abs(sh);}}
@@ -12704,7 +12714,7 @@ function leapLand(){const L=P.leap;P.leap=null;if(!L||mode!=='world')return;cons
 function updateDuelMarks(dt){for(const m of monsters){if(!m.duelMark)continue;m.duelT-=dt;
     if(m.duelT<=0||m.dying!==null){scene.remove(m.duelMark);m.duelMark.traverse(o=>{if(o.geometry)o.geometry.dispose();});m.duelMark=null;m.duelT=0;continue;}
     const p=m.mesh.position;m.duelMark.position.set(p.x,p.y+(m.mesh.userData.h||1.5)+.7,p.z);m.duelMark.rotation.y+=dt*2.5;m.duelMark.visible=m.mesh.visible;}}
-function updateNetMonsters(dt){
+function updateNetMonsters(dt){if(player){const _n=OR.spNear(player.position.x,player.position.z);player._spT=Math.hypot(player.position.x-OR.C2.x,player.position.z-OR.C2.z)<OR.TOWN_R+4?0:(_n?_n.t:0);}
   updateDuelMarks(dt);
   for(let i=monsters.length-1;i>=0;i--){
     const m=monsters[i],mp=m.mesh.position;
@@ -12755,7 +12765,8 @@ function updateNetMonsters(dt){
     const st=stun?.35:0,dg=dot?.25:0,gl=m.D.glow?.25+Math.sin(m.phase*3)*.1:0;
     m.mesh.userData.mats&&m.mesh.userData.mats.forEach(mt=>{if(mt.emissive){if(gl&&!fl&&!st&&!dg){mt.emissive.set(m.D.glow).multiplyScalar(gl*2);}else mt.emissive.setRGB(fl*.9+st*.4,fl*.9+st*.4+dg*.6,fl*.9+st);}});
     const dist=player?Math.hypot(player.position.x-mp.x,player.position.z-mp.z):999;
-    m.mesh.visible=dist<82;
+    if(m._ha===undefined)m._ha=Math.hypot(mp.x-OR.C2.x,mp.z-OR.C2.z)<OR.R2+20;
+    m.mesh.visible=dist<(m._ha?(Math.abs(OR.spNear(mp.x,mp.z).t-(player?player._spT||0:0))<1.1?58:34):82);
     const show=mode==='world'&&(m.hp<m.mh||dist<16)&&dist<45;
     if(show){const s=screenOf(mp.clone().add(new THREE.Vector3(0,m.mesh.userData.h+.55+hover,0)));
       if(s.ok){m.tag.hidden=false;m.tag.style.left=s.x+'px';m.tag.style.top=s.y+'px';m.tagBar.style.width=Math.max(0,m.hp/m.mh*100)+'%';{const ex=isRogueLine(),th=execTh(m),lo=ex&&m.hp<m.mh*th;if(m.tag._ex!==ex){m.tag._ex=ex;m.tag.classList.toggle('ex',ex);}if(m.tag._lo!==lo){m.tag._lo=lo;m.tag.classList.toggle('low',lo);}if(m.tag._th!==th){m.tag._th=th;m.tag.style.setProperty('--ex',th*100+'%');}}   /* 처형: HP 25% 선 표시, 그 아래면 노랗게 */
