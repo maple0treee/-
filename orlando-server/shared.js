@@ -70,7 +70,9 @@
   function isleEdge(I, a) { if (I.id !== 'marcus') return I.R; return I.R - 8 + 14 * Math.sin(3 * a + 1.3) + 7 * Math.sin(7 * a + 0.4) + 4 * Math.sin(13 * a + 2.1); }
   function isleAt(x, z) { let b = null, bd = 1e9; for (const k of ISLE_ORDER) { const I = ISLES[k]; const d = Math.hypot(x - I.x, z - I.z) - I.R; if (d < bd) { bd = d; b = I; } } return b; }
   // 지하실 위층의 작은 방 (계단을 올라가면 나온다)
-  const HALL_ROOM = { x: 0, z0: -500 - 24 - 8.3 - 10, z1: -500 - 24 - 8.3, hw: 4.5, y: 4.5, corHw: 1.8, stHw: 1.5, stLen: 16, stRise: 9, stLand: 3.4 };   // st*: 방 안쪽(북쪽) 벽에서 위로 오르는 계단           // 포탈을 처음 타면 가는 와이번의 둥지 (잡으면 다음부터는 바로 지하실)                 // 동쪽 황야 끝 포탈
+  const HALL_ROOM = { x: 0, z0: -500 - 24 - 8.3 - 10, z1: -500 - 24 - 8.3, hw: 4.5, y: 4.5, corHw: 1.8, stHw: 1.5, stLen: 16, stRise: 9, stLand: 3.4 };
+  // 계단 꼭대기 너머: 길드홀 지하 창고 (북쪽 벽의 짧은 계단 위 문으로 길드홀 1층에 오른다)
+  const CELLAR = (() => { const H = HALL_ROOM, zS = H.z0 - H.stLen - H.stLand; return { x: H.x, z1: zS, z0: zS - 14, hw: 7, y: H.y + H.stRise, up: 2.0, stL: 4.4, land: 1.8 }; })();   // st*: 방 안쪽(북쪽) 벽에서 위로 오르는 계단           // 포탈을 처음 타면 가는 와이번의 둥지 (잡으면 다음부터는 바로 지하실)                 // 동쪽 황야 끝 포탈
 
   function zoneAt(x, z) {
     if (x >= 800) return isleAt(x, z).id;
@@ -93,7 +95,8 @@
     if (Math.hypot(p.x - ax, p.z - az) <= Math.hypot(p.x - bx, p.z - bz)) { p.x = ax; p.z = az; } else { p.x = bx; p.z = bz; }
   }
   const inHallAnnex = (p, rad) => { const H = HALL_ROOM; if (Math.abs(p.x - H.x) < H.hw - rad && p.z > H.z0 + rad && p.z < H.z1 + 1) return true;
-    if (Math.abs(p.x - H.x) < H.stHw - rad && p.z > H.z0 - H.stLen - H.stLand + rad && p.z <= H.z0 + rad + 0.01) return true; return Math.abs(p.x - H.x) < H.corHw - rad * 0.5 && p.z > H.z1 - 1 && p.z < HALL.z - HALL.R + 2; };
+    if (Math.abs(p.x - H.x) < H.stHw - rad && p.z > H.z0 - H.stLen - H.stLand - 1 && p.z <= H.z0 + rad + 0.01) return true;
+    { const C = CELLAR; if (Math.abs(p.x - C.x) < C.hw - rad && p.z > C.z0 + rad && p.z <= C.z1 + 0.01) return true; } return Math.abs(p.x - H.x) < H.corHw - rad * 0.5 && p.z > H.z1 - 1 && p.z < HALL.z - HALL.R + 2; };
   function worldClamp(p, rad) {
     if (p.x >= 800) { const I = isleAt(p.x, p.z); const d = Math.hypot(p.x - I.x, p.z - I.z), r = isleEdge(I, Math.atan2(p.z - I.z, p.x - I.x)) - rad; if (d > r) { p.x = I.x + (p.x - I.x) * r / d; p.z = I.z + (p.z - I.z) * r / d; } return; }
     if (p.z > 300) return roomClamp(p, rad);
@@ -142,13 +145,13 @@
     // 북쪽 황야 (Lv 28–40)
     hyena:    { name: '하이에나', lv: 31, build: 'quad', color: 0x8a7a5a, hpM: 0.95, atkM: 1.1, scale: 1.05 },
     rockslime:{ name: '바위 슬라임', lv: 35, build: 'slime', color: 0x8a8478, hpM: 1.4, atkM: 0.95, scale: 1.4 },
-    nomad:    { name: '황야 약탈자', lv: 39, build: 'biped', color: 0x5a4a3a, hpM: 1.05, atkM: 1.15, sword: true },
+    nomad:    { name: '사막 거북', lv: 39, build: 'quad', color: 0x8a6a44, hpM: 1.05, atkM: 1.15, scale: 1.3 },   // 등딱지에 돌이 박힌 큰 사막 거북
     // 남쪽 황야 (Lv 38–50)
     scorpion: { name: '전갈', lv: 42, build: 'quad', color: 0xb07a3a, hpM: 1.1, atkM: 1.1, tail: true, scale: 1.1 },
     salamander:{ name: '불도마뱀', lv: 45, build: 'biped', color: 0xb8402a, hpM: 1.1, atkM: 1.2, tail: true },
-    duneogre: { name: '모래 오우거', lv: 49, build: 'biped', color: 0xa08060, hpM: 1.6, atkM: 1.2, scale: 1.7, club: true },
+    duneogre: { name: '모래 벌레', lv: 49, build: 'quad', color: 0xcfae7a, hpM: 1.6, atkM: 1.2, scale: 1.2 },   // 모래 속을 파고 다니다 솟아오르는 큰 벌레
     // 동쪽 황야 (Lv 48–60)
-    redlizard:{ name: '붉은 리자드맨', lv: 52, build: 'biped', color: 0x9a4a32, hpM: 1.1, atkM: 1.2, tail: true, sword: true },
+    redlizard:{ name: '사막 독수리', lv: 52, build: 'quad', color: 0x3a2a20, hpM: 1.1, atkM: 1.2, scale: 1.25 },   // 땅을 걸어 다니다 날개를 펴고 쪼는 큰 대머리 독수리
     emberslime:{ name: '불씨 슬라임', lv: 56, build: 'slime', color: 0xd8702a, hpM: 1.1, atkM: 1.2, scale: 1.4, glow: 0xff5a10 },
     redgiant: { name: '붉은 바위 거인', lv: 59, build: 'biped', color: 0x7a3a2a, hpM: 1.8, atkM: 1.25, scale: 2.1, club: true },
     // 석굴
@@ -166,6 +169,7 @@
     yeti:     { name: '예티', lv: 79, build: 'biped', color: 0xe8ecf0, hpM: 1.9, atkM: 1.35, scale: 2.0, club: true },
     // 카올리스 (Lv 80–90)
     mackerel: { name: '화난 고등어', lv: 84, build: 'quad', color: 0x2a5a78, hpM: 1.15, atkM: 1.3, scale: 1.25 },
+    octopus:  { name: '큰 문어', lv: 88, build: 'quad', color: 0xb8483a, hpM: 1.35, atkM: 1.35, scale: 1.3 },   // 여덟 다리로 모래 위를 기어 다니는 큰 문어
     tideslime:{ name: '파도 슬라임', lv: 86, build: 'slime', color: 0x40a0c0, hpM: 1.4, atkM: 1.1, scale: 1.5, glow: 0x30c0e0 },
     // 숩쿠스 (Lv 90–100)
     darkhound:{ name: '어둠 사냥개', lv: 93, build: 'quad', color: 0x2a2630, hpM: 1.1, atkM: 1.3, scale: 1.2 },
@@ -190,7 +194,7 @@
   const ZONE_MON = {
     forest: ['slime', 'slime', 'wolf'], plains: ['boar', 'goblin'], swamp: ['toad', 'lizard'], ruins: ['skeleton', 'skeleton', 'ogre'],
     wwest: ['jackal', 'bandit', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'salamander', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
-    silva: ['silvawolf', 'mossslime', 'treant'], arbus: ['snowwolf', 'frostslime', 'yeti'], kaolis: ['mackerel', 'tideslime'], subcus: ['darkhound', 'crystalslime', 'cavetroll'],
+    silva: ['silvawolf', 'mossslime', 'treant'], arbus: ['snowwolf', 'frostslime', 'yeti'], kaolis: ['mackerel', 'tideslime', 'octopus'], subcus: ['darkhound', 'crystalslime', 'cavetroll'],
   };
   const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30 };
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
@@ -243,6 +247,6 @@
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
