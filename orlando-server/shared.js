@@ -127,12 +127,12 @@
   const MON = {
     slime:    { name: '슬라임', lv: 1, fixed: { hp: 26, atk: 6, def: 1, exp: 9 }, build: 'slime', color: 0x7fd067 },
     wolf:     { name: '회색 늑대', lv: 3, fixed: { hp: 38, atk: 8, def: 2, exp: 14 }, build: 'quad', color: 0x8d8f92 },
-    boar:     { name: '멧돼지', lv: 4, fixed: { hp: 58, atk: 11, def: 4, exp: 22 }, build: 'quad', color: 0x6e4b31, tusk: true },
-    goblin:   { name: '고블린', lv: 6, fixed: { hp: 54, atk: 13, def: 4, exp: 26 }, build: 'biped', color: 0x6f9440, scale: 0.8, ears: true },
+    boar:     { name: '사막멧돼지', lv: 4, fixed: { hp: 58, atk: 11, def: 4, exp: 22 }, build: 'quad', color: 0x6e4b31, tusk: true },
+    goblin:   { name: '사막고블린', lv: 6, fixed: { hp: 54, atk: 13, def: 4, exp: 26 }, build: 'biped', color: 0x6f9440, scale: 0.8, ears: true },
     toad:     { name: '독두꺼비', lv: 8, fixed: { hp: 84, atk: 16, def: 6, exp: 38 }, build: 'slime', color: 0x6a7a2c, toad: true, scale: 1.2 },
-    lizard:   { name: '리자드맨', lv: 10, fixed: { hp: 104, atk: 19, def: 8, exp: 50 }, build: 'biped', color: 0x3f7d60, tail: true },
-    skeleton: { name: '스켈레톤', lv: 12, fixed: { hp: 120, atk: 23, def: 9, exp: 64 }, build: 'biped', color: 0xe0d8c5, bone: true },
-    ogre:     { name: '오우거', lv: 15, fixed: { hp: 200, atk: 29, def: 12, exp: 98 }, build: 'biped', color: 0x8e7050, scale: 1.75, club: true },
+    lizard:   { name: '모래도마뱀', lv: 10, fixed: { hp: 104, atk: 19, def: 8, exp: 50 }, build: 'biped', color: 0x3f7d60, tail: true },
+    skeleton: { name: '사막방울뱀', lv: 12, fixed: { hp: 120, atk: 23, def: 9, exp: 64 }, build: 'snake', color: 0xc4a46e, scale: 1.6 },
+    ogre:     { name: '낙타', lv: 15, fixed: { hp: 200, atk: 29, def: 12, exp: 98 }, build: 'biped', color: 0xc8a068, scale: 1.15 },
     // 길
     dog:      { name: '들개', lv: 12, build: 'quad', color: 0x7a5a3a, hpM: 0.8, atkM: 1 },
     bandit:   { name: '산적', lv: 16, build: 'biped', color: 0x6b4a2e, hpM: 1, atkM: 1.05, sword: true },
