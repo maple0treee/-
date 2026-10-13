@@ -29,7 +29,7 @@ const files = {
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'icon'))) if (/^[a-z0-9_-]+\.png$/.test(fn)) files['/icon/' + fn] = { file: 'icon/' + fn, type: 'image/png', cache: 'public, max-age=604800' }; } catch (e) {}
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'pmodel'))) if (/^[a-z0-9_]+\.json$/.test(fn)) files['/pmodel/' + fn] = { file: 'pmodel/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; } catch (e) {}
 // 하레나 풍경 모델 (public/models/*.glb, Quaternius CC0)
-try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'models'))) { if (/^[a-z0-9_]+\.glb$/.test(fn)) files['/models/' + fn] = { file: 'models/' + fn, type: 'model/gltf-binary', cache: 'public, max-age=86400' }; } } catch (e) {}
+try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'models'))) { if (/^[a-z0-9_]+\.glb\.wasm$/.test(fn)) files['/models/' + fn] = { file: 'models/' + fn, type: 'application/octet-stream', cache: 'public, max-age=86400' };   /* 이름 끝 .wasm: 아티팩트가 .glb 를 올려 주지 않아서 (내용은 glb) */ } } catch (e) {}
 // 마르쿠스 주민 모델 (public/citbake/*.json)
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'citbake'))) { if (/^[a-z0-9_]+\.json$/.test(fn)) files['/citbake/' + fn] = { file: 'citbake/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; else if (/^[a-z0-9_]+\.webp$/.test(fn)) files['/citbake/' + fn] = { file: 'citbake/' + fn, type: 'image/webp', cache: 'public, max-age=86400' }; } } catch (e) {}
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'npcbake'))) if (/^[a-z0-9_]+\.json$/.test(fn)) files['/npcbake/' + fn] = { file: 'npcbake/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; } catch (e) {}
