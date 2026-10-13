@@ -62,11 +62,11 @@
     milgol: { x: 3500, z: 0, R: 230 },   // 밀골: 밀 농사 마을 + 왕실 곡창
     fort:   { x: 4150, z: 0, R: 190 },   // 통로 요새
     coachway: { x: 5300, z: 0, R: 400 }, // 왕도: 마차가 달리는 고리 길 (타고 가는 동안만 머문다)
-    castle: { x: 6400, z: 0, R: 300 },   // 엑스 성: 지하실 위층 계단을 올라가면 나온다
+    castle: { x: 6400, z: 0, R: 300 },   // 엑시즈 성: 지하실 위층 계단을 올라가면 나온다
   };
   const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle'];
   for (const k of ISLE_ORDER) { const I = ISLES[k]; I.id = k; I.entry = { x: I.x, z: I.z + I.R - 12 }; }   // 들어오는 자리 (남쪽 가장자리)
-  // 섬 가장자리 반지름 (엑스는 둥글지 않게 들쭉날쭉: 언덕 너머로 이어지는 땅처럼 보이게)
+  // 섬 가장자리 반지름 (엑시즈는 둥글지 않게 들쭉날쭉: 언덕 너머로 이어지는 땅처럼 보이게)
   function isleEdge(I, a) { if (I.id !== 'marcus') return I.R; return I.R - 8 + 14 * Math.sin(3 * a + 1.3) + 7 * Math.sin(7 * a + 0.4) + 4 * Math.sin(13 * a + 2.1); }
   function isleAt(x, z) { let b = null, bd = 1e9; for (const k of ISLE_ORDER) { const I = ISLES[k]; const d = Math.hypot(x - I.x, z - I.z) - I.R; if (d < bd) { bd = d; b = I; } } return b; }
   // 지하실 위층의 작은 방 (계단을 올라가면 나온다)
