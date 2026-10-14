@@ -5147,7 +5147,7 @@ function pmPose(g,A,dt){
     pmAim(A,U,Lw,pmStickDir(g,st.hip,d));pmAim(A,Lw,F,pmStickDir(g,st.knee,d));};
   arm(S.AR,mir?'L':'R');arm(S.AL,mir?'R':'L');leg(S.R,mir?'L':'R');leg(S.L,mir?'R':'L');
   // 무기를 쥔 손: 주먹 축을 무기 축에 맞추고, 무기는 주먹 가운데로
-  for(const [W,proxy,sd] of A.hold){if(!W||!proxy)continue;
+  for(const [W,proxy,sd] of A.hold){if(!W||!proxy||g.userData.relax)continue;
     const H=A.by('J_Bip_'+sd+'_Hand'),gi=A.grip[sd];if(!H||!gi)continue;
     if(W===S.nock)H.updateMatrixWorld(true);   // 활 화살: 손목은 그대로 두고 주먹 가운데로만 옮긴다
     else{
@@ -5194,7 +5194,7 @@ function pmAttach(g,job,gear,ap){
   if(S.quiver){const ch=A.by('J_Bip_C_UpperChest')||A.by('J_Bip_C_Chest');A.root.updateMatrixWorld(true);const cp=new THREE.Vector3();ch.getWorldPosition(cp);
     const tgt=new THREE.Vector3(.06,.0,-.17).add(cp);ch.add(S.quiver);S.quiver.position.copy(ch.worldToLocal(tgt));const cq=new THREE.Quaternion();ch.getWorldQuaternion(cq);
     S.quiver.quaternion.copy(cq.invert()).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),-.45));const ws=new THREE.Vector3();ch.getWorldScale(ws);S.quiver.scale.set(1/ws.x,1/ws.y,1/ws.z);S.quiver.traverse(o=>keep.add(o));}
-  {const held=new Set(A.hold.filter(h=>h[0]).map(h=>h[2]));for(const sd of ['L','R'])pmFingers(A,sd,held.has(sd)?'tight':'open');}
+  {const held=new Set(A.hold.filter(h=>h[0]).map(h=>h[2]));for(const sd of ['L','R'])pmFingers(A,sd,held.has(sd)||S.style==='fist'?'tight':'open');}   /* 맨손 싸움 자세는 주먹을 쥔다 */
   if((gear||{}).acc>=0)pmAccessory(A,gear.acc);
   g.userData.anime=A;return true;}
 // 장신구: 반지는 오른손 가운뎃손가락, 목걸이·부적·용의 심장은 목에 건다
@@ -5203,16 +5203,17 @@ const ACC_KIND=['ring','neck','amulet','ring','neck','ring','amulet','neck','rin
 function pmFingers(A,sd,mode){const gi=A.grip&&A.grip[sd],H=A.by('J_Bip_'+sd+'_Hand');if(!gi||!H)return;
   if(!A.fRest)A.fRest=A.rest.map(r=>r.q.clone());A.fMode=A.fMode||{};if(A.fMode[sd]===mode)return;A.fMode[sd]=mode;
   const isF=new RegExp('_'+sd+'_(Index|Middle|Ring|Little|Thumb)\\d');A.bones.forEach((b,i)=>{if(isF.test(b.name))A.rest[i].q.copy(A.fRest[i]);});
+  if(mode==='relax'){A.bones.forEach((b,i)=>{if(isF.test(b.name)||b===H)A.rest[i].q.identity();});}   /* 편한 손: 손목과 손가락을 곧게 편 뒤 조금만 굽힌다 */
   A.bones.forEach((b,i)=>{b.position.copy(A.rest[i].p);b.quaternion.copy(A.rest[i].q);});A.root.updateMatrixWorld(true);
   const c=new THREE.Vector3().fromArray(gi.c).applyMatrix4(H.matrixWorld);const hq=new THREE.Quaternion();H.getWorldQuaternion(hq);const ax=new THREE.Vector3().fromArray(gi.a).applyQuaternion(hq).normalize();
   const W=n=>{const v=new THREE.Vector3();A.by(n).getWorldPosition(v);return v;};
   const rotW=(b,ang)=>{const pw=new THREE.Quaternion();b.parent.getWorldQuaternion(pw);const d=new THREE.Quaternion().setFromAxisAngle(ax,ang);b.quaternion.premultiply(pw.clone().invert().multiply(d).multiply(pw));b.updateMatrixWorld(true);};
-  const AMT=mode==='tight'?[0,.32,.38,.3]:[0,-.95,-1.0,-.7];
+  const AMT=mode==='tight'?[0,.32,.38,.3]:mode==='relax'?[0,.22,.3,.22]:[0,-.95,-1.0,-.7];
   for(const F of ['Index','Middle','Ring','Little'])for(let k=1;k<=3;k++){const nm='J_Bip_'+sd+'_'+F+k,b=A.by(nm);if(!b)continue;
     const tip=()=>k<3?W('J_Bip_'+sd+'_'+F+(k+1)):W('J_Bip_'+sd+'_'+F+'3').multiplyScalar(2).sub(W('J_Bip_'+sd+'_'+F+'2'));
     const q0=b.quaternion.clone();rotW(b,.2);const d1=tip().distanceTo(c);b.quaternion.copy(q0);rotW(b,-.2);const d2=tip().distanceTo(c);b.quaternion.copy(q0);b.updateMatrixWorld(true);
     const sg=d1<d2?1:-1;rotW(b,sg*AMT[k]);}
-  if(mode!=='tight'){const t1=A.by('J_Bip_'+sd+'_Thumb2');if(t1){const q=t1.quaternion.clone();t1.quaternion.slerp(new THREE.Quaternion(),.35);}}
+  if(mode==='open'){const t1=A.by('J_Bip_'+sd+'_Thumb2');if(t1){const q=t1.quaternion.clone();t1.quaternion.slerp(new THREE.Quaternion(),.35);}}
   A.bones.forEach((b,i)=>{if(isF.test(b.name))A.rest[i].q.copy(b.quaternion);});}
 function pmAccessory(A,t){const kind=ACC_KIND[Math.max(0,Math.min(10,t))];const col=t>=10?0xff3020:tierCol(Math.min(9,t));
   const gold=new THREE.MeshStandardMaterial({color:t>=6?0xe8c060:0xc8ccd4,metalness:.85,roughness:.25});
@@ -11305,6 +11306,11 @@ function buildApControls(box,ap,onChange){box.innerHTML='';
   {const w=row('키','t');['아주 작게','작게','보통','크게','아주 크게'].forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap.t??2)===i);
     b.onclick=()=>{ap.t=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});}
   sw('윗옷',SHIRT_COLORS,'c');sw('바지',PANTS_COLORS,'p');}
+// 미리보기 자세: 무기 없이 팔을 편하게 내리고 손도 편다
+function apRelaxPose(m,dt){const u=m.userData;u.relax=1;animStick(m,0,tAll,1,false,false,null);const S=u.stick;
+  if(S){S.AR.sh.rotation.set(-.04,0,.1);S.AR.el.rotation.x=-.2;S.AL.sh.rotation.set(-.04,0,-.1);S.AL.el.rotation.x=-.2;S.AR.hand.rotation.x=0;S.AL.hand.rotation.x=0;S.upper.rotation.set(0,0,0);}
+  if(!u.anime&&u.ap&&PM.data[u.ap.g])pmAttach(m,u.job,u.gear,u.ap);
+  if(u.anime){if(!u.relaxF){u.relaxF=1;pmFingers(u.anime,'L','relax');pmFingers(u.anime,'R','relax');}pmPose(m,u.anime,dt);}}
 // 작은 미리보기 화면 하나 (캔버스마다)
 function makeApPreview(cv){let st=null;return{dirty:true,tick(dt,job,ap,gear,alive){if(!alive)return;
   if(!st){try{const r=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true});r.setPixelRatio(Math.min(2,devicePixelRatio||1));r.outputEncoding=renderer.outputEncoding;
@@ -11312,7 +11318,7 @@ function makeApPreview(cv){let st=null;return{dirty:true,tick(dt,job,ap,gear,ali
     const c2=new THREE.PerspectiveCamera(30,1,.1,20);c2.position.set(0,1.15,4.2);c2.lookAt(0,.95,0);st={r,sc,cam:c2,m:null,yaw:.4};}catch(e){st={fail:1};}}
   if(st.fail)return;const w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;if(st.w!==w||st.h!==h){st.w=w;st.h=h;st.r.setSize(w,h,false);st.cam.aspect=w/h;st.cam.updateProjectionMatrix();}
   if(this.dirty&&PM.data[ap.g]){if(st.m)st.sc.remove(st.m);st.m=makePlayerMesh(job,gear,{...ap});st.sc.add(st.m);this.dirty=false;}
-  if(st.m){st.yaw+=dt*.5;st.m.rotation.y=st.yaw;animPlayer(st.m,0,tAll,1,false,false,null);}
+  if(st.m){st.yaw+=dt*.5;st.m.rotation.y=st.yaw;apRelaxPose(st.m,dt);}
   st.r.render(st.sc,st.cam);}};}
 const newAp={...apDefault(),c:SHIRT_COLORS[0]};let apPrev=null;
 (function(){const box=$('#apBox');if(!box)return;buildApControls(box,newAp,()=>{if(apPrev)apPrev.dirty=true;});pmLoad('m').catch(()=>{});pmLoad('f').catch(()=>{});})();
