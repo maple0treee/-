@@ -6411,7 +6411,26 @@ function harenaModels(list){if(!THREE.GLTFLoader){console.warn('harena: no GLTFL
       const cx=(B.minx+B.maxx)/2,cz=(B.minz+B.maxz)/2;HMOD.groups.push({im:m,x:cx,z:cz,r:Math.hypot(B.maxx-cx,B.maxz-cz),far:B.kind==='g'?40:B.kind==='t'?85:110});}
     HMOD.ready=true;},undefined,e=>console.warn('harena models',e));}
 setInterval(()=>{if(!HMOD.ready||!player)return;const px=player.position.x,pz=player.position.z,far=px>800||Math.abs(pz)>300;
-  for(const G of HMOD.groups){const v=!far&&Math.hypot(px-G.x,pz-G.z)-G.r<G.far;if(G.im.visible!==v)G.im.visible=v;}},400);
+  const ff=scene.fog.far+12;for(const G of HMOD.groups){const v=!far&&Math.hypot(px-G.x,pz-G.z)-G.r<Math.min(G.far,ff);if(G.im.visible!==v)G.im.visible=v;}},400);
+
+/* ---------- 사냥터 나누기: 구역 사이 협곡 문마다 짙은 모래 안개 ----------
+   문 가까이 가면 안개가 확 짙어져 다음 구역이 보이지 않고, 구역 안에서도 멀리는 흐리게 (먼 구역은 그리지 않아 가볍다) */
+const HFOG={gates:[]};
+(function buildGateFog(){const SP=OR.SP,Q=SP.Q,rnd=(()=>{let s=9137;return()=>(s=(s*16807)%2147483647)/2147483647;})();
+  const list=[[.16,0]];for(let k=1;k<8;k++)list.push([k*Q,k]);
+  for(const [t,k] of list){const c=OR.spPos(t,0),a=Math.PI+t,ox=Math.cos(a),oz=Math.sin(a),tx=-Math.sin(a),tz=Math.cos(a);   /* o: 바깥쪽, t: 길 방향 */
+    const g=new THREE.Group();g.visible=false;scene.add(g);const col=new THREE.Color(HZ[Math.max(0,k-1)].g).lerp(new THREE.Color(HZ[k].g),.5).lerp(new THREE.Color(0xf4ead6),.35);
+    const mat=new THREE.SpriteMaterial({map:edgeMistTex(),color:col,transparent:true,opacity:.62,depthWrite:false,fog:false});
+    const hw=Math.max(6,OR.spHW(t))+4;
+    for(let i=0;i<26;i++){const s=new THREE.Sprite(mat);const across=(rnd()*2-1)*hw,along=(rnd()*2-1)*5,x=c.x+ox*across+tx*along,z=c.z+oz*across+tz*along;
+      const sz=9+rnd()*9;s.scale.set(sz*1.5,sz,1);s.position.set(x,heightAt(x,z)+1.5+rnd()*6,z);s.userData.b={x:s.position.x,y:s.position.y,z:s.position.z,ph:rnd()*6.28};g.add(s);}
+    HFOG.gates.push({t,k,x:c.x,z:c.z,g});}})();
+/* 길 위 자리에서 가장 가까운 협곡 문까지의 가까움 (0 멀다 ~ 1 문 한가운데) */
+function hfogNear(x,z){const n=OR.spNear(x,z);if(!n||n.e>8)return 0;const Q=OR.SP.Q,R=OR.spR(n.t);let best=1e9;
+  for(const G of HFOG.gates){const d=Math.abs(n.t-G.t)*R;if(d<best)best=d;}return 1-smooth(3,18,best);}
+function hfogTick(t){if(!player)return;const px=player.position.x,pz=player.position.z,on=px<800&&Math.abs(pz)<300;
+  for(const G of HFOG.gates){const v=on&&Math.hypot(px-G.x,pz-G.z)<110;if(G.g.visible!==v)G.g.visible=v;
+    if(v)for(const s of G.g.children){const b=s.userData.b;s.position.x=b.x+Math.sin(t*.13+b.ph)*1.5;s.position.y=b.y+Math.sin(t*.21+b.ph*2)*.4;}}}
 
 /* ---------- 정교한 집: 기초석, 반목조 벽, 박공지붕(기와 줄), 굴뚝, 창틀·덧문·화분, 문틀·계단·등불 ----------
    모든 집의 조각을 재질별로 한 덩어리로 합쳐서 그린다 (집이 많아도 가볍다).
@@ -13616,6 +13635,9 @@ function updateWorld(dt){
   const inCave=z==='subcus';targetSky.set(ZONES[z].sky);scene.background.lerp(targetSky,z==='dungeon'||(z==='hall'||z==='thouse')||inCave?1:dt*1.2);scene.fog.color.copy(scene.background);
   const inRealm=z==='marcus'||z==='milgol'||z==='fort'||z==='coachway'||z==='castle',inMil=z==='milgol'||z==='coachway';const hi=OR.SP.ZONES.indexOf(z),inHa=hi>=0||z==='town';   /* 하레나 둘레 길: 앞 구역은 맑고 멀리 보이며, 뒤로 갈수록 먼지·연기로 흐려진다 */
   scene.fog.near=z==='dungeon'?14:(z==='hall'||z==='thouse')?30:inCave?18:inMil?95:inRealm?70:inHa?(hi<0?70:82-7*hi):38;scene.fog.far=z==='dungeon'?60:(z==='hall'||z==='thouse')?95:inCave?80:inMil?370:inRealm?280:inHa?(hi<0?300:330-18*hi):140;
+  /* 하레나 사냥터: 구역 안은 먼 곳이 흐리고, 협곡 문 가까이 가면 짙은 모래 안개로 다음 구역을 가린다 */
+  if(hi>=0&&typeof hfogNear==='function'){scene.fog.near=20;scene.fog.far=90;const k=hfogNear(player.position.x,player.position.z);if(k>0){scene.fog.near+=(2-scene.fog.near)*k;scene.fog.far+=(26-scene.fog.far)*k;}}
+  if(typeof hfogTick==='function')hfogTick(tAll);
   /* 땅 끝 가까이 가면 안개가 짙어진다 (멀리 있는 것부터 안개 속으로 사라진다) */
   if(player&&player.position.x>=800){const q=player.position,I=OR.isleAt(q.x,q.z),dd=OR.isleEdge(I,Math.atan2(q.z-I.z,q.x-I.x))-Math.hypot(q.x-I.x,q.z-I.z),k=1-OR.smooth(6,60,dd);
     if(k>0){scene.fog.near+=(4-scene.fog.near)*k*.9;scene.fog.far+=(48-scene.fog.far)*k*.8;}}
@@ -14056,7 +14078,7 @@ function updateNetMonsters(dt){if(player){const _n=OR.spNear(player.position.x,p
     m.mesh.userData.mats&&m.mesh.userData.mats.forEach(mt=>{if(mt.emissive){if(gl&&!fl&&!st&&!dg){mt.emissive.set(m.D.glow).multiplyScalar(gl*2);}else mt.emissive.setRGB(fl*.9+st*.4,fl*.9+st*.4+dg*.6,fl*.9+st);}});
     const dist=player?Math.hypot(player.position.x-mp.x,player.position.z-mp.z):999;
     if(m._ha===undefined)m._ha=Math.hypot(mp.x-OR.C2.x,mp.z-OR.C2.z)<OR.R2+20;
-    m.mesh.visible=dist<(m._ha?(Math.abs(OR.spNear(mp.x,mp.z).t-(player?player._spT||0:0))<1.1?58:34):82);
+    m.mesh.visible=dist<(m._ha?(Math.floor(OR.spNear(mp.x,mp.z).t/OR.SP.Q)===Math.floor((player?player._spT||0:0)/OR.SP.Q)?(scene.fog.far+6):14):82);   /* 하레나 사냥터: 다른 구역 몬스터는 안개 너머 (그리지 않는다) */
     const show=mode==='world'&&(m.hp<m.mh||dist<16)&&dist<45;
     if(show){const s=screenOf(mp.clone().add(new THREE.Vector3(0,m.mesh.userData.h+.55+hover,0)));
       if(s.ok){m.tag.hidden=false;m.tag.style.left=s.x+'px';m.tag.style.top=s.y+'px';m.tagBar.style.width=Math.max(0,m.hp/m.mh*100)+'%';{const ex=isRogueLine(),th=execTh(m),lo=ex&&m.hp<m.mh*th;if(m.tag._ex!==ex){m.tag._ex=ex;m.tag.classList.toggle('ex',ex);}if(m.tag._lo!==lo){m.tag._lo=lo;m.tag.classList.toggle('low',lo);}if(m.tag._th!==th){m.tag._th=th;m.tag.style.setProperty('--ex',th*100+'%');}}   /* 처형: HP 25% 선 표시, 그 아래면 노랗게 */
