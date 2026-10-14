@@ -11478,7 +11478,7 @@ function startGameNow(data){
   // 직업에 맞지 않는 장비는 가방으로
   for(const s of ['weapon','sub']){const id=P.equip[s];if(id&&!canWear(id,P.job)){P.bag.push(bagGear(id,P.enh[s]));P.equip[s]=null;P.enh[s]=0;}}
   // 직업 전용 장비 지급 (처음 한 번)
-  P.got={...(data.got||{})};giveJobGear(true);
+  P.got={...(data.got||{})};if(!data.needBook)giveJobGear(true);   /* 책을 고르기 전(임시 직업)에는 직업 장비를 주지 않는다 */
   P.ap=apParse(data.ap)||(typeof data.ap==='object'&&data.ap&&data.ap.g?data.ap:null)||apDefault();
   computeStats(P);
   if(player)scene.remove(player);
@@ -12574,7 +12574,11 @@ function basicAttackInner(){
   if(!P.equip.weapon||shFist){  // 맨손: 모든 직업이 같다
     basicCd=BASIC.fist.cd;swingT=0;swingN++;myMo=null;myMoId='';if(shFist){myMoId='fpunch';myMo=motionFor('shield','fpunch');}sfx('punch');
     setTimeout(()=>{if(mode!=='world'||!P)return;shared(()=>singleHit(BASIC.fist.range,BASIC.fist.mult,{color:0xffe8c8}));const f=flatFwd(),q=player.position;VFX.burst(new THREE.Vector3(q.x+f.x*1.3,q.y+1.3,q.z+f.z*1.3),0xffe8c8,8,2.5,.25,{up:.1});},90);return;}
-  if(JOBS[P.job].weapon==='bow'){if(!P.bowDraw)bowStart();return;}   // 활: 누르는 동안 당기고, 떼면 쏜다 (bowTick)
+  if(JOBS[P.job].weapon==='bow'){if(P.pullReady&&P.buffs.pull){if(!P.bowDraw)bowStart();return;}   // 시위 당기기(스킬)로 강화된 화살만 당겨 쏜다 (bowTick)
+    /* 기본 공격: 당기지 않고 바로 쏜다 */
+    const B=BASIC.bow;basicCd=B.cd*(P.equip.weapon&&JOBS[P.job].aspd||1)/(1+famLv()*.05*(P.famN||0))/buffV('draw');swingT=0;swingN++;myMoId='bshot';myMo=motionFor('bow','bshot');sfx('bw_fire');
+    const opt={};if(P.buffs.roll){opt.critMul=2.2;delete P.buffs.roll;}
+    fireProj({color:B.color,speed:B.speed,size:B.size,mult:B.mult,arrow:true,g:2.5,life:1.4,opt});return;}
   const B=BASIC[JOBS[P.job].weapon];basicCd=B.cd*(P.job==='swordsman'?.86:P.job==='swordmaster'?.75:1)*(P.equip.weapon&&JOBS[P.job].aspd||1)/(1+famLv()*.05*(P.famN||0));swingT=0;swingN++;myMo=null;myMoId='';if(P.job==='barbarian'&&P.equip.weapon)sfx('a_basic');else if(/^(warrior|swordsman|swordmaster)$/.test(P.job)&&P.equip.weapon)sfx('w_swing');else if(jobChain(P.job).includes('mage'))sfx('mg_basic');else if(!(P.job==='fowler'&&B.kind==='melee')&&JOBS[P.job].weapon!=='shield')sfxWeapon(JOBS[P.job].weapon);   // 방패는 맞는 소리만 낸다
   // 방패병: 크게 휘둘러서, 방패가 앞으로 나가는 순간(약 0.5초 뒤)에 맞는다
   if(B.kind==='melee'&&P.job==='fowler'){const now=performance.now();fowlN=now-fowlAt<1300&&fowlN===2?3:2;  // 1타는 없앴다: 2타 → 3타
