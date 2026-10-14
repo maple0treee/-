@@ -22,6 +22,10 @@ const files = {
   '/three.min.js': { file: 'three.min.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=604800' },
   '/GLTFLoader.js': { file: 'GLTFLoader.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=604800' },
   '/ads.txt': { file: 'ads.txt', type: 'text/plain; charset=utf-8', cache: 'public, max-age=86400' },
+  '/robots.txt': { file: 'robots.txt', type: 'text/plain; charset=utf-8', cache: 'public, max-age=86400' },
+  '/sitemap.xml': { file: 'sitemap.xml', type: 'application/xml; charset=utf-8', cache: 'public, max-age=86400' },
+  '/manifest.webmanifest': { file: 'manifest.webmanifest', type: 'application/manifest+json; charset=utf-8', cache: 'public, max-age=86400' },
+  '/og.jpg': { file: 'og.jpg', type: 'image/jpeg', cache: 'public, max-age=604800' },
   '/SkeletonUtils.js': { file: 'SkeletonUtils.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=604800' },
 };
 // 미리 구운 NPC 모델 (public/npcbake/*.json)
@@ -43,6 +47,7 @@ for (const f of Object.values(files)) {
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
   if (url === '/health') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('ok v' + VERSION + ' monsters ' + sim.count()); }
+  if (url === '/index.html') { res.writeHead(301, { Location: '/' }); return res.end(); }   // 같은 페이지는 주소 하나로 (검색 노출)
   const f = files[url];
   if (!f) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('없는 페이지'); }
   if (f.raw) {
@@ -58,7 +63,7 @@ const server = http.createServer((req, res) => {
     return res.end(f.body);
   }
   const gzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
-  res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': f.cache, ...(gzip ? { 'Content-Encoding': 'gzip' } : {}) });
+  res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': f.cache, Vary: 'Accept-Encoding', ...(gzip ? { 'Content-Encoding': 'gzip' } : {}) });
   res.end(gzip ? f.gz : f.body);
 });
 
