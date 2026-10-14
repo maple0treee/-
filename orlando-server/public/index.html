@@ -6394,7 +6394,7 @@ function harenaModels(list){if(!THREE.GLTFLoader){console.warn('harena: no GLTFL
     let kids=[...g.scene.children];while(kids.length===1&&kids[0].children.length>1&&!kids[0].isMesh)kids=[...kids[0].children];
     const parts={};for(const c of kids){c.updateMatrixWorld(true);const ms=[];c.traverse(o=>{if(o.isMesh)ms.push(o);});parts[c.name]=ms;}
     const mats=new Map(),matFor=m=>{if(!mats.has(m.uuid)){const n=m.clone();n.vertexColors=true;n.color.set(0xffffff);n.roughness=1;n.metalness=0;if(n.map)n.map.anisotropy=4;mats.set(m.uuid,n);}return mats.get(m.uuid);};
-    const cells=new Map(),cellOf=p=>Math.floor(p.x/64)+','+Math.floor(p.z/64);
+    const cells=new Map(),cellOf=p=>Math.floor(p.x/64)+','+Math.floor(p.z/64)+'|'+(p.seg??-1);   /* 칸과 구역으로 나눠 묶는다 (지금 있는 구역 근처만 그린다) */
     const M4=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler(),v=new THREE.Vector3(),sv=new THREE.Vector3(),N3=new THREE.Matrix3(),c=new THREE.Color(),pp=new THREE.Vector3();
     for(const p of list){const src=parts[p.m];if(!src)continue;const ck=cellOf(p);if(!cells.has(ck))cells.set(ck,new Map());const cell=cells.get(ck);
       e.set(0,p.ry,0);q.setFromEuler(e);sv.set(p.sx,p.sy,p.sz);v.set(p.x,p.y,p.z);c.set(p.tint==null?0xffffff:p.tint);
@@ -6408,10 +6408,11 @@ function harenaModels(list){if(!THREE.GLTFLoader){console.warn('harena: no GLTFL
       geo.setAttribute('position',new THREE.Float32BufferAttribute(B.P,3));if(B.Nn.length)geo.setAttribute('normal',new THREE.Float32BufferAttribute(B.Nn,3));if(B.U.length)geo.setAttribute('uv',new THREE.Float32BufferAttribute(B.U,2));
       geo.setAttribute('color',new THREE.Float32BufferAttribute(B.C,3));geo.setIndex(B.P.length/3>65535?new THREE.Uint32BufferAttribute(B.I,1):new THREE.Uint16BufferAttribute(B.I,1));geo.computeBoundingSphere();
       const m=new THREE.Mesh(geo,B.mat);m.castShadow=!B.ns&&B.kind!=='g';m.receiveShadow=true;scene.add(m);
-      const cx=(B.minx+B.maxx)/2,cz=(B.minz+B.maxz)/2;HMOD.groups.push({im:m,x:cx,z:cz,r:Math.hypot(B.maxx-cx,B.maxz-cz),far:B.kind==='g'?40:B.kind==='t'?85:110});}
+      const cx=(B.minx+B.maxx)/2,cz=(B.minz+B.maxz)/2;HMOD.groups.push({im:m,x:cx,z:cz,r:Math.hypot(B.maxx-cx,B.maxz-cz),far:B.kind==='g'?40:B.kind==='t'?85:110,seg:+ck.split('|')[1],kind:B.kind});}
     HMOD.ready=true;},undefined,e=>console.warn('harena models',e));}
 setInterval(()=>{if(!HMOD.ready||!player)return;const px=player.position.x,pz=player.position.z,far=px>800||Math.abs(pz)>300;
-  const ff=scene.fog.far+12;for(const G of HMOD.groups){const v=!far&&Math.hypot(px-G.x,pz-G.z)-G.r<Math.min(G.far,ff);if(G.im.visible!==v)G.im.visible=v;}},400);
+  const ff=scene.fog.far+12,mk=typeof mapKeyAt==='function'?mapKeyAt(px,pz):null,segOk=(s,kd)=>typeof mk!=='number'||s<0||(kd==='g'?sameMapNear(s,mk):sameMap(s,mk));
+  for(const G of HMOD.groups){const v=!far&&segOk(G.seg,G.kind)&&Math.hypot(px-G.x,pz-G.z)-G.r<Math.min(G.far,ff);if(G.im.visible!==v)G.im.visible=v;}},400);
 
 /* ---------- 사냥터 나누기: 구역 사이 협곡 문마다 짙은 모래 안개 ----------
    문 가까이 가면 안개가 확 짙어져 다음 구역이 보이지 않고, 구역 안에서도 멀리는 흐리게 (먼 구역은 그리지 않아 가볍다) */
@@ -6419,7 +6420,7 @@ const HFOG={gates:[]};
 (function buildGateFog(){const SP=OR.SP,Q=SP.Q,rnd=(()=>{let s=9137;return()=>(s=(s*16807)%2147483647)/2147483647;})();
   const list=[[.16,0]];for(let k=1;k<8;k++)list.push([k*Q,k]);
   for(const [t,k] of list){const c=OR.spPos(t,0),a=Math.PI+t,ox=Math.cos(a),oz=Math.sin(a),tx=-Math.sin(a),tz=Math.cos(a);   /* o: 바깥쪽, t: 길 방향 */
-    const g=new THREE.Group();g.visible=false;scene.add(g);const col=new THREE.Color(HZ[Math.max(0,k-1)].g).lerp(new THREE.Color(HZ[k].g),.5).lerp(new THREE.Color(0xf4ead6),.35);
+    const g=new THREE.Group();g.visible=false;g.userData.noMap=1;scene.add(g);const col=new THREE.Color(HZ[Math.max(0,k-1)].g).lerp(new THREE.Color(HZ[k].g),.5).lerp(new THREE.Color(0xf4ead6),.35);
     const mat=new THREE.SpriteMaterial({map:edgeMistTex(),color:col,transparent:true,opacity:.62,depthWrite:false,fog:false});
     const hw=Math.max(6,OR.spHW(t))+4;
     for(let i=0;i<26;i++){const s=new THREE.Sprite(mat);const across=(rnd()*2-1)*hw,along=(rnd()*2-1)*5,x=c.x+ox*across+tx*along,z=c.z+oz*across+tz*along;
@@ -6429,7 +6430,7 @@ const HFOG={gates:[]};
 function hfogNear(x,z){const n=OR.spNear(x,z);if(!n||n.e>8)return 0;const Q=OR.SP.Q,R=OR.spR(n.t);let best=1e9;
   for(const G of HFOG.gates){const d=Math.abs(n.t-G.t)*R;if(d<best)best=d;}return 1-smooth(3,18,best);}
 function hfogTick(t){if(!player)return;const px=player.position.x,pz=player.position.z,on=px<800&&Math.abs(pz)<300;
-  for(const G of HFOG.gates){const v=on&&Math.hypot(px-G.x,pz-G.z)<110;if(G.g.visible!==v)G.g.visible=v;
+  const inTown=Math.hypot(px-OR.C2.x,pz-OR.C2.z)<OR.TOWN_R+4;for(const G of HFOG.gates){const v=on&&Math.hypot(px-G.x,pz-G.z)<(inTown?35:75);   /* 성안에서는 서문 바로 앞에서만 */if(G.g.visible!==v)G.g.visible=v;
     if(v)for(const s of G.g.children){const b=s.userData.b;s.position.x=b.x+Math.sin(t*.13+b.ph)*1.5;s.position.y=b.y+Math.sin(t*.21+b.ph*2)*.4;}}}
 
 /* ---------- 정교한 집: 기초석, 반목조 벽, 박공지붕(기와 줄), 굴뚝, 창틀·덧문·화분, 문틀·계단·등불 ----------
@@ -14025,7 +14026,28 @@ function leapLand(){const L=P.leap;P.leap=null;if(!L||mode!=='world')return;cons
 function updateDuelMarks(dt){for(const m of monsters){if(!m.duelMark)continue;m.duelT-=dt;
     if(m.duelT<=0||m.dying!==null){scene.remove(m.duelMark);m.duelMark.traverse(o=>{if(o.geometry)o.geometry.dispose();});m.duelMark=null;m.duelT=0;continue;}
     const p=m.mesh.position;m.duelMark.position.set(p.x,p.y+(m.mesh.userData.h||1.5)+.7,p.z);m.duelMark.rotation.y+=dt*2.5;m.duelMark.visible=m.mesh.visible;}}
-function updateNetMonsters(dt){if(player){const _n=OR.spNear(player.position.x,player.position.z);player._spT=Math.hypot(player.position.x-OR.C2.x,player.position.z-OR.C2.z)<OR.TOWN_R+4?0:(_n?_n.t:0);}
+/* 맵 나누기: 하레나 사냥터는 구역(0~7, 성안은 -1)마다, 그 밖은 지역마다 하나의 맵 */
+function mapKeyAt(x,z){if(x>=800)return OR.isleAt(x,z).id;if(Math.abs(z)>300)return zoneAt(x,z);
+  if(Math.hypot(x-OR.C2.x,z-OR.C2.z)<OR.R2+20){if(Math.hypot(x-OR.C2.x,z-OR.C2.z)<OR.TOWN_R+4)return -1;const n=OR.spNear(x,z);return n?Math.min(7,Math.floor(n.t/OR.SP.Q)):0;}return zoneAt(x,z);}
+/* 하레나: 길로 이어진 앞뒤 구역, 능선 너머 바로 옆 바퀴(±4), 성안과 안쪽 바퀴(0~3)는 서로 보인다 */
+function sameMap(a,b){if(typeof a==='number'&&typeof b==='number'){if(a<0||b<0)return Math.max(a,b)<=3;const d=Math.abs(a-b);return d<=1||(d>=3&&d<=5);}return a===b;}   /* 소용돌이 길: 옆 바퀴의 같은 방향 구역(±3~5)은 능선 너머로 붙어 있다 */
+/* 낮고 작은 것(꽃·풀·소품): 그 맵과 길로 바로 이어진 곳에서만 */
+function sameMapNear(a,b){if(typeof a==='number'&&typeof b==='number'){if(a<0||b<0)return a===b||Math.max(a,b)===0;return Math.abs(a-b)<=1;}return a===b;}
+/* 맵 나누기 (그리기): 다른 맵에 있는 붙박이 물체는 카메라에 보이지 않는 층으로 옮긴다. 0.5초마다 (움직인 물체는 자리를 다시 잰다) */
+const MapSplit={t:0,objs:new WeakMap(),_v:new THREE.Vector3(),_m:new THREE.Matrix4(),_s:new THREE.Sphere()};
+function mapSplitTick(dt){const S=MapSplit;S.t-=dt;if(S.t>0||!player)return;S.t=.5;const my=_myMap;
+  for(const o of scene.children){if(!(o.isMesh||o.isPoints)||o.isSkinnedMesh||o.userData.noMap)continue;if(!o.frustumCulled&&!o.isInstancedMesh)continue;
+    let e=S.objs.get(o);
+    if(!e||e.px!==o.position.x||e.pz!==o.position.z||e.n!==(o.count|0)){const g=o.geometry;if(!g)continue;if(!g.boundingSphere)g.computeBoundingSphere();let cx,cz,r;
+      if(o.isInstancedMesh){if(!o.count)continue;let sx=0,sz=0;const pts=[];for(let i=0;i<o.count;i++){o.getMatrixAt(i,S._m);S._v.setFromMatrixPosition(S._m).applyMatrix4(o.matrixWorld);sx+=S._v.x;sz+=S._v.z;pts.push(S._v.x,S._v.z);}
+        cx=sx/o.count;cz=sz/o.count;r=0;for(let i=0;i<pts.length;i+=2)r=Math.max(r,Math.hypot(pts[i]-cx,pts[i+1]-cz));r+=g.boundingSphere.radius;}
+      else{S._s.copy(g.boundingSphere).applyMatrix4(o.matrixWorld);cx=S._s.center.x;cz=S._s.center.z;r=S._s.radius;}
+      if(!g.boundingBox)g.computeBoundingBox();const hy=(g.boundingBox.max.y-g.boundingBox.min.y)*(o.isInstancedMesh?1.4:o.scale.y);
+      const k=mapKeyAt(cx,cz),far=typeof k==='string'&&(cx>=800||Math.abs(cz)>300);   /* 섬·지하는 커도 그 맵에만 */
+      e={px:o.position.x,pz:o.position.z,n:o.count|0,key:r>140&&!far?null:k,small:hy<1.2};S.objs.set(o,e);}
+    const L=e.key===null||(e.small?sameMapNear:sameMap)(e.key,my)?0:30;if(o.layers.mask!==(1<<L))o.layers.set(L);}}
+let _myMap=-1,_myMapT=-9;
+function updateNetMonsters(dt){if(player&&tAll-_myMapT>.3){_myMapT=tAll;_myMap=mapKeyAt(player.position.x,player.position.z);}if(player){const _n=OR.spNear(player.position.x,player.position.z);player._spT=Math.hypot(player.position.x-OR.C2.x,player.position.z-OR.C2.z)<OR.TOWN_R+4?0:(_n?_n.t:0);}
   updateDuelMarks(dt);
   for(let i=monsters.length-1;i>=0;i--){
     const m=monsters[i],mp=m.mesh.position;
@@ -14035,6 +14057,9 @@ function updateNetMonsters(dt){if(player){const _n=OR.spNear(player.position.x,p
       continue;
     }
     if(m.ox||m.oz){mp.x-=m.ox;mp.z-=m.oz;m.ox=m.oz=0;}
+    /* 다른 맵(하레나 사냥터의 다른 구역, 다른 섬 등)에 있는 몬스터는 그리지도 움직이지도 않는다. 자리만 맞춰 둔다 */
+    if(!(tAll-(m._mkT||-9)<.5)){m._mkT=tAll;m._mk=mapKeyAt(mp.x,mp.z);}
+    if(!sameMap(m._mk,_myMap)&&!m.thrown){if(m.mesh.visible)m.mesh.visible=false;if(!m.tag.hidden)m.tag.hidden=true;const q=snapAt(m);if(q){mp.x=q[0];mp.z=q[1];}else{mp.x=m.tx;mp.z=m.tz;}continue;}
     m.phase+=dt;
     const px=mp.x,pz=mp.z;
     {const q=snapAt(m);if(q){if(Math.hypot(q[0]-mp.x,q[1]-mp.z)>8){mp.x=q[0];mp.z=q[1];}else{mp.x+=(q[0]-mp.x)*Math.min(1,dt*20);mp.z+=(q[1]-mp.z)*Math.min(1,dt*20);}}
@@ -14506,7 +14531,7 @@ function loopBody(){
   else if(mode==='world')updateWorld(dt);
   else if(mode==='dialog'){if(P&&P.bowDraw)bowCancel();if(P&&P.ray)rayEnd();if(P&&P.flame){P.flame=null;sfxStop('mg_fire');if(myMoId==='flame'){swingT=1;myMo=null;myMoId='';}}updateViewModel(dt,0);updateNetMonsters(dt);for(const m of monsters)m.tag.hidden=true;}
   updateFx(dt);VFX.update(dt);updateAmbient(dt);zoneMotes(dt);updateOthers(dt);animateDungeonLights(tAll);updatePortals(tAll);
-  if(mode!=='title'){const pp=player?player.position:camera.position;LightPool.update(dt,pp);InstChunks.update(camera.position);for(const m of monsters)if(m.mesh)setFarHidden(m.mesh,m.mesh.position.distanceToSquared(camera.position)>95*95);}
+  if(mode!=='title'){const pp=player?player.position:camera.position;LightPool.update(dt,pp);InstChunks.update(camera.position);mapSplitTick(dt);for(const m of monsters)if(m.mesh)setFarHidden(m.mesh,m.mesh.position.distanceToSquared(camera.position)>95*95);}
   Perf.tick();
   updateHazards(dt);updateTeles(dt);for(const f of lairFlames)f.scale.set(1+Math.sin(tAll*11+f.position.z)*.12,1+Math.sin(tAll*7+f.position.z)*.2,1);renderMirror(dt);
   if(mode==='world'){updateBossBar();
