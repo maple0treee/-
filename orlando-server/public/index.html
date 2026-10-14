@@ -4986,20 +4986,22 @@ function makeGrimoire(tier=0){
    - 막대 인형은 보이지 않게 두고 자세만 계산하는 데 쓴다 (기존 동작·스킬 동작을 모두 그대로 쓸 수 있다)
    - 팔·다리는 막대 마디의 방향을 그대로 따르게 뼈를 돌린다
    - 무기·방패는 막대 손의 방향 그대로, 위치만 애니 모델의 주먹 가운데로 옮긴다 */
-const PM={ver:'5',data:{},loading:{},tmpl:{},scale:{m:1.1,f:1.06}};
+const PM={ver:'6',data:{},loading:{},tmpl:{},scale:{m:1.1,f:1.06}};
 const HAIR_COLORS=[0x2a2220,0x5a3a22,0x9a5a30,0xd8b070,0xe8e2d8,0xb03a2e,0x3a5aa8,0x6a4aa0,0x7a7a82,0xf0d898,0xe09ab0,0x2a7a5a];
 const EYE_COLORS=[0x5a3a22,0x3a6aa8,0x3a9a6a,0x9a3a3a,0xb08a2a,0x7a4ab0,0x4a4a54,0x2a8a9a,0xb8bccc,0xe0782a];
-const HAIR_STYLES={m:['짧은 머리','스포츠 머리','뾰족 머리','덥수룩 머리','단발'],f:['긴 생머리','어깨 머리','올림 단발','단발']};
+const HAIR_STYLES={m:['짧은 머리','스포츠 머리','뾰족 머리','덥수룩 머리','단발','흐트러진 머리','덮은 머리','긴 머리','묶은 긴 머리'],f:['긴 생머리','어깨 머리','올림 단발','단발','보브','히메컷','뻗친 머리','짧은 머리']};
 // 피부색(곱하는 색), 키(배율), 윗옷색(0은 직업색), 바지색
 const SKIN_TONES=[0xffffff,0xfff1ec,0xf3d6b8,0xdfb48c,0xb98258,0x8c5c3e];
 const HEIGHTS=[.94,.97,1,1.03,1.06];
 const SHIRT_COLORS=[0xb8a27c,0x9c3d2f,0x2f5a9c,0x3f7a3a,0x6a4a8a,0xd8c8a0,0x2e2e32,0x8a6236];
 const PANTS_COLORS=[0x4a3a2c,0x2a2a30,0x34466a,0x55583e,0x7a5a3a,0xc4b496];
-function apDefault(){return {g:'m',h:HAIR_COLORS[1],e:EYE_COLORS[0],s:0,k:0,t:2,c:0,p:PANTS_COLORS[0]};}
+// 체형: 목 아래 몸과 옷을 겉면 방향으로 부풀리거나 줄인다 (손·머리는 그대로)
+const BUILDS=['마른','보통','탄탄한','통통한'];
+function apDefault(){return {g:'m',h:HAIR_COLORS[1],e:EYE_COLORS[0],s:0,k:0,t:2,c:0,p:PANTS_COLORS[0],b:1};}
 const _hx=v=>(v>>>0).toString(16).padStart(6,'0');
-function apCode(a){a=a||apDefault();return a.g+','+_hx(a.h)+','+_hx(a.e)+','+(a.s|0)+','+Math.min(9,a.k|0)+','+Math.min(9,a.t??2)+','+_hx(a.c|0)+','+_hx(a.p??PANTS_COLORS[0]);}
-function apParse(s){const m=/^([mf]),([0-9a-f]{6}),([0-9a-f]{6})(?:,(\d)(?:,(\d),(\d),([0-9a-f]{6}),([0-9a-f]{6}))?)?$/.exec(String(s||''));if(!m)return null;const g=m[1];
-  return {g,h:parseInt(m[2],16),e:parseInt(m[3],16),s:Math.min(HAIR_STYLES[g].length-1,+(m[4]||0)),k:Math.min(SKIN_TONES.length-1,+(m[5]||0)),t:m[6]!=null?Math.min(HEIGHTS.length-1,+m[6]):2,c:m[7]?parseInt(m[7],16):0,p:m[8]?parseInt(m[8],16):PANTS_COLORS[0]};}
+function apCode(a){a=a||apDefault();return a.g+','+_hx(a.h)+','+_hx(a.e)+','+(a.s|0)+','+Math.min(9,a.k|0)+','+Math.min(9,a.t??2)+','+_hx(a.c|0)+','+_hx(a.p??PANTS_COLORS[0])+','+Math.min(9,a.b??1);}
+function apParse(s){const m=/^([mf]),([0-9a-f]{6}),([0-9a-f]{6})(?:,(\d)(?:,(\d),(\d),([0-9a-f]{6}),([0-9a-f]{6})(?:,(\d))?)?)?$/.exec(String(s||''));if(!m)return null;const g=m[1];
+  return {g,h:parseInt(m[2],16),e:parseInt(m[3],16),s:Math.min(HAIR_STYLES[g].length-1,+(m[4]||0)),k:Math.min(SKIN_TONES.length-1,+(m[5]||0)),t:m[6]!=null?Math.min(HEIGHTS.length-1,+m[6]):2,c:m[7]?parseInt(m[7],16):0,p:m[8]?parseInt(m[8],16):PANTS_COLORS[0],b:m[9]!=null?Math.min(BUILDS.length-1,+m[9]):1};}
 function pmLoad(g){
   if(PM.data[g])return Promise.resolve(PM.data[g]);
   if(!PM.loading[g])PM.loading[g]=fetch('pmodel/'+g+'.json?v='+PM.ver).then(r=>{if(!r.ok)throw new Error('pmodel '+r.status);return r.json();}).then(async d=>{
@@ -5059,6 +5061,12 @@ function pmTuckCode(pc,show,d){const f=v=>v.toFixed(4),yr=q=>{const g=d.geos.fin
     return {key:f(top)+f(bot),code:`{float tk=smoothstep(${f(top+.004)},${f(top+.02)},transformed.y)+1.-smoothstep(${f(bot-.02)},${f(bot-.004)},transformed.y);transformed-=normal*.012*min(tk,1.);}`};}
   if(pc==='shirt'&&(show.has('a0')||show.has('a2')))return {key:'sh',code:'transformed-=normal*.008;'};
   return null;}
+function pmTkJoin(a,b){return a&&b?{key:a.key+b.key,code:a.code+'\n'+b.code}:a||b;}
+function pmBodyCode(ap,bones){const b=ap&&ap.b!=null?ap.b:1;if(b===1)return null;
+  const W=n=>{const o=bones.find(q=>q.name===n);const v=new THREE.Vector3();if(o)o.getWorldPosition(v);return v;};
+  const f=v=>v.toFixed(4),V=v=>`vec3(${f(v.x)},${f(v.y)},${f(v.z)})`,ny=W('J_Bip_C_Neck').y,hy=W('J_Bip_C_Hips').y,cy=W('J_Bip_C_UpperChest').y||W('J_Bip_C_Chest').y,hl=W('J_Bip_L_Hand'),hr=W('J_Bip_R_Hand');
+  const prof=b===0?'-.009':b===2?`.015*mix(.35,1.,smoothstep(${f(hy)},${f(cy)},transformed.y))`:`.027*mix(.45,1.,1.-clamp(abs(transformed.y-${f((hy+cy)/2)})/.3,0.,1.))`;
+  return {key:'bd'+b+f(ny),code:`{float bw=(1.-smoothstep(${f(ny-.07)},${f(ny-.01)},transformed.y))*smoothstep(.06,.13,distance(transformed,${V(hl)}))*smoothstep(.06,.13,distance(transformed,${V(hr)}));transformed+=normal*(${prof})*bw;}`};}
 // 갑옷 색: 단계에 따라
 function pmTint(slot,t,job,ap){
   if(slot==='shirt')return new THREE.Color(ap&&ap.c?ap.c:JOBS[job]?JOBS[job].color:0x9c3d2f).lerp(new THREE.Color(0xffffff),.15);
@@ -5094,12 +5102,12 @@ function pmBuild(d,ap,G,job,outline=true){
   d.bones.forEach((b,i)=>{if(b.p>=0)bones[b.p].add(bones[i]);else root.add(bones[i]);});
   root.updateMatrixWorld(true);const sk=new THREE.Skeleton(bones);
   const rest=bones.map(b=>({p:b.position.clone(),q:b.quaternion.clone()}));
-  const show=pmPieces(G,ap);const mask=pmMaskOf(show);const meshes=[],face=[];
+  const show=pmPieces(G,ap);const mask=pmMaskOf(show);const meshes=[],face=[];const bc=pmBodyCode(ap,bones);
   const hg=d.geos.find(q=>/^h\d$/.test(q.userData.piece)&&show.has(q.userData.piece)),hb=hg?pmHelmBox(hg):null;
   d.geos.forEach(geo=>{const pc=geo.userData.piece;if(!show.has(pc))return;
     const slot=pmSlotOf(pc);const t=slot==='armor'?G.armor:slot==='helm'?G.helm:slot==='boots'?G.boots:-1;
     const tint=geo.userData.kind==='cloth'?pmTint(slot,t,job,ap):null;
-    const isHair=hb&&/^hair/.test(geo.userData.kind),tk=geo.userData.kind==='cloth'?pmTuckCode(pc,show,d):null;let mt=pmMat(d,geo,ap,tint,mask);if(isHair)mt=pmHelmPatch(mt,hb);if(tk)mt=pmTuck(mt,tk.code,tk.key);const m=new THREE.SkinnedMesh(geo,mt);m.bind(sk,new THREE.Matrix4());m.frustumCulled=false;m.castShadow=true;root.add(m);meshes.push(m);
+    const isHair=hb&&/^hair/.test(geo.userData.kind),tk=pmTkJoin(geo.userData.kind==='cloth'?pmTuckCode(pc,show,d):null,/^(skin|mask|cloth)$/.test(geo.userData.kind)?bc:null);let mt=pmMat(d,geo,ap,tint,mask);if(isHair)mt=pmHelmPatch(mt,hb);if(tk)mt=pmTuck(mt,tk.code,tk.key);const m=new THREE.SkinnedMesh(geo,mt);m.bind(sk,new THREE.Matrix4());m.frustumCulled=false;m.castShadow=true;root.add(m);meshes.push(m);
     if(geo.userData.morph)face.push(m);
     if(outline&&geo.userData.kind!=='blend'&&geo.userData.kind!=='iris'&&geo.userData.kind!=='mask'){const k=geo.userData.kind;
       const oc=k==='hair'||k==='hairvc'?new THREE.Color(ap.h).multiplyScalar(.35).getHex():k==='cloth'?tint.clone().multiplyScalar(.4).getHex():0x5a3a30;
@@ -11305,6 +11313,8 @@ function buildApControls(box,ap,onChange){box.innerHTML='';
     b.onclick=()=>{ap.k=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});}
   {const w=row('키','t');['아주 작게','작게','보통','크게','아주 크게'].forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap.t??2)===i);
     b.onclick=()=>{ap.t=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});}
+  {const w=row('체형','t');BUILDS.forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap.b??1)===i);
+    b.onclick=()=>{ap.b=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});}
   sw('윗옷',SHIRT_COLORS,'c');sw('바지',PANTS_COLORS,'p');}
 // 미리보기 자세: 무기 없이 팔을 편하게 내리고 손도 편다
 function apRelaxPose(m,dt){const u=m.userData;u.relax=1;animStick(m,0,tAll,1,false,false,null);const S=u.stick;
@@ -11315,7 +11325,7 @@ function apRelaxPose(m,dt){const u=m.userData;u.relax=1;animStick(m,0,tAll,1,fal
 function makeApPreview(cv){let st=null;return{dirty:true,tick(dt,job,ap,gear,alive){if(!alive)return;
   if(!st){try{const r=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true});r.setPixelRatio(Math.min(2,devicePixelRatio||1));r.outputEncoding=renderer.outputEncoding;
     const sc=new THREE.Scene();sc.add(new THREE.HemisphereLight(0xfff4e0,0x3a3430,.95));const k=new THREE.DirectionalLight(0xffffff,.85);k.position.set(1.5,3,3);sc.add(k);
-    const c2=new THREE.PerspectiveCamera(30,1,.1,20);c2.position.set(0,1.15,4.2);c2.lookAt(0,.95,0);st={r,sc,cam:c2,m:null,yaw:.4};}catch(e){st={fail:1};}}
+    const c2=new THREE.PerspectiveCamera(30,1,.1,20);c2.position.set(0,1.2,4.9);c2.lookAt(0,1.0,0);st={r,sc,cam:c2,m:null,yaw:.4};}catch(e){st={fail:1};}}
   if(st.fail)return;const w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;if(st.w!==w||st.h!==h){st.w=w;st.h=h;st.r.setSize(w,h,false);st.cam.aspect=w/h;st.cam.updateProjectionMatrix();}
   if(this.dirty&&PM.data[ap.g]){if(st.m)st.sc.remove(st.m);st.m=makePlayerMesh(job,gear,{...ap});st.sc.add(st.m);this.dirty=false;}
   if(st.m){st.yaw+=dt*.5;st.m.rotation.y=st.yaw;apRelaxPose(st.m,dt);}
