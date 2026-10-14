@@ -193,8 +193,8 @@
   }
   const ZONE_MON = {
     forest: ['slime', 'slime', 'wolf'], plains: ['boar', 'goblin'], swamp: ['toad', 'lizard'], ruins: ['skeleton', 'skeleton', 'ogre'],
-    wwest: ['jackal', 'bandit', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'salamander', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
-    silva: ['silvawolf', 'mossslime', 'treant'], arbus: ['snowwolf', 'frostslime', 'yeti'], kaolis: ['mackerel', 'tideslime', 'octopus'], subcus: ['darkhound', 'crystalslime', 'cavetroll'],
+    wwest: ['jackal', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
+    silva: ['silvawolf', 'mossslime'], arbus: ['snowwolf', 'frostslime'], kaolis: ['mackerel', 'tideslime', 'octopus'], subcus: ['darkhound', 'crystalslime'],
   };
   const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30 };
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
