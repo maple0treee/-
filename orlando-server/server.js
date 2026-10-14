@@ -33,9 +33,11 @@ try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'models'))) { if (/^[a-z
 // 마르쿠스 주민 모델 (public/citbake/*.json)
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'citbake'))) { if (/^[a-z0-9_]+\.json$/.test(fn)) files['/citbake/' + fn] = { file: 'citbake/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; else if (/^[a-z0-9_]+\.webp$/.test(fn)) files['/citbake/' + fn] = { file: 'citbake/' + fn, type: 'image/webp', cache: 'public, max-age=86400' }; } } catch (e) {}
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'npcbake'))) if (/^[a-z0-9_]+\.json$/.test(fn)) files['/npcbake/' + fn] = { file: 'npcbake/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; } catch (e) {}
+// 배경 음악 (public/music/*.mp3): 압축하지 않고, 부분 요청(Range)을 받아 준다 (휴대폰 브라우저가 음악을 나눠 받는다)
+try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'music'))) if (/^[a-z0-9_]+\.mp3$/.test(fn)) files['/music/' + fn] = { file: 'music/' + fn, type: 'audio/mpeg', cache: 'public, max-age=86400', raw: true }; } catch (e) {}
 for (const f of Object.values(files)) {
   f.body = fs.readFileSync(path.join(PUBLIC, f.file));
-  f.gz = zlib.gzipSync(f.body);
+  if (!f.raw) f.gz = zlib.gzipSync(f.body);
 }
 
 const server = http.createServer((req, res) => {
@@ -43,6 +45,18 @@ const server = http.createServer((req, res) => {
   if (url === '/health') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('ok v' + VERSION + ' monsters ' + sim.count()); }
   const f = files[url];
   if (!f) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('없는 페이지'); }
+  if (f.raw) {
+    const L = f.body.length, m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (m && (m[1] || m[2])) {
+      let a = m[1] ? +m[1] : L - +m[2], b = m[1] && m[2] ? Math.min(+m[2], L - 1) : L - 1;
+      if (!m[1]) { a = Math.max(0, a); }
+      if (a >= L || a > b) { res.writeHead(416, { 'Content-Range': 'bytes */' + L }); return res.end(); }
+      res.writeHead(206, { 'Content-Type': f.type, 'Cache-Control': f.cache, 'Accept-Ranges': 'bytes', 'Content-Range': `bytes ${a}-${b}/${L}`, 'Content-Length': b - a + 1 });
+      return res.end(f.body.subarray(a, b + 1));
+    }
+    res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': f.cache, 'Accept-Ranges': 'bytes', 'Content-Length': L });
+    return res.end(f.body);
+  }
   const gzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
   res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': f.cache, ...(gzip ? { 'Content-Encoding': 'gzip' } : {}) });
   res.end(gzip ? f.gz : f.body);

@@ -6097,6 +6097,21 @@ function sfxSkill(S,id){
   if(st==='staff')return sfx('cast');
   sfxWeapon(st);
 }
+/* ---------- 배경 음악: 지역마다 테마 곡 (하레나·엑시즈) ----------
+   긴 곡이라 미리 다 받지 않고 흘려 들으며 튼다. 지역이 바뀌면 천천히 바꾼다. 브라우저는 첫 클릭·키 입력 뒤에만 소리를 낸다 */
+const BGM={vol:.38,cur:null,want:null,els:{},fade:1.6,
+  files:{harena:'music/harena.mp3?v=1',exiz:'music/exiz.mp3?v=1'},
+  zone:{town:'harena',thouse:'harena',marcus:'exiz'}};
+function bgmEl(k){let a=BGM.els[k];if(!a){a=BGM.els[k]=new Audio(BGM.files[k]);a.loop=true;a.preload='auto';a.volume=0;a._v=0;}return a;}
+function bgmZone(z){BGM.want=z&&BGM.zone[z]||null;if(BGM.want)bgmEl(BGM.want);}
+function bgmTick(dt){const step=dt/BGM.fade,hid=document.hidden;
+  for(const k in BGM.els){const a=BGM.els[k],on=k===BGM.want&&!hid;
+    a._v=Math.max(0,Math.min(1,a._v+(on?step:-step)));const v=a._v*a._v*BGM.vol;if(Math.abs(a.volume-v)>.002)a.volume=v;
+    if(on&&a.paused&&!a._try){a._try=1;a.play().then(()=>{a._try=0;}).catch(()=>{a._try=0;a._blocked=1;});}
+    if(!on&&a._v<=0&&!a.paused){a.pause();}}}
+/* 자동 재생이 막혔으면 다음 클릭·키에서 다시 */
+for(const ev of ['pointerdown','keydown','touchstart'])addEventListener(ev,()=>{const a=BGM.want&&BGM.els[BGM.want];if(a&&a.paused&&!document.hidden)a.play().catch(()=>{});},true);
+{let last=performance.now();setInterval(()=>{const n=performance.now();bgmTick(Math.min(2,(n-last)/1000));last=n;},100);}
 
 /* ---------- 화려한 효과: 불꽃 입자, 베기 궤적, 충격파, 빛기둥 ----------
    입자는 점 두 묶음(작은 불티, 큰 빛)으로 한 번에 그려서 가볍다. */
@@ -10969,7 +10984,7 @@ function updateBuffBar(){
 }
 let bannerT=0;
 function setZone(z){
-  if(z===curZone)return;curZone=z;
+  if(z===curZone)return;curZone=z;bgmZone(z);
   {const q=P&&P.quest;if(q&&q.special==='portal'){const inside=z==='wlair'||z==='hall';
     if(inside&&(q.stage|0)<1){q.stage=1;updateQuestHud();save();}else if(!inside&&q.stage===1){q.stage=2;log('의뢰 목표 달성','sys');updateQuestHud();save();}}}const Z=ZONES[z];if(z==='village'||z==='town')P.home=z;
   $('#wName').textContent=Z.name;$('#wCountry').textContent=(typeof COUNTRY_OF!=='undefined'&&COUNTRY_OF[z])||'';$('#wStars').textContent=stars(Z.diff);$('#wRec').textContent=Z.rec;
@@ -11399,7 +11414,7 @@ function toTitle(){
   for(const o of others.values())o.tag.hidden=true;
   for(const k in cds)delete cds[k];
   if(trade){dm(trade.with,{k:'tcancel'});closeTrade(false);}leaveParty();$('#pmenu').hidden=true;$('#prompt').hidden=true;
-  $('#inv').hidden=true;$('#shop').hidden=true;document.body.classList.remove('inv-open');P=null;mode='title';interactTarget=null;$('#interact').hidden=true;curZone=null;jumpY=0;vy=0;
+  $('#inv').hidden=true;$('#shop').hidden=true;document.body.classList.remove('inv-open');P=null;mode='title';bgmZone(null);interactTarget=null;$('#interact').hidden=true;curZone=null;jumpY=0;vy=0;
   if(room)room.presence({on:0}).catch(()=>{});lastPresKey='';
   $('#hud').hidden=true;$('#start').hidden=false;startStep(0);logEl.innerHTML='';$('#questBox').hidden=true;$('#questHud').textContent='';
   scene.background.set(ZONES.village.sky);scene.fog.color.copy(scene.background);
