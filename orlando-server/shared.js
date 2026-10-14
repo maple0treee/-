@@ -74,7 +74,11 @@
   // 계단 꼭대기 너머: 길드홀 지하 창고 (북쪽 벽의 짧은 계단 위 문으로 길드홀 1층에 오른다)
   const CELLAR = (() => { const H = HALL_ROOM, zS = H.z0 - H.stLen - H.stLand; return { x: H.x, z1: zS, z0: zS - 14, hw: 7, y: H.y + H.stRise, up: 2.0, stL: 4.4, land: 1.8 }; })();   // st*: 방 안쪽(북쪽) 벽에서 위로 오르는 계단           // 포탈을 처음 타면 가는 와이번의 둥지 (잡으면 다음부터는 바로 지하실)                 // 동쪽 황야 끝 포탈
 
+  // 튀르팽의 집: 하레나 성안 흙집 안 (작은 방 하나, 문으로 드나든다)
+  const THOUSE = { x: -200, z: -800, hw: 5.5, hd: 4.5, rh: 3.8 };
+  const inTHouse = (x, z) => Math.abs(x - THOUSE.x) < THOUSE.hw + 6 && Math.abs(z - THOUSE.z) < THOUSE.hd + 6;
   function zoneAt(x, z) {
+    if (inTHouse(x, z)) return 'thouse';
     if (x >= 800) return isleAt(x, z).id;
     if (z > 300) return 'dungeon';
     if (z < -300) return x > 100 ? 'wlair' : 'hall';
@@ -83,7 +87,7 @@
     const n = spNear(x, z); const i = n ? clampN(Math.floor(n.t / SP.Q), 0, 7) : 0;
     return SP.ZONES[i];
   }
-  const SAFE = { village: 1, town: 1, hall: 1, marcus: 1, milgol: 1, fort: 1, coachway: 1, castle: 1 };
+  const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, marcus: 1, milgol: 1, fort: 1, coachway: 1, castle: 1 };
 
   // 걸어 다닐 수 있는 곳 안으로 붙잡는다 (첫 지역 원, 길, 두 번째 지역 원, 석굴)
   function roomClamp(p, rad) {
@@ -98,6 +102,7 @@
     if (Math.abs(p.x - H.x) < H.stHw - rad && p.z > H.z0 - H.stLen - H.stLand - 1 && p.z <= H.z0 + rad + 0.01) return true;
     { const C = CELLAR; if (Math.abs(p.x - C.x) < C.hw - rad && p.z > C.z0 + rad && p.z <= C.z1 + 0.01) return true; } return Math.abs(p.x - H.x) < H.corHw - rad * 0.5 && p.z > H.z1 - 1 && p.z < HALL.z - HALL.R + 2; };
   function worldClamp(p, rad) {
+    if (inTHouse(p.x, p.z)) { const T = THOUSE; p.x = clampN(p.x, T.x - T.hw + rad, T.x + T.hw - rad); p.z = clampN(p.z, T.z - T.hd + rad, T.z + T.hd - rad); return; }
     if (p.x >= 800) { const I = isleAt(p.x, p.z); const d = Math.hypot(p.x - I.x, p.z - I.z), r = isleEdge(I, Math.atan2(p.z - I.z, p.x - I.x)) - rad; if (d > r) { p.x = I.x + (p.x - I.x) * r / d; p.z = I.z + (p.z - I.z) * r / d; } return; }
     if (p.z > 300) return roomClamp(p, rad);
     if (p.z < -300 && p.x <= 100 && inHallAnnex(p, rad)) return;
@@ -225,7 +230,7 @@
       G('브론', '무기상', ['칼날 재료를 실은 상단이 {z}에서 {m}에게 습격당했소. 길이 안전해져야 좋은 무기를 들여올 수 있지.']),
       G('미나', '잡화상', ['{z}에서 나는 약초를 받아 와야 포션을 만들 수 있는데, {m} 때문에 채집꾼들이 다 돌아왔어요.']),
       G('베른', '지도 제작자', ['{z}의 지도를 마저 그려야 하는데 {m}이(가) 측량대를 쫓아냈어! 한동안 조용하게 만들어 줘.']),
-      G('세라', '현자', ['{z}에서 이상한 기운이 느껴집니다. {m}이(가) 그 기운에 끌려 모여드는 것 같아요. 수를 줄여 주면 원인을 살펴보겠습니다.']),
+      G('튀르팽', '현자', ['{z}에서 이상한 기운이 느껴집니다. {m}이(가) 그 기운에 끌려 모여드는 것 같아요. 수를 줄여 주면 원인을 살펴보겠습니다.']),
       G('로웬', '경비대장', ['{z}에서 {m}이(가) 무리를 지어 성벽 쪽으로 오고 있다. 경비대만으로는 모자라니 힘을 보태라.', '어젯밤 {z} 감시탑이 {m}에게 습격당했다. 감시탑을 다시 세울 수 있게 주변을 쓸어 버려라.']),
       G('한나', '여관 주인', ['손님들이 {z}를 지나오다 {m}에게 짐을 다 잃었대요. 여관 손님이 끊기면 저도 큰일이에요.', '{z}에서 오는 식재료 마차가 {m} 때문에 사흘째 안 와요. 수프 냄비가 비어 가요!']),
       G('티모', '아이', ['아빠가 {z}로 장 보러 갔는데 {m}이(가) 무섭대요… 아빠가 무사히 돌아오게 해 주세요!']),
@@ -247,6 +252,6 @@
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { THOUSE, inTHouse, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
