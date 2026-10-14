@@ -2040,7 +2040,9 @@ const camera=new THREE.PerspectiveCamera(60,1,.1,400);
 const hemi=new THREE.HemisphereLight(0xe4ecf0,0x4d4128,.62);scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xfff0d4,.88);
 sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
-const sc=sun.shadow.camera;sc.left=-36;sc.right=36;sc.top=36;sc.bottom=-36;sc.near=1;sc.far=140;sun.shadow.bias=-.0006;
+const sc=sun.shadow.camera;sc.left=-36;sc.right=36;sc.top=36;sc.bottom=-36;sc.near=1;sc.far=140;sun.shadow.bias=-.0005;sun.shadow.normalBias=.035;
+/* 해 방향(그림자 상자) 기준 축: 그림자 상자를 그림자 그림 칸에 맞춰 옮길 때 쓴다 */
+const _sunBasis=(()=>{const z=new THREE.Vector3(30,60,20).normalize(),x=new THREE.Vector3(0,1,0).cross(z).normalize(),y=z.clone().cross(x);return {x,y,z};})();
 scene.add(sun,sun.target);
 /* 하늘: 지평선에서 꼭대기로 짙어지는 색, 해와 햇무리, 천천히 흐르는 구름 */
 const SKY={hor:new THREE.Uniform(new THREE.Color(0xc8d8e0)),zen:new THREE.Uniform(new THREE.Color(0x5a8ec8)),sun:new THREE.Uniform(new THREE.Vector3(30,60,20).normalize()),
@@ -2993,7 +2995,19 @@ function _bakedModel(d,key){const dim=NPC_DIM[key]||1;
   return {G,open,closed,outlines,height:d.height,ready};}
 // NPC 메시(그룹) 하나를 구운 모델로 바꾼다. 머리 위 표시는 남긴다.
 const NPC_TALL={messenger:1.12,knight:1.14,bron:1.05,kyle:1.12,rowen:1.14,lian:1.1,bern:1.1,stranger:1.12,merchant:1.08,elis:1.05,marta:1.04,hanna:1.03,mina:1.04,sera:1.04,turpin:1.04,orwen:1.04,mentor:1.04};
-function _swapBaked(mesh,M,key){const u=mesh.userData;const k=NPC_TALL[key]||1;M.G.scale.setScalar(k);M.height*=k;
+/* 서 있는 사람의 숨·무게 옮김·고개 돌림: 뼈가 없는 구운 모델이라 꼭짓점을 높이에 따라 살짝 움직인다 (얼굴·외곽선 모두 같이) */
+const NPC_IDLE_GLSL=`
+float ih=transformed.y/uIdle.w;float hk=smoothstep(.80,.865,ih);
+{vec2 d=transformed.xz-vec2(0.,.01*uIdle.w);float a=uIdle.x*hk,cs=cos(a),sn=sin(a);transformed.xz=vec2(0.,.01*uIdle.w)+vec2(d.x*cs+d.y*sn,-d.x*sn+d.y*cs);}
+float ck=smoothstep(.48,.62,ih)*(1.-smoothstep(.74,.82,ih));transformed.xz*=1.+uIdle.y*ck*.022;transformed.y+=uIdle.y*.005*uIdle.w*smoothstep(.45,.8,ih);
+transformed.x+=uIdle.z*transformed.y*.016*smoothstep(.0,.5,ih);transformed.y-=abs(uIdle.z)*.004*uIdle.w*smoothstep(.0,.5,ih);`;
+function _npcIdleMat(m,U,outline){const prev=m.onBeforeCompile;m.onBeforeCompile=(s,r)=>{s.uniforms.uIdle=U;
+    s.vertexShader='uniform vec4 uIdle;\n'+s.vertexShader.replace('#include <begin_vertex>',outline?'vec3 transformed = position + normal * 0.0028;'+NPC_IDLE_GLSL:'#include <begin_vertex>'+NPC_IDLE_GLSL);};
+  m.customProgramCacheKey=()=>'npcidle'+(outline?'o':'')+(m.map?'m':'')+m.alphaTest+m.transparent;return m;}
+function _swapBaked(mesh,M,key){const u=mesh.userData;const k=NPC_TALL[key]||1;
+  {const U={value:new THREE.Vector4(0,0,0,M.height)};u.idleU=U;
+    M.G.traverse(o=>{if(!o.isMesh)return;if(o.material===animeOutline()){o.material=_npcIdleMat(new THREE.MeshBasicMaterial({color:0x2a1c18,side:THREE.BackSide}),U,true);o.userData.ol=1;}else _npcIdleMat(o.material,U,false);});}
+  M.G.scale.setScalar(k);M.height*=k;
   for(const c of [...mesh.children])if(c!==u.marker)mesh.remove(c);
   mesh.scale.setScalar(1);mesh.add(M.G);(NPCBAKE.models=NPCBAKE.models||{})[key]={G:M.G,r:M.ready,h:M.height-.04,ci:M.closed.map(m=>M.G.children.indexOf(m)),oi:M.open.map(m=>M.G.children.indexOf(m))};
   u.baked={open:M.open,closed:M.closed};u.outlines=M.outlines;u.head=u.head||new THREE.Object3D();u.lids=[];u.face=null;u.up=u.body=u.armL=null;
@@ -6110,7 +6124,7 @@ function sfxSkill(S,id){
    긴 곡이라 미리 다 받지 않고 흘려 들으며 튼다. 지역이 바뀌면 천천히 바꾼다. 브라우저는 첫 클릭·키 입력 뒤에만 소리를 낸다 */
 const BGM={vol:.38,cur:null,want:null,els:{},fade:1.6,
   files:{harena:'music/harena.mp3?v=1',exiz:'music/exiz.mp3?v=1'},
-  zone:{town:'harena',thouse:'harena',marcus:'exiz'}};
+  zone:{town:'harena',thouse:'harena',forest:'harena',plains:'harena',swamp:'harena',ruins:'harena',wwest:'harena',wnorth:'harena',wsouth:'harena',weast:'harena',marcus:'exiz'}};   /* 하레나 둘레 사냥터(길 여덟 구역)도 하레나 테마 */
 function bgmEl(k){let a=BGM.els[k];if(!a){a=BGM.els[k]=new Audio(BGM.files[k]);a.loop=true;a.preload='auto';a.volume=0;a._v=0;}return a;}
 function bgmZone(z){BGM.want=z&&BGM.zone[z]||null;if(BGM.want)bgmEl(BGM.want);}
 function bgmTick(dt){const step=dt/BGM.fade,hid=document.hidden;
@@ -6329,7 +6343,7 @@ const HZ=[   // 구역: 바닥색, 바닥 짙은색, 능선색, 깃발색
       if(Math.abs(t-Math.round(t/Q)*Q)<.09&&Math.round(t/Q)>0)continue;   /* 협곡 문 자리는 비운다 */
       if(t<.14)continue;   /* 하레나에서 모래밭으로 나가는 목은 비운다 */
       const big=srand()<.25,sy=sr(.8,1.3);put(big?pickA(ROCKB):pickA(ROCKM),p.x,p.z,s*(big?.75:1),s*sy*(big?.75:1),s*(big?.75:1),srand()*6.28,HZ[k].rock,k,-s*.35,1);   /* 벽 밑 바위는 그림자를 그리지 않는다 (가볍게) */
-      colliders.push({x:p.x,z:p.z,r:Math.max(.6,Math.min(s*(big?1.75:1.35),Math.abs(off)-SP.HW+.5)),h:Math.max(2.4,s*sy*(big?2.6:1.5))});   /* 큰 바위는 지나가지 못한다 (길 안쪽으로는 막지 않게) */}}
+      colliders.push({x:p.x,z:p.z,r:s*(big?1.9:1.5),h:Math.max(2.4,s*sy*(big?2.6:1.5))});   /* 바위는 보이는 크기만큼 막는다 (몸이 바위를 뚫고 들어가지 않게) */}}
   /* 협곡 문: 좁은 목 양쪽 돌기둥 + 다음 구역 깃발 */
   {const stone=mat(0xbdb29a),pole=mat(0x3a2818);
     for(let k=1;k<8;k++){const t=k*Q;
@@ -6502,7 +6516,13 @@ function npcFolds(mesh,n,amp,y0,y1){const P=mesh.geometry.attributes.position;
     const f=1+amp*k*Math.sin(a*n);P.setX(i,x*f);P.setZ(i,z*f);}
   mesh.geometry.computeVertexNormals();return mesh;}
 // 살아 있는 듯한 움직임: 숨쉬기, 고개 돌리기, 눈 깜박이기, 팔 흔들기
+const smoothN=(a,b,x)=>{const k=Math.max(0,Math.min(1,(x-a)/(b-a)));return k*k*(3-2*k);};
 function animNpc(g,t,dt){const u=g.userData;if(!u.head)return;const ph=u.ph||0;
+  if(u.baked&&u.idleU){const U=u.idleU.value;   /* 숨 쉬고, 가끔 무게를 옮기고, 이따금 고개를 돌린다. 가까이 온 사람은 쳐다본다 */
+    const nz=(a,s)=>Math.sin(t*a+s)*.5+Math.sin(t*a*1.93+s*2.1)*.3+Math.sin(t*a*3.7+s*4.3)*.2;
+    let yaw=nz(.21,ph)*.55;yaw=Math.sign(yaw)*Math.max(0,Math.abs(yaw)-.12)*1.6;
+    if(player){const dx=player.position.x-g.position.x,dz=player.position.z-g.position.z,d=Math.hypot(dx,dz);if(d<5&&d>.3){let a=Math.atan2(dx,dz)-g.rotation.y;a=Math.atan2(Math.sin(a),Math.cos(a));if(Math.abs(a)<1.6){const w=1-smoothN(3.5,5,d);yaw=yaw*(1-w)+Math.max(-.85,Math.min(.85,a))*w;}}}
+    u.hy=(u.hy??0)+(yaw-(u.hy??0))*Math.min(1,dt*2.2);U.x=u.hy;U.y=Math.sin(t*1.25+ph)*.5+.5;U.z=Math.tanh(nz(.07,ph+3)*3)*.6;}
   if(u.baked){u.blinkT=(u.blinkT??(2+Math.random()*3))-dt;let c=false;if(u.blinkT<0){c=-u.blinkT<.14;if(!c)u.blinkT=2+Math.random()*4;}
     if(u.bc!==c){u.bc=c;for(const m of u.baked.open)m.visible=!c;for(const m of u.baked.closed)m.visible=c;}return;}
   const b=Math.sin(t*1.7+ph);if(u.up)u.up.scale.set(1+.012*b,1+.02*b,1+.012*b);if(u.body)u.body.scale.set(1+.007*b,1,1+.012*b);
@@ -7703,7 +7723,7 @@ function citInstance(T){const pool=CITM.pool[T.id]||(CITM.pool[T.id]=[]);if(pool
    모든 건물은 꼭짓점 색으로 굽고, 재질 번호(mt)에 따라 세상 좌표로 무늬를 입힌다(삼면 투영). UV가 필요 없다. */
 const MTEX=(()=>{let tex=null;
   const R=(()=>{let s=4711;return()=>(s=(s*16807)%2147483647)/2147483647;})();
-  const cv=(n,draw)=>{const c=document.createElement('canvas');c.width=c.height=n;const x=c.getContext('2d');draw(x,n);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=4;t.generateMipmaps=true;t.minFilter=THREE.LinearMipmapLinearFilter;return t;};
+  const cv=(n,draw)=>{const c=document.createElement('canvas');c.width=c.height=n;const x=c.getContext('2d');draw(x,n);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());t.generateMipmaps=true;t.minFilter=THREE.LinearMipmapLinearFilter;return t;};
   const g=v=>{v=Math.max(0,Math.min(255,v|0));return `rgb(${v},${v},${v})`;};
   const noise=(x,n,base,amp,count,rmin,rmax,alpha)=>{for(let i=0;i<count;i++){const r=rmin+R()*(rmax-rmin);x.fillStyle=g(base+(R()-.5)*2*amp);x.globalAlpha=alpha;const px=R()*n,py=R()*n;
       for(const ox of [-n,0,n])for(const oy of [-n,0,n]){x.beginPath();x.arc(px+ox,py+oy,r,0,7);x.fill();}}x.globalAlpha=1;};
@@ -7744,7 +7764,9 @@ const MTEX=(()=>{let tex=null;
   const patch=(m,key)=>{m.onBeforeCompile=s=>{const T=get();for(let i=0;i<8;i++)s.uniforms['mtx'+i]={value:T[i]};
       s.vertexShader='attribute float mt;varying float vMt;varying vec3 vWP;varying vec3 vWN;\n'+s.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\nvMt=mt;vWP=(modelMatrix*vec4(transformed,1.)).xyz;vWN=normalize(mat3(modelMatrix)*objectNormal);');
       let fn='uniform sampler2D mtx0,mtx1,mtx2,mtx3,mtx4,mtx5,mtx6,mtx7;varying float vMt;varying vec3 vWP;varying vec3 vWN;\n';
-      for(let i=0;i<8;i++)fn+=`vec3 tri${i}(){vec3 w=pow(abs(vWN),vec3(4.));w/=(w.x+w.y+w.z);float s=${SC[i+1].toFixed(2)};return texture2D(mtx${i},vWP.zy/s).rgb*w.x+texture2D(mtx${i},vWP.xz/s).rgb*w.y+texture2D(mtx${i},vWP.xy/s).rgb*w.z;}\n`;
+      fn+='float mtFar(){return smoothstep(9.,38.,length(vWP-cameraPosition));}\n';   /* 멀리 있는 무늬는 평균 빛으로 녹인다: 걸을 때 돌길에 흰 줄(무늬 겹침)이 흐르지 않게 */
+      for(let i=0;i<8;i++)fn+=`vec3 tx${i}(vec2 u,float f){vec3 a=texture2D(mtx${i},u).rgb;return f>0.?mix(a,texture2D(mtx${i},u,12.).rgb,f):a;}
+vec3 tri${i}(){vec3 w=pow(abs(vWN),vec3(4.));w/=(w.x+w.y+w.z);float s=${SC[i+1].toFixed(2)};float f=mtFar();return tx${i}(vWP.zy/s,0.)*w.x+tx${i}(vWP.xz/s,f*.85)*w.y+tx${i}(vWP.xy/s,0.)*w.z;}\n`;
       s.fragmentShader=fn+s.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
 {int k=int(vMt+.5);vec3 d=vec3(1.);
 if(k==1)d=tri0()*1.3;else if(k==2)d=tri1()*1.24;else if(k==3)d=tri2()*1.22;else if(k==4)d=tri3()*1.3;else if(k==5)d=tri4()*1.28;else if(k==6)d=tri5()*1.2;else if(k==7)d=tri6()*1.15;else if(k==8)d=tri7()*1.25;
@@ -8667,11 +8689,15 @@ function citPose(c,t){
     const k=Math.min(1,(u-it.st)/it.dur),ux=(it.x1-it.x0)/it.L,uz=(it.z1-it.z0)/it.L;return {x:it.x0+(it.x1-it.x0)*k-uz*c.side,z:it.z0+(it.z1-it.z0)*k+ux*c.side,vx:ux,vz:uz,walk:true,s:0};}
   const sp=c.sp;
   if(c.k==='circ'){const L=2*Math.PI*c.r,s=((t+c.off)*sp)%L;const a=c.a0+c.dir*s/c.r;return {x:c.x+Math.cos(a)*c.r,z:c.z+Math.sin(a)*c.r,vx:-Math.sin(a)*c.dir,vz:Math.cos(a)*c.dir,walk:true,s};}
-  const L=c.span,Tw=L/sp,P=2*Tw+2*c.pause,u=((t+c.off)%P+P)%P;let s,dir=1,walk=true;
-  if(u<Tw)s=u*sp;else if(u<Tw+c.pause){s=L;walk=false;}else if(u<2*Tw+c.pause){s=L-(u-Tw-c.pause)*sp;dir=-1;}else{s=0;walk=false;dir=-1;}
-  const l=c.l,q=Math.max(0,Math.min(l.T,c.s0+Math.max(0,Math.min(L,s))));let j=1;while(j<l.cum.length-1&&l.cum[j]<q)j++;
-  const A=l.pts[j-1],B=l.pts[j],sl=l.cum[j]-l.cum[j-1]||1,t2=(q-l.cum[j-1])/sl,ux=(B[0]-A[0])/sl,uz=(B[1]-A[1])/sl;
-  return {x:A[0]+(B[0]-A[0])*t2-uz*c.side,z:A[1]+(B[1]-A[1])*t2+ux*c.side,vx:ux*dir,vz:uz*dir,walk,s};}
+  /* 오가며 걷기: 천천히 걸음을 떼고 멈추기 전에 늦추며, 멈춰 서 있는 동안 돌아선다. 길모퉁이는 둥글게 돈다 */
+  const L=c.span,ac=Math.min(.6,L/sp*.3),Tw=L/sp+ac,P=2*Tw+2*c.pause,u=((t+c.off)%P+P)%P;let s,dir=1,walk=true,v=1;
+  const ease=w=>w<ac?(v=w/ac,sp*w*w/(2*ac)):w>Tw-ac?(v=(Tw-w)/ac,L-sp*(Tw-w)*(Tw-w)/(2*ac)):(sp*(w-ac/2));
+  if(u<Tw)s=ease(u);else if(u<Tw+c.pause){s=L;walk=false;v=0;if(u>Tw+c.pause*.55)dir=-1;}else if(u<2*Tw+c.pause){s=L-ease(u-Tw-c.pause);dir=-1;}else{s=0;walk=false;v=0;dir=u>2*Tw+c.pause*1.55?1:-1;}
+  const l=c.l,at=d=>{const q=Math.max(0,Math.min(l.T,d));let j=1;while(j<l.cum.length-1&&l.cum[j]<q)j++;const A=l.pts[j-1],B=l.pts[j],sl=l.cum[j]-l.cum[j-1]||1,t2=(q-l.cum[j-1])/sl,ux=(B[0]-A[0])/sl,uz=(B[1]-A[1])/sl;
+    return [A[0]+(B[0]-A[0])*t2-uz*c.side,A[1]+(B[1]-A[1])*t2+ux*c.side];};
+  const q0=c.s0+Math.max(0,Math.min(L,s)),R=1.1,p0=at(q0),pa=at(q0-R),pb=at(q0+R);
+  const x=(pa[0]+2*p0[0]+pb[0])/4,z=(pa[1]+2*p0[1]+pb[1])/4;let vx=pb[0]-pa[0],vz=pb[1]-pa[1];const vl=Math.hypot(vx,vz)||1;vx/=vl;vz/=vl;
+  return {x,z,vx:vx*dir,vz:vz*dir,walk,s,v};}
 /* 자세 틀 번호 (CIT_FRAMES): 걷는 동작은 두 틀을 번갈아 */
 const CIT_FRAME_OF={stand:[0,0],walk:[1,2],hoe:[3,4],sit:[5,5],carry:[6,6],guard:[7,7],talk:[8,0],hammer:[9,0],reap:[10,10],shoulder:[11,11],sweep:[8,8],lean:[0,0],wave:[8,8]};
 function crowdInitMesh(){
@@ -8717,9 +8743,9 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
       const walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const idle=walking&&!q.walk;aF[n*3]=idle?0:fr[0];aF[n*3+1]=idle?0:fr[1];aF[n*3+2]=c.mode==='hoe'||c.mode==='hammer'?1.1:walking?c.sp*1.6:.6;n++;}
     M.aPos.needsUpdate=M.aInf.needsUpdate=M.aF.needsUpdate=true;M.mesh.geometry.instanceCount=n;M.drawn=n;}
   for(const c of M.list){if(!c.I)continue;const q=refresh?c.q:citPose(c,t);const G=c.I.g;G.position.set(q.x,heightAt(q.x,q.z)+(c.y||0),q.z);
-    const want=Math.atan2(q.vx,q.vz);let dr=Math.atan2(Math.sin(want-G.rotation.y),Math.cos(want-G.rotation.y));G.rotation.y+=dr*Math.min(1,dt*8);
-    const mode=q.mode||c.mode,walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');c.w=(c.w??0)+(((walking&&q.walk)?1:0)-(c.w??0))*Math.min(1,dt*5);
-    if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2;citPoseBones(c.I,c.ph,c.w,t+c.off,c.mode==='walk'||c.w<.05&&c.mode!=='carry'?'walk':c.mode);}
+    const want=Math.atan2(q.vx,q.vz);let dr=Math.atan2(Math.sin(want-G.rotation.y),Math.cos(want-G.rotation.y));G.rotation.y+=Math.sign(dr)*Math.min(Math.abs(dr),Math.abs(dr)*dt*4.5+dt*1.2);   /* 사람처럼 천천히 돌아선다 */
+    const mode=q.mode||c.mode,walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const vk=q.v??1;c.w=(c.w??0)+(((walking&&q.walk)?Math.max(.25,vk):0)-(c.w??0))*Math.min(1,dt*5);
+    if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2*Math.max(.3,vk);citPoseBones(c.I,c.ph,c.w,t+c.off,c.mode==='walk'||c.w<.05&&c.mode!=='carry'?'walk':c.mode);}
     else{c.ph+=dt*(mode==='hoe'?3.2:mode==='hammer'?4.5:mode==='reap'?2:1.5)*(c.v?c.v.tempo:1);citPoseBones(c.I,c.ph,0,t+c.off,mode);}}}
 let _mcT=0;
 function marcusTick(dt){if(!MARCUS.ready||!player)return;if(typeof coachTick==='function')coachTick(dt);const p=player.position,inM=p.x>2000;
@@ -11620,7 +11646,7 @@ function drawPortrait(n){
       portraitCam.position.set(.3*h/1.75,h-.02,2.1*h/1.75);portraitCam.lookAt(0,h-.2*h/1.75,0);portraitR.render(portraitScene,portraitCam);};
     // 새 모델이 준비되기 전에는 빈 초상화 (옛 모델이 잠깐 보이지 않게)
     while(portraitScene.children.length>3)portraitScene.remove(portraitScene.children[3]);portraitR.render(portraitScene,portraitCam);
-    const cached=NPCBAKE.models&&NPCBAKE.models[npcBakeKey(n.id)];if(cached){drawPortrait.cur=n;const G=cached.G.clone();G.traverse(o=>{if(o.material===animeOutline())o.visible=false;});for(const i of cached.ci)G.children[i].visible=false;for(const i of cached.oi)G.children[i].visible=true;cached.r.then(()=>{if(drawPortrait.cur===n)show(G,cached.h);});return;}
+    const cached=NPCBAKE.models&&NPCBAKE.models[npcBakeKey(n.id)];if(cached){drawPortrait.cur=n;const G=cached.G.clone();G.traverse(o=>{if(o.material===animeOutline()||o.userData.ol)o.visible=false;});for(const i of cached.ci)G.children[i].visible=false;for(const i of cached.oi)G.children[i].visible=true;cached.r.then(()=>{if(drawPortrait.cur===n)show(G,cached.h);});return;}
     drawPortrait.cur=n;npcBakeData(npcBakeKey(n.id)).then(d=>{if(drawPortrait.cur!==n)return;const key=npcBakeKey(n.id),M=_bakedModel(d,key),k=NPC_TALL[key]||1;M.G.scale.setScalar(k);
       M.ready.then(()=>{if(drawPortrait.cur===n)show(M.G,M.height*k-.04);});},()=>{});
   }catch(e){}
@@ -13574,7 +13600,11 @@ function updateWorld(dt){
     skyDome.visible=!inD;skyDome.position.copy(camera.position);SKY.t.value=tAll;SKY.hor.value.copy(scene.background);
     _zenC.copy(scene.background).lerp(_skyBlue.set(inHa?(hi<5?0x2f78d4:hi<7?0x6a6a9a:0x4a3a40):inMil?0x3f86d8:inM?0x5a8ac8:0x4f86c4),inHa?(hi<5?.74:.5):inMil?.74:inM?.62:.55);SKY.zen.value.lerp(_zenC,kk);
     SKY.cloud.value+=((inT?.18:/^w/.test(z)||z==='forest'||z==='plains'||z==='swamp'||z==='ruins'?.3:.5)-SKY.cloud.value)*kk*.5;SKY.glow.value+=((inT?1.8:1)-SKY.glow.value)*kk;}
-  {const q=player.position,ty=Math.min(q.y,heightAt(q.x,q.z)+6);sun.position.set(q.x+30,ty+60,q.z+20);sun.target.position.set(q.x,ty,q.z);}   /* 높이 날아도 그림자 상자는 땅 위에 */
+  {const q=player.position,ty=Math.min(q.y,heightAt(q.x,q.z)+6);   /* 높이 날아도 그림자 상자는 땅 위에 */
+    /* 그림자 상자를 그림자 그림의 한 칸 단위로만 옮긴다: 걸을 때 땅에 그림자 줄무늬가 흐르듯 움직이지 않게 */
+    const B=_sunBasis,T=72/1024,px=q.x*B.x.x+ty*B.x.y+q.z*B.x.z,py=q.x*B.y.x+ty*B.y.y+q.z*B.y.z,dx=Math.round(px/T)*T-px,dy=Math.round(py/T)*T-py;
+    const tx=q.x+B.x.x*dx+B.y.x*dy,tyy=ty+B.x.y*dx+B.y.y*dy,tz=q.z+B.x.z*dx+B.y.z*dy;
+    sun.position.set(tx+30,tyy+60,tz+20);sun.target.position.set(tx,tyy,tz);}
   publishPresence(false);
 }
 /* ---------- 몬스터 (시뮬레이션이 보내 주는 대로 그린다) ---------- */
