@@ -220,9 +220,17 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 .bk-in{position:absolute;inset:0;padding:11% 11% 13%;display:flex;flex-direction:column;gap:14px}
 .bk-tx{margin:0;font-family:'Gowun Batang',serif;font-size:calc(var(--pw)*.043);line-height:1.95;word-break:keep-all;text-align:left}
 .bk-tx.first::first-letter{float:left;font-family:var(--f-display);font-size:3.1em;line-height:.9;margin:.06em .1em 0 0;color:#7a2a18}
-.bk-blank{display:inline-block;min-width:4.2em;text-align:center;border-bottom:1.5px solid #5a3a1a;margin:0 .15em;padding:0 .2em;color:#7a2a18;font-weight:700}
+.bk-blank{position:relative;display:inline-block;min-width:4.2em;text-align:center;border:0;border-bottom:1.5px solid #5a3a1a;margin:0 .15em;padding:0 .2em;color:#7a2a18;font:inherit;font-weight:700;line-height:inherit;background:none;border-radius:0}
+.bk-blank.pickable{cursor:pointer}.bk-blank.pickable:hover{background:rgba(200,138,58,.18)}
+.bk-caret{font-style:normal;font-size:.6em;margin-left:.25em;color:#a0703a;vertical-align:.2em}
+.bk-pop{position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:5px;padding:7px;background:#f4e8c8;border:1.5px solid #8a6a40;border-radius:4px;box-shadow:0 8px 18px rgba(60,35,15,.35);z-index:5;white-space:nowrap;animation:bkpop .18s ease}
+.bk-pop::before{content:'';position:absolute;top:-7px;left:50%;margin-left:-6px;border:6px solid transparent;border-top:0;border-bottom-color:#8a6a40}
+@keyframes bkpop{from{opacity:0;transform:translate(-50%,-4px)}}
+.bk-pop button{font-family:'Gowun Batang',serif;font-size:1em;font-weight:400;padding:.25em 1.2em;background:rgba(255,255,255,.35);border:1px solid #b8986a;border-radius:3px;color:#4a2e14;cursor:pointer}
+.bk-pop button:hover{background:rgba(212,174,99,.35)}.bk-pop button[aria-pressed="true"]{background:#7a2a18;border-color:#5a1a0a;color:#f6ecd2}
 .bk-blank:not(.on){animation:bkblink 1.6s ease-in-out infinite}
 .bk-blank.on{min-width:0;margin:0;padding:0 .05em;border-bottom-color:#7a2a18}
+.bk-blank.on .bk-caret{display:none}.bk-blank.on:hover .bk-caret{display:inline}
 @keyframes bkblink{50%{border-color:#c88a3a;background:rgba(200,138,58,.12)}}
 .bk-ch{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:6px}
 .bk-ch button{font-family:'Gowun Batang',serif;font-size:calc(var(--pw)*.042);padding:.35em 1.1em;background:rgba(255,255,255,.25);border:1.5px solid #8a6a40;border-radius:3px;color:#4a2e14;cursor:pointer}
@@ -14740,7 +14748,8 @@ function openBook(id){const B=BOOKS[id];if(!B||!P)return;if(!$('#inv').hidden)cl
     document.body.appendChild(el);
     el.querySelector('.bk-prev').onclick=()=>bookTurn(-1);el.querySelector('.bk-next').onclick=()=>bookTurn(1);
     el.querySelector('.bk-x').onclick=closeBook;el.querySelector('.bk-cover').onclick=()=>bookTurn(1);
-    el.querySelector('.bk-r').onclick=e=>{if(e.target.closest('button'))return;bookTurn(1);};el.querySelector('.bk-l').onclick=e=>{if(e.target.closest('button'))return;bookTurn(-1);};
+    const pg=dir=>e=>{if(e.target.closest('button'))return;if(bookCur&&bookCur.pop){bookCur.pop=false;bookRender();return;}bookTurn(dir);};
+    el.querySelector('.bk-r').onclick=pg(1);el.querySelector('.bk-l').onclick=pg(-1);
     addEventListener('resize',()=>{if(bookCur&&!bookCur.anim){const w=bookWide();if(w!==bookCur.wide){bookCur.wide=w;bookCur.i=w?bookCur.i-bookCur.i%2:bookCur.i;bookRender();}}});}
   const base=baseOf(P.job),canAdv=base===B.base&&!JOBS[P.job].from&&advLv(P.job)!=null&&P.lv>=advLv(P.job);
   bookCur={id,i:0,open:false,anim:false,wide:bookWide(),pick:JOBS[P.job].from&&baseOf(P.job)===B.base?jobChain(P.job)[1]:null,canAdv};
@@ -14753,14 +14762,19 @@ function bookPage(k){const C=bookCur,B=BOOKS[C.id],seq=bookSeq(B),it=seq[k],d=do
   const raw=B.pages[it],blank=raw.includes('{빈칸}'),name=C.pick?JOBS[C.pick].name:null;
   const bat=s=>((s.charCodeAt(s.length-1)-0xac00)%28)>0;
   const tx=document.createElement('p');tx.className='bk-tx'+(it===0?' first':'');
-  if(blank){const [a,b]=raw.split('{빈칸}');tx.append(a);const u=document.createElement('span');u.className='bk-blank'+(name?' on':'');u.textContent=name||'　　　';tx.append(u);
-    tx.append((name?(bat(name)?'이었다':'였다'):'이었다')+b.replace(/^이었다/,''));}
+  if(blank){const [a,b]=raw.split('{빈칸}');tx.append(a);
+    // 빈칸 자체를 눌러 들어갈 말을 고른다 (빈칸 바로 아래에 고를 말이 펼쳐진다)
+    const u=document.createElement(C.canAdv?'button':'span');u.className='bk-blank'+(name?' on':'')+(C.canAdv?' pickable':'');if(C.canAdv)u.type='button';
+    u.append(name||'　　　');if(C.canAdv){const cr=document.createElement('i');cr.className='bk-caret';cr.textContent='▾';u.append(cr);
+      u.onclick=e=>{e.stopPropagation();C.pop=!C.pop;bookRender();};
+      if(C.pop){const pop=document.createElement('span');pop.className='bk-pop';
+        for(const j of JOBS[B.base].adv){const o=document.createElement('button');o.type='button';o.textContent=JOBS[j].name;o.setAttribute('aria-pressed',C.pick===j);
+          o.onclick=e=>{e.stopPropagation();C.pick=j;C.pop=false;bookRender();};pop.append(o);}
+        u.append(pop);}}
+    tx.append(u);tx.append((name?(bat(name)?'이었다':'였다'):'이었다')+b.replace(/^이었다/,''));}
   else tx.textContent=raw;
   d.append(tx);
-  if(blank&&C.canAdv){const ch=document.createElement('div');ch.className='bk-ch';
-    for(const j of JOBS[B.base].adv){const b=document.createElement('button');b.type='button';b.textContent=JOBS[j].name;b.setAttribute('aria-pressed',C.pick===j);
-      b.onclick=e=>{e.stopPropagation();C.pick=j;bookRender();};ch.append(b);}
-    d.append(ch);if(!C.pick){const h=document.createElement('div');h.className='bk-ask';h.textContent='빈칸에 들어갈 말을 고르세요';d.append(h);}}
+  if(blank&&C.canAdv&&!C.pick&&!C.pop){const h=document.createElement('div');h.className='bk-ask';h.textContent='빈칸을 눌러 들어갈 말을 고르세요';d.append(h);}
   const n=document.createElement('div');n.className='bk-no';n.textContent=String(it+1);d.append(n);return d;}
 function bookFill(el,k){el.textContent='';el.append(bookPage(k));}
 function bookBlankShown(){const C=bookCur,B=BOOKS[C.id],seq=bookSeq(B),ks=C.wide?[C.i,C.i+1]:[C.i];return ks.some(k=>typeof seq[k]==='number'&&B.pages[seq[k]].includes('{빈칸}'));}
@@ -14772,7 +14786,7 @@ function bookRender(){const el=$('#bookWin'),C=bookCur,B=BOOKS[C.id],seq=bookSeq
   el.querySelector('.bk-prev').disabled=!C.open;
   const nx=el.querySelector('.bk-next');nx.disabled=C.open&&bookBlankShown()&&C.canAdv&&!C.pick;nx.textContent=!C.open?'펼치기':last?'책을 덮는다':'›';nx.classList.toggle('word',!C.open||last);
   el.querySelector('.bk-hint').textContent=!C.open?'표지를 누르면 책이 펼쳐져요':nx.disabled?'빈칸에 들어갈 말을 골라야 넘길 수 있어요':'쪽을 누르거나 ← → 키로 넘겨요';}
-function bookTurn(dir){const C=bookCur;if(!C||C.anim)return;const el=$('#bookWin'),B=BOOKS[C.id],N=bookSeq(B).length,S=C.wide?2:1;
+function bookTurn(dir){const C=bookCur;if(!C||C.anim)return;if(C.pop){C.pop=false;bookRender();}const el=$('#bookWin'),B=BOOKS[C.id],N=bookSeq(B).length,S=C.wide?2:1;
   if(!C.open){if(dir<0)return;C.anim=true;el.classList.add('bk-opening');sfxPage();setTimeout(()=>{C.open=true;C.anim=false;el.classList.remove('bk-opening');bookRender();},700);return;}
   if(dir>0&&el.querySelector('.bk-next').disabled)return;
   if(dir>0&&C.i+S>=N){finishBook();return;}
