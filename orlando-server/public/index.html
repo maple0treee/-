@@ -6240,6 +6240,29 @@ function sfxSkill(S,id){
   if(st==='staff')return sfx('cast');
   sfxWeapon(st);
 }
+
+/* ---------- NPC 목소리: 글자가 하나 나올 때마다 그 글자의 모음 소리로 짧게 웅얼거린다 ----------
+   한글이면 모음(ㅏ·ㅔ·ㅓ·ㅗ·ㅜ·ㅡ·ㅣ)에 맞춘 두 공명(포먼트)으로 거른 소리를 낸다. 사람마다 높이·빠르기·거친 정도가 다르다 */
+const VOICE={kyle:{p:128,sp:46},sera:{p:104,rasp:.35,sp:58,fs:.95},turpin:{p:104,rasp:.35,sp:58,fs:.95},bron:{p:98,rasp:.3,sp:52},torgan:{p:84,rasp:.22,sp:50,fs:.9},
+  rowen:{p:112,sp:46},messenger:{p:132,sp:50,fs:1.02},mina:{p:236,sp:42,fs:1.16},hanna:{p:208,sp:45,fs:1.12},elis:{p:252,sp:46,fs:1.18,air:.25},knight:{p:214,sp:46,fs:1.12},
+  timo:{p:320,sp:40,fs:1.32},mentor:{p:118,sp:50}};
+const VW_F={a:[800,1200],e:[520,1850],eo:[600,1000],o:[460,820],u:[360,760],eu:[420,1450],i:[310,2250]};
+const VW_OF=['a','e','a','e','eo','e','eo','e','o','a','e','e','o','u','eo','e','i','u','eu','eu','i'];
+function voiceOf(n){if(!n)return {p:130,sp:46};const v=VOICE[n.id];if(v)return v;
+  const h=[...String(n.id||n.name||'')].reduce((a,c)=>a*31+c.charCodeAt(0)>>>0,7);return {p:[108,122,136,150][h%4],sp:46,rasp:(h>>3)%3?0:.15};}
+function npcVoice(ch,v,q,at){const X=SFX.ctx;if(!X||!SFX.master||SFX.vol<=0||!ch)return;const c=ch.charCodeAt(0);
+  let vw='eo',coda=0;if(c>=0xAC00&&c<=0xD7A3){const k=c-0xAC00;vw=VW_OF[Math.floor(k/28)%21];coda=k%28;}
+  else if(/[0-9A-Za-z\u3131-\u318E]/.test(ch))vw='eo';else return;
+  try{const t=(at??X.currentTime)+.002,fs=v.fs||1,dur=coda?.05:.065,f0=v.p*(1+(Math.random()-.5)*.1)*(q?1.12:1);
+    const o=X.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(f0,t);o.frequency.linearRampToValueAtTime(f0*(q?1.1:.94),t+dur);
+    const [F1,F2]=VW_F[vw],b1=X.createBiquadFilter(),b2=X.createBiquadFilter();b1.type=b2.type='bandpass';b1.frequency.value=F1*fs;b2.frequency.value=F2*fs;b1.Q.value=5;b2.Q.value=7;
+    const g1=X.createGain(),g2=X.createGain();g1.gain.value=1;g2.gain.value=.55;
+    const env=X.createGain(),A=.22*(v.vol||1);env.gain.setValueAtTime(0,t);env.gain.linearRampToValueAtTime(A,t+.008);env.gain.setValueAtTime(A,t+dur*.6);env.gain.exponentialRampToValueAtTime(.0008,t+dur+.03);
+    o.connect(b1);o.connect(b2);b1.connect(g1);b2.connect(g2);g1.connect(env);g2.connect(env);env.connect(SFX.master);
+    if(v.rasp||v.air){const len=Math.floor(X.sampleRate*(dur+.04)),buf=X.createBuffer(1,len,X.sampleRate),d=buf.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+      const ns=X.createBufferSource();ns.buffer=buf;const nf=X.createBiquadFilter();nf.type='bandpass';nf.frequency.value=F2*fs*1.2;nf.Q.value=1.2;const ng=X.createGain();ng.gain.value=(v.rasp||0)*1.4+(v.air||0)*1.8;
+      ns.connect(nf);nf.connect(ng);ng.connect(env);ns.start(t);ns.stop(t+dur+.04);}
+    o.start(t);o.stop(t+dur+.04);}catch(e){}}
 /* ---------- 배경 음악: 지역마다 테마 곡 (하레나·엑시즈) ----------
    긴 곡이라 미리 다 받지 않고 흘려 들으며 튼다. 지역이 바뀌면 천천히 바꾼다. 브라우저는 첫 클릭·키 입력 뒤에만 소리를 낸다 */
 const BGM={vol:.38,cur:null,want:null,els:{},fade:1.6,
@@ -11807,8 +11830,11 @@ let typeT=null,typing=false,typeDone=null;
 function typeText(el,text,done){
   clearInterval(typeT);el.textContent='';typing=true;typeDone=done;const t0=performance.now();
   $('#npcNext').hidden=true;$('#npcNext').classList.remove('pg');
-  let lastK=0;const voice=npcCur?.7+([...String(npcCur.id||'')].reduce((a,c)=>a+c.charCodeAt(0),0)%9)*.12:1;
-  typeT=setInterval(()=>{const k=Math.floor((performance.now()-t0)/22);el.textContent=text.slice(0,k);if(k-lastK>=3&&k<text.length){lastK=k;if(text[k]&&text[k]!==' ')sfx('talk',null,.6,voice*(.95+Math.random()*.1));}if(k>=text.length)finishTyping(text);},30);
+  // 글자가 하나 나올 때마다 그 NPC의 목소리로 그 글자를 웅얼거린다 (말투 빠르기도 사람마다 다르다)
+  let lastK=0;const voice=typeof voiceOf==='function'?voiceOf(npcCur):null,per=voice&&voice.sp||40;
+  typeT=setInterval(()=>{const k=Math.min(text.length,Math.floor((performance.now()-t0)/per));if(k>lastK){el.textContent=text.slice(0,k);const ch=text[k-1];
+      if(voice&&typeof npcVoice==='function'){const q=/[?？]/.test(text.slice(k,k+3));npcVoice(ch,voice,q);}lastK=k;}
+    if(k>=text.length)finishTyping(text);},16);
   el.dataset.full=text;
 }
 function finishTyping(text){
