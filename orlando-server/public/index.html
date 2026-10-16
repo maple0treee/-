@@ -2487,6 +2487,21 @@ function flattenStatic(root,keep){
   // 비어 버린 하위 그룹 정리
   const empty=[];root.traverse(c=>{if(c!==root&&c.isGroup&&!c.children.length)empty.push(c);});for(const e of empty)if(e.parent)e.parent.remove(e);
 }
+// 바둑판 땅(PlaneGeometry)을 step칸씩 조각으로 나눈다. 꼭짓점 값은 그대로 옮겨서 이음매가 없다
+function splitGridGeo(g,NX,NZ,step){
+  const out=[],X1=NX+1,P=g.attributes.position,C=g.attributes.color,N=g.attributes.normal;
+  for(let z0=0;z0<NZ;z0+=step)for(let x0=0;x0<NX;x0+=step){
+    const nx=Math.min(step,NX-x0),nz=Math.min(step,NZ-z0),W=nx+1,cnt=W*(nz+1);
+    const p=new Float32Array(cnt*3),c=C?new Float32Array(cnt*3):null,n=N?new Float32Array(cnt*3):null;
+    for(let iz=0;iz<=nz;iz++)for(let ix=0;ix<=nx;ix++){const s=(z0+iz)*X1+x0+ix,d=iz*W+ix;
+      p[d*3]=P.getX(s);p[d*3+1]=P.getY(s);p[d*3+2]=P.getZ(s);
+      if(c){c[d*3]=C.getX(s);c[d*3+1]=C.getY(s);c[d*3+2]=C.getZ(s);}
+      if(n){n[d*3]=N.getX(s);n[d*3+1]=N.getY(s);n[d*3+2]=N.getZ(s);}}
+    const idx=[];for(let iz=0;iz<nz;iz++)for(let ix=0;ix<nx;ix++){const a=ix+W*iz,b=ix+W*(iz+1),cc=ix+1+W*(iz+1),d=ix+1+W*iz;idx.push(a,b,d,b,cc,d);}
+    const G=new THREE.BufferGeometry();G.setAttribute('position',new THREE.BufferAttribute(p,3));if(c)G.setAttribute('color',new THREE.BufferAttribute(c,3));if(n)G.setAttribute('normal',new THREE.BufferAttribute(n,3));
+    G.setIndex(idx);G.computeBoundingSphere();G.computeBoundingBox();out.push(G);}
+  return out;
+}
 // 점광원 풀
 const LightPool={src:[],pool:[],t:0,
   init(){
@@ -2512,7 +2527,7 @@ const LightPool={src:[],pool:[],t:0,
 };
 // 여러 개 묶음을 구역별로 나눈다
 const InstChunks={list:[],
-  init(cell=100){
+  init(cell=64){
     const M=new THREE.Matrix4(),v=new THREE.Vector3(),col=new THREE.Color();
     for(const m of scene.children.slice()){
       if(!m.isInstancedMesh||m.count<60||m.parent!==scene)continue;
@@ -2536,10 +2551,10 @@ const InstChunks={list:[],
   update(p){
     if(!this.list.length)return;
     this.pm.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);this.fr.setFromProjectionMatrix(this.pm);
-    const far=camera.far;
+    const far=scene.fog&&scene.fog.isFog?Math.min(camera.far,scene.fog.far+14):camera.far;   /* 안개에 완전히 묻힌 곳은 그리지 않는다 */
     // 하레나 안에 있으면 둘레 산줄기 밖의 것은 보이지 않는다
     const inHa=Math.hypot(p.x-OR.C2.x,p.z-OR.C2.z)<OR.R2+25;
-    for(const q of this.list){const d=q.s.center.distanceTo(p)-q.s.radius;if(inHa&&Math.hypot(q.s.center.x-OR.C2.x,q.s.center.z-OR.C2.z)-q.s.radius>OR.R2+70){q.m.visible=false;continue;}q.m.visible=q.maxD?(d<q.maxD&&(d<20||this.fr.intersectsSphere(q.s))):(d<40||(d<far&&this.fr.intersectsSphere(q.s)));}
+    for(const q of this.list){const d=q.s.center.distanceTo(p)-q.s.radius;if(inHa&&Math.hypot(q.s.center.x-OR.C2.x,q.s.center.z-OR.C2.z)-q.s.radius>OR.R2+70){q.m.visible=false;continue;}const fz=q.m.material.fog===false?camera.far:far;q.m.visible=q.maxD?(d<q.maxD&&d<fz&&(d<20||this.fr.intersectsSphere(q.s))):(d<40||(d<fz&&this.fr.intersectsSphere(q.s)));}
   }
 };
 // 멀리 있는 몬스터는 그리지 않는다 (visible은 죽음·숨김에 쓰이니 건드리지 않고 '층'으로 끈다)
@@ -6414,7 +6429,9 @@ const HZ=[   // 구역: 바닥색, 바닥 짙은색, 능선색, 깃발색
     cols.push(tmp.r,tmp.g,tmp.b);
   }
   g.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));g.computeVertexNormals();
-  const ground=new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,flatShading:true}));ground.receiveShadow=true;scene.add(ground);
+  /* 땅을 40m 조각으로 나눈다: 화면 밖·안개 너머 조각은 그리지 않게 */
+  {const gm=new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,flatShading:true});
+   for(const tg of splitGridGeo(g,NX,NZ,22)){const t=new THREE.Mesh(tg,gm);t.receiveShadow=true;t.userData.tile=1;scene.add(t);}g.dispose();}
 
   // 놓을 자리: 구역 k 안에서 (길 가운데 자국·석굴·포탈·상인 자리는 비운다)
   const tooClose=(x,z,r)=>colliders.some(c=>Math.abs(c.x-x)<c.r+r&&Math.abs(c.z-z)<c.r+r&&Math.hypot(c.x-x,c.z-z)<c.r+r);
@@ -14179,9 +14196,21 @@ function sameMap(a,b){if(typeof a==='number'&&typeof b==='number'){if(a<0||b<0)r
 /* 낮고 작은 것(꽃·풀·소품): 그 맵과 길로 바로 이어진 곳에서만 */
 function sameMapNear(a,b){if(typeof a==='number'&&typeof b==='number'){if(a<0||b<0)return a===b||Math.max(a,b)===0;return Math.abs(a-b)<=1;}return a===b;}
 /* 맵 나누기 (그리기): 다른 맵에 있는 붙박이 물체는 카메라에 보이지 않는 층으로 옮긴다. 0.5초마다 (움직인 물체는 자리를 다시 잰다) */
-const MapSplit={t:0,objs:new WeakMap(),_v:new THREE.Vector3(),_m:new THREE.Matrix4(),_s:new THREE.Sphere()};
+const MapSplit={t:0,objs:new WeakMap(),_v:new THREE.Vector3(),_m:new THREE.Matrix4(),_s:new THREE.Sphere(),_b:new THREE.Box3(),_c:new THREE.Vector3(),mon:new Set()};
 function mapSplitTick(dt){const S=MapSplit;S.t-=dt;if(S.t>0||!player)return;S.t=.5;const my=_myMap;
   const cx0=camera.position.x,cz0=camera.position.z,ff=scene.fog?scene.fog.far+14:1e9;
+  /* 묶음(마을 사람들, 건물 묶음 등)도 다른 구역이나 안개 너머에 있으면 통째로 그리지 않는다 */
+  const MS=S.mon;MS.clear();let bud=60;   /* 처음 잴 때 한꺼번에 몰리지 않게 나눠서 */for(const m of monsters)if(m.mesh)MS.add(m.mesh);
+  for(const o of scene.children){if(!(o.isGroup||o.type==='Object3D')||o===player||!o.visible||o.userData.noMap||MS.has(o))continue;
+    let e=S.objs.get(o);
+    if(!e||e.nc!==o.children.length){if(bud--<=0)continue;S._b.setFromObject(o);if(S._b.isEmpty())continue;S._b.getCenter(S._c);const r=Math.hypot(S._b.max.x-S._b.min.x,S._b.max.z-S._b.min.z)/2;
+      let nofog=false;o.traverse(c=>{const m=c.material;if(m&&(Array.isArray(m)?m.some(q=>q.fog===false):m.fog===false))nofog=true;});
+      e={nc:o.children.length,ox:S._c.x-o.position.x,oz:S._c.z-o.position.z,r,small:S._b.max.y-S._b.min.y<1.2,nofog,px:NaN,pz:NaN,key:null,L:-1};S.objs.set(o,e);}
+    const cx=o.position.x+e.ox,cz=o.position.z+e.oz;
+    if(e.px!==o.position.x||e.pz!==o.position.z){e.px=o.position.x;e.pz=o.position.z;e.key=e.r>140?null:mapKeyAt(cx,cz);}   /* 큰 묶음은 여러 맵에 걸쳐 있을 수 있어 안개로만 판단 */
+    const gone=!e.nofog&&Math.hypot(cx-cx0,cz-cz0)-e.r>ff;
+    const L=!gone&&(e.key===null||(e.small?sameMapNear:sameMap)(e.key,my))?0:30;
+    if(e.L!==L){e.L=L;o.traverse(c=>{if(c.layers.mask!==(1<<L))c.layers.set(L);});}}
   for(const o of scene.children){if(!(o.isMesh||o.isPoints)||o.isSkinnedMesh||o.userData.noMap)continue;if(!o.frustumCulled&&!o.isInstancedMesh)continue;
     let e=S.objs.get(o);
     if(!e||e.px!==o.position.x||e.pz!==o.position.z||e.n!==(o.count|0)){const g=o.geometry;if(!g)continue;if(!g.boundingSphere)g.computeBoundingSphere();let cx,cz,r;
@@ -14191,7 +14220,7 @@ function mapSplitTick(dt){const S=MapSplit;S.t-=dt;if(S.t>0||!player)return;S.t=
       if(!g.boundingBox)g.computeBoundingBox();const hy=(g.boundingBox.max.y-g.boundingBox.min.y)*(o.isInstancedMesh?1.4:o.scale.y);
       const k=mapKeyAt(cx,cz),far=typeof k==='string'&&(cx>=800||Math.abs(cz)>300);   /* 섬·지하는 커도 그 맵에만 */
       const m0=Array.isArray(o.material)?o.material[0]:o.material;
-      e={px:o.position.x,pz:o.position.z,n:o.count|0,key:r>140&&!far?null:k,small:hy<1.2,cx,cz,r,nofog:!!(m0&&m0.fog===false)};S.objs.set(o,e);}
+      e={px:o.position.x,pz:o.position.z,n:o.count|0,key:(r>140&&!far)||o.userData.tile?null:k,small:hy<1.2,cx,cz,r,nofog:!!(m0&&m0.fog===false)};S.objs.set(o,e);}
     /* 안개 너머(완전히 안개에 묻혀 안 보이는 곳)에 있는 것도 그리지 않는다 */
     const gone=!e.nofog&&Math.hypot(e.cx-cx0,e.cz-cz0)-e.r>ff;
     const L=!gone&&(e.key===null||(e.small?sameMapNear:sameMap)(e.key,my))?0:30;if(o.layers.mask!==(1<<L))o.layers.set(L);}}
