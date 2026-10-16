@@ -14181,6 +14181,7 @@ function sameMapNear(a,b){if(typeof a==='number'&&typeof b==='number'){if(a<0||b
 /* 맵 나누기 (그리기): 다른 맵에 있는 붙박이 물체는 카메라에 보이지 않는 층으로 옮긴다. 0.5초마다 (움직인 물체는 자리를 다시 잰다) */
 const MapSplit={t:0,objs:new WeakMap(),_v:new THREE.Vector3(),_m:new THREE.Matrix4(),_s:new THREE.Sphere()};
 function mapSplitTick(dt){const S=MapSplit;S.t-=dt;if(S.t>0||!player)return;S.t=.5;const my=_myMap;
+  const cx0=camera.position.x,cz0=camera.position.z,ff=scene.fog?scene.fog.far+14:1e9;
   for(const o of scene.children){if(!(o.isMesh||o.isPoints)||o.isSkinnedMesh||o.userData.noMap)continue;if(!o.frustumCulled&&!o.isInstancedMesh)continue;
     let e=S.objs.get(o);
     if(!e||e.px!==o.position.x||e.pz!==o.position.z||e.n!==(o.count|0)){const g=o.geometry;if(!g)continue;if(!g.boundingSphere)g.computeBoundingSphere();let cx,cz,r;
@@ -14189,8 +14190,11 @@ function mapSplitTick(dt){const S=MapSplit;S.t-=dt;if(S.t>0||!player)return;S.t=
       else{S._s.copy(g.boundingSphere).applyMatrix4(o.matrixWorld);cx=S._s.center.x;cz=S._s.center.z;r=S._s.radius;}
       if(!g.boundingBox)g.computeBoundingBox();const hy=(g.boundingBox.max.y-g.boundingBox.min.y)*(o.isInstancedMesh?1.4:o.scale.y);
       const k=mapKeyAt(cx,cz),far=typeof k==='string'&&(cx>=800||Math.abs(cz)>300);   /* 섬·지하는 커도 그 맵에만 */
-      e={px:o.position.x,pz:o.position.z,n:o.count|0,key:r>140&&!far?null:k,small:hy<1.2};S.objs.set(o,e);}
-    const L=e.key===null||(e.small?sameMapNear:sameMap)(e.key,my)?0:30;if(o.layers.mask!==(1<<L))o.layers.set(L);}}
+      const m0=Array.isArray(o.material)?o.material[0]:o.material;
+      e={px:o.position.x,pz:o.position.z,n:o.count|0,key:r>140&&!far?null:k,small:hy<1.2,cx,cz,r,nofog:!!(m0&&m0.fog===false)};S.objs.set(o,e);}
+    /* 안개 너머(완전히 안개에 묻혀 안 보이는 곳)에 있는 것도 그리지 않는다 */
+    const gone=!e.nofog&&Math.hypot(e.cx-cx0,e.cz-cz0)-e.r>ff;
+    const L=!gone&&(e.key===null||(e.small?sameMapNear:sameMap)(e.key,my))?0:30;if(o.layers.mask!==(1<<L))o.layers.set(L);}}
 let _myMap=-1,_myMapT=-9;
 function updateNetMonsters(dt){if(player&&tAll-_myMapT>.3){_myMapT=tAll;_myMap=mapKeyAt(player.position.x,player.position.z);}if(player){const _n=OR.spNear(player.position.x,player.position.z);player._spT=Math.hypot(player.position.x-OR.C2.x,player.position.z-OR.C2.z)<OR.TOWN_R+4?0:(_n?_n.t:0);}
   updateDuelMarks(dt);
