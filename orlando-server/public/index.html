@@ -124,8 +124,6 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brass);outline-
 .slot.none .cnt{color:#e07a6c}
 .slot.drop-on{border-color:var(--me);box-shadow:0 0 0 2px var(--me)}
 .hsep{width:1px;align-self:stretch;margin:4px 3px;background:var(--line)}
-body.inv-open #hotbar{z-index:50}
-body.inv-open #inv{padding-bottom:calc(var(--safe-b) + 96px)}
 
 #cross{position:fixed;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;pointer-events:none}
 #cross::before,#cross::after{content:"";position:absolute;background:rgba(239,228,204,.85);box-shadow:0 0 2px #000}
@@ -228,7 +226,12 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 @keyframes bkpop{from{opacity:0;transform:translate(-50%,-4px)}}
 .bk-pop button{font-family:'Gowun Batang',serif;font-size:1em;font-weight:400;padding:.25em 1.2em;background:rgba(255,255,255,.35);border:1px solid #b8986a;border-radius:3px;color:#4a2e14;cursor:pointer}
 .bk-pop button:hover{background:rgba(212,174,99,.35)}.bk-pop button[aria-pressed="true"]{background:#7a2a18;border-color:#5a1a0a;color:#f6ecd2}
-.bk-blank:not(.on){animation:bkblink 1.6s ease-in-out infinite}
+.bk-blank:not(.on):not(.open){animation:bkblink 1.6s ease-in-out infinite}
+.bk-blank.open{min-width:0;border-bottom-style:dashed;border-bottom-color:#a0703a;padding:0 .1em;cursor:default}
+.bk-opt{font:inherit;font-weight:400;line-height:inherit;color:rgba(90,58,26,.42);background:none;border:0;padding:0 .12em;cursor:pointer;transition:color .15s,text-shadow .15s}
+.bk-opt:hover,.bk-opt:focus-visible{color:#7a2a18;text-shadow:0 0 .5px #7a2a18;outline:none}
+.bk-opt.on{color:#7a2a18;font-weight:700}
+.bk-sep{color:rgba(90,58,26,.35);padding:0 .1em;font-weight:400}
 .bk-blank.on{min-width:0;margin:0;padding:0 .05em;border-bottom-color:#7a2a18}
 .bk-blank.on .bk-caret{display:none}.bk-blank.on:hover .bk-caret{display:inline}
 @keyframes bkblink{50%{border-color:#c88a3a;background:rgba(200,138,58,.12)}}
@@ -6244,9 +6247,10 @@ const SFX_DEF={
   hurt:(o,t,p)=>{_tone(o,'sine',120,60,t,.18,1);_noise(o,'lowpass',900,200,t,.14,.7,1);_tone(o,'square',220,180,t,.08,.12);},
   levelup:(o,t,p)=>{[523,659,784,1046,1318].forEach((f,i)=>_tone(o,'triangle',f,f,t+i*.08,.45,.35,.01));_noise(o,'highpass',6000,8000,t+.3,.5,.15,1,.05);},
   coin:(o,t,p)=>{_tone(o,'square',1320,1320,t,.07,.2);_tone(o,'square',1760,1760,t+.07,.18,.2);},
-  advance:(o,t,p)=>{_tone(o,'sine',110,52,t,.9,.5,.005);_noise(o,'lowpass',400,120,t,.6,.25,1,.005);
-    [262,330,392,523,659,784].forEach((f,i)=>_tone(o,'triangle',f*p,f*p,t+.12+i*.07,.5,.28,.01));
-    [523,659,784,1046].forEach(f=>_tone(o,'sine',f*p,f*p,t+.58,1.6,.16,.04));_noise(o,'highpass',5000,9000,t+.5,1.3,.12,1,.15);},
+  advance:(o,t,p)=>{_tone(o,'sine',150,70,t,.7,.55,.005);_noise(o,'lowpass',900,200,t,.5,.3,1,.005);   /* 전직: 쿵 → 밝게 올라가는 화음 → 오래 남는 반짝임 (휴대폰 스피커에서도 들리게 높은 음 위주) */
+    [523,659,784,1046,1318,1568].forEach((f,i)=>_tone(o,'triangle',f*p,f*p,t+.1+i*.075,.6,.42,.008));
+    [1046,1318,1568,2093].forEach(f=>_tone(o,'sine',f*p,f*p,t+.56,1.7,.24,.03));[784,1046].forEach(f=>_tone(o,'triangle',f*p,f*p,t+.56,1.2,.2,.03));
+    _noise(o,'highpass',5000,9000,t+.45,1.4,.2,1,.12);},
   quest:(o,t,p)=>{[392,523,659,784].forEach((f,i)=>_tone(o,'triangle',f*p,f*p,t+i*.11,.55,.3,.012));[523,784].forEach(f=>_tone(o,'sine',f*p,f*p,t+.46,1.1,.18,.02));},
   ui:(o,t,p)=>{_tone(o,'sine',900*p,900*p,t,.04,.25);},
   talk:(o,t,p)=>{_tone(o,'square',p*220,p*215,t,.045,.12,.003);},
@@ -10192,12 +10196,7 @@ function thChooseBook(j,nm){if(!P||!P.needBook)return;
   log(`${P.name}, ${JOBS[j].name}의 길을 걷기 시작했다.`,'sys');
   updateHud();renderOnline();save();publishPresence(true);
   if(typeof mqStart==='function')mqStart('kyle1');
-  /* 마지막 말이 다 나오면 잠깐 읽을 틈을 두고 대화를 스스로 닫는다 */
-  const line=`${nm}라… 그렇다면 자네는 모험가겠군. 광장의 카일에게 가 보게.`,who=npcCur;
-  /* 이 말에는 '이야기'·'그만두기'를 띄우지 않는다: F를 누르거나 2초가 지나면 그대로 끝 */
-  npcCloseQuiet=1200;
-  renderNpc(line,()=>{queueMicrotask(()=>{if(npcCur===who&&$('#npcSay').dataset.full===line){$('#npcActs').innerHTML='';}});
-    setTimeout(()=>{if(mode==='dialog'&&npcCur===who&&$('#npcSay').dataset.full===line&&!typing)closeNpc();},2000);});}
+  npcEndLine(`${nm}라… 그렇다면 자네는 모험가겠군. 광장의 카일에게 가 보게.`);}   /* 마지막 말: 버튼 없이, 2초 뒤(또는 F) 대화가 끝난다 */
 /* 매 프레임: 벽난로 불빛이 흔들리고, 집을 나서면 튀르팽은 광장으로 */
 function thouseTick(t){if(!player)return;const inH=OR.inTHouse(player.position.x,player.position.z);
   if(THOUSE_ST.group&&THOUSE_ST.group.visible!==inH)THOUSE_ST.group.visible=inH;
@@ -11944,8 +11943,12 @@ function openNpc(n){
   if(n.onOpen&&n.onOpen())return;
   renderNpc(n.lines[n.li%n.lines.length]);
 }
-let npcQuietUntil=0,npcCloseQuiet=350;   /* 대화를 닫은 그 키(F)로 곧바로 다시 말을 걸지 않게 */
-function closeNpc(){npcQuietUntil=Math.max(npcQuietUntil,performance.now()+npcCloseQuiet);npcCloseQuiet=350;clearInterval(typeT);typing=false;npcPageNext=null;if(viewModel)viewModel.visible=true;$('#npc').hidden=true;$('#npcChoices').hidden=true;document.body.classList.remove('talking');mode='world';syncLockTip();relock();focusGame();if(typeof thAfterClose==='function')thAfterClose();}
+let npcQuietUntil=0,npcCloseQuiet=350,npcEnding=null;
+/* 퀘스트 대화의 마지막 말: 버튼 없이 다 나오고 2초 뒤(또는 F)에 대화가 끝난다 */
+function npcEndLine(text){const who=npcCur;renderNpc(text,()=>{queueMicrotask(()=>{if(npcEnding===who){$('#npcActs').innerHTML='';$('#npcChoices').hidden=true;}});
+    setTimeout(()=>{if(mode==='dialog'&&npcCur===who&&npcEnding===who&&!typing)closeNpc();},2000);});
+  npcEnding=who;npcCloseQuiet=1200;}   /* 대화를 닫은 그 키(F)로 곧바로 다시 말을 걸지 않게 */
+function closeNpc(){npcEnding=null;npcQuietUntil=Math.max(npcQuietUntil,performance.now()+npcCloseQuiet);npcCloseQuiet=350;clearInterval(typeT);typing=false;npcPageNext=null;if(viewModel)viewModel.visible=true;$('#npc').hidden=true;$('#npcChoices').hidden=true;document.body.classList.remove('talking');mode='world';syncLockTip();relock();focusGame();if(typeof thAfterClose==='function')thAfterClose();}
 $('#npcClose').onclick=e=>{e.stopPropagation();closeNpc();};
 addEventListener('keydown',e=>{if($('#npc').hidden)return;const c=codeOf(e);
   if(c==='Escape')closeNpc();
@@ -11955,10 +11958,10 @@ addEventListener('keydown',e=>{if($('#npc').hidden)return;const c=codeOf(e);
     const n=+e.code.slice(-1)-1,ch=$('#npcChoices');
     const list=!ch.hidden&&ch.querySelector('#npcBody button')?[...ch.querySelectorAll('#npcBody button')]:[...$('#npcActs').querySelectorAll('button')];
     const b=list[n];if(b&&!b.disabled)b.click();}
-  else if((c==='KeyF'||c==='Space'||e.key==='Enter')&&!e.repeat){e.preventDefault();if(typing)finishTyping();else if(nextNpcPage());else if(!npcCur.acts.length)closeNpc();}});
-$('#npc').querySelector('.talk').addEventListener('click',e=>{if(e.target.closest('button'))return;if(typing)finishTyping();else nextNpcPage();});
+  else if((c==='KeyF'||c==='Space'||e.key==='Enter')&&!e.repeat){e.preventDefault();if(typing)finishTyping();else if(npcSecondActive());else if(nextNpcPage());else if(npcEnding||!npcCur.acts.length)closeNpc();}});   /* 골라야 할 것이 떠 있으면 F로 넘어가지 않는다 */
+$('#npc').querySelector('.talk').addEventListener('click',e=>{if(e.target.closest('button'))return;if(typing)finishTyping();else if(npcSecondActive());else if(!nextNpcPage()&&npcEnding)closeNpc();});
 function npcBtn(box,t,f,cls,dis){const b=document.createElement('button');b.type='button';b.textContent=t;if(cls)b.className=cls;b.disabled=!!dis;b.onclick=e=>{e.stopPropagation();f();};box.appendChild(b);return b;}
-function renderNpc(text,extra){
+function renderNpc(text,extra){npcEnding=null;
   const n=npcCur;$('#npcName').textContent=n.name;$('#npcRole').textContent=n.role;$('#npcRole').hidden=!n.role;
   const body=$('#npcBody');body.innerHTML='';delete body.dataset.noskip;const acts=$('#npcActs');acts.innerHTML='';$('#npcChoices').hidden=true;
   typeText($('#npcSay'),text,()=>{
@@ -14900,6 +14903,11 @@ const BOOKS={
     '"화살은 멀리 날아가지만, 쏘는 사람은 제자리에 서 있어야 한다. 흔들리지 않는 것, 그게 전부다."',
     '마지막 장 사이에는 낡은 깃털 하나가 끼워져 있다. 그의 첫 화살에 달려 있던 깃털이다.']},
 };
+/* 빈칸에 고른 직업에 따라 그 뒤 쪽들이 바뀐다 (고르기 전에는 pages 그대로) */
+BOOKS.book_jerier.alt={swordsman:['그는 방패를 오래 들지 않았다. "막는 동안에는 벨 수 없다." 그는 두 손으로 검을 쥐고 적의 한가운데로 걸어 들어갔다.','제리에의 검은 크게 돌았다. 한 번 휘두르면 앞에 선 셋이 물러났고, 물러선 자리에는 그가 먼저 서 있었다.','어느 해 겨울, 성벽 아래까지 몰려온 몬스터 무리 앞에서 그는 사흘 밤낮 검을 내려찍었다. 나흘째 아침, 성문 앞에 서 있는 것은 그 하나뿐이었다.','마지막 장에는 서툰 글씨로 한 줄이 적혀 있다. "검은 망설이는 손을 기다려 주지 않는다."'],guardian:['그는 검보다 방패를 먼저 들었다. 커다란 방패 뒤에는 늘 다친 동료와 겁먹은 상인들이 있었다.','몬스터가 덮쳐 오면 제리에는 방패를 땅에 박고 버텼다. 부딪친 쪽이 먼저 나가떨어졌다.','어느 해 겨울, 성벽 아래까지 몰려온 몬스터 무리를 막으려고 그는 사흘 밤낮을 성문 앞에 서 있었다. 나흘째 아침, 성문은 한 번도 열리지 않은 채였다.','마지막 장에는 서툰 글씨로 한 줄이 적혀 있다. "앞에 선 사람이 쓰러지지 않으면, 뒤에 선 사람들은 집으로 돌아간다."']};
+BOOKS.book_ansei.alt={cleric:['앙세이는 마력을 상처 위에 얹는 법을 먼저 익혔다. 그의 손이 지나간 자리에는 피가 멎고 숨이 돌아왔다.','그는 다친 동료를 두고 먼저 물러난 적이 없었다. 마력이 다하면 지팡이로 버텼고, 지팡이가 부러지면 말로 동료들을 붙잡았다.','한번은 무너진 폐허에 갇힌 아이들을 구하러 들어가, 내려앉는 천장을 하룻밤 내내 빛으로 받치고 있었다. 아침에 걸어 나온 그의 머리는 하얗게 세어 있었다.','마지막 장에는 친구에게 남긴 쪽지가 끼워져 있다. "빛은 적을 태우기 전에, 곁에 선 사람부터 비춰야 하네."'],wizard:['앙세이는 불씨를 키우는 일을 오래 미뤄 두었다. 그러나 한번 키우기로 마음먹은 뒤로는, 하늘에서 떨어지는 불까지 다루게 되었다.','그의 번개는 늘 한 박자 늦게 떨어졌다. 적이 도망칠 곳을 모두 고른 뒤에야, 바로 그 자리에.','붉은 바위 협곡을 메운 몬스터 무리 앞에서 그는 눈보라로 길을 막고, 남은 마력을 모두 모아 불덩이 하나를 떨어뜨렸다. 협곡은 사흘 동안 식지 않았다.','마지막 장에는 친구에게 남긴 쪽지가 끼워져 있다. "힘을 크게 쓸수록 쓸 곳은 작게 고르게. 그게 내가 배운 전부라네."']};
+BOOKS.book_jaerang.alt={thief:['재랭의 허리춤에는 늘 그물 한 뭉치와 포션 몇 병이 매달려 있었다. 붙잡고, 들이켜고, 다시 붙잡았다.','그는 적이 가진 것부터 빼앗았다. 무기든, 길이든, 숨 돌릴 틈이든.','모래 언덕 너머에서 길 잃은 아이들이 몬스터에게 쫓기던 날, 재랭은 그물로 무리를 한데 묶어 두고 아이들을 하나씩 업어 날랐다.','마지막 장에 재랭은 이렇게 썼다. "이 일지를 줍는 녀석에게. 빼앗는 것도 기술이다. 다만 빈손으로 남는 사람은 만들지 마라."'],assassin:['재랭은 싸우기 전에 표식부터 남겼다. 수리검 하나가 박힌 순간, 그의 싸움은 이미 끝나 있었다.','그는 거꾸로 쥔 단검을 좋아했다. 그림자 속에서 칼날이 한 번 빛나면, 다시 빛날 일은 없었다.','어느 밤 하레나 둘레 길에서 사람을 노리던 몬스터 무리가 하나씩 사라졌다. 아침에 남은 것은 모래 위의 작은 표식들뿐이었다.','마지막 장에 재랭은 이렇게 썼다. "이 일지를 줍는 녀석에게. 보이지 않는 칼이 가장 깊이 들어간다. 그리고 지붕 위는 생각보다 미끄럽다."']};
+BOOKS.book_olivier.alt={hunter:['올리비에는 화살보다 덫을 먼저 놓았다. 짐승이 지나갈 길을 읽고, 그 길 위에서 기다렸다.','그의 화살촉에는 늘 독이 발라져 있었다. 한 발에 쓰러지지 않은 짐승도 몇 걸음 못 가 주저앉았다.','사막 늑대 떼가 마을 우리를 노리던 겨울, 올리비에는 덫 서른 개로 늑대들을 골짜기 하나에 몰아넣었다. 그해 마을의 가축은 한 마리도 줄지 않았다.','마지막 장 사이에는 낡은 깃털 하나가 끼워져 있다. 옆에는 이렇게 적혀 있다. "길을 아는 사냥꾼은 쫓지 않는다. 기다린다."'],sniper:['동료들은 그를 \'마지막 화살\'이라 불렀다. 모두가 활을 내려놓은 뒤에도 그는 한 발을 더 남겨 두었기 때문이다.','그는 남들이 과녁을 보지도 못하는 거리에서 시위를 당겼다. 숨을 멈추고, 바람이 잦아드는 단 한순간만을 기다렸다.','"화살은 멀리 날아가지만, 쏘는 사람은 제자리에 서 있어야 한다. 흔들리지 않는 것, 그게 전부다."','마지막 장 사이에는 낡은 깃털 하나가 끼워져 있다. 그의 첫 화살에 달려 있던 깃털이다.']};
 for(const id in BOOKS){const B=BOOKS[id];ITEMS[id]={name:`${B.owner}의 책`,short:'책',kind:'book',tier:5,book:id,desc:'튀르팽이 건넨 옛 친구의 책'};}
 function mqStart(id,quiet){if(!P||!MAINQ[id])return;P.mq=id;updateQuestHud();save();if(!quiet){log(`메인 퀘스트: ${MAINQ[id].title}`,'sys');mqStartFx(id);}}
 /* 새 메인 퀘스트: 화면 위쪽에 금빛 알림 + 소리, 퀘스트 창의 메인 칸이 잠깐 빛난다. 대화 중이면 대화가 끝난 뒤에 */
@@ -14920,16 +14928,16 @@ function mqLevelCheck(quiet){if(!P||P.needBook||P.mq)return;const al=advLv(P.job
 function mqKyle(n){n.mqLock=true;
   showPages(['처음 보는 얼굴이구나. 어디서 왔니?'],0,text=>renderNpc(text,box=>{box.dataset.noskip='1';
     for(const t of ['모르겠어요.','…기억이 나지 않아요.','저도 잘 모르겠어요.'])npcBtn(box,t,()=>{
-      showPages(['그래?','모험가로 강해져서 갈 수 있는 곳이 많아지면, 어디서 왔는지도 알 수 있을 거다.','그러니 여기서 강해져라. 의뢰를 하다 보면 강해질 수 있을 거야.'],0,last=>{n.mqLock=false;mqComplete('kyle1');renderNpc(last);});},'pri wide');}));}
+      showPages(['그래?','모험가로 강해져서 갈 수 있는 곳이 많아지면, 어디서 왔는지도 알 수 있을 거다.','그러니 여기서 강해져라. 의뢰를 하다 보면 강해질 수 있을 거야.'],0,last=>{n.mqLock=false;mqComplete('kyle1');npcEndLine(last);});},'pri wide');}));}
 /* ---- 튀르팽: 옛 친구의 책 ---- */
 function mqTurpin(n){const base=baseOf(P.job),bk=BASE_BOOK[base]||'그 책',id=OLD_BOOK[base];n.mqLock=true;
   showPages([`자네의 품속에 있는 책이 ${bk}라는 것을 알게 된 후, 옛 친구의 책이 기억났네.`,'그대에게 주는 게 낫겠네.'],0,last=>{n.mqLock=false;
     if(id&&!P.bag.some(e=>e.id===id)){P.bag.push({id,n:1});invDirty();log(`[${ITEMS[id].name}]을(를) 받았다.`,'good');}
-    THOUSE_ST.hold=true;mqComplete('turpin30');renderNpc(last);});}
+    THOUSE_ST.hold=true;mqComplete('turpin30');npcEndLine(last);});}
 /* ---- 책 읽기: 진짜 책처럼 표지를 넘기고, 한 장씩 넘긴다 ----
    넓은 화면은 두 쪽 펼침(왼쪽 = 속표지, 오른쪽 = 1쪽 …), 좁은 화면은 한 쪽씩 */
 let bookCur=null;
-function bookSeq(B){return ['__title',...B.pages.map((_,k)=>k),'__end'];}
+function bookSeq(B){return ['__title',...B.pages.map((_,k)=>k)];}
 function bookWide(){return innerWidth>=720&&innerHeight>=420;}
 function openBook(id){const B=BOOKS[id];if(!B||!P)return;if(!$('#inv').hidden)closeInv();
   let el=document.getElementById('bookWin');
@@ -14949,19 +14957,17 @@ function openBook(id){const B=BOOKS[id];if(!B||!P)return;if(!$('#inv').hidden)cl
 // 한 쪽의 내용
 function bookPage(k){const C=bookCur,B=BOOKS[C.id],seq=bookSeq(B),it=seq[k],d=document.createElement('div');d.className='bk-in';
   if(it==='__title'){d.classList.add('bk-tp');d.innerHTML='<div class="bk-orn"></div><div class="bk-tt"></div><div class="bk-ts">그의 싸움과 그의 길에 대하여</div><div class="bk-orn b"></div>';d.querySelector('.bk-tt').textContent=`${B.owner}의 책`;return d;}
-  if(it==='__end'||it==null){d.classList.add('bk-tp');if(it==='__end')d.innerHTML='<div class="bk-end">— 끝 —</div>';return d;}
-  const raw=B.pages[it],blank=raw.includes('{빈칸}'),name=C.pick?JOBS[C.pick].name:null;
+  if(it==null){d.classList.add('bk-tp');return d;}
+  const bi=B.pages.findIndex(s=>s.includes('{빈칸}')),alt=C.pick&&B.alt&&B.alt[C.pick],raw=alt&&it>bi&&alt[it-bi-1]?alt[it-bi-1]:B.pages[it],blank=raw.includes('{빈칸}'),name=C.pick?JOBS[C.pick].name:null;
   const bat=s=>((s.charCodeAt(s.length-1)-0xac00)%28)>0;
   const tx=document.createElement('p');tx.className='bk-tx'+(it===0?' first':'');
   if(blank){const [a,b]=raw.split('{빈칸}');tx.append(a);
-    // 빈칸 자체를 눌러 들어갈 말을 고른다 (빈칸 바로 아래에 고를 말이 펼쳐진다)
-    const u=document.createElement(C.canAdv?'button':'span');u.className='bk-blank'+(name?' on':'')+(C.canAdv?' pickable':'');if(C.canAdv)u.type='button';
-    u.append(name||'　　　');if(C.canAdv){const cr=document.createElement('i');cr.className='bk-caret';cr.textContent='▾';u.append(cr);
-      u.onclick=e=>{e.stopPropagation();C.pop=!C.pop;bookRender();};
-      if(C.pop){const pop=document.createElement('span');pop.className='bk-pop';
-        for(const j of JOBS[B.base].adv){const o=document.createElement('button');o.type='button';o.textContent=JOBS[j].name;o.setAttribute('aria-pressed',C.pick===j);
-          o.onclick=e=>{e.stopPropagation();C.pick=j;C.pop=false;bookRender();};pop.append(o);}
-        u.append(pop);}}
+    // 빈칸을 누르면 그 자리에 연한 글씨로 고를 말이 가로로 적힌다. 하나를 누르면 진하게 써진다
+    const u=document.createElement('span');u.className='bk-blank'+(name?' on':'')+(C.canAdv?' pickable':'')+(C.canAdv&&C.pop?' open':'');
+    if(C.canAdv&&C.pop){JOBS[B.base].adv.forEach((j,k)=>{if(k){const s=document.createElement('span');s.className='bk-sep';s.textContent='/';u.append(s);}
+        const o=document.createElement('button');o.type='button';o.className='bk-opt'+(C.pick===j?' on':'');o.textContent=JOBS[j].name;
+        o.onclick=e=>{e.stopPropagation();C.pick=j;C.pop=false;bookRender();};u.append(o);});}
+    else{u.append(name||'　　　');if(C.canAdv){u.setAttribute('role','button');u.tabIndex=0;u.onclick=e=>{e.stopPropagation();C.pop=true;bookRender();};}}
     tx.append(u);tx.append((name?(bat(name)?'이었다':'였다'):'이었다')+b.replace(/^이었다/,''));}
   else tx.textContent=raw;
   d.append(tx);
