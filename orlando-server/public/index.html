@@ -10189,7 +10189,10 @@ function thChooseBook(j,nm){if(!P||!P.needBook)return;
   if(typeof mqStart==='function')mqStart('kyle1');
   /* 마지막 말이 다 나오면 잠깐 읽을 틈을 두고 대화를 스스로 닫는다 */
   const line=`${nm}라… 그렇다면 자네는 모험가겠군. 광장의 카일에게 가 보게.`,who=npcCur;
-  renderNpc(line,()=>{setTimeout(()=>{if(mode==='dialog'&&npcCur===who&&$('#npcSay').dataset.full===line&&!typing)closeNpc();},2000);});}
+  /* 이 말에는 '이야기'·'그만두기'를 띄우지 않는다: F를 누르거나 2초가 지나면 그대로 끝 */
+  npcCloseQuiet=1200;
+  renderNpc(line,()=>{queueMicrotask(()=>{if(npcCur===who&&$('#npcSay').dataset.full===line){$('#npcActs').innerHTML='';}});
+    setTimeout(()=>{if(mode==='dialog'&&npcCur===who&&$('#npcSay').dataset.full===line&&!typing)closeNpc();},2000);});}
 /* 매 프레임: 벽난로 불빛이 흔들리고, 집을 나서면 튀르팽은 광장으로 */
 function thouseTick(t){if(!player)return;const inH=OR.inTHouse(player.position.x,player.position.z);
   if(THOUSE_ST.group&&THOUSE_ST.group.visible!==inH)THOUSE_ST.group.visible=inH;
@@ -11819,7 +11822,7 @@ function faceMe(obj){if(!obj||!player)return;if(!obj.userData.baseQ)obj.userData
 function easeFacing(dt){for(const o of facing){const talking=mode==='dialog';o.userData.faceT+=dt;
   const target=talking?o.userData.faceQ:o.userData.baseQ;o.quaternion.slerp(target,Math.min(1,dt*(talking?8:2.5)));
   if(!talking&&o.quaternion.angleTo(o.userData.baseQ)<.01){o.quaternion.copy(o.userData.baseQ);facing.delete(o);}}}
-function doInteract(){if(interactTarget&&interactTarget.startsWith('portal:')){usePortal(+interactTarget.split(':')[1]);return;}if(interactTarget&&interactTarget.startsWith('chest:')){openBossChest(+interactTarget.slice(6));interactTarget=null;return;}if(interactTarget&&interactTarget.startsWith('player:')){openPlayerMenu(interactTarget.slice(7));return;}if(interactTarget&&interactTarget.startsWith('npc:')){const n=NPCS.find(q=>q.id===interactTarget.slice(4));if(n){faceMe(n.mesh);openNpc(n);}return;}if(interactTarget==='shop'){faceMe(merchant.userData.npc);openShop('village');}else if(interactTarget==='mentor'){faceMe(mentor);openMentor();}else if(interactTarget==='door_in')enterDungeon();else if(interactTarget==='door_out')leaveDungeon();}
+function doInteract(){if(performance.now()<npcQuietUntil)return;if(interactTarget&&interactTarget.startsWith('portal:')){usePortal(+interactTarget.split(':')[1]);return;}if(interactTarget&&interactTarget.startsWith('chest:')){openBossChest(+interactTarget.slice(6));interactTarget=null;return;}if(interactTarget&&interactTarget.startsWith('player:')){openPlayerMenu(interactTarget.slice(7));return;}if(interactTarget&&interactTarget.startsWith('npc:')){const n=NPCS.find(q=>q.id===interactTarget.slice(4));if(n){faceMe(n.mesh);openNpc(n);}return;}if(interactTarget==='shop'){faceMe(merchant.userData.npc);openShop('village');}else if(interactTarget==='mentor'){faceMe(mentor);openMentor();}else if(interactTarget==='door_in')enterDungeon();else if(interactTarget==='door_out')leaveDungeon();}
 let warping=false;
 function warpTo(x,z,yaw,msg){
   if(warping)return;warping=true;
@@ -11932,7 +11935,8 @@ function openNpc(n){
   if(n.onOpen&&n.onOpen())return;
   renderNpc(n.lines[n.li%n.lines.length]);
 }
-function closeNpc(){clearInterval(typeT);typing=false;npcPageNext=null;if(viewModel)viewModel.visible=true;$('#npc').hidden=true;$('#npcChoices').hidden=true;document.body.classList.remove('talking');mode='world';syncLockTip();relock();focusGame();if(typeof thAfterClose==='function')thAfterClose();}
+let npcQuietUntil=0,npcCloseQuiet=350;   /* 대화를 닫은 그 키(F)로 곧바로 다시 말을 걸지 않게 */
+function closeNpc(){npcQuietUntil=Math.max(npcQuietUntil,performance.now()+npcCloseQuiet);npcCloseQuiet=350;clearInterval(typeT);typing=false;npcPageNext=null;if(viewModel)viewModel.visible=true;$('#npc').hidden=true;$('#npcChoices').hidden=true;document.body.classList.remove('talking');mode='world';syncLockTip();relock();focusGame();if(typeof thAfterClose==='function')thAfterClose();}
 $('#npcClose').onclick=e=>{e.stopPropagation();closeNpc();};
 addEventListener('keydown',e=>{if($('#npc').hidden)return;const c=codeOf(e);
   if(c==='Escape')closeNpc();
