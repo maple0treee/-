@@ -14782,7 +14782,7 @@ function loopBody(){
   if(mode==='title'){const a=tAll*.05;camera.position.set(Math.cos(a)*30,14,Math.sin(a)*30);camera.lookAt(0,2,0);apPreviewTick(dt);}
   else if(mode==='world')updateWorld(dt);
   else if(mode==='dialog'){if(P&&P.bowDraw)bowCancel();if(P&&P.ray)rayEnd();if(P&&P.flame){P.flame=null;sfxStop('mg_fire');if(myMoId==='flame'){swingT=1;myMo=null;myMoId='';}}updateViewModel(dt,0);updateNetMonsters(dt);for(const m of monsters)m.tag.hidden=true;}
-  updateFx(dt);VFX.update(dt);updateAmbient(dt);zoneMotes(dt);updateOthers(dt);animateDungeonLights(tAll);updatePortals(tAll);
+  updateFx(dt);VFX.update(dt);updateAmbient(dt);if(typeof questMarkTick==='function')questMarkTick(dt);zoneMotes(dt);updateOthers(dt);animateDungeonLights(tAll);updatePortals(tAll);
   if(mode!=='title'){const pp=player?player.position:camera.position;LightPool.update(dt,pp);InstChunks.update(camera.position);mapSplitTick(dt);for(const m of monsters)if(m.mesh)setFarHidden(m.mesh,m.mesh.position.distanceToSquared(camera.position)>95*95);}
   Perf.tick();fpsTick();
   updateHazards(dt);updateTeles(dt);for(const f of lairFlames)f.scale.set(1+Math.sin(tAll*11+f.position.z)*.12,1+Math.sin(tAll*7+f.position.z)*.2,1);renderMirror(dt);
@@ -14801,9 +14801,28 @@ loop();
    kyle1: 책을 고른 뒤 → 카일을 찾아가기 / turpin30: 기본 직업 Lv 30 → 튀르팽 찾아가기 (옛 친구의 책을 받는다)
    책(kind:'book')은 소지품에서 '읽기'로 읽는다. 옛 친구의 책을 끝까지 읽으면 전직한다. */
 const MAINQ={
-  kyle1:{title:'카일을 찾아가기',goal:'하레나 광장의 카일에게 말을 건다'},
-  turpin30:{title:'튀르팽 찾아가기',goal:'튀르팽의 집에 찾아간다'},
+  kyle1:{title:'카일을 찾아가기',goal:'하레나 광장의 카일에게 말을 건다',npc:'kyle'},
+  turpin30:{title:'튀르팽 찾아가기',goal:'튀르팽의 집에 찾아간다',npc:'turpin'},
 };
+/* 메인 퀘스트의 주요 인물: 머리 위에 큰 금빛 느낌표가 뜬다. 안개 속에서도 멀리서 보이고, 멀수록 조금 커진다 */
+const QMARK={g:null,n:null};
+function qmarkMake(){const g=new THREE.Group();g.userData.noMap=1;
+  const gold=new THREE.MeshBasicMaterial({color:0xffd34a,fog:false,depthTest:false,depthWrite:false,transparent:true}),edge=new THREE.MeshBasicMaterial({color:0x3a2608,fog:false,side:THREE.BackSide,depthTest:false,depthWrite:false,transparent:true});   /* 벽·분수 뒤에 있어도 보이게 */
+  const bar=new THREE.CylinderGeometry(.085,.05,.4,12),dot=new THREE.SphereGeometry(.065,14,10);
+  for(const [geo,y] of [[bar,.25],[dot,-.05]]){const a=new THREE.Mesh(geo,gold);a.position.y=y;const b=new THREE.Mesh(geo,edge);b.position.y=y;b.scale.setScalar(1.28);a.renderOrder=999;b.renderOrder=998;g.add(b,a);}
+  const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d'),rg=x.createRadialGradient(32,32,0,32,32,32);rg.addColorStop(0,'rgba(255,220,120,.85)');rg.addColorStop(.45,'rgba(255,190,70,.3)');rg.addColorStop(1,'rgba(255,170,40,0)');x.fillStyle=rg;x.fillRect(0,0,64,64);
+  const halo=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,fog:false}));halo.scale.setScalar(1.1);halo.position.y=.12;halo.renderOrder=997;halo.material.depthTest=false;g.add(halo);g.userData.halo=halo;
+  g.visible=false;scene.add(g);return g;}
+function questMarkTick(dt){if(!questMarkTick.ok)return;if(!QMARK.g)QMARK.g=qmarkMake();const g=QMARK.g;
+  const M=P&&P.mq&&MAINQ[P.mq],n=M&&M.npc?NPCS.find(q=>q.id===M.npc):null,ok=n&&!(n.hideIf&&n.hideIf())&&n.mesh&&player;
+  if(QMARK.n&&QMARK.n!==n&&QMARK.n.mesh.userData.marker)QMARK.n.mesh.userData.marker.visible=true;   /* 끝난 퀘스트 인물은 원래 작은 표시로 */
+  QMARK.n=n;const d=ok?Math.hypot(camera.position.x-n.mesh.position.x,camera.position.z-n.mesh.position.z):1e9;
+  g.visible=!!ok&&d<160&&mode!=='title';if(!g.visible)return;
+  if(n.mesh.userData.marker)n.mesh.userData.marker.visible=false;
+  const t=tAll,s=Math.min(10,Math.max(1,d/7))   /* 멀어져도 화면에서 비슷한 크기로 */,p=n.mesh.position,hy=(n.mesh.userData.markerY??(n.look&&n.look.small?2.2:2.6))+.25;
+  g.position.set(p.x,p.y+hy+(s-1)*.25+Math.sin(t*2.4)*.07,p.z);g.scale.setScalar(s*1.2*(1+Math.sin(t*4)*.04));
+  g.rotation.y=Math.atan2(camera.position.x-p.x,camera.position.z-p.z);g.userData.halo.material.opacity=.75+Math.sin(t*3)*.2;}
+questMarkTick.ok=1;   /* 이 파일이 읽힌 뒤부터 돈다 */
 const BASE_BOOK={warrior:'전사의 서',mage:'마법사의 서',rogue:'도적의 서',archer:'궁수의 서'};
 const OLD_BOOK={warrior:'book_jerier',mage:'book_ansei',rogue:'book_jaerang',archer:'book_olivier'};
 /* 옛 친구의 책: pages 안의 '{빈칸}'은 전직할 직업을 직접 골라 채운다 */
