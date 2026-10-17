@@ -6308,13 +6308,14 @@ function sfxSkill(S,id){
 
 /* ---------- NPC 목소리: 글자가 하나 나올 때마다 그 글자의 모음 소리로 짧게 웅얼거린다 ----------
    한글이면 모음(ㅏ·ㅔ·ㅓ·ㅗ·ㅜ·ㅡ·ㅣ)에 맞춘 두 공명(포먼트)으로 거른 소리를 낸다. 사람마다 높이·빠르기·거친 정도가 다르다 */
-const VOICE={kyle:{p:128,sp:46},sera:{p:104,rasp:.35,sp:58,fs:.95},turpin:{p:104,rasp:.35,sp:58,fs:.95},bron:{p:98,rasp:.3,sp:52},torgan:{p:84,rasp:.22,sp:50,fs:.9},
-  rowen:{p:112,sp:46},messenger:{p:132,sp:50,fs:1.02},mina:{p:236,sp:42,fs:1.16},hanna:{p:208,sp:45,fs:1.12},elis:{p:252,sp:46,fs:1.18,air:.25},knight:{p:214,sp:46,fs:1.12},
-  timo:{p:320,sp:40,fs:1.32},mentor:{p:118,sp:50}};
+/* vol: 목소리마다 들리는 크기를 튀르팽에 맞춘 값 (거친 숨소리가 없는 목소리는 더 작게 들려서 키운다) */
+const VOICE={kyle:{p:128,sp:46,vol:1.75},sera:{p:104,rasp:.35,sp:58,fs:.95,vol:1.06},turpin:{p:104,rasp:.35,sp:58,fs:.95},bron:{p:98,rasp:.3,sp:52,vol:1.13},torgan:{p:84,rasp:.22,sp:50,fs:.9,vol:1.23},
+  rowen:{p:112,sp:46,vol:1.72},messenger:{p:132,sp:50,fs:1.02,vol:1.62},mina:{p:236,sp:42,fs:1.16,vol:1.31},hanna:{p:208,sp:45,fs:1.12,vol:1.51},elis:{p:252,sp:46,fs:1.18,air:.25},knight:{p:214,sp:46,fs:1.12,vol:1.48},
+  timo:{p:320,sp:40,fs:1.32,vol:1.5},mentor:{p:118,sp:50,vol:1.72}};
 const VW_F={a:[800,1200],e:[520,1850],eo:[600,1000],o:[460,820],u:[360,760],eu:[420,1450],i:[310,2250]};
 const VW_OF=['a','e','a','e','eo','e','eo','e','o','a','e','e','o','u','eo','e','i','u','eu','eu','i'];
 function voiceOf(n){if(!n)return {p:130,sp:46};const v=VOICE[n.id];if(v)return v;
-  const h=[...String(n.id||n.name||'')].reduce((a,c)=>a*31+c.charCodeAt(0)>>>0,7);return {p:[108,122,136,150][h%4],sp:46,rasp:(h>>3)%3?0:.15};}
+  const h=[...String(n.id||n.name||'')].reduce((a,c)=>a*31+c.charCodeAt(0)>>>0,7),i=h%4,r=(h>>3)%3?0:.15;return {p:[108,122,136,150][i],sp:46,rasp:r,vol:[1.68,1.73,1.61,1.45][i]*(r?.84:1)};}
 function npcVoice(ch,v,q,at){const X=SFX.ctx;if(!X||!SFX.voice||OPT.voice<=0||!ch)return;const c=ch.charCodeAt(0);
   let vw='eo',coda=0;if(c>=0xAC00&&c<=0xD7A3){const k=c-0xAC00;vw=VW_OF[Math.floor(k/28)%21];coda=k%28;}
   else if(/[0-9A-Za-z\u3131-\u318E]/.test(ch))vw='eo';else return;
@@ -6336,8 +6337,10 @@ const BGM={vol:.38,cur:null,want:null,els:{},fade:1.6,
 function bgmEl(k){let a=BGM.els[k];if(!a){a=BGM.els[k]=new Audio(BGM.files[k]);a.loop=true;a.preload='auto';a.volume=0;a._v=0;}return a;}
 function bgmZone(z){BGM.want=z&&BGM.zone[z]||null;if(BGM.want)bgmEl(BGM.want);}
 function bgmTick(dt){const step=dt/BGM.fade,hid=document.hidden;
+  /* NPC와 이야기하는 동안은 음악을 낮춰 목소리가 들리게 */
+  const dk=document.body.classList.contains('talking')?.4:1;BGM.duck=BGM.duck==null?dk:BGM.duck+(dk-BGM.duck)*Math.min(1,dt*3);
   for(const k in BGM.els){const a=BGM.els[k],on=k===BGM.want&&!hid;
-    a._v=Math.max(0,Math.min(1,a._v+(on?step:-step)));const v=a._v*a._v*BGM.vol*OPT.bgm;if(Math.abs(a.volume-v)>.002)a.volume=v;
+    a._v=Math.max(0,Math.min(1,a._v+(on?step:-step)));const v=a._v*a._v*BGM.vol*OPT.bgm*BGM.duck;if(Math.abs(a.volume-v)>.002)a.volume=v;
     if(on&&a.paused&&!a._try){a._try=1;a.play().then(()=>{a._try=0;}).catch(()=>{a._try=0;a._blocked=1;});}
     if(!on&&a._v<=0&&!a.paused){a.pause();}}}
 /* 자동 재생이 막혔으면 다음 클릭·키에서 다시 */
