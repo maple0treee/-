@@ -244,7 +244,7 @@
     // 무거운 의뢰: 한 종류를 많이, 또는 두 종류를 함께
     const two = tys.length > 1 && rnd() < 0.45, rare = rnd() < 0.15;
     const pick = tys.slice().sort(() => rnd() - 0.5).slice(0, two ? 2 : 1);
-    const goals = pick.map((ty, k) => ({ ty, need: (two ? 12 : 22) + Math.floor(rnd() * (two ? 10 : 16)) - (k ? 4 : 0), have: 0 }));
+    const goals = pick.map((ty, k) => ({ ty, need: (two ? 8 : 15) + Math.floor(rnd() * (two ? 7 : 11)) - (k ? 3 : 0), have: 0 }));
     let exp = 0; for (const g of goals) { const L2 = MON[g.ty].fixed ? MON[g.ty].lv : lv; exp += monStats(g.ty, L2).exp * g.need; }
     const tot = goals.reduce((a, g) => a + g.need, 0);
     const gv = B.givers[Math.floor(rnd() * B.givers.length)];
