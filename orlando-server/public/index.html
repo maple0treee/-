@@ -8802,7 +8802,7 @@ function makeCitizens(cx,cz){
     segs.forEach((sg,i)=>{const ts=[...new Set(cuts[i].map(t=>Math.round(t*200)/200))].sort((a,b)=>a-b);let prev=null;for(const t of ts){const n=node(sg.a[0]+(sg.b[0]-sg.a[0])*t,sg.a[1]+(sg.b[1]-sg.a[1])*t);if(prev!==null)addE(prev,n,sg.w);prev=n;}});
     return {nodes,edges};})();
   /* 사람 하나의 하루: 길 그물 위를 멋대로 걷다가 멈춰 서고, 다시 걷는다 (왕복 아님). 일정은 시계로 되풀이된다 */
-  const roam=(ids,mode,home)=>{const N=GR.nodes,E=GR.edges;if(!E.length)return null;
+  const roam=(ids,mode,home)=>{if(mode==='carry')mode='walk';   /* 두 손을 앞으로 든 채 걷는 자세는 쓰지 않는다 */const N=GR.nodes,E=GR.edges;if(!E.length)return null;
     let e0;if(home!==undefined){let best=0,bd=1e9;for(let k=0;k<E.length;k++){const q=E[k],mx=(N[q.a].x+N[q.b].x)/2,my=(N[q.a].y+N[q.b].y)/2,d=Math.hypot(mx-home[0],my-home[1]);if(d<bd){bd=d;best=k;}}e0=best;}else e0=Math.floor(rnd()*E.length);
     let cur=rnd()<.5?E[e0].a:E[e0].b,prevE=-1;const pts=[cur],ws=[];let total=0;
     const sd=(rnd()<.5?-1:1),so=.7+rnd()*1.6;
@@ -8819,12 +8819,12 @@ function makeCitizens(cx,cz){
       sch.push({t:'w',x0:cx+a.x-uz*side,z0:cz+a.y+ux*side,x1:cx+b.x-uz*side,z1:cz+b.y+ux*side,dur,L,st:P});P+=dur;
       if(rnd()<.55){const d=5+rnd()*16;sch.push({t:'s',x:cx+b.x-uz*side,z:cz+b.y+ux*side,dur:d,st:P,mode:pick(['stand','talk','stand','lean','wave']),yaw:rnd()*6.28});P+=d;}}
     return add({k:'rt',sch,P,sp,side:0,id:pick(ids),mode});};
-  const walkerOn=(st,ids,mode)=>{const pts=st.p.map(([x,y])=>[cx+x,cz+y]),cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));const T=cum[cum.length-1];
+  const walkerOn=(st,ids,mode)=>{if(mode==='carry')mode='walk';const pts=st.p.map(([x,y])=>[cx+x,cz+y]),cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));const T=cum[cum.length-1];
     const span=Math.min(T,40+rnd()*90),s0=rnd()*(T-span),side=(rnd()<.5?-1:1)*Math.max(.3,st.w/2-1.6-rnd()*1.2);
     const off=pts.map((p,i)=>{const q=pts[Math.min(pts.length-1,Math.max(1,i))],o=pts[Math.min(pts.length-1,Math.max(1,i))-1],l=Math.hypot(q[0]-o[0],q[1]-o[1])||1,ux=(q[0]-o[0])/l,uz=(q[1]-o[1])/l;return [p[0]-uz*side,p[1]+ux*side];});
     if(hitLoop(off))return null;return add({k:'pl',l:{pts,cum,T},s0,span,side,id:pick(ids),mode});};
   const standAt=(mx,my,ids,mode,yaw,o={})=>{if(mode==='sit')mode='stand';/* 앉는 건 벤치에서만 */if(!o.force&&hit(cx+mx,cz+my,.35))return null;return add({k:'st',x:cx+mx,z:cz+my,yaw:yaw??rnd()*6.28,id:pick(ids),mode,...o});};
-  const circ=(mx,my,r,ids,mode)=>{const n=Math.max(8,Math.ceil(2*Math.PI*r/.8));for(let i=0;i<n;i++){const a=i/n*6.28;if(hit(cx+mx+Math.cos(a)*r,cz+my+Math.sin(a)*r))return null;}return add({k:'circ',x:cx+mx,z:cz+my,r,a0:rnd()*6.28,dir:rnd()<.5?-1:1,id:pick(ids),mode,sp:.7+rnd()*.4});};
+  const circ=(mx,my,r,ids,mode)=>{if(mode==='carry')mode='walk';const n=Math.max(8,Math.ceil(2*Math.PI*r/.8));for(let i=0;i<n;i++){const a=i/n*6.28;if(hit(cx+mx+Math.cos(a)*r,cz+my+Math.sin(a)*r))return null;}return add({k:'circ',x:cx+mx,z:cz+my,r,a0:rnd()*6.28,dir:rnd()<.5?-1:1,id:pick(ids),mode,sp:.7+rnd()*.4});};
   /* 구역 안 빈자리 찾기 */
   const spot=(z,allow,tries=30)=>{for(let k=0;k<tries;k++){let mx,my;if(z.shape==='circle'){const a=rnd()*6.28,r=Math.sqrt(rnd())*z.r;mx=z.x+Math.cos(a)*r;my=z.y+Math.sin(a)*r;}else if(z.shape==='rect'){mx=z.x+rr(-z.w/2,z.w/2);my=z.y+rr(-z.h/2,z.h/2);}else{const xs=z.pts.map(p=>p[0]),ys=z.pts.map(p=>p[1]);mx=rr(Math.min(...xs),Math.max(...xs));my=rr(Math.min(...ys),Math.max(...ys));if(!PL.inPoly(z.pts,mx,my))continue;}
       if(free(mx,my,allow)&&!hit(cx+mx,cz+my,.5))return [mx,my];}return null;};
@@ -12274,7 +12274,7 @@ function damageMonster(m,mult,o={}){
   if(P.job==='assassin'&&m.sMark>tAll&&!o.noMark){d*=1.4;const c=mCenter(m);VFX.burst(c,0xb060ff,8,3,.3,{mix:0xffffff});}
   if(P.skills.pile&&o.stun>0&&(m.flags&2)){d*=1.5+.1*(P.skills.pile-1);o={...o,stun:Math.min(8,o.stun*2)};}
   d=Math.max(1,Math.round(d));if(execKill)d=Math.max(d,Math.ceil(m.hp));
-  m.hp-=d;m.flash=.18;
+  m.hp-=d;m.flash=.18;m.hitT=tAll;   /* 서버가 이 타격을 반영하기 전에 온 HP로 바가 다시 차지 않게 */
   if(P.skills.madness){const miss=1-P.hp/P.maxhp,h=d*miss*(1+.15*(P.skills.madness-1));P.hp=Math.min(P.maxhp,P.hp+h);P.lsAcc=(P.lsAcc||0)+h;}
   VFX.burst(mCenter(m),crit?0xffd040:0xfff0d0,crit?18:8,crit?6:3.5,.35,{up:.3,glow:crit});
   {const at=m.mesh.position,D=m.D,blade=P.equip.weapon&&(JOBS[P.job].weapon==='sword'&&P.job!=='fowler'||JOBS[P.job].weapon==='dagger');const axe=P.job==='barbarian',sk=swingT<1&&SWORD_SKILL_HIT.has(myMoId);const hammer=P.job==='fowler'&&P.equip.weapon,staff=JOBS[P.job].weapon==='staff'&&P.equip.weapon&&o.bhit;   /* 지팡이 피격음은 일반공격에만 */if(!o.nohs)sfx(blade?(crit?(axe&&!sk?'ahit2':'blood2'):sk?'blood3':axe?'ahit1':'blood1'):hammer?'h_hit':staff?'st_hit':'hit',at,1,hammer?.86:staff?.94+Math.random()*.12:1);if(crit)sfx('crit',at,.8);}
@@ -14381,7 +14381,7 @@ function setupNetMonsters(r){
   r.on('mspawn',msg=>{const f=msg.m;if(f&&MON[f.ty]&&!netMonsterById(f.i))spawnMonster(f.zone,f);});
   r.on('mu',msg=>{
     for(const u of (msg.u||[])){const m=netMonsterById(u[0]);if(!m||m.dying!==null)continue;
-      m.tx=u[1];m.tz=u[2];m.tr=u[3];pushSnap(m,u[1],u[2]);if(u[4]<m.hp-.5||u[4]>m.hp+.5)m.hp=u[4];
+      m.tx=u[1];m.tz=u[2];m.tr=u[3];pushSnap(m,u[1],u[2]);if(u[4]<m.hp-.5||(u[4]>m.hp+.5&&!(tAll-(m.hitT??-9)<1.2)))m.hp=u[4];   /* 방금 때렸으면 서버의 (아직 안 깎인) HP로 되돌리지 않는다 */
       const was=m.flags&8;m.flags=u[5]|0;if((m.flags&8)&&!was&&m.D.boss)m.vulnT=3.2;}
   });
   r.on('matk',msg=>{
