@@ -438,9 +438,9 @@
           // 단단한 감각(쉴더): 노리던 쉴더는 더 멀리 가도 놓치지 않는다
           if (t.dc && t.id !== m.aggroOn) continue;
           const far = false;   // (단단한 감각은 없어졌다)
-          if ((homeD > (far ? 80 : 45) && !m.summon) || d > (far ? 55 : 30)) continue;
+          if ((homeD > (far ? 80 : 60) && !m.summon) || d > (far ? 55 : 40)) continue;   /* 더 멀리까지 쫓아온다 */
           const pri = t.id === m.aggroOn ? d - 6 : d;
-          if ((d < (t.sd ? 16 : 9) || t.id === m.aggroOn) && pri < best) { best = pri; tgt = t; }
+          if ((d < (t.sd ? 22 : 14) || t.id === m.aggroOn) && pri < best) { best = pri; tgt = t; }   /* 더 멀리서 알아챈다 (9 → 14m) */
         }
         if (m.taunt > 0) { m.taunt -= TICK; const tt = ts.find((q) => q.id === m.aggroOn && (dun ? q.rot : !q.dun)); if (tt) tgt = tt; }
         if (!tgt) m.aggroOn = null;
@@ -458,7 +458,7 @@
             turn(m, Math.atan2(dx, dz), 0.6);
             m.windup -= TICK;
             if (m.windup <= 0) {
-              m.atkCd = 1.6;
+              m.atkCd = 1.0;   /* 공격 사이 쉬는 시간 1.6 → 1.0초 */
               if (dist < reach + 0.9) send(tgt.id, { t: 'matk', i: m.i, to: tgt.id, atk: m.atk });
               broadcast({ t: 'matk', i: m.i, to: null }, tgt.id);
             }
@@ -467,7 +467,7 @@
             if (m.detour && m.detour.t > 0) { m.detour.t -= TICK; moveToward(m, m.detour.x, m.detour.z, spd); }
             else moveToward(m, tgt.x, tgt.z, spd);
             want = spd;
-          } else { turn(m, Math.atan2(dx, dz), 0.6); if (m.atkCd <= 0) m.windup = 0.45; }
+          } else { turn(m, Math.atan2(dx, dz), 0.6); if (m.atkCd <= 0) m.windup = 0.4; }
         } else {
           m.windup = 0;
           m.wait -= TICK;
