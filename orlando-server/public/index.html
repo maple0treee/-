@@ -236,7 +236,6 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 .bk-ch button{font-family:'Gowun Batang',serif;font-size:calc(var(--pw)*.042);padding:.35em 1.1em;background:rgba(255,255,255,.25);border:1.5px solid #8a6a40;border-radius:3px;color:#4a2e14;cursor:pointer}
 .bk-ch button:hover{background:rgba(212,174,99,.3)}
 .bk-ch button[aria-pressed="true"]{background:#7a2a18;border-color:#5a1a0a;color:#f6ecd2}
-.bk-ask{text-align:center;font-size:calc(var(--pw)*.032);color:#8a5a2a;font-style:italic}
 .bk-no{position:absolute;left:0;right:0;bottom:5.5%;text-align:center;font-size:calc(var(--pw)*.03);color:#8a6a48;letter-spacing:.1em}
 .bk-tp{align-items:center;justify-content:center;text-align:center}
 .bk-tt{font-family:var(--f-display);font-size:calc(var(--pw)*.085);color:#5a2414;letter-spacing:.08em}
@@ -6246,6 +6245,9 @@ const SFX_DEF={
   hurt:(o,t,p)=>{_tone(o,'sine',120,60,t,.18,1);_noise(o,'lowpass',900,200,t,.14,.7,1);_tone(o,'square',220,180,t,.08,.12);},
   levelup:(o,t,p)=>{[523,659,784,1046,1318].forEach((f,i)=>_tone(o,'triangle',f,f,t+i*.08,.45,.35,.01));_noise(o,'highpass',6000,8000,t+.3,.5,.15,1,.05);},
   coin:(o,t,p)=>{_tone(o,'square',1320,1320,t,.07,.2);_tone(o,'square',1760,1760,t+.07,.18,.2);},
+  advance:(o,t,p)=>{_tone(o,'sine',110,52,t,.9,.5,.005);_noise(o,'lowpass',400,120,t,.6,.25,1,.005);
+    [262,330,392,523,659,784].forEach((f,i)=>_tone(o,'triangle',f*p,f*p,t+.12+i*.07,.5,.28,.01));
+    [523,659,784,1046].forEach(f=>_tone(o,'sine',f*p,f*p,t+.58,1.6,.16,.04));_noise(o,'highpass',5000,9000,t+.5,1.3,.12,1,.15);},
   quest:(o,t,p)=>{[392,523,659,784].forEach((f,i)=>_tone(o,'triangle',f*p,f*p,t+i*.11,.55,.3,.012));[523,784].forEach(f=>_tone(o,'sine',f*p,f*p,t+.46,1.1,.18,.02));},
   ui:(o,t,p)=>{_tone(o,'sine',900*p,900*p,t,.04,.25);},
   talk:(o,t,p)=>{_tone(o,'square',p*220,p*215,t,.045,.12,.003);},
@@ -6271,7 +6273,7 @@ function sfxSkill(S,id){
   if(id==='thrust1'||id==='thrust2')return sfx('w_thrust');
   if(id==='ambush'||id==='shuriken'||id==='deepstab')return;
   if(id==='parry')return sfx('w_parry');
-  if(id==='axechop')return sfx('a_chop');
+  if(id==='axechop'||id==='downcut')return sfx('a_chop');   /* 검사 내려찍기도 도끼 머리찍기와 같은 소리 */
   if(id==='axespin')return sfx('a_spin');
   if(S.type==='heal')return sfx('heal');
   if(S.type==='buff'){if(v==='roar'||v==='pump')sfx('roar',null,.7,1.2);sfx('buff');return;}
@@ -10204,14 +10206,14 @@ function thouseTick(t){if(!player)return;const inH=OR.inTHouse(player.position.x
   /* Lv 30 퀘스트 동안 튀르팽은 책장 앞에 서 있다 */
   if(!inH&&(THOUSE_ST.hold||THOUSE_ST.walk)){THOUSE_ST.hold=false;THOUSE_ST.walk=null;}
   if(n&&THOUSE_ST.walk){thWalkTick(n,t);return;}
-  if(n){const T=OR.THOUSE,want=P&&(P.mq==='turpin30'||THOUSE_ST.hold)?'shelf':'bed';if(n._spot!==want){n._spot=want;const sp=want==='shelf'?{x:T.x-.2,z:T.z-T.hd+1.45,ry:0}:{x:T.x-1.1,z:T.z-1.5,ry:Math.atan2(-1.9,-1.1)};
-    n.x=sp.x;n.z=sp.z;n.mesh.position.set(sp.x,0,sp.z);n.mesh.rotation.set(0,sp.ry,0);n.mesh.userData.ry0=sp.ry;if(THOUSE_ST.col){THOUSE_ST.col.x=sp.x;THOUSE_ST.col.z=sp.z;}}}}
+  if(n){const T=OR.THOUSE,want=P&&(P.mq==='turpin30'||THOUSE_ST.hold)?'shelf':'bed';if(n._spot!==want){n._spot=want;const sp=want==='shelf'?{x:T.x-.2,z:T.z-T.hd+1.45,ry:Math.PI}:{x:T.x-1.1,z:T.z-1.5,ry:Math.atan2(-1.9,-1.1)};
+    n.x=sp.x;n.z=sp.z;n.mesh.position.set(sp.x,0,sp.z);n.mesh.rotation.set(0,sp.ry,0);n.mesh.userData.ry0=sp.ry;n.mesh.userData.baseQ=n.mesh.quaternion.clone();facing.delete(n.mesh);if(THOUSE_ST.col){THOUSE_ST.col.x=sp.x;THOUSE_ST.col.z=sp.z;}}}}
 
 /* 책을 건넨 뒤: 대화를 닫으면 책장 앞에서 원래 자리(침대 옆)로 천천히 걸어 돌아간다 */
 function thHomeSpot(){const T=OR.THOUSE;return {x:T.x-1.1,z:T.z-1.5,ry:Math.atan2(-1.9,-1.1)};}
 function thAfterClose(){const n=THOUSE_ST.npc;if(!THOUSE_ST.hold||!n)return;THOUSE_ST.hold=false;
   const to=thHomeSpot(),dx=to.x-n.x,dz=to.z-n.z,L=Math.hypot(dx,dz);
-  THOUSE_ST.walk={t0:null,from:{x:n.x,z:n.z,ry:n.mesh.rotation.y},to,L,dir:Math.atan2(dx,dz)};}
+  facing.delete(n.mesh);THOUSE_ST.walk={t0:null,from:{x:n.x,z:n.z,ry:n.mesh.rotation.y},to,L,dir:Math.atan2(dx,dz)};}
 function thWalkTick(n,t){const W=THOUSE_ST.walk;if(W.t0==null)W.t0=t;const e=t-W.t0,turn=.45,walk=W.L/.9,end=turn+walk+turn;
   const lerpA=(a,b,k)=>{let d=((b-a+Math.PI*3)%(Math.PI*2))-Math.PI;return a+d*k;};const sm=k=>k*k*(3-2*k);
   let x=W.from.x,z=W.from.z,ry=W.from.ry,bob=0;
@@ -10219,7 +10221,7 @@ function thWalkTick(n,t){const W=THOUSE_ST.walk;if(W.t0==null)W.t0=t;const e=t-W
   else if(e<turn+walk){const k=(e-turn)/walk,kk=sm(k);x=W.from.x+(W.to.x-W.from.x)*kk;z=W.from.z+(W.to.z-W.from.z)*kk;ry=W.dir;bob=Math.abs(Math.sin((e-turn)*Math.PI*1.7))*.025;}
   else{x=W.to.x;z=W.to.z;ry=lerpA(W.dir,W.to.ry,sm(Math.min(1,(e-turn-walk)/turn)));}
   n.x=x;n.z=z;n.mesh.position.set(x,bob,z);n.mesh.rotation.set(0,ry,0);n.mesh.userData.ry0=ry;if(THOUSE_ST.col){THOUSE_ST.col.x=x;THOUSE_ST.col.z=z;}
-  if(e>=end){THOUSE_ST.walk=null;n._spot='bed';n.mesh.position.y=0;}}
+  if(e>=end){THOUSE_ST.walk=null;n._spot='bed';n.mesh.position.y=0;n.mesh.userData.baseQ=n.mesh.quaternion.clone();}}
 
 /* ---------- 맵 꾸미기: 풀, 꽃, 덤불, 버섯, 돌멩이, 마을 소품 ----------
    작은 것들은 인스턴싱으로 한 번에 그린다. 들판의 작은 장식은 부딪히지 않는다(몬스터 길찾기와 맞추기 위해). */
@@ -12239,7 +12241,7 @@ function advance(j){
   giveJobGear();fixSkills('전직하면서 전사 스킬을 내려놓고');
   computeStats(P);P.hp=P.maxhp;P.mp=P.maxmp;
   const pos=player.position.clone();scene.remove(player);player=makePlayerMesh(j,gearOf(P),P.ap);player.position.copy(pos);player.visible=false;scene.add(player);setViewModel(j);
-  spawnFx(0xf3cf6a,pos.clone().add(new THREE.Vector3(0,1,0)),3,.9);
+  spawnFx(0xf3cf6a,pos.clone().add(new THREE.Vector3(0,1,0)),3,.9);sfx('advance');
   log(`${from}에서 ${JOBS[j].name}(으)로 전직했다.`,'sys');
   if(mentor){scene.remove(mentor);mentor=null;}const ci=colliders.findIndex(c=>c.mentor);if(ci>=0)colliders.splice(ci,1);
   $('#interact').hidden=true;interactTarget=null;closeMentor();updateHud();renderOnline();save();publishPresence(true);
@@ -14897,7 +14899,7 @@ function mqKyle(n){n.mqLock=true;
       showPages(['그래?','모험가로 강해져서 갈 수 있는 곳이 많아지면, 어디서 왔는지도 알 수 있을 거다.','그러니 여기서 강해져라. 의뢰를 하다 보면 강해질 수 있을 거야.'],0,last=>{n.mqLock=false;mqComplete('kyle1');renderNpc(last);});},'pri wide');}));}
 /* ---- 튀르팽: 옛 친구의 책 ---- */
 function mqTurpin(n){const base=baseOf(P.job),bk=BASE_BOOK[base]||'그 책',id=OLD_BOOK[base];n.mqLock=true;
-  showPages([`자네가 ${bk}를 골랐다는 걸 들은 후, 옛 친구의 책이 기억났네.`,'그대에게 주는 게 낫겠네.'],0,last=>{n.mqLock=false;
+  showPages([`자네의 품속에 있는 책이 ${bk}라는 것을 알게 된 후, 옛 친구의 책이 기억났네.`,'그대에게 주는 게 낫겠네.'],0,last=>{n.mqLock=false;
     if(id&&!P.bag.some(e=>e.id===id)){P.bag.push({id,n:1});invDirty();log(`[${ITEMS[id].name}]을(를) 받았다.`,'good');}
     THOUSE_ST.hold=true;mqComplete('turpin30');renderNpc(last);});}
 /* ---- 책 읽기: 진짜 책처럼 표지를 넘기고, 한 장씩 넘긴다 ----
@@ -14909,7 +14911,7 @@ function openBook(id){const B=BOOKS[id];if(!B||!P)return;if(!$('#inv').hidden)cl
   let el=document.getElementById('bookWin');
   if(!el){el=document.createElement('div');el.id='bookWin';el.className='overlay';
     el.innerHTML='<div class="bk-stage"><div class="bk-book"><div class="bk-back"></div><div class="bk-pages"><div class="bk-pg bk-l"></div><div class="bk-pg bk-r"></div></div><div class="bk-leaf"><div class="bk-face bk-f"></div><div class="bk-face bk-b"></div></div><div class="bk-cover"><div class="bk-cf"><div class="bk-orn"></div><div class="bk-ct"></div><div class="bk-orn b"></div></div><div class="bk-cb"></div></div></div>'
-      +'<div class="bk-nav"><button class="bk-prev" type="button" aria-label="앞 장">‹</button><span class="bk-n"></span><button class="bk-next" type="button" aria-label="다음 장">›</button></div><div class="bk-hint">표지나 오른쪽 쪽을 누르면 넘어가요</div></div><button class="bk-x" type="button" aria-label="닫기">✕</button>';
+      +'<div class="bk-nav"><button class="bk-prev" type="button" aria-label="앞 장">‹</button><span class="bk-n"></span><button class="bk-next" type="button" aria-label="다음 장">›</button></div><div class="bk-hint"></div></div><button class="bk-x" type="button" aria-label="닫기">✕</button>';
     document.body.appendChild(el);
     el.querySelector('.bk-prev').onclick=()=>bookTurn(-1);el.querySelector('.bk-next').onclick=()=>bookTurn(1);
     el.querySelector('.bk-x').onclick=closeBook;el.querySelector('.bk-cover').onclick=()=>bookTurn(1);
@@ -14939,7 +14941,6 @@ function bookPage(k){const C=bookCur,B=BOOKS[C.id],seq=bookSeq(B),it=seq[k],d=do
     tx.append(u);tx.append((name?(bat(name)?'이었다':'였다'):'이었다')+b.replace(/^이었다/,''));}
   else tx.textContent=raw;
   d.append(tx);
-  if(blank&&C.canAdv&&!C.pick&&!C.pop){const h=document.createElement('div');h.className='bk-ask';h.textContent='빈칸을 눌러 들어갈 말을 고르세요';d.append(h);}
   const n=document.createElement('div');n.className='bk-no';n.textContent=String(it+1);d.append(n);return d;}
 function bookFill(el,k){el.textContent='';el.append(bookPage(k));}
 function bookBlankShown(){const C=bookCur,B=BOOKS[C.id],seq=bookSeq(B),ks=C.wide?[C.i,C.i+1]:[C.i];return ks.some(k=>typeof seq[k]==='number'&&B.pages[seq[k]].includes('{빈칸}'));}
@@ -14950,7 +14951,7 @@ function bookRender(){const el=$('#bookWin'),C=bookCur,B=BOOKS[C.id],seq=bookSeq
   el.querySelector('.bk-n').textContent=C.open?(C.wide?`${Math.floor(C.i/2)+1} / ${Math.ceil(N/2)}`:`${C.i+1} / ${N}`):'';
   el.querySelector('.bk-prev').disabled=!C.open;
   const nx=el.querySelector('.bk-next');nx.disabled=C.open&&bookBlankShown()&&C.canAdv&&!C.pick;nx.textContent=!C.open?'펼치기':last?'책을 덮는다':'›';nx.classList.toggle('word',!C.open||last);
-  el.querySelector('.bk-hint').textContent=!C.open?'표지를 누르면 책이 펼쳐져요':nx.disabled?'빈칸에 들어갈 말을 골라야 넘길 수 있어요':'쪽을 누르거나 ← → 키로 넘겨요';}
+}
 function bookTurn(dir){const C=bookCur;if(!C||C.anim)return;if(C.pop){C.pop=false;bookRender();}const el=$('#bookWin'),B=BOOKS[C.id],N=bookSeq(B).length,S=C.wide?2:1;
   if(!C.open){if(dir<0)return;C.anim=true;el.classList.add('bk-opening');sfxPage();setTimeout(()=>{C.open=true;C.anim=false;el.classList.remove('bk-opening');bookRender();},700);return;}
   if(dir>0&&el.querySelector('.bk-next').disabled)return;
