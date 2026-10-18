@@ -2600,17 +2600,25 @@ const InstChunks={list:[],
 };
 // 멀리 있는 몬스터는 그리지 않는다 (visible은 죽음·숨김에 쓰이니 건드리지 않고 '층'으로 끈다)
 function setFarHidden(obj,far){if(obj.userData._far===far)return;obj.userData._far=far;obj.traverse(o=>{if(far)o.layers.set(31);else o.layers.set(0);});}
-const Perf={acc:0,frames:0,t:0,dpr:1,minDpr:1,
-  init(){this.dpr=Math.min(devicePixelRatio||1,(typeof coarse==='function'&&coarse())?1.25:1.5);this.minDpr=Math.min(this.dpr,(typeof coarse==='function'&&coarse())?.85:1);renderer.setPixelRatio(this.dpr);},
+/* 화면 품질 자동 조절
+   - 큰 모니터(컴퓨터)는 그릴 픽셀 수가 휴대폰의 몇 배라서, 처음부터 픽셀 수에 한도를 둔다 (컴퓨터 약 200만, 휴대폰 약 130만)
+   - 프레임이 낮으면 해상도를 0.6배까지 낮춘다 (예전에는 컴퓨터가 1배 아래로 내려가지 못해 렉이 그대로 남았다)
+   - 그래도 낮으면 그림자를 2~3프레임에 한 번만 다시 그린다 (그림자 그리기가 한 장면의 절반 가까이를 차지한다) */
+const Perf={acc:0,frames:0,t:0,dpr:1,minDpr:.6,shSkip:1,fc:0,low:0,
+  init(){this.dpr=this.maxDpr();renderer.setPixelRatio(this.dpr);renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;
+    addEventListener('resize',()=>{const m=this.maxDpr();if(this.dpr>m+.01){this.dpr=m;renderer.setPixelRatio(m);}});},
   tick(){
     const now=performance.now(),dt=this.last?Math.min(1,(now-this.last)/1000):0;this.last=now;
+    if(++this.fc%this.shSkip===0)renderer.shadowMap.needsUpdate=true;
     if(document.hidden)return;
     this.acc+=dt;this.frames++;
-    if(this.acc>=2.5){const fps=this.frames/this.acc;this.acc=0;this.frames=0;
-      if(fps<38&&this.dpr>this.minDpr+.01){this.dpr=Math.max(this.minDpr,this.dpr-.15);renderer.setPixelRatio(this.dpr);}
-      else if(fps>57&&this.dpr<this.maxDpr()-.01){this.dpr=Math.min(this.maxDpr(),this.dpr+.1);renderer.setPixelRatio(this.dpr);}}
+    if(this.acc>=2){const fps=this.frames/this.acc;this.acc=0;this.frames=0;
+      if(fps<40){if(this.dpr>this.minDpr+.01){this.dpr=Math.max(this.minDpr,this.dpr-.12);renderer.setPixelRatio(this.dpr);}
+        this.low++;if(this.low>=2&&this.shSkip<3)this.shSkip++;}
+      else{this.low=0;if(fps>57){if(this.shSkip>1)this.shSkip--;else if(this.dpr<this.maxDpr()-.01){this.dpr=Math.min(this.maxDpr(),this.dpr+.08);renderer.setPixelRatio(this.dpr);}}}}
   },
-  maxDpr(){return Math.min(devicePixelRatio||1,(typeof coarse==='function'&&coarse())?1.25:1.5);}
+  maxDpr(){const mob=typeof coarse==='function'&&coarse(),base=Math.min(devicePixelRatio||1,mob?1.25:1.5),px=Math.max(1,innerWidth*innerHeight);
+    return Math.max(this.minDpr,Math.min(base,Math.sqrt((mob?1.3e6:2.0e6)/px)));}
 };
 
 /* ---------- 분수와 불: 흐르는 물줄기, 물결, 물보라 / 흔들리는 등불과 화덕 불
@@ -11737,7 +11745,7 @@ function startGame(data){const ap=apParse(data.ap)||(data.ap&&data.ap.g?data.ap:
   const L=$('#loading');L.hidden=false;$('#loadMsg').textContent='모험가를 불러오는 중…';
   pmLoad(ap.g).catch(()=>{}).then(()=>{L.hidden=true;startGameNow(data);});}
 function startGameNow(data){
-  setTimeout(precompileAll,4000);setTimeout(precompileAll,12000);
+  setTimeout(precompileAll,4000);setTimeout(precompileAll,12000);setTimeout(()=>warmGpu(),1500);
   P={...data,buffs:{}};if(!P.id)P.id='c'+Date.now().toString(36);
   P.gold=data.gold||0;P.equip={weapon:null,sub:null,helm:null,armor:null,boots:null,acc:null,...(data.equip||{})};
   for(const k in P.equip)if(P.equip[k]&&!ITEMS[P.equip[k]])P.equip[k]=null;
@@ -14846,6 +14854,15 @@ function updateFx(dt){
 let miniT=0;
 // 처음 보는 재질을 그릴 때 화면이 잠깐 멈추는 것(셰이더 만들기)을 미리 해 둔다
 function precompileAll(){try{renderer.compile(scene,camera);}catch(e){}}
+/* 처음 보는 물체를 그릴 때 생기는 끊김 줄이기: 게임을 시작하면 한 번, 아주 작은 화면에 모든 물체를 그려
+   모양·그림(텍스처)을 그래픽카드에 미리 올려 둔다 (처음 들어온 컴퓨터에서 하레나를 걸을 때 자잘하게 멈추던 것) */
+function warmGpu(){if(warmGpu.done)return;warmGpu.done=1;try{
+  const mask=camera.layers.mask,fc=[],iv=[];camera.layers.enableAll();
+  scene.traverse(o=>{if((o.isMesh||o.isPoints)&&o.frustumCulled){o.frustumCulled=false;fc.push(o);}});
+  for(const q of InstChunks.list)if(!q.m.visible){q.m.visible=true;iv.push(q.m);}
+  const rt=new THREE.WebGLRenderTarget(8,8),prev=renderer.getRenderTarget(),nu=renderer.shadowMap.needsUpdate;renderer.shadowMap.needsUpdate=false;
+  renderer.setRenderTarget(rt);renderer.render(scene,camera);renderer.setRenderTarget(prev);rt.dispose();renderer.shadowMap.needsUpdate=nu;
+  for(const o of fc)o.frustumCulled=true;for(const m of iv)m.visible=false;camera.layers.mask=mask;}catch(e){console.warn('warmGpu',e);}}
 setTimeout(precompileAll,2500);
 // 한 프레임에서 오류가 나도 게임이 멈추지 않게 한다 (오류는 한 번만 기록에 남긴다)
 let loopErr=0;
