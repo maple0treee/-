@@ -200,3 +200,9 @@ setInterval(() => {
 }, 30000);
 
 server.listen(PORT, () => console.log(`오를란도 서버 실행 중: http://localhost:${PORT}`));
+
+// 무료 서버가 15분 동안 아무도 안 오면 잠드는 걸 막는다: 10분마다 자기 자신의 /health를 부른다 (응답이 한 줄이라 대역폭은 거의 안 씀)
+const SELF_URL = process.env.RENDER_EXTERNAL_URL;
+if (SELF_URL) setInterval(() => {
+  require('https').get(SELF_URL + '/health', r => r.resume()).on('error', () => {});
+}, 10 * 60 * 1000);
