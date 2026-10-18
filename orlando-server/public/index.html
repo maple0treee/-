@@ -1010,7 +1010,7 @@ body.talking #buffBar{visibility:hidden}
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@e547496e461a2b37493cbc97da0d8a3ef2fd4336/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@7e3b45890a5f614115ae12dd7977d3bb2ecec687/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -11295,7 +11295,7 @@ let bannerT=0;
 function setZone(z){
   if(z===curZone)return;curZone=z;bgmZone(z);
   {const q=P&&P.quest;if(q&&q.special==='portal'){const inside=z==='wlair'||z==='hall';
-    if(inside&&(q.stage|0)<1){q.stage=1;updateQuestHud();save();}else if(!inside&&q.stage===1){q.stage=2;log('의뢰 목표 달성','sys');updateQuestHud();save();}}}const Z=ZONES[z];if(z==='village'||z==='town')P.home=z;
+    if(inside||(q.stage|0)>=1){q.stage=2;questPayout(q);}}}   /* 포탈을 넘으면 조사는 끝: 보고 없이 바로 보상 */const Z=ZONES[z];if(z==='village'||z==='town')P.home=z;
   $('#wName').textContent=Z.name;$('#wCountry').textContent=(typeof COUNTRY_OF!=='undefined'&&COUNTRY_OF[z])||'';$('#wStars').textContent=stars(Z.diff);$('#wRec').textContent=Z.rec;
   $('#bT').textContent=Z.name;$('#bS').textContent=Z.diff?`${stars(Z.diff)}  ${Z.rec||''}`:'';
   if(!(typeof arriveBanner==='function'&&performance.now()-(arriveBanner.at||0)<4000)){   /* 문·포탈로 막 넘어왔으면 도착 글자만 띄운다 (두 글자가 겹치지 않게) */
@@ -12099,13 +12099,14 @@ function qText(q){if(q&&q.special)return '길 끝 포탈 조사';return qGoals(q
 function fillWhy(p){const g=qGoals(p)[0];const s=String(p.why||'').replace(/\{m\}/g,MON[g.ty].name).replace(/\{z\}/g,ZONES[p.zone].name);
   // 받침에 맞춰 조사 고르기: 이(가) 을(를) 은(는) 와(과) 로(으로)
   return s.replace(/([가-힣])(이\(가\)|을\(를\)|은\(는\)|와\(과\))/g,(m,ch,j)=>{const b=(ch.charCodeAt(0)-0xac00)%28>0;const [x,y]=j.replace(')','').split('(');return ch+(b?x:y);});}
+function questPayout(q){
+    P.gold+=q.gold;const t=Math.min(9,tierForLevel(q.lv)+(q.rare?1:0));const reward=pick(GEAR_BY_TIER[t]||GEAR_BY_TIER[tierForLevel(q.lv)]);const gotItem=addItem(reward,1,true);
+    const pot=q.lv>=20?'hp_l':'hp_s';if(ITEMS[pot])addItem(pot,3+(q.rare?3:0),true);
+    log(`의뢰 완료! EXP +${Math.round(q.exp*expMul())} · ${q.gold} 골드${gotItem?` · [${itemName(reward,P.job)}]`:''}`,'sys');P.quest=null;gainExp(q.exp);updateQuestHud();save();}
 function renderQuest(msg){
   const q=P.quest,T=qTone(),here=npcCur?npcCur.id:'kyle';
   if(q&&q.from&&OR.BOARDS[q.from]&&q.from!==here&&OR.BOARDS[here]){renderNpc(T.other(q.fromName||'의뢰인'),box=>{npcBtn(box,'게시판 보기',()=>openBoard(boardOf(here)),'pri wide');npcBtn(box,'닫기',()=>closeNpc(),'wide').dataset.skip='1';});return;}
-  if(q&&qDone(q)){
-    P.gold+=q.gold;const t=Math.min(9,tierForLevel(q.lv)+(q.rare?1:0));const reward=pick(GEAR_BY_TIER[t]||GEAR_BY_TIER[tierForLevel(q.lv)]);const gotItem=addItem(reward,1,true);
-    const pot=q.lv>=20?'hp_l':'hp_s';if(ITEMS[pot])addItem(pot,3+(q.rare?3:0),true);
-    log(`의뢰 완료! EXP +${Math.round(q.exp*expMul())} · ${q.gold} 골드${gotItem?` · [${itemName(reward,P.job)}]`:''}`,'sys');P.quest=null;gainExp(q.exp);updateQuestHud();save();
+  if(q&&qDone(q)){questPayout(q);
     renderNpc(T.done,box=>{npcBtn(box,'게시판 보기',()=>openBoard(boardOf(here)),'pri wide');});return;}
   if(q){renderNpc(msg||(q.special?T.doing:`${T.doing} (${qGoals(q).map(g=>`${MON[g.ty].name} ${Math.min(g.have,g.need)}/${g.need}`).join(' · ')})`),box=>{npcBtn(box,'계속하기',()=>closeNpc(),'pri wide').dataset.skip='1';npcBtn(box,'게시판 보기',()=>openBoard(boardOf(here)),'wide');npcBtn(box,'의뢰 포기',()=>{P.quest=null;updateQuestHud();save();renderQuest(T.quit);},'wide');});return;}
   if(msg){renderNpc(msg,box=>{npcBtn(box,'게시판 보기',()=>openBoard(boardOf(here)),'pri wide');});return;}
@@ -14909,9 +14910,8 @@ const MAINQ={
   turpin30:{title:'튀르팽 찾아가기',goal:'튀르팽의 집에 찾아간다',npc:'turpin'},
   /* Lv 60 (1차 전직 직업): 게시판 특별 의뢰 → 길 끝 포탈 → 전달자. 진행은 의뢰·와이번 상태를 보고 정한다 (mqAdvSync) */
   portal60:{title:'길 끝 포탈 조사',
-    get goal(){const q=P&&P.quest,sp=q&&q.special==='portal'?q:null;if(!sp)return '카일의 게시판에서 특별 의뢰를 받는다';
-      const s=sp.stage|0;return s<1?'깊은 사막5 길 끝의 포탈로 들어간다':s<2?'포탈 밖으로 돌아온다':`${sp.fromName||'카일'}에게 보고한다`;},
-    get npc(){const q=P&&P.quest,sp=q&&q.special==='portal'?q:null;return !sp||(sp.stage|0)>=2?(sp&&sp.from)||'kyle':null;}},
+    get goal(){const q=P&&P.quest;return q&&q.special==='portal'?'깊은 사막5 길 끝의 포탈로 들어간다':'카일의 게시판에서 특별 의뢰를 받는다';},
+    get npc(){const q=P&&P.quest;return q&&q.special==='portal'?null:'kyle';}},
   messenger60:{title:'전달자 만나기',
     get goal(){return P&&P.got&&P.got.wyvern?'길드홀 지하실의 전달자에게 말을 건다':'포탈 너머의 와이번을 쓰러뜨리고 길드홀 지하실로 간다';},npc:'messenger'},
 };
