@@ -1010,7 +1010,7 @@ body.talking #buffBar{visibility:hidden}
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@7e3b45890a5f614115ae12dd7977d3bb2ecec687/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@512e1f7941c9f422f3f541f2a5637bae9298f7c1/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -12358,6 +12358,7 @@ function gainExp(n){
     log(`레벨 업! Lv ${P.lv}`,'sys');levelUpFx(P.lv);
     spawnFx(0xf3cf6a,player.position.clone().add(new THREE.Vector3(0,1,0)),2.4,.8);
     if(advLv(P.job)!=null&&P.lv>=advLv(P.job)&&!P.mentorReady){P.mentorReady=true;summonMentor();}
+    if(P.lv===100)updateQuestHud();   /* Lv 100 메인 퀘스트 */
     publishPresence(true);renderOnline();
   }
   updateHud();save();
@@ -14914,16 +14915,19 @@ const MAINQ={
     get npc(){const q=P&&P.quest;return q&&q.special==='portal'?null:'kyle';}},
   messenger60:{title:'전달자 만나기',
     get goal(){return P&&P.got&&P.got.wyvern?'길드홀 지하실의 전달자에게 말을 건다':'포탈 너머의 와이번을 쓰러뜨리고 길드홀 지하실로 간다';},npc:'messenger'},
+  /* Lv 100 (2차 전직 뒤): 전달자를 찾아가면 길드홀의 버키를 찾아가라고 한다 */
+  messenger100:{title:'전달자 찾아가기',goal:'길드홀 지하실의 전달자에게 말을 건다',npc:'messenger'},
 };
 /* Lv 60 메인 퀘스트를 지금 상태에 맞춘다 (퀘스트 창을 그릴 때마다 부른다) */
 function mqAdvSync(){if(!mqAdvSync.ok||!P||!P.job||!JOBS[P.job])return;
   const al=advLv(P.job),ok=!!JOBS[P.job].from&&al!=null&&P.lv>=al;
-  if(!ok){if(P.mq==='portal60'||P.mq==='messenger60')mqComplete(P.mq);return;}
-  if(P.mq&&P.mq!=='portal60'&&P.mq!=='messenger60')return;
-  const q=P.quest,sp=q&&q.special==='portal',g=P.got||{},want=sp||(!g.portalQ&&!g.wyvern)?'portal60':'messenger60';
-  if(P.mq===want)return;
-  if(P.mq==='portal60')mqComplete('portal60');
-  if(P.mq!==want)mqStart(want);}
+  if(!ok){if(P.mq==='portal60'||P.mq==='messenger60')mqComplete(P.mq);}
+  else{if(P.mq&&P.mq!=='portal60'&&P.mq!=='messenger60')return;
+    const q=P.quest,sp=q&&q.special==='portal',g=P.got||{},want=sp||(!g.portalQ&&!g.wyvern)?'portal60':'messenger60';
+    if(P.mq===want)return;
+    if(P.mq==='portal60')mqComplete('portal60');
+    if(P.mq!==want)mqStart(want);return;}
+  if(!P.mq&&P.lv>=100&&(JOBS[P.job].tier|0)>=2&&!(P.mqDone&&P.mqDone.messenger100))mqStart('messenger100');}
 /* 메인 퀘스트의 주요 인물: 머리 위에 큰 금빛 느낌표가 뜬다. 안개 속에서도 멀리서 보인다 */
 const QMARK={g:null,n:null};
 function qmarkMake(){const g=new THREE.Group();g.userData.noMap=1;
@@ -15018,6 +15022,9 @@ function mqKyle(n){n.mqLock=true;
   showPages(['처음 보는 얼굴이구나. 어디서 왔니?'],0,text=>renderNpc(text,box=>{box.dataset.noskip='1';
     for(const t of ['모르겠어요.','…기억이 나지 않아요.','저도 잘 모르겠어요.'])npcBtn(box,t,()=>{
       showPages(['그래?','모험가로 강해져서 갈 수 있는 곳이 많아지면, 어디서 왔는지도 알 수 있을 거다.','그러니 여기서 강해져라. 의뢰를 하다 보면 강해질 수 있을 거야.'],0,last=>{n.mqLock=false;mqComplete('kyle1');npcEndLine(last);});},'pri wide');}));}
+/* ---- 전달자 (Lv 100): 계단이 열렸다, 길드홀의 버키를 찾아가라 ---- */
+function mqMessenger100(n){n.mqLock=true;
+  showPages(['…때가 됐군.','계단은 열려 있어.','올라가서 길드홀의 버키를 찾아가.'],0,last=>{n.mqLock=false;mqComplete('messenger100');npcEndLine(last);});}
 /* ---- 튀르팽: 옛 친구의 책 ---- */
 function mqTurpin(n){const base=baseOf(P.job),bk=BASE_BOOK[base]||'그 책',id=OLD_BOOK[base];n.mqLock=true;
   showPages([`자네의 품속에 있는 책이 ${bk}라는 것을 알게 된 후, 옛 친구의 책이 기억났네.`,'그대에게 주는 게 낫겠네.'],0,last=>{n.mqLock=false;
@@ -15095,6 +15102,7 @@ addEventListener('keydown',e=>{const el=document.getElementById('bookWin');if(!e
   if(c==='Escape'){closeBook();e.preventDefault();}else if(c==='ArrowRight'){bookTurn(1);e.preventDefault();}else if(c==='ArrowLeft'){bookTurn(-1);e.preventDefault();}});
 /* ---- NPC 연결: 카일(메인 퀘스트 대화), 광장의 튀르팽(Lv 30 퀘스트 동안은 집에 있다) ---- */
 (function(){const k=NPCS.find(n=>n.id==='kyle');if(k){const prev=k.onOpen;k.onOpen=()=>{if(P&&P.mq==='kyle1'){mqKyle(k);return true;}return prev?prev():false;};}
+  const ms=NPCS.find(n=>n.id==='messenger');if(ms){const prev=ms.onOpen;ms.onOpen=()=>{if(P&&P.mq==='messenger100'){mqMessenger100(ms);return true;}return prev?prev():false;};}
   const s=NPCS.find(n=>n.id==='sera');if(s){s.hideIf=()=>!!(P&&P.mq==='turpin30');const c=colliders.find(c=>c.npc&&c.x===s.x&&c.z===s.z);
     setInterval(()=>{if(c)c.r=s.hideIf()?0:.6;},500);}})();
 
