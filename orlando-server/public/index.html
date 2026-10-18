@@ -1010,7 +1010,7 @@ body.talking #buffBar{visibility:hidden}
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@c8666953cc61ae224b1f6ff40a7680040c35cc9a/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@e547496e461a2b37493cbc97da0d8a3ef2fd4336/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -12202,12 +12202,13 @@ function questKill(m){const q=P.quest;if(!q)return;const g=qGoals(q).find(g=>g.t
   if(party&&q.qid)for(const pm of party.members)if(pm.id!==myPeer())dm(pm.id,{k:'qkill',qid:q.qid,ty:m.t});
   if(qDone(q))log(`의뢰 목표 달성`,'sys');}
 /* 퀘스트 창: 맨 위에 메인 퀘스트, 그 아래 의뢰 (받은 의뢰가 없어도 창은 늘 보인다) */
-function updateQuestHud(){const e=$('#questHud'),bx=$('#questBox');if(!P){bx.hidden=true;return;}bx.hidden=false;e.innerHTML='';
+function updateQuestHud(){if(typeof mqAdvSync==='function')mqAdvSync();const e=$('#questHud'),bx=$('#questBox');if(!P){bx.hidden=true;return;}bx.hidden=false;e.innerHTML='';
   const sec=(tag,cls,title,lines,dim)=>{const d=document.createElement('div');d.className='qsec '+cls;const t=document.createElement('span');t.className='qtag';t.textContent=tag;d.appendChild(t);
     if(title){const b=document.createElement('b');b.textContent=title;d.appendChild(b);}for(const l of lines){const s=document.createElement('div');s.className='ql'+(dim?' dim':'');s.textContent=l;d.appendChild(s);}e.appendChild(d);};
   const M=typeof MAINQ!=='undefined'&&P.mq&&MAINQ[P.mq];if(M)sec('메인','main',M.title,[M.goal]);
   const q=P.quest;
-  if(q){const lines=q.special?((q.stage|0)<1?['길 끝 포탈 조사']:(q.stage|0)<2?['포탈 밖으로 돌아오기']:[]):qGoals(q).map(g=>`${MON[g.ty].name} 처치 ${Math.min(g.have,g.need)}/${g.need}`);
+  if(q&&q.special&&P.mq==='portal60');   /* 길 끝 포탈 조사는 메인 칸에 뜬다 */
+  else if(q){const lines=q.special?((q.stage|0)<1?['길 끝 포탈 조사']:(q.stage|0)<2?['포탈 밖으로 돌아오기']:[]):qGoals(q).map(g=>`${MON[g.ty].name} 처치 ${Math.min(g.have,g.need)}/${g.need}`);
     if(qDone(q))lines.push(`${q.fromName||'의뢰인'}에게 보고하기`);sec('의뢰','sub',null,lines);}
   else sec('의뢰','sub',null,['받은 의뢰가 없다'],true);
   placeQuestBox();}
@@ -12222,7 +12223,7 @@ const MENTOR_AT={x:OR.C2.x-5.5,z:OR.C2.z+4.5};
 const secondAdv=()=>!!(P&&JOBS[P.job].from);
 function summonMentor(quiet){
   if(!secondAdv()&&typeof mqLevelCheck==='function'){mqLevelCheck(quiet);return;}   /* 1차 전직은 스승 대신 메인 퀘스트(튀르팽의 옛 친구의 책) */
-  if(secondAdv()){if(!quiet)log('누군가가 당신을 찾고 있다.','sys');return;}
+  if(secondAdv()){if(!quiet)log('누군가가 당신을 찾고 있다.','sys');updateQuestHud();return;}
   if(mentor)return;
   mentor=makeMentorMesh();mentor.position.set(MENTOR_AT.x,heightAt(MENTOR_AT.x,MENTOR_AT.z),MENTOR_AT.z);mentor.lookAt(OR.C2.x,mentor.position.y,OR.C2.z);scene.add(mentor);npcBakeRequest('mentor',mentor);
   colliders.push({x:MENTOR_AT.x,z:MENTOR_AT.z,r:.6,mentor:true});
@@ -12269,7 +12270,7 @@ function advance(j){
   computeStats(P);P.hp=P.maxhp;P.mp=P.maxmp;
   const pos=player.position.clone();scene.remove(player);player=makePlayerMesh(j,gearOf(P),P.ap);player.position.copy(pos);player.visible=false;scene.add(player);setViewModel(j);
   spawnFx(0xf3cf6a,pos.clone().add(new THREE.Vector3(0,1,0)),3,.9);sfx('advance');
-  log(`${from}에서 ${JOBS[j].name}(으)로 전직했다.`,'sys');
+  log(`${from}에서 ${JOBS[j].name}(으)로 전직했다.`,'sys');updateQuestHud();
   if(mentor){scene.remove(mentor);mentor=null;}const ci=colliders.findIndex(c=>c.mentor);if(ci>=0)colliders.splice(ci,1);
   $('#interact').hidden=true;interactTarget=null;closeMentor();updateHud();renderOnline();save();publishPresence(true);
 }
@@ -14711,7 +14712,7 @@ function wyvernReward(m,n){
   const items=[...loot.map(id=>[id,1]),['elixir',2],['hp_l',5]];
   log(`${D.name} 처치!${n>1?` (함께 ${n}명)`:''} EXP +${Math.round(exp*expMul())}`,'sys');
   bigBanner(`${D.name} 처치`,`EXP +${Math.round(exp*expMul()).toLocaleString('ko-KR')}`);sfx('levelup');
-  P.got=P.got||{};P.got.wyvern=1;
+  P.got=P.got||{};P.got.wyvern=1;updateQuestHud();
   gainExp(exp);questKill(m);spawnBossChest(m.mesh.position,gold,items,D.name);save();
 }
 /* 상자: 이 플레이어 화면에만 생긴다. 다가가서 F로 열면 상자 창이 뜨고, 거기서 골드와 장비를 챙긴다 */
@@ -14906,7 +14907,23 @@ loop();
 const MAINQ={
   kyle1:{title:'카일을 찾아가기',goal:'하레나 광장의 카일에게 말을 건다',npc:'kyle'},
   turpin30:{title:'튀르팽 찾아가기',goal:'튀르팽의 집에 찾아간다',npc:'turpin'},
+  /* Lv 60 (1차 전직 직업): 게시판 특별 의뢰 → 길 끝 포탈 → 전달자. 진행은 의뢰·와이번 상태를 보고 정한다 (mqAdvSync) */
+  portal60:{title:'길 끝 포탈 조사',
+    get goal(){const q=P&&P.quest,sp=q&&q.special==='portal'?q:null;if(!sp)return '카일의 게시판에서 특별 의뢰를 받는다';
+      const s=sp.stage|0;return s<1?'깊은 사막5 길 끝의 포탈로 들어간다':s<2?'포탈 밖으로 돌아온다':`${sp.fromName||'카일'}에게 보고한다`;},
+    get npc(){const q=P&&P.quest,sp=q&&q.special==='portal'?q:null;return !sp||(sp.stage|0)>=2?(sp&&sp.from)||'kyle':null;}},
+  messenger60:{title:'전달자 만나기',
+    get goal(){return P&&P.got&&P.got.wyvern?'길드홀 지하실의 전달자에게 말을 건다':'포탈 너머의 와이번을 쓰러뜨리고 길드홀 지하실로 간다';},npc:'messenger'},
 };
+/* Lv 60 메인 퀘스트를 지금 상태에 맞춘다 (퀘스트 창을 그릴 때마다 부른다) */
+function mqAdvSync(){if(!mqAdvSync.ok||!P||!P.job||!JOBS[P.job])return;
+  const al=advLv(P.job),ok=!!JOBS[P.job].from&&al!=null&&P.lv>=al;
+  if(!ok){if(P.mq==='portal60'||P.mq==='messenger60')mqComplete(P.mq);return;}
+  if(P.mq&&P.mq!=='portal60'&&P.mq!=='messenger60')return;
+  const q=P.quest,sp=q&&q.special==='portal',g=P.got||{},want=sp||(!g.portalQ&&!g.wyvern)?'portal60':'messenger60';
+  if(P.mq===want)return;
+  if(P.mq==='portal60')mqComplete('portal60');
+  if(P.mq!==want)mqStart(want);}
 /* 메인 퀘스트의 주요 인물: 머리 위에 큰 금빛 느낌표가 뜬다. 안개 속에서도 멀리서 보인다 */
 const QMARK={g:null,n:null};
 function qmarkMake(){const g=new THREE.Group();g.userData.noMap=1;
@@ -14925,7 +14942,7 @@ function questMarkTick(dt){if(!questMarkTick.ok)return;if(!QMARK.g)QMARK.g=qmark
   const t=tAll,s=1   /* 원래 팔면체 표시처럼 크기는 늘 같다 (멀면 작게 보인다) */,p=n.mesh.position,hy=(n.mesh.userData.markerY??(n.look&&n.look.small?2.2:2.6))+.25;
   g.position.set(p.x,p.y+hy+(s-1)*.25+Math.sin(t*2.4)*.07,p.z);g.scale.setScalar(s*1.2*(1+Math.sin(t*4)*.04));
   g.rotation.y=Math.atan2(camera.position.x-p.x,camera.position.z-p.z);g.userData.halo.material.opacity=.75+Math.sin(t*3)*.2;}
-questMarkTick.ok=1;   /* 이 파일이 읽힌 뒤부터 돈다 */
+questMarkTick.ok=1;mqAdvSync.ok=1;   /* 이 파일이 읽힌 뒤부터 돈다 */
 const BASE_BOOK={warrior:'전사의 서',mage:'마법사의 서',rogue:'도적의 서',archer:'궁수의 서'};
 const OLD_BOOK={warrior:'book_jerier',mage:'book_ansei',rogue:'book_jaerang',archer:'book_olivier'};
 /* 옛 친구의 책: pages 안의 '{빈칸}'은 전직할 직업을 직접 골라 채운다 */
