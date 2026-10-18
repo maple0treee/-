@@ -41,7 +41,8 @@ try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'npcbake'))) if (/^[a-z0
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'music'))) if (/^[a-z0-9_]+\.mp3$/.test(fn)) files['/music/' + fn] = { file: 'music/' + fn, type: 'audio/mpeg', cache: 'public, max-age=86400', raw: true }; } catch (e) {}
 for (const f of Object.values(files)) {
   f.body = fs.readFileSync(path.join(PUBLIC, f.file));
-  if (!f.raw) f.gz = zlib.gzipSync(f.body);
+  if (!f.raw) f.gz = zlib.gzipSync(f.body, { level: 9 });
+  f.etag = '"' + require('crypto').createHash('sha1').update(f.body).digest('base64').slice(0, 20) + '"';   // 바뀌지 않았으면 304로 끝낸다
 }
 
 const server = http.createServer((req, res) => {
@@ -49,6 +50,7 @@ const server = http.createServer((req, res) => {
   if (url === '/health') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('ok v' + VERSION + ' monsters ' + sim.count()); }
   if (url === '/index.html') { res.writeHead(301, { Location: '/' }); return res.end(); }   // 같은 페이지는 주소 하나로 (검색 노출)
   const f = files[url];
+  if (f && req.headers['if-none-match'] === f.etag) { res.writeHead(304, { ETag: f.etag, 'Cache-Control': f.cache }); return res.end(); }
   if (!f) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('없는 페이지'); }
   if (f.raw) {
     const L = f.body.length, m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
@@ -59,16 +61,18 @@ const server = http.createServer((req, res) => {
       res.writeHead(206, { 'Content-Type': f.type, 'Cache-Control': f.cache, 'Accept-Ranges': 'bytes', 'Content-Range': `bytes ${a}-${b}/${L}`, 'Content-Length': b - a + 1 });
       return res.end(f.body.subarray(a, b + 1));
     }
-    res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': f.cache, 'Accept-Ranges': 'bytes', 'Content-Length': L });
+    res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': f.cache, ETag: f.etag, 'Accept-Ranges': 'bytes', 'Content-Length': L });
     return res.end(f.body);
   }
   const gzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
-  res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': f.cache, Vary: 'Accept-Encoding', ...(gzip ? { 'Content-Encoding': 'gzip' } : {}) });
+  res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': f.cache, ETag: f.etag, Vary: 'Accept-Encoding', ...(gzip ? { 'Content-Encoding': 'gzip' } : {}) });
   res.end(gzip ? f.gz : f.body);
 });
 
 // ---------- 동시접속 ----------
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8 * 1024 });
+// 메시지를 압축해서 보낸다 (몬스터 위치 같은 JSON은 1/4~1/5로 줄어 서버 대역폭이 크게 준다)
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8 * 1024,
+  perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 6 }, serverNoContextTakeover: false, clientNoContextTakeover: true, concurrencyLimit: 4 } });
 const clients = new Map(); // id -> ws
 let counter = 0;
 

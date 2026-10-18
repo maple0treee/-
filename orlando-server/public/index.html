@@ -1010,10 +1010,10 @@ body.talking #buffBar{visibility:hidden}
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;</script>
-<script src="three.min.js"></script>
-<script src="GLTFLoader.js"></script>
-<script src="SkeletonUtils.js"></script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@c8666953cc61ae224b1f6ff40a7680040c35cc9a/orlando-server/public/";</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
 <script>
 /* 오를란도 공용 데이터: 게임(브라우저)과 서버가 똑같이 쓰는 지도·지역·몬스터 정보 */
 (function (root) {
@@ -1835,6 +1835,12 @@ body.talking #buffBar{visibility:hidden}
 <script>
 (()=>{
 'use strict';
+/* 큰 파일(모델·음악·구운 NPC)은 CDN(GitHub 공개 저장소)에서 먼저 받고, 안 되면 이 서버에서 받는다 → 서버 대역폭 절약 */
+const ASSET_RE=/^(models\/|npcbake\/|pmodel\/|citbake\/|music\/|player\.glb)/;
+function cdnURL(u){return window.ORLANDO_CDN&&typeof u==='string'&&ASSET_RE.test(u)?window.ORLANDO_CDN+u:u;}
+(function(){if(!window.ORLANDO_CDN)return;
+  const of=window.fetch.bind(window);window.fetch=(u,o)=>{const c=cdnURL(u);if(c===u)return of(u,o);return of(c,o).then(r=>r.ok?r:of(u,o)).catch(()=>of(u,o));};
+  const L=window.THREE&&THREE.GLTFLoader&&THREE.GLTFLoader.prototype;if(L){const ol=L.load;L.load=function(u,ok,pr,er){const c=cdnURL(u);if(c===u)return ol.call(this,u,ok,pr,er);return ol.call(this,c,ok,pr,()=>ol.call(this,u,ok,pr,er));};}})();
 const $=s=>document.querySelector(s);
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const pick=a=>a[Math.floor(Math.random()*a.length)];
@@ -6356,7 +6362,7 @@ function npcVoice(ch,v,q,at){const X=SFX.ctx;if(!X||!SFX.voice||OPT.voice<=0||!c
 const BGM={vol:.38,cur:null,want:null,els:{},fade:1.6,
   files:{harena:'music/harena.mp3?v=1',exiz:'music/exiz.mp3?v=1'},
   zone:{town:'harena',forest:'harena',plains:'harena',swamp:'harena',ruins:'harena',wwest:'harena',wnorth:'harena',wsouth:'harena',weast:'harena',marcus:'exiz'}};   /* 하레나 둘레 사냥터(길 여덟 구역)도 하레나 테마 */
-function bgmEl(k){let a=BGM.els[k];if(!a){a=BGM.els[k]=new Audio(BGM.files[k]);a.loop=true;a.preload='auto';a.volume=0;a._v=0;}return a;}
+function bgmEl(k){let a=BGM.els[k];if(!a){const src=BGM.files[k],c=typeof cdnURL==='function'?cdnURL(src):src;a=BGM.els[k]=new Audio(c);if(c!==src)a.addEventListener('error',()=>{if(!a._fb){a._fb=1;a.src=src;}});a.loop=true;a.preload='auto';a.volume=0;a._v=0;}return a;}
 function bgmZone(z){BGM.want=z&&BGM.zone[z]||null;if(BGM.want)bgmEl(BGM.want);}
 function bgmTick(dt){const step=dt/BGM.fade,hid=document.hidden;
   /* NPC와 이야기하는 동안은 음악을 낮춰 목소리가 들리게 */
@@ -13599,7 +13605,7 @@ function makeWsRoom(){
   const firePeers=()=>{const ps=snap();peerFns.forEach(f=>{try{f({peers:ps,joined:[],left:[],updated:[]});}catch(e){}});};
   const setConn=v=>{ok=v;connFns.forEach(f=>{try{f(v);}catch(e){}});};
   const send=o=>{if(ok&&ws&&ws.readyState===1)ws.send(JSON.stringify(o));};
-  function open(){
+  function open(){if(window.__wsOff)return;
     try{ws=new WebSocket(url);}catch(e){setTimeout(open,retry);return;}
     ws.onopen=()=>{retry=1000;setConn(true);send({t:'p',d:mine});};
     ws.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch(err){return;}
@@ -13610,7 +13616,7 @@ function makeWsRoom(){
       else if(m.t==='leave'&&m.id){peers.delete(m.id);firePeers();}
       else if(m.t==='fx'){(topicFns.fx||[]).forEach(f=>{try{f({topic:'fx',data:m.d,peer:m.id,by:null,isMe:false,sameTab:false,kind:'viewer',guest:false});}catch(err){}});}
       else if(topicFns[m.t]){topicFns[m.t].forEach(f=>{try{f(m);}catch(err){}});}};
-    ws.onclose=()=>{setConn(false);peers.clear();firePeers();setTimeout(open,retry);retry=Math.min(retry*2,15000);};
+    ws.onclose=()=>{if(!ok)window.__wsFails=(window.__wsFails||0)+1;setConn(false);peers.clear();firePeers();setTimeout(open,retry);retry=Math.min(retry*2,15000);};
     ws.onerror=()=>{};
   }
   open();
@@ -14886,7 +14892,11 @@ function loopBody(){
 }
 sun.position.set(30,60,20);
 if(!window.ORLANDO_WS){mnet=makeLocalMonsterNet();setupNetMonsters(mnet);mnet.start();}renderOnline();
-if(window.ORLANDO_WS)setTimeout(()=>{if(!monsGot)log(srvVer===null?'서버에 연결되지 않아 몬스터를 받지 못했어요. 잠시 뒤 새로고침해 보세요.':'서버에서 몬스터 정보를 받지 못했어요. 서버 파일이 최신인지 확인해 주세요.','bad');},8000);
+/* 서버에 닿지 않으면(서버가 꺼졌거나, 서버 없이 올린 사본) 몬스터를 이 기기에서 돌려 혼자서라도 할 수 있게 한다 */
+if(window.ORLANDO_WS){
+  const wsDead=setInterval(()=>{if(monsGot||srvVer!==null){clearInterval(wsDead);return;}   // 연결이 한 번도 안 되고 두 번 이상 끊겼을 때만 (느린 기기에서 잘못 넘어가지 않게)
+    if((window.__wsFails||0)>=2){clearInterval(wsDead);window.__wsOff=true;mnet=makeLocalMonsterNet();setupNetMonsters(mnet);mnet.start();log('서버에 연결되지 않아 혼자 하기로 시작했어요.','sys');}},1000);
+  setTimeout(()=>{if(!monsGot&&srvVer!==null)log('서버에서 몬스터 정보를 받지 못했어요. 서버 파일이 최신인지 확인해 주세요.','bad');},8000);}
 loop();
 
 /* ---------- 메인 퀘스트 · 옛 친구의 책 ----------
