@@ -1219,7 +1219,7 @@ body.talking #buffBar{visibility:hidden}
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@50157f2f7ef1f1e7b05580ab097c1f4f70f38bfc/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@7363ed7de4ff2032341ef3cd81725ff8609f682e/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -13773,7 +13773,7 @@ function toggleView(){cam.third=!cam.third;toast(cam.third?'3인칭 시점':'1�
 $('#mnInv').onclick=()=>{$('#menu').hidden=true;mode='world';openInv();};
 
 function damagePlayer(d,src,mon){
-  if(invuln>0||mode!=='world')return;
+  if(invuln>0||(mode!=='world'&&mode!=='dialog')||!P||P.hp<=0||!$('#dead').hidden)return;   /* 메뉴·소지품 창을 열어도 몬스터에게 맞는다 */
   if(P.fly&&Math.random()<.35)P.flyFall=true;   /* 비행 중 맞으면 떨어질 수 있다 */
   // 방패를 든 나를 친 몬스터는 되레 다친다
   if(P.guardT>0&&mon&&mon.dying===null){damageMonster(mon,P.guardRef||1,{color:0xbfd4ff});const q=player.position;VFX.burst(new THREE.Vector3(q.x,q.y+1.2,q.z),0xbfd4ff,16,3.5,.4,{mix:0xffffff});sfx('block');}
@@ -13798,6 +13798,8 @@ function die(src){
   log(`쓰러졌다 · EXP -${lost}`,'bad');
   for(const m of monsters){m.aggro=false;m.windup=0;}
   $('#revive').textContent='하레나에서 깨어나기';
+  for(const id of ['menu','skills','shop','board','mentor','inv','bookWin','portalWin','npc'])if($('#'+id))$('#'+id).hidden=true;   /* 열려 있던 창은 닫고 쓰러진 창만 */
+  document.body.classList.remove('inv-open','talking');if(typeof bookCur!=='undefined')bookCur=null;
   $('#dead').hidden=false;updateHud();
 }
 $('#revive').onclick=()=>{
@@ -15244,7 +15246,10 @@ function loopBody(){
   const dt=Math.min(clock.getDelta(),.05);tAll+=dt;dtLast=dt;
   if(mode==='title'){const a=tAll*.05;camera.position.set(Math.cos(a)*30,14,Math.sin(a)*30);camera.lookAt(0,2,0);apPreviewTick(dt);}
   else if(mode==='world')updateWorld(dt);
-  else if(mode==='dialog'){if(P&&P.bowDraw)bowCancel();if(P&&P.ray)rayEnd();if(P&&P.flame){P.flame=null;sfxStop('mg_fire');if(myMoId==='flame'){swingT=1;myMo=null;myMoId='';}}updateViewModel(dt,0);updateNetMonsters(dt);for(const m of monsters)m.tag.hidden=true;}
+  else if(mode==='dialog'){
+    /* 창을 열어도 세상은 멈추지 않는다: 공중에 있으면 떨어진다 */
+    if(P&&player&&!P.fly&&P.hp>0){const pos=player.position,ground=floorAt(pos.x,pos.z,pos.y);if(pos.y>ground+.001||vy>0){const y0=pos.y;vy-=26*dt;let py=pos.y+vy*dt;if(py<=ground){py=ground;vy=0;}pos.y=py;jumpY=Math.max(0,py-ground);camera.position.y+=py-y0;}}
+    if(P&&P.bowDraw)bowCancel();if(P&&P.ray)rayEnd();if(P&&P.flame){P.flame=null;sfxStop('mg_fire');if(myMoId==='flame'){swingT=1;myMo=null;myMoId='';}}updateViewModel(dt,0);updateNetMonsters(dt);for(const m of monsters)m.tag.hidden=true;}
   updateFx(dt);VFX.update(dt);updateAmbient(dt);if(typeof questMarkTick==='function')questMarkTick(dt);zoneMotes(dt);updateOthers(dt);animateDungeonLights(tAll);updatePortals(tAll);
   if(mode!=='title'){const pp=player?player.position:camera.position;LightPool.update(dt,pp);InstChunks.update(camera.position);mapSplitTick(dt);for(const m of monsters)if(m.mesh)setFarHidden(m.mesh,m.mesh.position.distanceToSquared(camera.position)>95*95);}
   Perf.tick();fpsTick();
