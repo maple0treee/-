@@ -1101,6 +1101,7 @@ body.talking #buffBar{visibility:hidden}
         <label class="orow"><span>배경 음악</span><input type="range" id="opBgm" min="0" max="100" step="5"><output></output></label>
         <label class="orow"><span>효과음</span><input type="range" id="opSfx" min="0" max="100" step="5"><output></output></label>
         <label class="orow"><span>NPC 목소리</span><input type="range" id="opVoice" min="0" max="100" step="5"><output></output></label>
+        <label class="orow"><span>그래픽</span><select id="opGfx"><option value="0">낮음</option><option value="1">보통</option><option value="2">높음</option></select></label>
         <label class="orow chk"><span>FPS 표시</span><input type="checkbox" id="opFps"></label>
       </section>
     </div>
@@ -1218,7 +1219,7 @@ body.talking #buffBar{visibility:hidden}
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@ffecac970df6002cd72c0dc385366c34db2a04bd/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@50157f2f7ef1f1e7b05580ab097c1f4f70f38bfc/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -2689,6 +2690,29 @@ function mergeRigid(root,extra){
   }
   return root;
 }
+/* 몬스터: 같은 부모에 붙은 조각은 색이 달라도 한 덩어리로 (색은 꼭짓점 색으로 옮긴다) → 몬스터 하나를 그리는 횟수가 확 준다
+   맞았을 때 번쩍임(재질의 emissive)은 새 재질을 userData.mats에 넣어 그대로 된다. userData가 따로 가리키는 재질(갈라진 빛 등)은 건드리지 않는다 */
+function mergeRigidColors(root){
+  if(!root)return root;const refs=_refsOf(root),mrefs=new Set();
+  root.traverse(o=>{for(const k in o.userData||{}){if(k==='mats')continue;const v=o.userData[k];if(v&&v.isMaterial)mrefs.add(v);}});
+  const mats=root.userData&&root.userData.mats;const nodes=[];root.traverse(o=>nodes.push(o));
+  for(const parent of nodes){const buckets=new Map();
+    for(const c of parent.children){
+      if(!c.isMesh||c.isInstancedMesh||c.isSkinnedMesh||c.children.length||refs.has(c)||Array.isArray(c.material)||!c.visible)continue;
+      const mt=c.material,g=c.geometry;if(!_OKMAT[mt.type]||mt.map||mrefs.has(mt)||!g||!g.attributes.position||g.morphAttributes&&Object.keys(g.morphAttributes).length)continue;
+      c.updateMatrix();if(c.matrix.determinant()<=0)continue;
+      const key=_sig(Object.assign(Object.create(mt),{vertexColors:true}))+'|'+c.renderOrder;if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(c);}
+    for(const list of buckets.values()){if(list.length<2)continue;
+      let n=0;const parts=list.map(c=>{const g=(c.geometry.index?c.geometry.toNonIndexed():c.geometry.clone());g.applyMatrix4(c.matrix);if(!g.attributes.normal)g.computeVertexNormals();n+=g.attributes.position.count;return {g,c:c.material.color||new THREE.Color(1,1,1)};});
+      const P=new Float32Array(n*3),N=new Float32Array(n*3),C=new Float32Array(n*3);let o=0;
+      for(const {g,c} of parts){const k=g.attributes.position.count,ca=g.attributes.color;P.set(g.attributes.position.array.subarray(0,k*3),o*3);N.set(g.attributes.normal.array.subarray(0,k*3),o*3);
+        for(let i=0;i<k;i++){C[(o+i)*3]=c.r*(ca?ca.getX(i):1);C[(o+i)*3+1]=c.g*(ca?ca.getY(i):1);C[(o+i)*3+2]=c.b*(ca?ca.getZ(i):1);}o+=k;g.dispose();}
+      const G=new THREE.BufferGeometry();G.setAttribute('position',new THREE.BufferAttribute(P,3));G.setAttribute('normal',new THREE.BufferAttribute(N,3));G.setAttribute('color',new THREE.BufferAttribute(C,3));G.computeBoundingSphere();
+      const nm=list[0].material.clone();nm.vertexColors=true;if(nm.color)nm.color.setRGB(1,1,1);nm.needsUpdate=true;
+      if(Array.isArray(mats)){const old=new Set(list.map(c=>c.material));for(let i=mats.length-1;i>=0;i--)if(old.has(mats[i]))mats.splice(i,1);mats.push(nm);}
+      const m=new THREE.Mesh(G,nm);m.castShadow=list.some(c=>c.castShadow);m.receiveShadow=list.some(c=>c.receiveShadow);m.renderOrder=list[0].renderOrder;
+      const idx=parent.children.indexOf(list[0]);for(const c of list)parent.remove(c);parent.add(m);parent.children.splice(parent.children.indexOf(m),1);parent.children.splice(Math.min(idx,parent.children.length),0,m);}}
+  return root;}
 // 정적인 큰 덩어리(기록관, 용의 둥지 등)도 합친다: scene에 바로 붙은 그룹 가운데 조각이 많은 것
 function mergeStaticGroups(minParts){
   const keep=new Set();
@@ -2819,8 +2843,12 @@ function setFarHidden(obj,far){if(obj.userData._far===far)return;obj.userData._f
    - 큰 모니터(컴퓨터)는 그릴 픽셀 수가 휴대폰의 몇 배라서, 처음부터 픽셀 수에 한도를 둔다 (컴퓨터 약 200만, 휴대폰 약 130만)
    - 프레임이 낮으면 해상도를 0.6배까지 낮춘다 (예전에는 컴퓨터가 1배 아래로 내려가지 못해 렉이 그대로 남았다)
    - 그래도 낮으면 그림자를 2~3프레임에 한 번만 다시 그린다 (그림자 그리기가 한 장면의 절반 가까이를 차지한다) */
+/* 그래픽 단계 (ESC 설정): 낮음 = 그림자 끄기 + 해상도 낮게 + 시야 짧게, 높음 = 해상도 조금 높게 */
+function gfxLv(){return typeof OPT!=='undefined'&&OPT.gfx!=null?OPT.gfx:1;}
+function applyGfx(){const L=gfxLv();try{const on=L>0;if(sun.castShadow!==on){sun.castShadow=on;scene.traverse(o=>{if(o.material){for(const m of Array.isArray(o.material)?o.material:[o.material])m.needsUpdate=true;}});}}catch(e){}
+  Perf.dpr=Math.min(Perf.dpr,Perf.maxDpr());if(L===2)Perf.dpr=Perf.maxDpr();renderer.setPixelRatio(Perf.dpr);}
 const Perf={acc:0,frames:0,t:0,dpr:1,minDpr:.6,shSkip:1,fc:0,low:0,
-  init(){this.dpr=this.maxDpr();renderer.setPixelRatio(this.dpr);renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;
+  init(){if(gfxLv()===0){this.minDpr=.5;try{sun.castShadow=false;}catch(e){}}this.dpr=this.maxDpr();renderer.setPixelRatio(this.dpr);renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;
     addEventListener('resize',()=>{const m=this.maxDpr();if(this.dpr>m+.01){this.dpr=m;renderer.setPixelRatio(m);}});},
   tick(){
     const now=performance.now(),dt=this.last?Math.min(1,(now-this.last)/1000):0;this.last=now;
@@ -2832,8 +2860,8 @@ const Perf={acc:0,frames:0,t:0,dpr:1,minDpr:.6,shSkip:1,fc:0,low:0,
         this.low++;if(this.low>=2&&this.shSkip<3)this.shSkip++;}
       else{this.low=0;if(fps>57){if(this.shSkip>1)this.shSkip--;else if(this.dpr<this.maxDpr()-.01){this.dpr=Math.min(this.maxDpr(),this.dpr+.08);renderer.setPixelRatio(this.dpr);}}}}
   },
-  maxDpr(){const mob=typeof coarse==='function'&&coarse(),base=Math.min(devicePixelRatio||1,mob?1.25:1.5),px=Math.max(1,innerWidth*innerHeight);
-    return Math.max(this.minDpr,Math.min(base,Math.sqrt((mob?1.3e6:2.0e6)/px)));}
+  maxDpr(){const mob=typeof coarse==='function'&&coarse(),L=gfxLv(),base=Math.min(devicePixelRatio||1,mob?1.25:L===2?2:1.5)*(L===0?.75:1),px=Math.max(1,innerWidth*innerHeight);
+    return Math.max(L===0?.5:this.minDpr,Math.min(base,Math.sqrt((mob?1.3e6:L===2?3.0e6:L===0?1.2e6:2.0e6)/px)));}
 };
 
 /* ---------- 분수와 불: 흐르는 물줄기, 물결, 물보라 / 흔들리는 등불과 화덕 불
@@ -3712,7 +3740,7 @@ function makeMonsterMesh(t){
   const s=D.scale||1;g.scale.setScalar(s);
   g.traverse(o=>{if(o.isMesh){if(!o.geometry.boundingSphere)o.geometry.computeBoundingSphere();o.castShadow=o.geometry.boundingSphere.radius>.14;}});
   g.userData.h=(g.userData.h||1)*s;
-  mergeRigid(g);
+  mergeRigid(g);if(D.build!=='dragon')mergeRigidColors(g);
   return g;
 }
 
@@ -6389,7 +6417,7 @@ function blendKeys(keys,p,idleObj,names){
 
 /* ---------- 효과음: 파일 없이 브라우저에서 바로 만든다 (Web Audio) ---------- */
 /* 설정 (ESC 메뉴): 배경 음악·효과음·NPC 목소리 크기, FPS 표시. 이 기기에 저장 */
-const OPT=(()=>{const d={bgm:1,sfx:1,voice:1,fps:0};try{const o=JSON.parse(localStorage.getItem('orlando3d.opt')||'{}');for(const k in d)if(typeof o[k]===typeof d[k]||(k==='fps'))d[k]=o[k];}catch(e){}return d;})();
+const OPT=(()=>{const d={bgm:1,sfx:1,voice:1,fps:0,gfx:1};try{const o=JSON.parse(localStorage.getItem('orlando3d.opt')||'{}');for(const k in d)if(typeof o[k]===typeof d[k]||(k==='fps'))d[k]=o[k];}catch(e){}return d;})();
 function optSave(){try{localStorage.setItem('orlando3d.opt',JSON.stringify(OPT));}catch(e){}}
 const VOICE_GAIN=2.6;   /* NPC 목소리는 다른 효과음보다 작게 만들어져 있어 따로 키운다 */
 const SFX={ctx:null,master:null,voice:null,noise:null,vol:OPT.sfx,last:{}};
@@ -11965,6 +11993,7 @@ $('#mnResume').onclick=closeMenu;
   bind('#opVoice',()=>OPT.voice,v=>{voiceSetVol(v);});
   $('#opSfx').addEventListener('change',()=>{sfxInit();sfx('ui');});
   $('#opVoice').addEventListener('change',()=>{sfxInit();const t=SFX.ctx&&SFX.ctx.currentTime;if(t==null)return;const v={p:130,sp:46};[...'안녕하세요'].forEach((c,i)=>npcVoice(c,v,false,t+.05+i*.06));});
+  const gs=$('#opGfx');gs.value=String(OPT.gfx);gs.addEventListener('change',()=>{OPT.gfx=+gs.value;optSave();applyGfx();});
   const fp=$('#opFps');fp.checked=!!OPT.fps;fp.addEventListener('change',()=>{OPT.fps=fp.checked?1:0;optSave();if(!OPT.fps)$('#fps').hidden=true;});}
 const FPSD={n:0,t:0};
 function fpsTick(){if(!OPT.fps)return;FPSD.n++;const now=performance.now();if(!FPSD.t){FPSD.t=now;return;}
@@ -14234,6 +14263,7 @@ function updateWorld(dt){
   /* 하레나 사냥터: 구역 안은 먼 곳이 흐리고, 협곡 문 가까이 가면 짙은 모래 안개로 다음 구역을 가린다 */
   if(hi>=0&&typeof hfogNear==='function'){scene.fog.near=20;scene.fog.far=90;const k=hfogNear(player.position.x,player.position.z);if(k>0){scene.fog.near+=(2-scene.fog.near)*k;scene.fog.far+=(26-scene.fog.far)*k;}}
   if(typeof hfogTick==='function')hfogTick(tAll);
+  if(gfxLv()===0&&z!=='dungeon'&&z!=='hall'&&z!=='thouse'&&!inCave){scene.fog.near*=.8;scene.fog.far*=.8;}   /* 그래픽 낮음: 시야를 줄여 먼 것을 덜 그린다 */
   /* 땅 끝 가까이 가면 안개가 짙어진다 (멀리 있는 것부터 안개 속으로 사라진다) */
   if(player&&player.position.x>=800){const q=player.position,I=OR.isleAt(q.x,q.z),dd=OR.isleEdge(I,Math.atan2(q.z-I.z,q.x-I.x))-Math.hypot(q.x-I.x,q.z-I.z),k=1-OR.smooth(6,60,dd);
     if(k>0){scene.fog.near+=(4-scene.fog.near)*k*.9;scene.fog.far+=(48-scene.fog.far)*k*.8;}}
@@ -14711,11 +14741,12 @@ function mapSplitTick(dt){const S=MapSplit;S.t-=dt;if(S.t>0||!player)return;S.t=
 let _myMap=-1,_myMapT=-9;
 /* 먼 몬스터는 가볍게: 38m 밖은 그림자를 끄고, 62m 밖(안개 속)은 몸통만 그린다. 몬스터 하나가 부위 12개로 그려져 사냥터 그리기의 대부분을 차지한다 */
 function monLod(m,i){if(!player||((m._lodT=(m._lodT||0)+1)+i)%8)return;const d=Math.hypot(m.mesh.position.x-camera.position.x,m.mesh.position.z-camera.position.z),o0=m._lod|0;
-  const L=d>(o0===2?59:62)?2:d>(o0>=1?35:38)?1:0;if(L===o0)return;m._lod=L;
+  const fz=scene.fog?scene.fog.far:200,far3=Math.min(140,fz*.74);   /* 안개에 거의 묻힌 몬스터(안개 끝의 74% 밖)는 아예 그리지 않는다 */
+  const gk=gfxLv()===0?.7:1,L=d>(o0===3?far3-3:far3)?3:d>(o0>=2?59:62)*gk?2:d>(o0>=1?21:24)*gk?1:0;if(L===o0)return;m._lod=L;
   if(!m._parts){const ps=[],B=new THREE.Box3(),sz=new THREE.Vector3();m.mesh.updateMatrixWorld(true);B.setFromObject(m.mesh);const H=Math.max(...B.getSize(sz).toArray())||1;m._small=new Set();
     m.mesh.traverse(o=>{if(!o.isMesh)return;ps.push(o);o.userData._cs=o.castShadow;B.setFromObject(o);const s=Math.max(...B.getSize(sz).toArray());   /* 눈·이빨·발톱 같은 작은 부위와 바닥 그림자 원판은 멀면 뺀다 */
       if(s<H*.18||(o.material&&o.material.isMeshBasicMaterial&&o.material.transparent))m._small.add(o);});m._parts=ps;}
-  for(const o of m._parts){o.castShadow=L===0&&o.userData._cs;if(L===2&&m._small.has(o)){if(o.visible){o.visible=false;o.userData._lodHid=1;}}else if(o.userData._lodHid){o.visible=true;o.userData._lodHid=0;}}}
+  for(const o of m._parts){o.castShadow=L===0&&o.userData._cs;if(L>=2&&m._small.has(o)){if(o.visible){o.visible=false;o.userData._lodHid=1;}}else if(o.userData._lodHid){o.visible=true;o.userData._lodHid=0;}}}
 function updateNetMonsters(dt){if(player&&tAll-_myMapT>.3){_myMapT=tAll;_myMap=mapKeyAt(player.position.x,player.position.z);}if(player){const _n=OR.spNear(player.position.x,player.position.z);player._spT=Math.hypot(player.position.x-OR.C2.x,player.position.z-OR.C2.z)<OR.TOWN_R+4?0:(_n?_n.t:0);}
   updateDuelMarks(dt);
   for(let i=monsters.length-1;i>=0;i--){
@@ -14730,7 +14761,9 @@ function updateNetMonsters(dt){if(player&&tAll-_myMapT>.3){_myMapT=tAll;_myMap=m
     if(!(tAll-(m._mkT||-9)<.5)){m._mkT=tAll;m._mk=mapKeyAt(mp.x,mp.z);}
     if(!sameMap(m._mk,_myMap)&&!m.thrown&&!(player&&Math.abs(mp.x-player.position.x)<MAP_NEAR&&Math.abs(mp.z-player.position.z)<MAP_NEAR)){if(m.mesh.visible)m.mesh.visible=false;if(!m.tag.hidden)m.tag.hidden=true;const q=snapAt(m);if(q){mp.x=q[0];mp.z=q[1];}else{mp.x=m.tx;mp.z=m.tz;}continue;}
     m.phase+=dt;
-    if(!m.D.boss&&!m.D.dragon)monLod(m,i);
+    if(!m.D.boss&&!m.D.dragon){monLod(m,i);
+      if(m._lod===3&&!m.thrown&&!(m.hitT>tAll-2)){if(m.mesh.visible)m.mesh.visible=false;if(!m.tag.hidden)m.tag.hidden=true;const q=snapAt(m);if(q){mp.x=q[0];mp.z=q[1];}else{mp.x=m.tx;mp.z=m.tz;}m.mesh.position.y=heightAt(mp.x,mp.z);continue;}
+      m._skip=m._lod>=2?!m._skip:false;}   /* 먼 몬스터는 움직임을 한 프레임 걸러 그린다 */
     const px=mp.x,pz=mp.z;
     {const q=snapAt(m);if(q){if(Math.hypot(q[0]-mp.x,q[1]-mp.z)>8){mp.x=q[0];mp.z=q[1];}else{mp.x+=(q[0]-mp.x)*Math.min(1,dt*20);mp.z+=(q[1]-mp.z)*Math.min(1,dt*20);}}
       else{mp.x+=(m.tx-mp.x)*Math.min(1,dt*8);mp.z+=(m.tz-mp.z)*Math.min(1,dt*8);}}
@@ -14755,7 +14788,7 @@ function updateNetMonsters(dt){if(player&&tAll-_myMapT>.3){_myMapT=tAll;_myMap=m
       else{const k=Math.min(1,(tAll-T.rel)/T.dur),gy=heightAt(T.ex,T.ez);mp.x=T.fx+(T.ex-T.fx)*k;mp.z=T.fz+(T.ez-T.fz)*k;mp.y=T.fy+(gy-T.fy)*k+Math.sin(k*Math.PI)*2.2;m.mesh.rotation.x=-k*Math.PI*1.5;m.mesh.rotation.z=.5*(1-k);if(Math.random()<.7){const c=mCenter(m);VFX.emit(0,c.x,c.y,c.z,(Math.random()-.5),(Math.random()-.5)+.4,(Math.random()-.5),0xe8d8b0,.35,0,2);}
         if(k>=1){m.thrown=null;m.mesh.rotation.x=0;m.mesh.rotation.z=0;mp.y=gy;}}
       m.ox=m.oz=0;}
-    if(m.mesh.userData.anim){if(m.mesh.visible&&!m.mesh.userData._far)m.mesh.userData.anim(m,mv,windup,dt);}
+    if(m.mesh.userData.anim){if(m.mesh.visible&&!m.mesh.userData._far&&!m._skip)m.mesh.userData.anim(m,mv,windup,m._lod>=2?dt*2:dt);}
     else if(m.D.build==='slime'){const b=m.mesh.userData.body;b.scale.y=(m.D.toad?.55:.78)*(1+Math.sin(m.phase*(mv>.5?14:5))*.06)*(windup?.78:1);b.scale.x=b.scale.z=(m.D.toad?1.25:1)*(windup?1.12:1);if(m.D.toad)b.scale.z=1.05*(windup?1.12:1);}
     else if(m.D.build==='quad'){const s2=Math.sin(m.phase*10)*Math.min(1,mv/2)*.6;m.mesh.userData.legs.forEach((l,j)=>l.rotation.x=(j%3===0?s2:-s2));}
     else{animBiped(m.mesh,mv/2,m.phase);if(windup)m.mesh.userData.armR.rotation.x=-2.2;}
