@@ -63,9 +63,17 @@
     fort:   { x: 4150, z: 0, R: 190 },   // 통로 요새
     coachway: { x: 5300, z: 0, R: 400 }, // 왕도: 마차가 달리는 고리 길 (타고 가는 동안만 머문다)
     castle: { x: 6400, z: 0, R: 300 },   // 엑시즈 성: 엑시즈 시내 왕궁 남문으로 들어가면 나온다
+    // 엑시즈 동문 밖 사냥터 (Lv 100–125): 서쪽 끝으로 들어와 동쪽 끝으로 나가면 다음 땅. 마지막 땅을 나가면 밀골
+    mfield: { x: 2700, z: 900, R: 150 },   // 들판
+    mhill:  { x: 3150, z: 900, R: 150 },   // 구릉
+    mwood:  { x: 3600, z: 900, R: 150 },   // 숲길
+    mvale:  { x: 4050, z: 900, R: 150 },   // 계곡
+    mpass:  { x: 4500, z: 900, R: 150 },   // 고개
   };
-  const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle'];
+  const MHUNT = ['mfield', 'mhill', 'mwood', 'mvale', 'mpass'];
+  const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle', ...MHUNT];
   for (const k of ISLE_ORDER) { const I = ISLES[k]; I.id = k; I.entry = { x: I.x, z: I.z + I.R - 12 }; }   // 들어오는 자리 (남쪽 가장자리)
+  for (const k of MHUNT) { const I = ISLES[k]; I.entry = { x: I.x - I.R + 14, z: I.z }; I.exit = { x: I.x + I.R - 14, z: I.z }; }   // 사냥터: 서쪽으로 들어와 동쪽으로 나간다
   // 섬 가장자리 반지름 (엑시즈는 둥글지 않게 들쭉날쭉: 언덕 너머로 이어지는 땅처럼 보이게)
   function isleEdge(I, a) { if (I.id !== 'marcus') return I.R; return I.R - 8 + 14 * Math.sin(3 * a + 1.3) + 7 * Math.sin(7 * a + 0.4) + 4 * Math.sin(13 * a + 2.1); }
   function isleAt(x, z) { let b = null, bd = 1e9; for (const k of ISLE_ORDER) { const I = ISLES[k]; const d = Math.hypot(x - I.x, z - I.z) - I.R; if (d < bd) { bd = d; b = I; } } return b; }
@@ -180,6 +188,19 @@
     darkhound:{ name: '어둠 사냥개', lv: 93, build: 'quad', color: 0x2a2630, hpM: 1.1, atkM: 1.3, scale: 1.2 },
     crystalslime:{ name: '수정 슬라임', lv: 96, build: 'slime', color: 0x9a60e0, hpM: 1.5, atkM: 1.15, scale: 1.5, glow: 0xb070ff },
     cavetroll:{ name: '동굴 트롤', lv: 99, build: 'biped', color: 0x5a5a62, hpM: 2.1, atkM: 1.45, scale: 2.2, club: true },
+    // 엑시즈 동문 밖 사냥터 (Lv 100–125)
+    fieldwolf:{ name: '들늑대', lv: 101, build: 'quad', color: 0x8a6e4e, hpM: 1.1, atkM: 1.25, scale: 1.2 },
+    mudslime: { name: '진흙 슬라임', lv: 104, build: 'slime', color: 0x7a5e3e, hpM: 1.5, atkM: 1.15, scale: 1.55 },
+    hillboar: { name: '큰 멧돼지', lv: 106, build: 'quad', color: 0x4e3626, hpM: 1.4, atkM: 1.35, scale: 1.45, tusk: true },
+    meadowviper:{ name: '풀뱀', lv: 109, build: 'snake', color: 0x5a8a3e, hpM: 1.1, atkM: 1.45, scale: 1.8 },
+    woodbear: { name: '흑곰', lv: 111, build: 'quad', color: 0x2c2420, hpM: 1.7, atkM: 1.4, scale: 1.7 },
+    thornslime:{ name: '가시 슬라임', lv: 113, build: 'slime', color: 0x3e6a2a, hpM: 1.55, atkM: 1.25, scale: 1.55, glow: 0x9ad040 },
+    woodtroll:{ name: '숲 트롤', lv: 115, build: 'biped', color: 0x4e5e3a, hpM: 2.2, atkM: 1.5, scale: 2.25, club: true },
+    stonehound:{ name: '돌개', lv: 116, build: 'quad', color: 0x7a7670, hpM: 1.35, atkM: 1.4, scale: 1.3 },
+    valleyogre:{ name: '계곡 오우거', lv: 119, build: 'biped', color: 0x8a6a4a, hpM: 2.3, atkM: 1.55, scale: 2.3, club: true },
+    windwolf: { name: '바람 늑대', lv: 121, build: 'quad', color: 0xb8c4cc, hpM: 1.3, atkM: 1.5, scale: 1.3 },
+    mistslime:{ name: '안개 슬라임', lv: 123, build: 'slime', color: 0xc8d4dc, hpM: 1.6, atkM: 1.3, scale: 1.6, glow: 0xa0c8e8 },
+    cliffgiant:{ name: '벼랑 거인', lv: 125, build: 'biped', color: 0x6a6662, hpM: 2.5, atkM: 1.6, scale: 2.5, club: true },
     reddragon:{ name: '붉은 용 이그니스', lv: 100, fixed: { hp: 450000, atk: 900, def: 60, exp: 80000 }, gold: 80000, build: 'dragon', color: 0xa8231a, scale: 1, dragon: true },
   };
   const HP_MUL = 1.6, EXP_MUL = 1.25;
@@ -200,8 +221,9 @@
     forest: ['slime', 'slime', 'wolf'], plains: ['boar', 'goblin'], swamp: ['toad', 'lizard'], ruins: ['skeleton', 'skeleton', 'ogre'],
     wwest: ['jackal', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
     silva: ['silvawolf', 'mossslime'], arbus: ['snowwolf', 'frostslime'], kaolis: ['mackerel', 'tideslime', 'octopus'], subcus: ['darkhound', 'crystalslime'],
+    mfield: ['fieldwolf', 'fieldwolf', 'mudslime'], mhill: ['hillboar', 'meadowviper'], mwood: ['woodbear', 'thornslime', 'woodtroll'], mvale: ['stonehound', 'valleyogre'], mpass: ['windwolf', 'mistslime', 'cliffgiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 40, mhill: 42, mwood: 44, mvale: 44, mpass: 46 };
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
     const d2 = Math.hypot(x - C2.x, z - C2.z);
@@ -214,7 +236,7 @@
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0], coachway: [0, 0], castle: [0, 0] };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0], coachway: [0, 0], castle: [0, 0] , mfield: [100, 105], mhill: [105, 110], mwood: [110, 115], mvale: [115, 120], mpass: [120, 125] };
 
   // ---------- 의뢰 게시판 포스터 ----------
   // 의뢰를 주는 NPC마다 게시판이 따로 있다. 포스터는 마을 사람(실제 NPC)이 이유를 적어 붙인 것
@@ -252,6 +274,6 @@
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { THOUSE, inTHouse, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { MHUNT, THOUSE, inTHouse, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
