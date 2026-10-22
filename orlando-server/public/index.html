@@ -1335,7 +1335,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@a71955cee743a61655a83e2f50678b7e23d6da10/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@3245f8c797eb624351accc1850f8b8695fb11767/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -8131,7 +8131,7 @@ const PORTALS=[
     to:{x:EP_BACK.x,z:EP_BACK.z,yaw:EP_BACK.yaw},msg:'포탈을 지나 깊은 사막5로 돌아왔다.',color:0xffd23a},
 ];
 for(const p of PORTALS)p.fx=makePortal(p.x,p.z,p.ry,{color:p.color});
-function portalNear(){if(!player)return -1;for(let i=0;i<PORTALS.length;i++){const p=PORTALS[i];if(portalSeen(p)&&Math.hypot(player.position.x-p.x,player.position.z-p.z)<3.2)return i;}return -1;}
+function portalNear(){if(!player)return -1;for(let i=0;i<PORTALS.length;i++){const p=PORTALS[i];if(!p.edge&&portalSeen(p)&&Math.hypot(player.position.x-p.x,player.position.z-p.z)<3.2)return i;}return -1;}
 // 와이번을 잡은 뒤의 동쪽 황야 포탈: 둥지로 갈지 지하실로 갈지 고른다
 function openPortalChoice(p){mode='dialog';attackHeld=false;unlockPointer();syncLockTip();$('#portalWin').hidden=false;
   const go=(t)=>{closePortalChoice();sfx('door');warpTo(t.x,t.z,t.yaw,null);arriveBanner(t.x,t.z);};
@@ -10248,7 +10248,7 @@ function coachTick(dt){const R=COACH.ride;
    공용 좌표는 shared.js의 ISLES. 땅 높이는 isleHeight, 꾸밈과 포탈은 buildIsles 에서. */
 const KAOLIS_WY=-.35;   /* 카올리스 바닷물 높이 */
 /* 엑시즈 동문 밖 사냥터: 서쪽 입구에서 동쪽 출구까지 굽은 흙길, 땅마다 생김새가 다르다 */
-function mhRoad(I,mx){return 9*Math.sin(mx*.026+I.x*.0013)+4*Math.sin(mx*.061+1.7);}
+function mhRoad(I,mx){return (9*Math.sin(mx*.026+I.x*.0013)+4*Math.sin(mx*.061+1.7))*(1-smooth(I.R*.6,I.R*.9,Math.abs(mx)));}   /* 양 끝(들어오고 나가는 곳)은 가운데 줄로 모인다 */
 function mhBase(I,x,z,dr){const mx=x-I.x,my=z-I.z,R=I.R;
   switch(I.id){
     case 'mfield':return Math.sin(x*.045)*Math.cos(z*.05)*1.1+Math.sin(x*.12+z*.08)*.45+Math.cos(z*.19-x*.07)*.2;
@@ -10423,18 +10423,20 @@ const ISLE_FX={snow:null,water:null,crystals:[],gate:null,mill:null};
         const big=P.place(26,6,0,(x,z)=>dr(x,z)>30);inst(rockG,mat(0x6e6a62),big,(t,e,sv,v)=>{e.set(srand()*3,srand()*3,0);sv.set(t.s*3.2,t.s*2.4,t.s*2.8);v.set(t.x,heightAt(t.x,t.z)+t.s*.6,t.z);});}
       if(id==='mpass'){pines(P.place(90,2.6,.45,(x,z)=>off(9)(x,z),5),.18);rocks(P.place(110,2.6,0,off(6)),0x88827a);bushes(P.place(70,1.4,0,off(5)),.22,.25);
         const big=P.place(34,6,0,(x,z)=>dr(x,z)>24);inst(rockG,mat(0x7a7570),big,(t,e,sv,v)=>{e.set(srand()*3,srand()*3,0);sv.set(t.s*3,t.s*2.8,t.s*2.6);v.set(t.x,heightAt(t.x,t.z)+t.s*.5,t.z);});}}
-    /* 길잡이 문: 엑시즈 동문 길 끝 → 들판 → 구릉 → 숲길 → 계곡 → 고개 → 밀골 */
-    const HC=0x9ad06a,face=(dx,dz)=>Math.atan2(-dx,-dz),H=OR.MHUNT,Z=k=>ZONES[k].name;
+    /* 땅 끝으로 걸어 나가면 다음 땅 (포탈 모양 없이, 길 끝 가장자리를 넘으면 옮겨 간다): 엑시즈 동문 길 끝 → 들판 → 구릉 → 숲길 → 계곡 → 고개 → 밀골 */
+    const face=(dx,dz)=>Math.atan2(-dx,-dz),H=OR.MHUNT,Z=k=>ZONES[k].name;
+    const edge=(id,x,z,ry,hw,label,to)=>{const g=new THREE.Group();g.position.set(x,heightAt(x,z),z);scene.add(g);PORTALS.push({id,x,z,ry,hw,minLv:0,label,to,msg:null,color:0x9ad06a,door:1,edge:1,fx:{g,cols:[]}});};
+    const W=(I)=>({x:I.x-I.R+6,z:I.z}),E=(I)=>({x:I.x+I.R-6,z:I.z}),Win=(I)=>({x:I.x-I.R+13,z:I.z,yaw:face(1,0)}),Ein=(I)=>({x:I.x+I.R-13,z:I.z,yaw:face(-1,0)});
     {const PL=marcusPlan(),M=ISLES.marcus,g=PL.gates.find(q=>q.name==='동문'),ux=Math.cos(g.out),uz=Math.sin(g.out);let L=0;for(let t=0;t<400;t+=4){if(Math.hypot(g.x+ux*t,g.y+uz*t)>M.R-10)break;L=t;}
-      const px=M.x+g.x+ux*(L-8),pz=M.z+g.y+uz*(L-8),ry=Math.PI/2-Math.atan2(uz,ux),F=ISLES[H[0]];
-      PORTALS.push({id:'mh_from_marcus',x:px,z:pz,ry,hw:2.6,minLv:0,label:`${Z(H[0])}로 가기`,to:{x:F.entry.x+4,z:F.entry.z,yaw:face(1,0)},msg:null,color:HC});
-      PORTALS.push({id:'mh_'+H[0]+'_back',x:F.entry.x,z:F.entry.z,ry:Math.PI/2,hw:2.6,minLv:0,label:'엑시즈로 돌아가기',to:{x:px-ux*4,z:pz-uz*4,yaw:face(-ux,-uz)},msg:null,color:HC});}
+      const px=M.x+g.x+ux*L,pz=M.z+g.y+uz*L,F=ISLES[H[0]];
+      edge('mh_from_marcus',px,pz,Math.PI/2-Math.atan2(uz,ux),6,`${Z(H[0])}로 가기`,Win(F));
+      edge('mh_'+H[0]+'_back',W(F).x,W(F).z,Math.PI/2,7,'엑시즈로 돌아가기',{x:px-ux*8,z:pz-uz*8,yaw:face(-ux,-uz)});}
     for(let i=0;i<H.length-1;i++){const A=ISLES[H[i]],B=ISLES[H[i+1]];
-      PORTALS.push({id:'mh_'+H[i]+'_next',x:A.exit.x,z:A.exit.z,ry:Math.PI/2,hw:2.6,minLv:0,label:`${Z(H[i+1])}로 가기`,to:{x:B.entry.x+4,z:B.entry.z,yaw:face(1,0)},msg:null,color:HC});
-      PORTALS.push({id:'mh_'+H[i+1]+'_back',x:B.entry.x,z:B.entry.z,ry:Math.PI/2,hw:2.6,minLv:0,label:`${Z(H[i])}로 돌아가기`,to:{x:A.exit.x-4,z:A.exit.z,yaw:face(-1,0)},msg:null,color:HC});}
-    {const A=ISLES[H[H.length-1]],Mg=ISLES.milgol,gx=Mg.entry.x-16,gz=Mg.entry.z-4;
-      PORTALS.push({id:'mh_to_milgol',x:A.exit.x,z:A.exit.z,ry:Math.PI/2,hw:2.6,minLv:0,label:'밀골로 가기',to:{x:gx,z:gz-4,yaw:0},msg:null,color:HC});
-      PORTALS.push({id:'milgol_to_mh',x:gx,z:gz,ry:0,hw:2.6,minLv:0,label:`${Z(A.id)}로 가기`,to:{x:A.exit.x-4,z:A.exit.z,yaw:face(-1,0)},msg:null,color:HC});}}
+      edge('mh_'+H[i]+'_next',E(A).x,E(A).z,Math.PI/2,7,`${Z(H[i+1])}로 가기`,Win(B));
+      edge('mh_'+H[i+1]+'_back',W(B).x,W(B).z,Math.PI/2,7,`${Z(H[i])}로 돌아가기`,Ein(A));}
+    {const A=ISLES[H[H.length-1]],Mg=ISLES.milgol,gz=Mg.z+Mg.R-6;
+      edge('mh_to_milgol',E(A).x,E(A).z,Math.PI/2,7,'밀골로 가기',{x:Mg.x,z:gz-9,yaw:0});
+      edge('milgol_to_mh',Mg.x,gz,0,6,`${Z(A.id)}로 가기`,Ein(A));}}
 
   /* ===== 지하실 위층의 작은 방 (Lv 100 계단) ===== */
   {const H=OR.HALL_ROOM,C={x:OR.HALL.x,z:OR.HALL.z},R=OR.HALL.R,z0=C.z-R+.3,sx=C.x;
