@@ -105,6 +105,7 @@ function cleanPresence(d) {
     pp: Array.isArray(d.pp) && d.pp.length === 3 && d.pp.every((v) => typeof v === 'number' && isFinite(v)) ? d.pp.map(n) : null,
     hd: d.hd ? 1 : 0,
     mo: typeof d.mo === 'string' && /^[a-z0-9]{0,16}$/.test(d.mo) ? d.mo : '',
+    cr: typeof d.cr === 'string' && /^k\d{1,2}s\d$/.test(d.cr) ? d.cr : '',
     ap: typeof d.ap === 'string' && /^[mf],[0-9a-f]{6},[0-9a-f]{6}(,\d(,\d,\d,[0-9a-f]{6},[0-9a-f]{6}(,\d)?)?)?$/.test(d.ap) ? d.ap : '',
   };
 }
