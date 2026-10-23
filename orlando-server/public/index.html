@@ -6814,87 +6814,175 @@ for(const ev of ['pointerdown','keydown','touchstart'])addEventListener(ev,()=>{
 /* ---------- 화려한 효과: 불꽃 입자, 베기 궤적, 충격파, 빛기둥 ----------
    입자는 점 두 묶음(작은 불티, 큰 빛)으로 한 번에 그려서 가볍다. */
 const VFX=(function(){
-  const tex=(()=>{const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');const g=x.createRadialGradient(32,32,0,32,32,32);
-    g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.25,'rgba(255,255,255,.8)');g.addColorStop(.6,'rgba(255,255,255,.18)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,64,64);
-    const t=new THREE.CanvasTexture(c);return t;})();
-  const mkLayer=(cap,size)=>{const geo=new THREE.BufferGeometry();const pos=new Float32Array(cap*3),col=new Float32Array(cap*3);
+  /* 품질: 그래픽 단계(낮음·보통·높음)와 지금 프레임 속도를 보고 덧붙이는 효과의 양을 자동으로 줄인다.
+     프레임이 떨어지면 입자 수·추가 모양을 먼저 줄여서, 화려함 때문에 렉이 생기지 않게 한다 */
+  let Qa=1,avgDt=1/60;
+  const Qf=()=>{const L=typeof gfxLv==='function'?gfxLv():1;return Qa*(L===0?.5:L===2?1.2:1);};
+  const camP=()=>camera.position;
+  const far=(p,d=55)=>{const c=camP(),dx=p.x-c.x,dy=p.y-c.y,dz=p.z-c.z;return dx*dx+dy*dy+dz*dz>d*d;};
+  const mkTex=(star)=>{const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');const g=x.createRadialGradient(32,32,0,32,32,32);
+    if(star){g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.12,'rgba(255,255,255,.7)');g.addColorStop(.35,'rgba(255,255,255,.08)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,64,64);
+      x.globalCompositeOperation='lighter';for(const [w,a] of [[64,.9],[46,.45]]){const lg=x.createLinearGradient(32-w/2,0,32+w/2,0);lg.addColorStop(0,'rgba(255,255,255,0)');lg.addColorStop(.5,`rgba(255,255,255,${a})`);lg.addColorStop(1,'rgba(255,255,255,0)');
+        x.save();x.translate(32,32);x.rotate(w===64?0:Math.PI/4);x.fillStyle=lg;x.fillRect(-w/2,-1.3,w,2.6);x.rotate(Math.PI/2);x.fillRect(-w/2,-1.3,w,2.6);x.restore();}}
+    else{g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.25,'rgba(255,255,255,.8)');g.addColorStop(.6,'rgba(255,255,255,.18)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,64,64);}
+    return new THREE.CanvasTexture(c);};
+  const tex=mkTex(false),starTex=mkTex(true);
+  const fadeTex=(()=>{const c=document.createElement('canvas');c.width=4;c.height=64;const x=c.getContext('2d'),g=x.createLinearGradient(0,64,0,0);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.35,'rgba(255,255,255,.55)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,4,64);return new THREE.CanvasTexture(c);})();
+  const mkLayer=(cap,size,map)=>{const geo=new THREE.BufferGeometry();const pos=new Float32Array(cap*3),col=new Float32Array(cap*3);
     geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));geo.setDrawRange(0,0);
-    const m=new THREE.PointsMaterial({size,map:tex,vertexColors:true,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true});
+    const m=new THREE.PointsMaterial({size,map:map||tex,vertexColors:true,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true});
     const pts=new THREE.Points(geo,m);pts.frustumCulled=false;pts.renderOrder=6;scene.add(pts);
-    return{cap,pos,col,geo,n:0,p:[]};};
-  const L=[mkLayer(1600,.22),mkLayer(500,.9)];
+    return{cap,pos,col,geo,n:0,p:[],w:0};};
+  /* 0 작은 불티 / 1 큰 빛 / 2 반짝이는 별빛 (십자 모양) */
+  const L=[mkLayer(2600,.22),mkLayer(700,.9),mkLayer(420,.62,starTex)];
   const tmpC=new THREE.Color();
   function emit(layer,x,y,z,vx,vy,vz,color,life,grav,drag){
-    const Ly=L[layer];if(Ly.p.length>=Ly.cap)Ly.p.shift();
-    tmpC.set(color);Ly.p.push({x,y,z,vx,vy,vz,r:tmpC.r,g:tmpC.g,b:tmpC.b,t:0,life,grav,drag});
+    const Ly=L[layer]||L[0];tmpC.set(color);
+    if(Ly.p.length>=Ly.cap){const q=Ly.p[Ly.w];Ly.w=(Ly.w+1)%Ly.cap;q.x=x;q.y=y;q.z=z;q.vx=vx;q.vy=vy;q.vz=vz;q.r=tmpC.r;q.g=tmpC.g;q.b=tmpC.b;q.t=0;q.life=life;q.grav=grav;q.drag=drag;return;}   // 가득 차면 가장 오래된 자리를 다시 쓴다 (배열을 밀지 않아 가볍다)
+    Ly.p.push({x,y,z,vx,vy,vz,r:tmpC.r,g:tmpC.g,b:tmpC.b,t:0,life,grav,drag});
   }
+  /* 화면을 향하는 빛 번짐(플레어)과 바닥 빛: 미리 만들어 둔 것을 돌려 쓴다 */
+  const flares=[],glows=[];
+  for(let i=0;i<28;i++){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffffff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));s.visible=false;s.renderOrder=7;scene.add(s);flares.push({s,t:1,dur:1,sz:1});}
+  const glowGeo=new THREE.PlaneGeometry(2,2);glowGeo.rotateX(-Math.PI/2);
+  for(let i=0;i<18;i++){const m=new THREE.Mesh(glowGeo,new THREE.MeshBasicMaterial({map:tex,color:0xffffff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));m.visible=false;m.renderOrder=5;m.frustumCulled=false;scene.add(m);glows.push({m,t:1,dur:1,r:1,op:1});}
+  let fi=0,gi=0;
+  function flare(pos,color,size=1.6,dur=.25){if(far(pos,70))return;const f=flares[fi];fi=(fi+1)%flares.length;f.s.position.copy(pos);f.s.material.color.set(color);f.t=0;f.dur=dur;f.sz=size;f.s.visible=true;f.s.scale.setScalar(size*.4);}
+  function glow(pos,color,r=2,dur=.5,op=.7){if(far(pos,60))return;const g=glows[gi];gi=(gi+1)%glows.length;g.m.position.set(pos.x,heightAt(pos.x,pos.z)+.08,pos.z);g.m.material.color.set(color);g.t=0;g.dur=dur;g.r=r;g.op=op;g.m.visible=true;g.m.scale.setScalar(r*.5);}
+  const glint=(p,color,n,spd=1.5,life=.4)=>{n=Math.round(n*Qf());for(let i=0;i<n;i++)emit(2,p.x+(Math.random()-.5)*.4,p.y+(Math.random()-.5)*.4,p.z+(Math.random()-.5)*.4,(Math.random()-.5)*spd,(Math.random()-.2)*spd,(Math.random()-.5)*spd,i%2?0xffffff:color,life*(.6+Math.random()*.6),.5,2);};
   // 터지는 불티: n개, 속도, 위로 치우침, 중력
   function burst(pos,color,n=12,speed=4,life=.55,o={}){
-    n=Math.min(n,60);
+    const q=Qf(),fr=far(pos);n=Math.min(Math.round(n*(fr?.5:Math.min(1.15,.4+q*.7))),70);
     for(let i=0;i<n;i++){const u=Math.random()*2-1,a=Math.random()*Math.PI*2,s=speed*(.4+Math.random()*.8),r=Math.sqrt(1-u*u);
       const up=o.up??.3;emit(o.layer??0,pos.x,pos.y,pos.z,Math.cos(a)*r*s,(u*.7+up)*s,Math.sin(a)*r*s,o.mix&&Math.random()<.5?o.mix:color,life*(.6+Math.random()*.6),o.grav??6,o.drag??1.8);}
     if(o.glow!==false)emit(1,pos.x,pos.y,pos.z,0,0,0,color,Math.min(.35,life*.6),0,0);
+    if(fr||q<.55||o.plain)return;
+    // 덧붙임: 빠르게 튀는 하얀 불티, 반짝임, 빛 번짐
+    const hot=Math.round(n*.3);for(let i=0;i<hot;i++){const u=Math.random()*2-1,a=Math.random()*Math.PI*2,s=speed*(1.1+Math.random()*.9),r=Math.sqrt(1-u*u);emit(0,pos.x,pos.y,pos.z,Math.cos(a)*r*s,(u*.6+.25)*s,Math.sin(a)*r*s,0xffffff,life*.4,3,3.2);}
+    if(n>=8)glint(pos,o.mix||color,Math.min(6,n/4),speed*.6,life*.9);
+    if(o.glow!==false&&n>=8)flare(pos,color,Math.min(4,.9+speed*.35+n*.02),Math.min(.3,.12+life*.25));
   }
   // 원을 따라 솟는 불티 (범위 공격, 고리)
-  function ringSparks(pos,color,r,n){n=Math.min(n||Math.round(r*7),48);const y=pos.y!==undefined?pos.y:0;
+  function ringSparks(pos,color,r,n){const q=Qf();n=Math.min(Math.round((n||Math.round(r*7))*Math.min(1.2,.5+q*.7)),56);const y=pos.y!==undefined?pos.y:0;
     for(let i=0;i<n;i++){const a=i/n*Math.PI*2+Math.random()*.2;const x=pos.x+Math.cos(a)*r,z=pos.z+Math.sin(a)*r;
       emit(0,x,heightAt(x,z)+.15,z,Math.cos(a)*1.2,2.5+Math.random()*3,Math.sin(a)*1.2,color,.6+Math.random()*.4,3,1.2);}
+    if(q<.6||far(pos))return;
+    const g=Math.round(Math.min(10,r*2)*q);for(let i=0;i<g;i++){const a=Math.random()*Math.PI*2,x=pos.x+Math.cos(a)*r,z=pos.z+Math.sin(a)*r;emit(2,x,heightAt(x,z)+.3+Math.random()*.6,z,0,1.2+Math.random(),0,i%2?0xffffff:color,.5+Math.random()*.3,0,1);}
+    glow(pos,color,r*1.05,.55,.35);
   }
   // 위로 피어오르는 기운 (버프·회복)
-  function aura(pos,color,n=26,r=.8,h=1){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,rr=r*(.4+Math.random()*.6);
-    emit(i%4?0:1,pos.x+Math.cos(a)*rr,pos.y+Math.random()*h,pos.z+Math.sin(a)*rr,Math.cos(a)*.3,1.6+Math.random()*1.6,Math.sin(a)*.3,color,.7+Math.random()*.5,-.5,.8);}}
+  function aura(pos,color,n=26,r=.8,h=1){const q=Qf();n=Math.round(n*Math.min(1.2,.5+q*.7));for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,rr=r*(.4+Math.random()*.6);
+    emit(i%4?0:1,pos.x+Math.cos(a)*rr,pos.y+Math.random()*h,pos.z+Math.sin(a)*rr,Math.cos(a)*.3,1.6+Math.random()*1.6,Math.sin(a)*.3,color,.7+Math.random()*.5,-.5,.8);}
+    if(q<.6||far(pos))return;
+    // 덧붙임: 몸을 감고 도는 나선 빛, 반짝임, 발밑 빛
+    const sp=Math.round(14*q),ph=Math.random()*6.3;for(let i=0;i<sp;i++){const a=ph+i/sp*Math.PI*4,k=i/sp;emit(0,pos.x+Math.cos(a)*r*1.1,pos.y+k*h*1.4,pos.z+Math.sin(a)*r*1.1,-Math.sin(a)*1.4,1.4,Math.cos(a)*1.4,i%3?color:0xffffff,.55+k*.3,-.3,.6);}
+    glint(new THREE.Vector3(pos.x,pos.y+h*.6,pos.z),color,4,1.2,.7);
+    glow(pos,color,r*2.2,.8,.4);
+  }
   // 하늘에서 떨어지는 것들 (눈보라, 화살비)
-  function rainDown(pos,color,r,n,speed=14,streak=false){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,rr=Math.sqrt(Math.random())*r,x=pos.x+Math.cos(a)*rr,z=pos.z+Math.sin(a)*rr,h=4+Math.random()*6;
+  function rainDown(pos,color,r,n,speed=14,streak=false){n=Math.round(n*Math.min(1.15,.45+Qf()*.7));for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,rr=Math.sqrt(Math.random())*r,x=pos.x+Math.cos(a)*rr,z=pos.z+Math.sin(a)*rr,h=4+Math.random()*6;
     emit(0,x,heightAt(x,z)+h,z,streak?0:(Math.random()-.5),-speed*(.7+Math.random()*.5),streak?0:(Math.random()-.5),color,h/speed,0,0);}}
   function update(dt){
-    for(const Ly of L){let k=0;
-      for(let i=Ly.p.length-1;i>=0;i--){const q=Ly.p[i];q.t+=dt;if(q.t>=q.life){Ly.p.splice(i,1);continue;}}
-      for(const q of Ly.p){const dr=Math.max(0,1-q.drag*dt);q.vx*=dr;q.vz*=dr;q.vy=q.vy*dr-q.grav*dt;q.x+=q.vx*dt;q.y+=q.vy*dt;q.z+=q.vz*dt;
-        const f=1-q.t/q.life,fi=f*f*(3-2*f);Ly.pos[k*3]=q.x;Ly.pos[k*3+1]=q.y;Ly.pos[k*3+2]=q.z;Ly.col[k*3]=q.r*fi;Ly.col[k*3+1]=q.g*fi;Ly.col[k*3+2]=q.b*fi;k++;}
-      Ly.n=k;Ly.geo.setDrawRange(0,k);Ly.geo.attributes.position.needsUpdate=true;Ly.geo.attributes.color.needsUpdate=true;}
-    for(let i=shapes.length-1;i>=0;i--){const s=shapes[i];s.t+=dt;const k=Math.min(1,s.t/s.dur);s.fn(k,s);if(k>=1){scene.remove(s.m);s.m.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});shapes.splice(i,1);}}
+    // 프레임 속도를 보고 품질을 천천히 맞춘다
+    avgDt+=(Math.min(.1,dt)-avgDt)*.04;const tq=avgDt>1/30?.4:avgDt>1/38?.65:avgDt>1/48?.85:1;Qa+=(tq-Qa)*Math.min(1,dt*(tq<Qa?3:.5));
+    for(const Ly of L){
+      const P=Ly.p;for(let i=P.length-1;i>=0;i--){const q=P[i];q.t+=dt;if(q.t>=q.life){const last=P.pop();if(i<P.length)P[i]=last;}}   // 다 탄 입자는 맨 끝 것과 바꿔 빼낸다 (가볍게)
+      if(Ly.w>=P.length)Ly.w=0;
+      let k=0;const pos=Ly.pos,col=Ly.col;
+      for(const q of P){const dr=Math.max(0,1-q.drag*dt);q.vx*=dr;q.vz*=dr;q.vy=q.vy*dr-q.grav*dt;q.x+=q.vx*dt;q.y+=q.vy*dt;q.z+=q.vz*dt;
+        const f=1-q.t/q.life,fi=f*f*(3-2*f);pos[k*3]=q.x;pos[k*3+1]=q.y;pos[k*3+2]=q.z;col[k*3]=q.r*fi;col[k*3+1]=q.g*fi;col[k*3+2]=q.b*fi;k++;}
+      if(k||Ly.n){Ly.n=k;Ly.geo.setDrawRange(0,k);Ly.geo.attributes.position.needsUpdate=true;Ly.geo.attributes.color.needsUpdate=true;}}
+    for(const f of flares){if(!f.s.visible)continue;f.t+=dt;const k=f.t/f.dur;if(k>=1){f.s.visible=false;continue;}f.s.scale.setScalar(f.sz*(.4+.6*(1-Math.pow(1-k,3))));f.s.material.opacity=.75*(k<.15?k/.15:(1-k)/.85);}
+    for(const g of glows){if(!g.m.visible)continue;g.t+=dt;const k=g.t/g.dur;if(k>=1){g.m.visible=false;continue;}g.m.scale.setScalar(g.r*(.5+.5*(1-Math.pow(1-k,2))));g.m.material.opacity=g.op*(k<.12?k/.12:(1-k)/.88);}
+    for(let i=shapes.length-1;i>=0;i--){const s=shapes[i];s.t+=dt;if(s.t<0)continue;const k=Math.min(1,s.t/s.dur);if(s.hid){s.hid=0;s.m.visible=true;}s.fn(k,s);if(k>=1){scene.remove(s.m);s.m.traverse(o=>{if(o.geometry&&!(o.geometry.userData&&o.geometry.userData.keep))o.geometry.dispose();if(o.material)o.material.dispose();});shapes.splice(i,1);}}
   }
   // 모양 효과 (베기 궤적, 충격파, 빛기둥)
   const shapes=[];
+  const busy=()=>shapes.length>110||Qf()<.55;   // 모양이 너무 많거나 프레임이 낮으면 덧붙임 모양은 건너뛴다
   const addMat=(c,op=1)=>new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:op,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+  /* 같은 모양은 한 번만 만들어 돌려 쓴다 (매번 새로 만들고 버리던 것) */
+  const GC=new Map();
+  const cg=(key,mk)=>{let g=GC.get(key);if(g)return g;g=mk();if(GC.size<240){g.userData.keep=1;GC.set(key,g);}return g;};
+  const r2=v=>Math.round(v*50)/50;
+  const ringG=(a,b,seg,ts,tl)=>cg(`r${r2(a)},${r2(b)},${seg},${r2(ts||0)},${r2(tl??6.2832)}`,()=>new THREE.RingGeometry(a,b,seg,1,ts||0,tl??Math.PI*2));
+  const v3=new THREE.Vector3(),v4=new THREE.Vector3();
   // 초승달 모양 베기 궤적: yaw 방향 앞, tilt 기울기(라디안), dir 회전 방향
   function slash(origin,yaw,color,o={}){
-    const r=o.r||1.7,arc=o.arc||2.4,g=new THREE.Group();
-    const inner=new THREE.Mesh(new THREE.RingGeometry(r*.6,r,28,1,-arc/2,arc),addMat(color,.6));
-    const core=new THREE.Mesh(new THREE.RingGeometry(r*.86,r*.97,28,1,-arc/2,arc),addMat(0xffffff,.9));
-    g.add(inner,core);g.position.copy(origin);
+    const r=o.r||1.7,arc=o.arc||2.4,g=new THREE.Group(),fancy=!busy()&&!far(origin);
+    const inner=new THREE.Mesh(ringG(r*.6,r,28,-arc/2,arc),addMat(color,.6));
+    const core=new THREE.Mesh(ringG(r*.86,r*.97,28,-arc/2,arc),addMat(0xffffff,.9));
+    g.add(inner,core);
+    let halo=null,edge=null;
+    if(fancy){halo=new THREE.Mesh(ringG(r*.35,r*1.14,28,-arc*.55,arc*1.1),addMat(color,.22));edge=new THREE.Mesh(ringG(r*.99,r*1.03,28,-arc/2,arc),addMat(0xffffff,.8));g.add(halo,edge);}
+    g.position.copy(origin);
     g.rotation.order='YXZ';g.rotation.set(-Math.PI/2+(o.tilt||0),yaw+Math.PI/2,o.roll||0);
     scene.add(g);
-    const sweep=o.dir||1;
-    shapes.push({m:g,t:0,dur:o.dur||.24,fn:(k)=>{g.children.forEach(c=>c.material.opacity=(1-k)*(c===core?.85:.6));g.scale.setScalar(.8+k*.35);g.rotation.z=(o.roll||0)+sweep*(k-.5)*.9;}});
+    const sweep=o.dir||1,dur=o.dur||.24;
+    shapes.push({m:g,t:0,dur:dur*(fancy?1.15:1),fn:(k)=>{const a=1-k,e=1-Math.pow(1-k,3);inner.material.opacity=a*.62;core.material.opacity=a*.9;if(halo){halo.material.opacity=a*a*.24;edge.material.opacity=(1-Math.min(1,k*1.6))*.85;}g.scale.setScalar(.78+e*.42);g.rotation.z=(o.roll||0)+sweep*(k-.5)*.9;}});
+    if(!fancy)return;
+    // 잔상: 조금 늦게 한 번 더 지나가는 옅은 궤적
+    const g2=new THREE.Group(),gh=new THREE.Mesh(ringG(r*.7,r*1.02,24,-arc/2,arc),addMat(color,.3));g2.add(gh);g2.position.copy(origin);g2.rotation.order='YXZ';g2.rotation.copy(g.rotation);g2.visible=false;scene.add(g2);
+    shapes.push({m:g2,hid:1,t:-dur*.25,dur:dur*1.1,fn:(k)=>{gh.material.opacity=.3*(1-k);g2.scale.setScalar(.9+k*.45);g2.rotation.z=(o.roll||0)+sweep*(k-.35)*.9;}});
+    // 궤적 가장자리를 따라 흩날리는 불티와 끝의 반짝임
+    g.updateMatrixWorld(true);const n=Math.round(22*Qf());
+    for(let i=0;i<n;i++){const t=-arc/2+arc*(i+Math.random())/n,rr=r*(.92+Math.random()*.12);v3.set(Math.cos(t)*rr,Math.sin(t)*rr,0).applyMatrix4(g.matrixWorld);
+      v4.set(-Math.sin(t)*sweep,Math.cos(t)*sweep,0).transformDirection(g.matrixWorld);const s=3+Math.random()*3;
+      emit(i%4?0:2,v3.x,v3.y,v3.z,v4.x*s,v4.y*s+.6,v4.z*s,i%3?color:0xffffff,.22+Math.random()*.2,2,3);}
+    const te=sweep>0?arc/2:-arc/2;v3.set(Math.cos(te)*r,Math.sin(te)*r,0).applyMatrix4(g.matrixWorld);flare(v3,color,r*.9,.18);
   }
   function shock(pos,color,r,dur=.45){
-    const m=new THREE.Mesh(new THREE.RingGeometry(.86,1,48),addMat(color,.9));m.rotation.x=-Math.PI/2;m.position.set(pos.x,heightAt(pos.x,pos.z)+.2,pos.z);scene.add(m);
-    const m2=new THREE.Mesh(new THREE.CircleGeometry(1,32),addMat(color,.35));m2.rotation.x=-Math.PI/2;m2.position.set(pos.x,heightAt(pos.x,pos.z)+.15,pos.z);scene.add(m2);
+    const y0=heightAt(pos.x,pos.z),fancy=!busy()&&!far(pos);
+    const m=new THREE.Mesh(ringG(.84,1,48),addMat(color,.9));m.rotation.x=-Math.PI/2;m.position.set(pos.x,y0+.2,pos.z);scene.add(m);
+    const m2=new THREE.Mesh(cg('c32',()=>new THREE.CircleGeometry(1,32)),addMat(color,.35));m2.rotation.x=-Math.PI/2;m2.position.set(pos.x,y0+.15,pos.z);scene.add(m2);
     shapes.push({m,t:0,dur,fn:(k)=>{const e=1-Math.pow(1-k,3);m.scale.setScalar(Math.max(.01,r*e));m.material.opacity=.95*(1-k);}});
     shapes.push({m:m2,t:0,dur:dur*.8,fn:(k)=>{m2.scale.setScalar(Math.max(.01,r*(1-Math.pow(1-k,2))));m2.material.opacity=.4*(1-k);}});
+    if(!fancy)return;
+    // 덧붙임: 앞서 달리는 하얀 가는 고리, 뒤따르는 두 번째 물결, 솟구치는 흙빛 불티, 바닥 빛
+    const w=new THREE.Mesh(ringG(.95,1,48),addMat(0xffffff,.9));w.rotation.x=-Math.PI/2;w.position.set(pos.x,y0+.24,pos.z);scene.add(w);
+    shapes.push({m:w,t:0,dur:dur*.7,fn:(k)=>{const e=1-Math.pow(1-k,4);w.scale.setScalar(Math.max(.01,r*1.08*e));w.material.opacity=.9*(1-k)*(1-k);}});
+    const w2=new THREE.Mesh(ringG(.7,1,40),addMat(color,.5));w2.rotation.x=-Math.PI/2;w2.position.set(pos.x,y0+.18,pos.z);w2.visible=false;scene.add(w2);
+    shapes.push({m:w2,hid:1,t:-dur*.22,dur:dur*1.1,fn:(k)=>{const e=1-Math.pow(1-k,2);w2.scale.setScalar(Math.max(.01,r*.85*e));w2.material.opacity=.5*(1-k);}});
+    const n=Math.round(Math.min(26,6+r*3)*Qf());
+    for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,rr=r*(.35+Math.random()*.55),x=pos.x+Math.cos(a)*rr,z=pos.z+Math.sin(a)*rr;emit(i%5?0:2,x,y0+.2,z,Math.cos(a)*2.5,3+Math.random()*4,Math.sin(a)*2.5,i%3?color:0xffffff,.4+Math.random()*.35,9,1.5);}
+    glow(pos,color,r*1.1,dur*1.4,.4);
+    const ch=Math.min(2.6,.5+r*.35),cw=new THREE.Mesh(cg('cur',()=>{const q=new THREE.CylinderGeometry(1,1,1,36,1,true);q.translate(0,.5,0);return q;}),new THREE.MeshBasicMaterial({map:fadeTex,color,transparent:true,opacity:.6,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));
+    cw.position.set(pos.x,y0-.05,pos.z);scene.add(cw);
+    shapes.push({m:cw,t:0,dur:dur*1.05,fn:(k)=>{const e=1-Math.pow(1-k,3);cw.scale.set(Math.max(.01,r*.98*e),ch*(1-k*.55),Math.max(.01,r*.98*e));cw.material.opacity=.6*(1-k)*(k<.08?k/.08:1);}});   // 땅에서 솟아 퍼지는 빛의 벽
+    flare(v3.set(pos.x,y0+.5,pos.z),color,Math.min(4,1+r*.5),Math.min(.3,dur*.5));
   }
   function pillar(pos,color,r=1.2,h=12,dur=.7){
-    const g=new THREE.Group();const y=heightAt(pos.x,pos.z);
-    const b=new THREE.Mesh(new THREE.CylinderGeometry(r,r*1.15,h,20,1,true),addMat(color,.55));b.position.y=h/2;g.add(b);
-    const c=new THREE.Mesh(new THREE.CylinderGeometry(r*.35,r*.45,h,12,1,true),addMat(0xffffff,.8));c.position.y=h/2;g.add(c);
+    const g=new THREE.Group();const y=heightAt(pos.x,pos.z),fancy=!busy()&&!far(pos,70);
+    const b=new THREE.Mesh(cg(`cy${r2(r)},${h}`,()=>new THREE.CylinderGeometry(r,r*1.15,h,20,1,true)),addMat(color,.55));b.position.y=h/2;g.add(b);
+    const c=new THREE.Mesh(cg(`cyc${r2(r)},${h}`,()=>new THREE.CylinderGeometry(r*.35,r*.45,h,12,1,true)),addMat(0xffffff,.8));c.position.y=h/2;g.add(c);
+    let o=null;if(fancy){o=new THREE.Mesh(cg(`cyo${r2(r)},${h}`,()=>new THREE.CylinderGeometry(r*1.9,r*2.3,h*.8,20,1,true)),addMat(color,.16));o.position.y=h*.4;g.add(o);}
     g.position.set(pos.x,y,pos.z);scene.add(g);
-    shapes.push({m:g,t:0,dur,fn:(k)=>{const w=k<.15?k/.15:1-(k-.15)/.85;g.scale.set(.3+w*.9,1,.3+w*.9);b.material.opacity=.55*w;c.material.opacity=.8*w;}});
+    shapes.push({m:g,t:0,dur,fn:(k)=>{const w=k<.15?k/.15:1-(k-.15)/.85;g.scale.set(.3+w*.9,1,.3+w*.9);b.material.opacity=.55*w;c.material.opacity=.8*w;if(o){o.material.opacity=.16*w;o.rotation.y=k*2;}}});
+    if(!fancy)return;
+    // 덧붙임: 기둥을 감고 오르는 빛 알갱이, 발밑 충격파, 위쪽 빛 번짐
+    const n=Math.round(30*Qf()),ph=Math.random()*6.3;
+    for(let i=0;i<n;i++){const a=ph+i/n*Math.PI*6,rr=r*(1.05+Math.random()*.3);emit(i%4?0:2,pos.x+Math.cos(a)*rr,y+Math.random()*h*.3,pos.z+Math.sin(a)*rr,-Math.sin(a)*2,h*(.8+Math.random()*.6),Math.cos(a)*2,i%3?color:0xffffff,.6+Math.random()*.4,0,.8);}
+    shock(pos,color,r*2.6,.5);
+    flare(v3.set(pos.x,y+1,pos.z),color,r*2.6,dur*.45);
   }
   // 찌르기: 앞으로 뻗는 가는 빛줄기
   function thrust(origin,yaw,color,o={}){
-    const L=o.len||1.7,g=new THREE.Group();
-    const geo=new THREE.ConeGeometry(.07,L,8,1,true);geo.translate(0,L/2,0);geo.rotateX(Math.PI/2);
-    const outer=new THREE.Mesh(geo,addMat(color,.55));const cg=new THREE.ConeGeometry(.025,L*1.05,6,1,true);cg.translate(0,L*.52,0);cg.rotateX(Math.PI/2);
-    const core=new THREE.Mesh(cg,addMat(0xffffff,.9));g.add(outer,core);
+    const Ln=o.len||1.7,g=new THREE.Group(),fancy=!busy()&&!far(origin);
+    const geo=cg(`th${r2(Ln)}`,()=>{const q=new THREE.ConeGeometry(.07,Ln,8,1,true);q.translate(0,Ln/2,0);q.rotateX(Math.PI/2);return q;});
+    const outer=new THREE.Mesh(geo,addMat(color,.55));const cgm=cg(`thc${r2(Ln)}`,()=>{const q=new THREE.ConeGeometry(.025,Ln*1.05,6,1,true);q.translate(0,Ln*.52,0);q.rotateX(Math.PI/2);return q;});
+    const core=new THREE.Mesh(cgm,addMat(0xffffff,.9));g.add(outer,core);
+    let haze=null,ring=null;
+    if(fancy){haze=new THREE.Mesh(cg(`thh${r2(Ln)}`,()=>{const q=new THREE.ConeGeometry(.2,Ln*.95,10,1,true);q.translate(0,Ln*.47,0);q.rotateX(Math.PI/2);return q;}),addMat(color,.22));
+      ring=new THREE.Mesh(ringG(.55,.7,24),addMat(0xffffff,.8));ring.position.z=Ln;g.add(haze,ring);}
     g.position.copy(origin);g.rotation.order='YXZ';g.rotation.set(o.pitch||0,yaw+Math.PI,0);scene.add(g);
     // 회전: 모델의 +z가 앞이 되도록 (yaw는 카메라 기준이라 뒤집는다)
-    shapes.push({m:g,t:0,dur:o.dur||.18,fn:(k)=>{const e=1-Math.pow(1-k,3);g.scale.set(1-k*.5,1-k*.5,.35+e*.9);outer.material.opacity=.55*(1-k);core.material.opacity=.9*(1-k);}});
-    const tip=origin.clone().add(new THREE.Vector3(-Math.sin(yaw)*L,0,-Math.cos(yaw)*L));burst(tip,color,6,2.2,.3,{glow:false,grav:2});
+    shapes.push({m:g,t:0,dur:(o.dur||.18)*(fancy?1.2:1),fn:(k)=>{const e=1-Math.pow(1-k,3),a=1-k;g.scale.set(1-k*.5,1-k*.5,.35+e*.9);outer.material.opacity=.55*a;core.material.opacity=.9*a;
+      if(ring){ring.material.opacity=.8*a*a;ring.scale.setScalar(.3+e*1.2);haze.material.opacity=.22*a;}}});
+    const tip=origin.clone().add(new THREE.Vector3(-Math.sin(yaw)*Ln,0,-Math.cos(yaw)*Ln));burst(tip,color,6,2.2,.3,{glow:false,grav:2,plain:1});
+    if(fancy){glint(tip,color,4,2,.3);flare(tip,color,1.4,.14);}
   }
   // 직접 만든 모양을 시간에 따라 움직이고 사라지게 한다 (fn(k) k:0→1)
   function anim(m,dur,fn){scene.add(m);shapes.push({m,t:0,dur,fn});return m;}
-  return{burst,ringSparks,aura,rainDown,update,slash,shock,pillar,emit,thrust,anim,addMat};
+  return{burst,ringSparks,aura,rainDown,update,slash,shock,pillar,emit,thrust,anim,addMat,flare,glow,glint,q:Qf};
 })();
 // 무기마다 다른 베기 궤적
 function slashFx(origin,yaw,style,color,alt,big){
@@ -12300,14 +12388,19 @@ let shareDepth=0;
 function shared(fn){shareDepth++;try{return fn();}finally{shareDepth--;}}
 function spawnFx(color,pos,size=1.6,dur=.45){
   if(shareDepth>0)netFx({k:'b',x:pos.x,y:pos.y,z:pos.z,s:size,c:color,d:dur});
-  const m=new THREE.Mesh(new THREE.SphereGeometry(1,14,10),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.85,blending:THREE.AdditiveBlending,depthWrite:false}));
+  const sg=spawnFx.g||(spawnFx.g=new THREE.SphereGeometry(1,14,10));sg.userData.keep=1;
+  const m=new THREE.Mesh(sg,new THREE.MeshBasicMaterial({color,transparent:true,opacity:.85,blending:THREE.AdditiveBlending,depthWrite:false}));
   m.position.copy(pos);m.scale.setScalar(.15);scene.add(m);fx.push({m,t:0,dur,size});
+  if(VFX.q()>.55&&size>.5){const c=new THREE.Mesh(sg,new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.85,blending:THREE.AdditiveBlending,depthWrite:false}));c.position.copy(pos);c.scale.setScalar(.1);scene.add(c);fx.push({m:c,t:0,dur:dur*.6,size:size*.45});}   // 하얗게 달아오른 속
   VFX.burst(pos,color,Math.round(6+size*7),2+size*2.4,.45+dur*.4,{mix:0xffffff,up:.35});
 }
 function spawnRing(color,pos,radius,dur=.5){
   if(shareDepth>0)netFx({k:'r',x:pos.x,z:pos.z,s:radius,c:color,d:dur});
-  const m=new THREE.Mesh(new THREE.RingGeometry(radius*.85,radius,40),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.8,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,depthWrite:false}));
-  m.rotation.x=-Math.PI/2;m.position.set(pos.x,heightAt(pos.x,pos.z)+.15,pos.z);scene.add(m);fx.push({m,t:0,dur,ring:true});
+  const rg=spawnRing.g||(spawnRing.g=new THREE.RingGeometry(.85,1,40));rg.userData.keep=1;
+  const m=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({color,transparent:true,opacity:.8,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,depthWrite:false}));
+  m.rotation.x=-Math.PI/2;m.position.set(pos.x,heightAt(pos.x,pos.z)+.15,pos.z);m.scale.setScalar(radius);scene.add(m);fx.push({m,t:0,dur,ring:true,bs:radius});
+  if(VFX.q()>.55){const wg=spawnRing.w||(spawnRing.w=new THREE.RingGeometry(.97,1.01,48));wg.userData.keep=1;   // 가장자리의 하얀 선
+    const w=new THREE.Mesh(wg,new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.8,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,depthWrite:false}));w.rotation.x=-Math.PI/2;w.position.copy(m.position);w.position.y+=.02;w.scale.setScalar(radius);scene.add(w);fx.push({m:w,t:0,dur:dur*.8,ring:true,bs:radius});}
   VFX.ringSparks(pos,color,radius);
 }
 
@@ -15641,9 +15734,9 @@ function updateBossBar(){
 
 function updateFx(dt){
   for(let i=fx.length-1;i>=0;i--){const f=fx[i];f.t+=dt;const k=f.t/f.dur;
-    if(f.ring){f.m.material.opacity=(f.op||.8)*(1-k);if(f.op===undefined)f.m.scale.setScalar(1+k*.08);}
+    if(f.ring){f.m.material.opacity=(f.op||.8)*(1-k);if(f.op===undefined)f.m.scale.setScalar((f.bs||1)*(1+k*.08));}
     else{f.m.scale.setScalar(.15+f.size*k);f.m.material.opacity=.85*(1-k);}
-    if(k>=1){scene.remove(f.m);f.m.geometry.dispose();f.m.material.dispose();fx.splice(i,1);}}
+    if(k>=1){scene.remove(f.m);if(!f.m.geometry.userData.keep)f.m.geometry.dispose();f.m.material.dispose();fx.splice(i,1);}}
 }
 let miniT=0;
 // 처음 보는 재질을 그릴 때 화면이 잠깐 멈추는 것(셰이더 만들기)을 미리 해 둔다
