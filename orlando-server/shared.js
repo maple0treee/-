@@ -70,7 +70,15 @@
     mvale:  { x: 4050, z: 900, R: 150 },   // 계곡
     mpass:  { x: 4500, z: 900, R: 150 },   // 고개
   };
-  const MHUNT = ['mfield', 'mhill', 'mwood', 'mvale', 'mpass'];
+  // 엑시즈 문 밖 사냥터 줄: 숫자=줄(1 동문 · 2 북문 · 3 서문 · 4 남문), 글자=그 줄의 몇 번째 땅. 땅 생김새(kind)는 들판·구릉·숲·계곡·고개
+  const MLINES = [
+    { n: 1, gate: '동문', end: 'milgol', zones: [['mfield', 'field'], ['mhill', 'hill'], ['mwood', 'wood'], ['mvale', 'vale'], ['mpass', 'pass']] },
+    { n: 2, gate: '북문', zones: [['m2a', 'wood'], ['m2b', 'hill'], ['m2c', 'wood'], ['m2d', 'vale'], ['m2e', 'pass']] },
+    { n: 3, gate: '서문', zones: [['m3a', 'field'], ['m3b', 'hill'], ['m3c', 'field'], ['m3d', 'wood'], ['m3e', 'hill']] },
+    { n: 4, gate: '남문', zones: [['m4a', 'wood'], ['m4b', 'vale'], ['m4c', 'wood'], ['m4d', 'vale'], ['m4e', 'pass']] },
+  ];
+  for (const L of MLINES) L.zones.forEach(([id, kind], i) => { const I = ISLES[id] || (ISLES[id] = { x: 2700 + i * 450, z: 900 + (L.n - 1) * 450, R: 150 }); I.kind = kind; I.line = L.n; I.seq = i; });
+  const MHUNT = MLINES.flatMap((L) => L.zones.map((q) => q[0]));
   const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle', ...MHUNT];
   for (const k of ISLE_ORDER) { const I = ISLES[k]; I.id = k; I.entry = { x: I.x, z: I.z + I.R - 12 }; }   // 들어오는 자리 (남쪽 가장자리)
   for (const k of MHUNT) { const I = ISLES[k]; I.entry = { x: I.x - I.R + 14, z: I.z }; I.exit = { x: I.x + I.R - 14, z: I.z }; }   // 사냥터: 서쪽으로 들어와 동쪽으로 나간다
@@ -201,6 +209,45 @@
     windwolf: { name: '바람 늑대', lv: 121, build: 'quad', color: 0xb8c4cc, hpM: 1.3, atkM: 1.5, scale: 1.3 },
     mistslime:{ name: '안개 슬라임', lv: 123, build: 'slime', color: 0xc8d4dc, hpM: 1.6, atkM: 1.3, scale: 1.6, glow: 0xa0c8e8 },
     cliffgiant:{ name: '벼랑 거인', lv: 125, build: 'biped', color: 0x6a6662, hpM: 2.5, atkM: 1.6, scale: 2.5, club: true },
+    // 엑시즈 북문 밖 (Lv 125–150)
+    pinewolf: { name: '솔늑대', lv: 126, build: 'quad', color: 0x5a4a3a, hpM: 1.2, atkM: 1.4, scale: 1.25 },
+    barkslime:{ name: '나무껍질 슬라임', lv: 128, build: 'slime', color: 0x6a4e32, hpM: 1.6, atkM: 1.3, scale: 1.6 },
+    hornboar: { name: '뿔멧돼지', lv: 131, build: 'quad', color: 0x3e2e22, hpM: 1.5, atkM: 1.45, scale: 1.5, tusk: true },
+    rockviper:{ name: '바위뱀', lv: 134, build: 'snake', color: 0x6e6a60, hpM: 1.2, atkM: 1.55, scale: 1.9 },
+    greybear: { name: '회색곰', lv: 136, build: 'quad', color: 0x6a645c, hpM: 1.8, atkM: 1.5, scale: 1.75 },
+    resinslime:{ name: '송진 슬라임', lv: 138, build: 'slime', color: 0xc8902a, hpM: 1.6, atkM: 1.35, scale: 1.6, glow: 0xffb040 },
+    pinetroll:{ name: '솔숲 트롤', lv: 140, build: 'biped', color: 0x3e4a32, hpM: 2.3, atkM: 1.6, scale: 2.3, club: true },
+    cragdog:  { name: '바위개', lv: 141, build: 'quad', color: 0x5e5a54, hpM: 1.4, atkM: 1.5, scale: 1.35 },
+    rockogre: { name: '바위 오우거', lv: 144, build: 'biped', color: 0x7a7266, hpM: 2.4, atkM: 1.65, scale: 2.35, club: true },
+    icewolf:  { name: '얼음 늑대', lv: 146, build: 'quad', color: 0xd0e0ea, hpM: 1.35, atkM: 1.6, scale: 1.35 },
+    snowslime:{ name: '눈 슬라임', lv: 148, build: 'slime', color: 0xeef4f8, hpM: 1.7, atkM: 1.4, scale: 1.65, glow: 0xc0e0ff },
+    frostgiant:{ name: '서리 거인', lv: 150, build: 'biped', color: 0x9ab0c0, hpM: 2.6, atkM: 1.7, scale: 2.6, club: true },
+    // 엑시즈 서문 밖 (Lv 150–175)
+    steppewolf:{ name: '초원 늑대', lv: 151, build: 'quad', color: 0x9a8058, hpM: 1.25, atkM: 1.5, scale: 1.3 },
+    clayslime:{ name: '점토 슬라임', lv: 154, build: 'slime', color: 0xa86a48, hpM: 1.7, atkM: 1.35, scale: 1.65 },
+    wildram:  { name: '들양', lv: 156, build: 'quad', color: 0xd8ccb0, hpM: 1.5, atkM: 1.5, scale: 1.4, tusk: true },
+    reedviper:{ name: '갈대뱀', lv: 159, build: 'snake', color: 0x8a9a4a, hpM: 1.25, atkM: 1.65, scale: 2.0 },
+    warboar:  { name: '싸움 멧돼지', lv: 161, build: 'quad', color: 0x5a3626, hpM: 1.6, atkM: 1.6, scale: 1.55, tusk: true },
+    pollenslime:{ name: '꽃가루 슬라임', lv: 163, build: 'slime', color: 0xe8d050, hpM: 1.7, atkM: 1.4, scale: 1.65, glow: 0xfff070 },
+    fieldogre:{ name: '들판 오우거', lv: 165, build: 'biped', color: 0x9a7a52, hpM: 2.5, atkM: 1.7, scale: 2.4, club: true },
+    ashwolf:  { name: '잿빛 늑대', lv: 166, build: 'quad', color: 0x6a6866, hpM: 1.4, atkM: 1.65, scale: 1.35 },
+    brownbear:{ name: '불곰', lv: 169, build: 'quad', color: 0x5a3a22, hpM: 1.9, atkM: 1.6, scale: 1.85 },
+    hilltroll:{ name: '언덕 트롤', lv: 171, build: 'biped', color: 0x6a7a4a, hpM: 2.5, atkM: 1.7, scale: 2.35, club: true },
+    stoneslime:{ name: '돌 슬라임', lv: 173, build: 'slime', color: 0x8a8680, hpM: 1.9, atkM: 1.45, scale: 1.7 },
+    hillgiant:{ name: '언덕 거인', lv: 175, build: 'biped', color: 0x8a7a62, hpM: 2.7, atkM: 1.75, scale: 2.65, club: true },
+    // 엑시즈 남문 밖 (Lv 175–200)
+    shadewolf:{ name: '그늘 늑대', lv: 176, build: 'quad', color: 0x3a3a3e, hpM: 1.4, atkM: 1.7, scale: 1.35 },
+    leafslime:{ name: '잎 슬라임', lv: 178, build: 'slime', color: 0x4a8a3a, hpM: 1.8, atkM: 1.5, scale: 1.7, glow: 0x80e060 },
+    cliffboar:{ name: '벼랑 멧돼지', lv: 181, build: 'quad', color: 0x4a3a30, hpM: 1.7, atkM: 1.7, scale: 1.6, tusk: true },
+    pitviper: { name: '살무사', lv: 184, build: 'snake', color: 0x5a4a32, hpM: 1.3, atkM: 1.8, scale: 2.0 },
+    moonbear: { name: '반달곰', lv: 186, build: 'quad', color: 0x1e1a1a, hpM: 2.0, atkM: 1.7, scale: 1.85 },
+    rotslime: { name: '썩은 잎 슬라임', lv: 188, build: 'slime', color: 0x5a5a2a, hpM: 1.9, atkM: 1.55, scale: 1.7 },
+    oldtroll: { name: '늙은 트롤', lv: 190, build: 'biped', color: 0x4a5a4a, hpM: 2.7, atkM: 1.8, scale: 2.45, club: true },
+    gorgehound:{ name: '협곡 사냥개', lv: 191, build: 'quad', color: 0x7a5e48, hpM: 1.55, atkM: 1.75, scale: 1.4 },
+    gorgeogre:{ name: '협곡 오우거', lv: 194, build: 'biped', color: 0x7a5a42, hpM: 2.8, atkM: 1.85, scale: 2.5, club: true },
+    stormwolf:{ name: '폭풍 늑대', lv: 196, build: 'quad', color: 0x7a8a9a, hpM: 1.6, atkM: 1.85, scale: 1.45 },
+    cloudslime:{ name: '구름 슬라임', lv: 198, build: 'slime', color: 0xf0f2f6, hpM: 2.0, atkM: 1.6, scale: 1.75, glow: 0xd8e8ff },
+    peakgiant:{ name: '봉우리 거인', lv: 200, build: 'biped', color: 0x8a8a92, hpM: 3.0, atkM: 1.9, scale: 2.8, club: true },
     reddragon:{ name: '붉은 용 이그니스', lv: 100, fixed: { hp: 450000, atk: 900, def: 60, exp: 80000 }, gold: 80000, build: 'dragon', color: 0xa8231a, scale: 1, dragon: true },
   };
   const HP_MUL = 1.6, EXP_MUL = 1.25;
@@ -222,8 +269,11 @@
     wwest: ['jackal', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
     silva: ['silvawolf', 'mossslime'], arbus: ['snowwolf', 'frostslime'], kaolis: ['mackerel', 'tideslime', 'octopus'], subcus: ['darkhound', 'crystalslime'],
     mfield: ['fieldwolf', 'fieldwolf', 'mudslime'], mhill: ['hillboar', 'meadowviper'], mwood: ['woodbear', 'thornslime', 'woodtroll'], mvale: ['stonehound', 'valleyogre'], mpass: ['windwolf', 'mistslime', 'cliffgiant'],
+    m2a: ['pinewolf', 'pinewolf', 'barkslime'], m2b: ['hornboar', 'rockviper'], m2c: ['greybear', 'resinslime', 'pinetroll'], m2d: ['cragdog', 'rockogre'], m2e: ['icewolf', 'snowslime', 'frostgiant'],
+    m3a: ['steppewolf', 'steppewolf', 'clayslime'], m3b: ['wildram', 'reedviper'], m3c: ['warboar', 'pollenslime', 'fieldogre'], m3d: ['ashwolf', 'brownbear'], m3e: ['hilltroll', 'stoneslime', 'hillgiant'],
+    m4a: ['shadewolf', 'shadewolf', 'leafslime'], m4b: ['cliffboar', 'pitviper'], m4c: ['moonbear', 'rotslime', 'oldtroll'], m4d: ['gorgehound', 'gorgeogre'], m4e: ['stormwolf', 'cloudslime', 'peakgiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 40, mhill: 42, mwood: 44, mvale: 44, mpass: 46 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 40, mhill: 42, mwood: 44, mvale: 44, mpass: 46, m2a: 32, m2b: 32, m2c: 32, m2d: 32, m2e: 32, m3a: 32, m3b: 32, m3c: 32, m3d: 32, m3e: 32, m4a: 32, m4b: 32, m4c: 32, m4d: 32, m4e: 32 };
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
     const d2 = Math.hypot(x - C2.x, z - C2.z);
@@ -237,6 +287,7 @@
     }
   }
   const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0], coachway: [0, 0], castle: [0, 0] , mfield: [100, 105], mhill: [105, 110], mwood: [110, 115], mvale: [115, 120], mpass: [120, 125] };
+  MLINES.forEach((L) => { if (L.n > 1) L.zones.forEach(([id], i) => { const a = 125 + (L.n - 2) * 25 + i * 5; ZONE_LEVELS[id] = [a, a + 5]; }); });
 
   // ---------- 의뢰 게시판 포스터 ----------
   // 의뢰를 주는 NPC마다 게시판이 따로 있다. 포스터는 마을 사람(실제 NPC)이 이유를 적어 붙인 것
@@ -274,6 +325,6 @@
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { MHUNT, THOUSE, inTHouse, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { MHUNT, MLINES, THOUSE, inTHouse, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
