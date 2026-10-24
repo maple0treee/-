@@ -1358,7 +1358,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@93c7047247c12ef8cec88e6df5cd863ec11a6e96/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@c9a5b38762dd9953eec1bef30dab221fdaa06328/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -5487,6 +5487,7 @@ function gearCode(G){return [G.helm,G.armor,G.boots,G.weapon,G.sub??-1,G.acc??-1
 function parseGear(s){const a=String(s||'').split(',').map(v=>Math.max(-1,Math.min(10,Math.floor(Number(v))))).map(v=>isFinite(v)?v:-1);return{helm:a[0]??-1,armor:a[1]??-1,boots:a[2]??-1,weapon:a[3]??-1,sub:a[4]??-1,acc:a[5]??-1,shs:a[6]===1?1:0,wc:Math.max(0,a[7]|0)};}
 /* 예전 모습(팔 가느다란 막대 인형·만든 NPC)으로: 애니 모델(무료 VRoid)을 입히지 않는다 */
 const OLD_LOOK=true;
+var STICK_MOUTH=false;
 function makeStickPlayer(job,gear){
   const J=JOBS[job],G=gear||{helm:-1,armor:-1,boots:-1,weapon:-1},g=new THREE.Group(),mats=[];
   const dj=G.wc>0?(jobChain(job)[G.wc-1]||job):baseOf(job);   // 무기 생김새는 무기 류를 따른다
@@ -5503,6 +5504,8 @@ function makeStickPlayer(job,gear){
   const neck=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,.12,6),limb);neck.position.y=.66;upper.add(neck);
   const head=ball(.22,skin);head.position.y=.88;upper.add(head);
   const eyeM=M(0x14110e);[-.075,.075].forEach(x=>{const e=new THREE.Mesh(new THREE.SphereGeometry(.028,8,6),eyeM);e.position.set(x,.03,.2);e.scale.z=.5;head.add(e);});
+  /* 입: 살짝 웃는 작은 호 (사진으로 먼저 보여 드리는 중: STICK_MOUTH가 켜져 있을 때만) */
+  if(typeof STICK_MOUTH!=='undefined'&&STICK_MOUTH){const mo=new THREE.Mesh(new THREE.TorusGeometry(.042,.0095,5,10,Math.PI),M(0x6a2a22));mo.position.set(0,-.055,.207);mo.rotation.set(-.28,0,Math.PI);mo.scale.set(1,.75,1);head.add(mo);}
   // 다리
   const mkLeg=x=>{const hip=new THREE.Group();hip.position.set(x,.96,0);hip.add(seg(.45,limb));
     const knee=new THREE.Group();knee.position.y=-.45;knee.add(ball(LR,limb),seg(.45,limb));
@@ -8893,9 +8896,10 @@ function marcusPlan(){if(MARCUS.plan)return MARCUS.plan;
   const onPlateau=(x,y)=>inPoly(hill,x,y);
   const nearStreet=(x,y,m)=>{for(const st of streets)for(let i=0;i<st.p.length-1;i++)if(segDist(x,y,st.p[i],st.p[i+1])<st.w/2+m)return true;for(const [px,py,r] of piazze)if(Math.hypot(x-px,y-py)<r+m)return true;return false;};
   const zone=id=>zones.find(z=>z.id===id);
-  const waterDepth=(x,y)=>{if(inHarbor(x,y,0)){const d=polyDist(harbor,x,y);return 3.2*smooth(0,5,d);}
+  const waterDepth=(x,y)=>{if(inHarbor(x,y,0)){if(wallDist(x,y)>-2)return 3.2;const d=polyDist(harbor,x,y);return 3.2*smooth(0,5,d);}   /* 성벽 밖으로 나간 항구 가장자리는 얕은 둔덕 없이 깊게 */
     const wd=wallDist(x,y);if(wd<0){const rd=riverDist(x,y);if(rd<MARCUS_RIVER_W/2+2&&!bridgeAt(x,y))return MARCUS_RIVER_DEEP*smooth(MARCUS_RIVER_W/2+1.5,MARCUS_RIVER_W/2-3,rd);return 0;}
-    return moatDepth(x,y);};
+    /* 성벽 밖으로 나간 항구 물은 해자와 이어 준다 (그 사이에 물 위로 뜬 듯한 땅 띠가 남지 않게) */
+    return Math.max(moatDepth(x,y),polyDist(harbor,x,y)<26?3.2*smooth(26,14,polyDist(harbor,x,y)):0);};
   return MARCUS.plan={hillStairs,onPlateau,wall,gates,river,harbor,hill,zones,streets,piazze,bridges,inPoly,segDist,polyDist,wallDist,inZone,riverDist,riverNear,bridgeAt,moatDepth,inHarbor,hillH,nearStreet,zone,waterDepth};}
 /* 땅 높이 보정 (isleHeight가 부른다): 강·해자·항구는 파이고, 왕궁 언덕은 솟는다 */
 function marcusTerrain(mx,my){const PL=marcusPlan();return PL.hillH(mx,my)-PL.waterDepth(mx,my);}
@@ -9081,11 +9085,12 @@ function buildMarcus(H){
       const mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];if(!inWall(mid[0],mid[1],-6))continue;   /* 성 밖으로 트인 변 */
       let sc=0;for(let t=2;t<L-1;t+=4){const mx=a[0]+ux*t,my=a[1]+uy*t;sc+=4;const inward=PL.inPoly(Hp,mx-uy*2,my+ux*2)?1:-1;   /* 물이 있는 쪽 */
         const px=mx-inward*(-uy)*.6,py=my-inward*ux*.6;
-        if(sc>40&&t<L-12){sc=0;stair(cx+mx+(-uy)*inward*4.5,cz+my+ux*inward*4.5,Math.atan2(uy*inward,-ux*inward),3.2);continue;}
+        if(PL.waterDepth(mx+uy*inward*3,my-ux*inward*3)>1)continue;   /* 뒤(뭍 쪽)도 물이면 (성벽 밖으로 나간 항구) 둑·계단을 놓지 않는다 */
+        if(sc>40&&t<L-12){sc=0;stair(cx+mx+(-uy)*inward*4.5,cz+my+ux*inward*4.5,Math.atan2(-uy*inward,ux*inward),3.2);   /* 앞(+z)이 물 쪽: 물에서 부두로 오른다 */continue;}
         bankWall(cx+px,cz+py,Math.atan2(ux,uy)+(inward>0?PI:0),4.1,3.2,{k:(t/4|0)%3,noRail:true});}}}
   /* 해자 둑: 성벽 밖 10m 선을 따라 낮은 돌 둑 (난간 없음) */
   {const Wl=PL.wall;for(let i=0;i<Wl.length;i++){const a=Wl[i],b=Wl[(i+1)%Wl.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/L,uy=(b[1]-a[1])/L,nx=uy,ny=-ux;   /* 바깥쪽 법선 (시계 방향 다각형) */
-      for(let t=2;t<L;t+=4){const mx=a[0]+ux*t+nx*10.5,my=a[1]+uy*t+ny*10.5;if(PL.moatDepth(mx+nx*4,my+ny*4)<.5)continue;
+      for(let t=2;t<L;t+=4){const mx=a[0]+ux*t+nx*10.5,my=a[1]+uy*t+ny*10.5;if(PL.moatDepth(mx+nx*4,my+ny*4)<.5||PL.inHarbor(mx,my,28))continue;
         const F=frame(cx+mx,cz+my,Math.atan2(ux,uy),0);F.P(BOX,0,-1.4,0,1.2,2.8,4.1,STONE[(t/4|0)%3]);F.P(BOX,0,.25,0,1.3,.5,4.1,PIETRA2);F.box(0,0,1.3,4.1,0,{y0:-6,y1:1.5,h:undefined});}}}
   /* ===== 성벽 · 망루 · 성문 (다각형을 따라) ===== */
   const sqTower=(x,z,ry,s,h,y)=>{const F=frame(x,z,ry,y);F.P(BOX,0,h/2,0,s,h,s,PIETRA);F.P(BOX,0,h+.2,0,s+.8,.4,s+.8,PIETRA2);
@@ -9696,9 +9701,9 @@ function makeCitizens(cx,cz){
   /* 8c. 바깥 정착지 주민 */
   if(typeof realmCitizens==='function')realmCitizens({add,standAt,circ,walkerOn,group,pick,rnd,rr,COMMON,FARM,ARMED,RICH,hit});
   /* 8d. 예전 모습(막대 인형): 멀리 있는 사람을 따로 가볍게 그리지 않는 대신 주민 수를 줄인다.
-     엑시즈는 약 8명 중 1명, 바깥 정착지는 절반만 남긴다 (경비병은 더 많이). 같은 씨앗이라 모두가 같은 사람을 본다 */
+     엑시즈는 약 6명 중 1명, 바깥 정착지는 절반만 남긴다 (경비병은 더 많이). 같은 씨앗이라 모두가 같은 사람을 본다 */
   if(CIT_OLD()){const at=c=>c.k==='rt'?[c.sch[0].x0??c.sch[0].x,c.sch[0].z0??c.sch[0].z]:c.k==='pl'?c.l.pts[0]:[c.x,c.z];
-    const kept=L.filter(c=>{const [x,z]=at(c),ex=Math.hypot(x-cx,z-cz)<480,g=c.mode==='guard';return rnd()<(ex?(g?.35:.12):(g?.8:.5));});L.length=0;L.push(...kept);}
+    const kept=L.filter(c=>{const [x,z]=at(c),ex=Math.hypot(x-cx,z-cz)<480,g=c.mode==='guard';return rnd()<(ex?(g?.45:.16):(g?.8:.5));});L.length=0;L.push(...kept);}
   /* 9. 집 안에 있는 사람들 (그리지 않는다) */
   CROWD.indoor=Math.max(0,CROWD.total-L.length);
   /* 스프라이트 한 번에 그리기 */
@@ -9879,12 +9884,12 @@ function _marcusLife(cx,cz){
 
   /* ===== 화분 ===== */
   const pots=[];
-  for(const R of routes){const n=Math.floor(R.T/7);for(let k=1;k<n;k++){if(rnd()<.35)continue;const side=(rnd()<.5?-1:1)*(R.w/2+rr(.7,1.3)),p=along(R,k*7+rr(-1.5,1.5),side);
+  for(const R of routes){const n=Math.floor(R.T/7);for(let k=1;k<n;k++){if(rnd()<.72)continue;const side=(rnd()<.5?-1:1)*(R.w/2+rr(.7,1.3)),p=along(R,k*7+rr(-1.5,1.5),side);
       if(!inCity(p.x,p.z)||PL.nearStreet(p.x-cx,p.z-cz,.25)||!free(p.x,p.z,.55)||!clear(p.x,p.z,.6))continue;
       const big=rnd()<.25;pots.push({x:p.x,z:p.z,s:big?rr(1.25,1.5):rr(.8,1.1),k:rnd()});claim(p.x,p.z,.6);
-      if(rnd()<.45){const q=along(R,k*7+rr(-1.5,1.5)+(rnd()<.5?-1.1:1.1),side);if(!PL.nearStreet(q.x-cx,q.z-cz,.25)&&free(q.x,q.z,.5)&&clear(q.x,q.z,.5)){pots.push({x:q.x,z:q.z,s:rr(.7,.95),k:rnd()});claim(q.x,q.z,.5);}}}}
+      if(rnd()<.15){const q=along(R,k*7+rr(-1.5,1.5)+(rnd()<.5?-1.1:1.1),side);if(!PL.nearStreet(q.x-cx,q.z-cz,.25)&&free(q.x,q.z,.5)&&clear(q.x,q.z,.5)){pots.push({x:q.x,z:q.z,s:rr(.7,.95),k:rnd()});claim(q.x,q.z,.5);}}}}
   /* 광장·작은 광장 둘레의 큰 화분 */
-  const PZ=PL.zone('plaza');const rings=[[cx+PZ.x,cz+PZ.y,PZ.r-3.5,22],...PL.piazze.map(([x,y,r])=>[cx+x,cz+y,r+1.6,8])];
+  const PZ=PL.zone('plaza');const rings=[[cx+PZ.x,cz+PZ.y,PZ.r-3.5,12],...PL.piazze.map(([x,y,r])=>[cx+x,cz+y,r+1.6,4])];
   for(const [x0,z0,R,n] of rings)for(let k=0;k<n;k++){const a=k/n*PI*2+.13,x=x0+Math.cos(a)*R,z=z0+Math.sin(a)*R;if(!free(x,z,.7)||!clear(x,z,.8))continue;pots.push({x,z,s:rr(1.3,1.6),k:rnd()});claim(x,z,.8);}
   if(pots.length){const n=pots.length;
     const potG=merge([[CYL(10),0,.27,0,.5,.54,.5,0xffffff],[CYL(10),0,.56,0,.58,.08,.58,0xffffff]]);potG.translate(0,0,0);
