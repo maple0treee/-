@@ -1357,7 +1357,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@f78380305cb7481a92586b6812945c05e0d8a29b/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@f2ca609635433b4a3a2ff0aaeaf042ccbbd4dc75/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -2848,7 +2848,7 @@ function makeBlockPlayer(job){
   return g;
 }
 function makeMentorMesh(){
-  const g=makeNpcMesh({robe:0x3a2f4a,robe2:0x4a3d5e,long:1,hat:'hood',hatC:0x2c2338,beard:0xe8e4dc,staff:0xf3cf6a,trim:0xc9a050});
+  const g=makeNpcMesh({robe:0x3a2f4a,robe2:0x4a3d5e,long:1,hat:'hood',hatC:0x2c2338,beard:0xe8e4dc,staff:0xf3cf6a,trim:0xc9a050});if(g.userData.stick)g.userData.pose='point';
   const mk=g.userData.marker;mk.scale.setScalar(1.6);mk.position.y=2.9;
   return g;
 }
@@ -7333,7 +7333,7 @@ function npcFolds(mesh,n,amp,y0,y1){const P=mesh.geometry.attributes.position;
   mesh.geometry.computeVertexNormals();return mesh;}
 // 살아 있는 듯한 움직임: 숨쉬기, 고개 돌리기, 눈 깜박이기, 팔 흔들기
 const smoothN=(a,b,x)=>{const k=Math.max(0,Math.min(1,(x-a)/(b-a)));return k*k*(3-2*k);};
-function animNpc(g,t,dt){const u=g.userData;if(u.stick){animStick(g,0,t+(u.ph||0),1,false,false,null);return;}if(!u.head)return;const ph=u.ph||0;
+function animNpc(g,t,dt){const u=g.userData;if(u.stick){stickNpcPose(g,u.pose||'idle',t+(u.ph||0));return;}if(!u.head)return;const ph=u.ph||0;
   if(u.baked&&u.idleU){const U=u.idleU.value;   /* 숨 쉬고, 가끔 무게를 옮기고, 이따금 고개를 돌린다. 가까이 온 사람은 쳐다본다 */
     const nz=(a,s)=>Math.sin(t*a+s)*.5+Math.sin(t*a*1.93+s*2.1)*.3+Math.sin(t*a*3.7+s*4.3)*.2;
     /* 고개만 따로 돌리면 머리카락·모자가 뒤틀려서, 몸 전체를 살짝 돌린다 */
@@ -7413,6 +7413,30 @@ function makeNpcMeshOld(o){
 }
 /* 예전 모습 NPC: 'robe' = 10월 초의 긴 옷 NPC, 'stick' = 플레이어와 같은 팔 가느다란 막대 인형 */
 var NPC_OLD='stick';
+/* 막대 인형 NPC 자세: 사람마다 하는 일이 다르게 */
+const NPC_POSE={bron:'cross',mina:'counter',torgan:'hammer',hanna:'drink',kyle:'hips',elis:'think',sera:'staff',turpin:'read',rowen:'guard',timo:'play',messenger:'behind',mentor:'point'};
+const _sn=(t,s)=>Math.sin(t*.71+s)*.5+Math.sin(t*1.37+s*2.3)*.3+Math.sin(t*2.93+s*4.1)*.2;
+function stickNpcPose(g,pose,t){const S=g.userData.stick;if(!S)return;const AR=S.AR,AL=S.AL,br=Math.sin(t*1.3)*.02;
+  const arm=(A,sx,sy,sz,el)=>{A.sh.rotation.set(sx,sy,sz);A.el.rotation.x=el;A.hand.rotation.set(0,0,0);};
+  const legs=(lh,lk,rh,rk)=>{S.L.hip.rotation.set(lh,0,0);S.L.knee.rotation.x=lk;S.R.hip.rotation.set(rh,0,0);S.R.knee.rotation.x=rk;};
+  /* 기본: 숨쉬기, 가끔 한쪽 다리에 무게 */
+  const sh=Math.tanh(_sn(t*.06,3)*3),rl=Math.max(0,sh),ll=Math.max(0,-sh);
+  legs(-.05*rl,.12*rl+.03,-.05*ll,.12*ll+.03);S.body.position.set(0,0,0);S.body.rotation.set(0,0,sh*.025);S.upper.rotation.set(br,0,0);
+  const look=(k=1)=>{const gq=_sn(t*.35,1);S.head.rotation.set(_sn(t*.27,5)*.06*k,(Math.abs(gq)>.35?Math.sign(gq)*(Math.abs(gq)-.35)*1.4:0)*k,0);};
+  switch(pose){
+    case 'cross':arm(AR,-.55,-.9,.12,-1.75);arm(AL,-.62,.9,-.12,-1.7);S.upper.rotation.x=br-.04;look(.8);break;
+    case 'hips':arm(AR,.15,-.7,.6,-1.65);arm(AL,.15,.7,-.6,-1.65);S.upper.rotation.x=br-.05;look();break;
+    case 'counter':{const wv=_sn(t*.15,2)>.25;if(wv){const u=Math.sin(t*7);arm(AR,0,0,2.5+u*.15,-.4);}else arm(AR,-.95,0,.08,-.35);arm(AL,-.95,0,-.08,-.35);S.upper.rotation.x=br+(wv?.02:.18);look(wv?.5:1);break;}
+    case 'hammer':{const u=(Math.sin(t*4.5)+1)/2;arm(AR,-2.4+u*1.7,0,.15,-.7+u*.4);arm(AL,-.7,0,-.1,-1.1);S.upper.rotation.x=br+.18+u*.1;S.head.rotation.set(.35,0,0);legs(-.25,.25,.15,.08);break;}
+    case 'drink':{const d=_sn(t*.2,7)>.3;if(d){arm(AR,-1.15,0,.25,-2.4);S.head.rotation.set(-.35,0,0);}else{arm(AR,-.5,0,.1,-1.5);look();}arm(AL,.05,0,-.08,-.2);break;}
+    case 'think':arm(AR,-.85,0,-.25,-2.35);arm(AL,-.45,.4,-.05,-1.6);S.head.rotation.set(.12,_sn(t*.2,2)*.25,.12);S.upper.rotation.x=br+.04;break;
+    case 'staff':arm(AR,-.45,0,.25,-.55);arm(AL,-.4,0,-.2,-1.2);S.upper.rotation.x=br+.1;look(.6);break;
+    case 'read':{const flip=_sn(t*.5,4)>.75;arm(AR,-.75,0,-.1,-1.25+(flip?.3:0));arm(AL,-.75,0,.1,-1.25);S.head.rotation.set(.45,_sn(t*.3,1)*.08,0);S.upper.rotation.x=br+.06;break;}
+    case 'guard':arm(AR,-.15,0,.1,-.5);arm(AL,.02,0,-.06,-.05);S.upper.rotation.x=br-.04;legs(0,.02,0,.02);S.head.rotation.set(0,Math.abs(_sn(t*.2,2))>.55?_sn(t*.2,2)*.5:0,0);break;
+    case 'play':{const j=Math.max(0,Math.sin(t*5));S.body.position.y=j*.22;legs(-.3*j,.6*j,-.3*j,.6*j);const u=Math.sin(t*5);arm(AR,0,0,1.6+u*.5,-.3);arm(AL,0,0,-1.6-u*.5,-.3);S.head.rotation.set(-.15,0,0);break;}
+    case 'behind':arm(AR,.45,-.6,-.15,-1.5);arm(AL,.45,.6,.15,-1.5);S.upper.rotation.x=br-.06;look(.7);break;
+    case 'point':{const on=_sn(t*.17,6)>.2;if(on)arm(AR,-1.45,0,.15,-.05);else arm(AR,.05,0,.08,-.15);arm(AL,.05,0,-.08,-.15);look(on?.3:1);break;}
+    default:arm(AR,.05,0,.1,-.15);arm(AL,.05,0,-.1,-.15);look();}}
 function makeNpcStick(o){const g=makeStickPlayer('warrior',null),u=g.userData,J=JOBS.warrior;
   const jc=new THREE.Color(J.color).getHex(),tc=new THREE.Color(J.color).multiplyScalar(.55).getHex();
   for(const m of u.mats){if(!m.color)continue;const h=m.color.getHex();if(h===jc)m.color.setHex(o.robe);else if(h===tc)m.color.setHex(o.robe2||shade2(o.robe,.7));}
@@ -7422,7 +7446,7 @@ function makeNpcStick(o){const g=makeStickPlayer('warrior',null),u=g.userData,J=
   if(o.hat==='wide'){const b=new THREE.Mesh(new THREE.CylinderGeometry(.2,.42,.06,14),hm(o.hatC||0x6b4a2e));b.position.y=.19;const t=new THREE.Mesh(new THREE.CylinderGeometry(.15,.19,.2,12),hm(o.hatC||0x6b4a2e));t.position.y=.3;H.add(b,t);}
   else if(o.hat==='hood'){const h=new THREE.Mesh(new THREE.ConeGeometry(.29,.5,10),hm(o.hatC||o.robe));h.position.y=.24;H.add(h);}
   else if(o.hat==='helm'){const h=new THREE.Mesh(new THREE.SphereGeometry(.245,14,8,0,Math.PI*2,0,Math.PI/2),mat(0x9aa0a8,{metalness:.6,roughness:.35,flatShading:false}));H.add(h);}
-  if(o.beard){const b=new THREE.Mesh(new THREE.ConeGeometry(.13,.3,8),hm(o.beard));b.position.set(0,-.2,.12);b.rotation.x=Math.PI;H.add(b);}
+  if(o.beard){const b=new THREE.Mesh(new THREE.SphereGeometry(.13,12,8),hm(o.beard));b.scale.set(1.15,1.05,.7);b.position.set(0,-.13,.11);H.add(b);const mu=new THREE.Mesh(new THREE.BoxGeometry(.16,.035,.04),hm(o.beard));mu.position.set(0,-.03,.205);H.add(mu);}
   if(o.staff){const s=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,2,6),mat(0x5a3d22));s.position.set(.42,1,.12);g.add(s);
     const orb=new THREE.Mesh(new THREE.OctahedronGeometry(.11,0),mat(o.staff,{emissive:o.staff,emissiveIntensity:1.2}));orb.position.set(.42,2.05,.12);g.add(orb);}
   if(o.small)g.scale.setScalar(.7);
@@ -7481,6 +7505,7 @@ function addNpc(o){
   if(NPC_NUDGE[o.id]){o.x+=NPC_NUDGE[o.id][0];o.z+=NPC_NUDGE[o.id][1];}
   const y=o.y??heightAt(o.x,o.z);const mesh=makeNpcMesh(o.look);mesh.position.set(o.x,y,o.z);mesh.lookAt(o.faceX??C2.x,y,o.faceZ??C2.z);scene.add(mesh);
   colliders.push(o.y!==undefined?{x:o.x,z:o.z,r:.6,npc:true,y0:y-.6,y1:y+2.4,bld:true}:{x:o.x,z:o.z,r:.6,npc:true});
+  if(mesh.userData.stick)mesh.userData.pose=NPC_POSE[o.id]||'idle';
   const n={...o,mesh,y};NPCS.push(n);if(o.id==='luna')mesh.userData.maxTurn=.45;npcBakeRequest(npcBakeKey(o.id),mesh);return n;
 }
 
@@ -8509,6 +8534,8 @@ const _cq=new THREE.Quaternion();let _citK=1;
 const ARM_IN=.04;   /* _citK: 자세 세기 (일하다 쉴 때 천천히 풀린다) */
 function _citRot(e,ang,axis){if(!e)return;e.b.quaternion.copy(e.q0);ang*=_citK;if(ang){_cq.setFromAxisAngle(axis==='y'?e.ay:axis==='z'?e.az:e.ax,ang);e.b.quaternion.multiply(_cq);}}
 function _citRot2(e,ax,ay,az){if(!e)return;e.b.quaternion.copy(e.q0);ax*=_citK;ay*=_citK;az*=_citK;if(ax){_cq.setFromAxisAngle(e.ax,ax);e.b.quaternion.multiply(_cq);}if(ay){_cq.setFromAxisAngle(e.ay,ay);e.b.quaternion.multiply(_cq);}if(az){_cq.setFromAxisAngle(e.az,az);e.b.quaternion.multiply(_cq);}}
+/* 아래팔: 먼저 앞으로 굽히고(ax) 그다음 몸 쪽·바깥쪽으로 돌린다(ay, 세로축) — 팔짱·허리에 손 같은 자세 */
+function _citYX(e,ax,ay){if(!e)return;e.b.quaternion.copy(e.q0);if(ay){_cq.setFromAxisAngle(e.ay,ay*_citK);e.b.quaternion.multiply(_cq);}if(ax){_cq.setFromAxisAngle(e.ax,ax*_citK);e.b.quaternion.multiply(_cq);}}
 /* 이미 돌린 뼈에 조금 더 돌리기 (덧붙임) */
 function _citAdd(e,ang,axis){if(!e||!ang)return;_cq.setFromAxisAngle(axis==='y'?e.ay:axis==='z'?e.az:e.ax,ang);e.b.quaternion.multiply(_cq);}
 /* 되풀이가 드러나지 않는 흔들림: 서로 나누어떨어지지 않는 세 박자의 합 (-1~1) */
@@ -8564,6 +8591,22 @@ function citPoseBones(I,ph,w,t,mode='walk'){const A=I.A,V=I.v||{amp:1,arm:1,lean
     _citRot(A.J_Bip_L_UpperLeg,-.15);_citRot(A.J_Bip_R_UpperLeg,.15);return;}
   if(mode==='lean'){_citRot2(A.J_Bip_C_Spine,-.1,0,.1*V.side);_citRot2(A.J_Bip_L_UpperArm,-.3,0,-.3);_citRot(A.J_Bip_L_LowerArm,-1.6);_citRot2(A.J_Bip_R_UpperArm,-.3,0,.3);_citRot(A.J_Bip_R_LowerArm,-1.6);_citRot(A.J_Bip_L_UpperLeg,.1,'y');_citRot(A.J_Bip_R_UpperLeg,-.2);_citRot(A.J_Bip_R_LowerLeg,.3);look(1);return;}
   if(mode==='wave'){const on=_cn(t*.15,S)>.1;const u=Math.sin(t*3+ph);if(on){_citRot2(A.J_Bip_R_UpperArm,-2.7,0,.4+u*.1);_citRot2(A.J_Bip_R_LowerArm,-.6,0,u*.5);}else{_citRot(A.J_Bip_R_UpperArm,-.06);_citRot(A.J_Bip_R_LowerArm,-V.elbow);}look(1);return;}
+  /* 그 밖의 서 있는 자세들 (다리는 'stand'처럼 무게를 옮기고, 팔·고개만 다르게) */
+  const EXTRA={cross:1,hips:1,think:1,drink:1,read:1,point:1,stretch:1,pray:1,shrug:1,crouch:1};
+  if(EXTRA[mode]){const sh=Math.tanh(_cn(t*.06,S+11)*3)*V.side,br=Math.sin(t*1.15+S)*.018,rl=Math.max(0,sh),ll=Math.max(0,-sh),UA=A.J_Bip_L_UpperArm,UR=A.J_Bip_R_UpperArm,LA=A.J_Bip_L_LowerArm,LR=A.J_Bip_R_LowerArm;
+    _citRot(A.J_Bip_L_UpperLeg,-.06*rl);_citRot(A.J_Bip_L_LowerLeg,.14*rl);_citRot(A.J_Bip_R_UpperLeg,-.06*ll);_citRot(A.J_Bip_R_LowerLeg,.14*ll);if(H)_citAdd(H,sh*.03,'z');
+    _citRot2(A.J_Bip_C_Spine,br+V.lean,0,-sh*.03);
+    if(mode==='cross'){_citRot2(UA,-.38,0,-.22);_citYX(LA,-1.5,-1.2);_citRot2(UR,-.3,0,.22);_citYX(LR,-1.62,1.2);look(.8);return;}
+    if(mode==='hips'){_citRot2(UA,.22,0,.55);_citYX(LA,-1.55,-2.3);_citRot2(UR,.22,0,-.55);_citYX(LR,-1.55,2.3);_citRot2(A.J_Bip_C_Spine,br-.05,0,0);look(1);return;}
+    if(mode==='think'){_citRot2(UR,-.6,0,.22);_citYX(LR,-2.25,.7);_citRot2(UA,-.3,0,-.18);_citYX(LA,-1.5,-1.25);_citRot2(A.J_Bip_C_Head,.12,_cn(t*.2,S)*.25,.08);return;}
+    if(mode==='drink'){const d=_cn(t*.2,S+7)>.3;if(d){_citRot2(UR,-.8,0,.2);_citYX(LR,-2.3,.75);_citRot2(A.J_Bip_C_Head,-.3,0,0);}else{_citRot2(UR,-.35,0,.15);_citRot(LR,-1.45);look(1);}_citRot2(UA,-.05,0,-ARM_IN);_citRot(LA,-V.elbow);return;}
+    if(mode==='read'){_citRot2(UA,-.45,0,-.15);_citYX(LA,-1.35,-.55);_citRot2(UR,-.45,0,.15);_citYX(LR,-1.35,.55);_citRot2(A.J_Bip_C_Head,.4,_cn(t*.3,S)*.08,0);_citRot2(A.J_Bip_C_Spine,br+.06,0,0);return;}
+    if(mode==='point'){const on=_cn(t*.17,S+6)>.2;if(on){_citRot2(UR,-1.45,0,.05);_citRot(LR,-.05);}else{_citRot2(UR,-.05,0,ARM_IN);_citRot(LR,-V.elbow);}_citRot2(UA,-.05,0,-ARM_IN);_citRot(LA,-V.elbow);look(on?.3:1);return;}
+    if(mode==='stretch'){const on=_cn(t*.12,S+4)>.35;if(on){_citRot2(UA,-2.9,0,-.15);_citRot(LA,-.3);_citRot2(UR,-2.9,0,.15);_citRot(LR,-.3);_citRot2(A.J_Bip_C_Spine,-.12,0,0);_citRot2(A.J_Bip_C_Head,-.25,0,0);}else{_citRot2(UA,-.05,0,-ARM_IN);_citRot(LA,-V.elbow);_citRot2(UR,-.05,0,ARM_IN);_citRot(LR,-V.elbow);look(1);}return;}
+    if(mode==='pray'){_citRot2(UA,-.4,0,-.22);_citYX(LA,-1.65,-.95);_citRot2(UR,-.4,0,.22);_citYX(LR,-1.65,.95);_citRot2(A.J_Bip_C_Head,.38,0,0);return;}
+    if(mode==='shrug'){const u=Math.max(0,_cn(t*.5,S+2));_citRot2(UA,-.1,0,.12+u*.15);_citYX(LA,-1.35-u*.2,.8);_citRot2(UR,-.1,0,-.12-u*.15);_citYX(LR,-1.35-u*.2,-.8);_citRot2(A.J_Bip_C_Head,0,_cn(t*.3,S)*.2,u*.15*V.side);return;}
+    if(mode==='crouch'){_citRot(A.J_Bip_L_UpperLeg,-1.75);_citRot(A.J_Bip_R_UpperLeg,-1.6);_citRot(A.J_Bip_L_LowerLeg,2.3);_citRot(A.J_Bip_R_LowerLeg,2.2);_citRot(A.J_Bip_L_Foot,-.4);_citRot(A.J_Bip_R_Foot,-.4);
+      _citRot2(A.J_Bip_C_Spine,.45,0,0);_citRot2(UA,-.7,0,-.1);_citRot(LA,-.7);_citRot2(UR,-.9+_cn(t*.6,S)*.25,0,.1);_citRot(LR,-.4);_citRot2(A.J_Bip_C_Head,-.15,_cn(t*.25,S)*.3,0);if(H)H.b.position.y-=.5;return;}}
   /* 'stand': 숨 쉬며 무게를 한쪽 다리에 싣고, 가끔 반대로 옮긴다. 팔은 힘을 빼고 고개는 이따금 돌아간다 */
   const sh=Math.tanh(_cn(t*.06,S+11)*3)*V.side,br=Math.sin(t*1.15+S)*.018;   /* sh: -1 왼다리, +1 오른다리 */
   _citRot2(A.J_Bip_C_Spine,br+V.lean,0,-sh*.03);_citRot2(A.J_Bip_C_Chest,br*.6,0,0);look(1);
@@ -9492,7 +9535,7 @@ function makeCitizens(cx,cz){
   const inWallFree=(mx,my)=>PL.wallDist(mx,my)<-6&&PL.waterDepth(mx,my)<=0&&PL.hillH(mx,my)<.3;
   const free=(mx,my,allow)=>PL.wallDist(mx,my)<-6&&PL.waterDepth(mx,my)<=0&&PL.riverDist(mx,my)>MARCUS_RIVER_W/2+2&&!nearHouse(mx,my,1.2)&&!big(mx,my,1,allow)&&PL.hillH(mx,my)<.3;
   /* 한 명 추가. k: 'pl'(길 왕복) 'circ'(원) 'st'(제자리) */
-  const add=o=>{o.type=ti(o.id);delete o.id;o.ph=rnd()*6.28;o.off=rnd()*1000;o.sc=rr(.94,1.08);o.pause=o.pause??(1.5+rnd()*3);o.mode=o.mode||'walk';o.sp=o.sp??(1.05+rnd()*.5);o.I=null;o.d=1e9;L.push(o);return o;};
+  const add=o=>{o.type=ti(o.id);delete o.id;o.ph=rnd()*6.28;o.off=rnd()*1000;o.sc=rr(.94,1.08);o.pause=o.pause??(1.5+rnd()*3);o.mode=o.mode||'walk';if(o.mode==='stand'&&rnd()<.7)o.mode=pick(['cross','hips','think','drink','read','point','stretch','pray','shrug','crouch','talk','wave']);o.sp=o.sp??(1.05+rnd()*.5);o.I=null;o.d=1e9;L.push(o);return o;};
   /* 길 그물: 길들이 만나는 자리를 마디로 삼아, 사람마다 제멋대로 길을 고르며 다니게 한다 */
   const GR=(()=>{const segs=[];PL.streets.forEach((st,si)=>{for(let i=0;i<st.p.length-1;i++)segs.push({si,a:st.p[i],b:st.p[i+1],w:st.w});});
     const nodes=[],key=(x,y)=>Math.round(x/3)+','+Math.round(y/3),nk=new Map();const node=(x,y)=>{const k=key(x,y);let n=nk.get(k);if(n===undefined){n=nodes.length;nodes.push({x,y,e:[]});nk.set(k,n);}return n;};
@@ -9519,7 +9562,7 @@ function makeCitizens(cx,cz){
     const sp=.75+rnd()*.85;const sch=[];let P=0;
     for(let i=0;i<loop.length-1;i++){const a=N[loop[i]],b=N[loop[i+1]],L=Math.hypot(b.x-a.x,b.y-a.y),dur=L/sp,ux=(b.x-a.x)/L,uz=(b.y-a.y)/L,side=lws[i];
       sch.push({t:'w',x0:cx+a.x-uz*side,z0:cz+a.y+ux*side,x1:cx+b.x-uz*side,z1:cz+b.y+ux*side,dur,L,st:P});P+=dur;
-      if(rnd()<.55){const d=5+rnd()*16;sch.push({t:'s',x:cx+b.x-uz*side,z:cz+b.y+ux*side,dur:d,st:P,mode:pick(['stand','talk','stand','lean','wave']),yaw:rnd()*6.28});P+=d;}}
+      if(rnd()<.55){const d=5+rnd()*16;sch.push({t:'s',x:cx+b.x-uz*side,z:cz+b.y+ux*side,dur:d,st:P,mode:pick(['stand','talk','lean','wave','cross','hips','think','drink','point','stretch','shrug','crouch']),yaw:rnd()*6.28});P+=d;}}
     return add({k:'rt',sch,P,sp,side:0,id:pick(ids),mode});};
   const walkerOn=(st,ids,mode)=>{if(mode==='carry')mode='walk';const pts=st.p.map(([x,y])=>[cx+x,cz+y]),cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));const T=cum[cum.length-1];
     const span=Math.min(T,40+rnd()*90),s0=rnd()*(T-span),side=(rnd()<.5?-1:1)*Math.max(.3,st.w/2-1.6-rnd()*1.2);
