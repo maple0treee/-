@@ -1358,7 +1358,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@6630dbdf4026794cb4d53e90259900eeed3a6975/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@bcfdd7e12d11dd5024661f2b5173a7a278d93254/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -12294,6 +12294,7 @@ function onDm(from,d){
   if(!d||typeof d!=='object'||typeof d.k!=='string'||!P||mode==='title')return;
   const o=others.get(from);const name=o?o.name:safeName(d.n);
   if(d.k[0]==='g'&&typeof onGuildDm==='function'){onGuildDm(from,name,d);return;}
+  if(d.k[0]==='x'&&typeof onDuelDm==='function'){onDuelDm(from,name,d);return;}
   switch(d.k){
     case 'shheal':{if(!party||!party.members.some(m=>m.id===from))return;const pct=clamp(num(d.pct,.2),0,.5);if(d.cyc)P.cycOn=tAll+5.5;const hv=clamp(num(d.hot,0),0,.03);if(hv>0)P.buffs.hot={t:5,max:5,v:hv};heal(P.maxhp*pct);spawnFx(0xfff2a8,player.position.clone().add(new THREE.Vector3(0,1,0)),1.6,.5);flash('#fff2a8',.12);log(`${name}의 마법이 나를 치유했다.`,'sys');return;}
     case 'empw':{if(!party||!party.members.some(m=>m.id===from))return;const pct=clamp(num(d.pct,.12),0,.3),dur=clamp(num(d.dur,8),1,20);empowerMe(pct,dur,{atk:1.2,def:1.2});log(`${name}이(가) 강화마법을 걸어 주었다.`,'sys');return;}
@@ -12428,6 +12429,7 @@ function openPlayerMenu(peer){
     else if(o.pt){btn('파티 참가 신청',()=>requestJoin(peer));btn('새 파티 만들기',()=>inviteToParty(peer),true);}
     else btn('파티 만들기',()=>inviteToParty(peer));}
   if(typeof gMine==='function'){const g=gMine();if(g&&!o.gd&&gRank()==='m')btn('길드에 초대',()=>guildInvite(peer));else if(!g&&o.gd)btn(`길드 「${o.gd.name}」 가입 신청`,()=>guildRequest(peer));}
+  if(typeof duelRequest==='function')btn('결투 신청',()=>duelRequest(peer),!!(DUEL&&DUEL.state!=='ask'));
   btn('거래 신청',()=>requestTrade(peer));
   btn('닫기',()=>{});
   $('#pmenu').hidden=false;
@@ -12614,6 +12616,72 @@ function renderGuild(){const box=$('#gBody');box.innerHTML='';const g=gMine();
   box.appendChild(sec);}
 $('#gClose').onclick=closeGuild;
 addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#gwin')&&!$('#gwin').hidden){closeGuild();e.stopImmediatePropagation();}},true);
+/* ---------- 결투 (PvP): 다른 플레이어에게 말을 걸어 신청하고, 받아들이면 둘이서만 싸운다 ----------
+   상대는 내 화면에서 '결투 상대' 과녁(몬스터처럼 맞는 대리)으로 들어가므로 모든 공격·스킬이 그대로 맞는다.
+   때린 쪽이 피해를 계산해 1:1 메시지로 보내고, 맞은 쪽이 자기 방어·막기·보호막으로 받는다.
+   HP가 바닥나면 쓰러지지 않고 1로 남으며 진다. 끝나면 둘 다 결투 전 HP로 돌아간다.
+   메시지: xreq 신청 · xacc 수락 · xno 거절 · xhit 맞힘 · xhp 내 HP 알림 · xend 끝 */
+const DUEL_MUL=.5,DUEL_SEC=120,DUEL_FAR=45;
+let DUEL=null;
+function duelRequest(peer){const o=others.get(peer);if(!o)return;if(DUEL&&DUEL.state!=='ask'){toast('이미 결투 중이다');return;}
+  DUEL={peer,name:o.name,state:'ask',t:tAll};dm(peer,{k:'xreq'});log(`${o.name}님에게 결투를 신청했다`,'sys');}
+function onDuelDm(from,name,d){
+  switch(d.k){
+    case 'xreq':
+      if(DUEL&&DUEL.state!=='ask'){dm(from,{k:'xno',why:'이미 결투 중이에요'});return;}
+      askPrompt(`${name}님이 결투를 신청했어요.`,'수락','거절',ok=>{if(!ok){dm(from,{k:'xno',why:'결투를 거절했어요'});return;}
+        if(DUEL&&DUEL.state!=='ask'){dm(from,{k:'xno',why:'이미 결투 중이에요'});return;}dm(from,{k:'xacc'});duelStart(from);});return;
+    case 'xacc':if(DUEL&&DUEL.peer===from&&DUEL.state==='ask')duelStart(from);return;
+    case 'xno':if(DUEL&&DUEL.peer===from&&DUEL.state==='ask')DUEL=null;toast(`${name}: ${typeof d.why==='string'?d.why.slice(0,40):'거절'}`);log(`${name}님이 결투를 받지 않았다`,'bad');return;
+    case 'xhit':{if(!DUEL||DUEL.peer!==from||DUEL.state!=='on')return;const v=Math.max(1,Math.min(99999,Math.round(+d.d||0)));
+      /* 결투에서는 방어를 비율로 (몬스터처럼 빼면 낮은 레벨끼리는 1씩만 들어간다) */
+      const df=P.def*buffV('def');damagePlayer(v*60/(60+df)+df*.6,DUEL.src);if(DUEL&&DUEL.state==='on')dm(from,{k:'xhp',h:Math.max(0,P.hp)/P.maxhp});duelHud();return;}
+    case 'xhp':if(DUEL&&DUEL.peer===from){DUEL.oppH=Math.max(0,Math.min(1,+d.h||0));duelHud();}return;
+    case 'xend':if(DUEL&&DUEL.peer===from)duelEnd(d.r==='win'?'win':d.r==='lose'?'lose':'draw',typeof d.why==='string'?d.why.slice(0,30):'',true);return;
+  }}
+function duelProxy(peer,o){const g=new THREE.Group();g.userData.h=1.75;
+  return {pvp:true,dummy:true,peer,r:.5,mesh:g,D:{name:o.name,lv:o.lv,build:'none',scale:1},t:'pvp',ty:'pvp',zone:'',dying:null,hp:1e9,mh:1e9,lv:o.lv,st:{def:0,exp:0,atk:0,hp:1e9,lv:o.lv},
+    flags:0,tag:document.createElement('div'),sid:'pvp:'+peer,tx:0,tz:0,tr:0,phase:0,x0:0,y0:0,z0:0};}
+function duelStart(peer){const o=others.get(peer);if(!o){DUEL=null;return;}
+  DUEL={peer,name:o.name,src:o.name+' (결투)',state:'count',t0:tAll,hp0:P.hp,oppH:1,proxy:duelProxy(peer,o)};
+  const mk=new THREE.Group();const a=new THREE.Mesh(new THREE.OctahedronGeometry(.2,0),new THREE.MeshBasicMaterial({color:0xff3a2a}));const r=new THREE.Mesh(new THREE.TorusGeometry(.3,.035,6,20),new THREE.MeshBasicMaterial({color:0xffd060}));r.rotation.x=Math.PI/2;mk.add(a,r);
+  DUEL.mark=mk;scene.add(mk);log(`${o.name}님과 결투!`,'sys');duelHud();}
+/* 지는 피해: 쓰러지지 않고 1로 남으며 진다 (damagePlayer가 부른다) */
+function duelLethal(d,src){if(!DUEL||DUEL.state!=='on'||src!==DUEL.src||P.hp-d>=1)return false;
+  P.hp=1;floatText(`-${d}`,innerWidth/2,innerHeight*.62,'me');updateHud();dm(DUEL.peer,{k:'xhp',h:0});dm(DUEL.peer,{k:'xend',r:'win'});duelEnd('lose','');return true;}
+/* 내 공격이 결투 상대에게 맞았을 때 (damageMonster가 부른다) */
+function duelHit(m,mult,o){if(!DUEL||DUEL.state!=='on'||m!==DUEL.proxy)return 0;const J=JOBS[P.job];
+  const crit=Math.random()<J.crit+P.critBonus+(o.crit||0)+(P.buffs.crit?P.buffs.crit.v:0);
+  let d=o.flat!=null?o.flat:atkPow()*buffV('atk')*(.9+Math.random()*.2)*mult*(crit?(o.critMul||1.6):1);d=Math.max(1,Math.round(d*DUEL_MUL*faithMul()));
+  dm(DUEL.peer,{k:'xhit',d,c:crit?1:0});
+  const c=mCenter(m);VFX.burst(c,crit?0xffd040:0xfff0d0,crit?18:8,crit?6:3.5,.35,{up:.3,glow:crit});
+  const s=screenOf(c.clone().add(new THREE.Vector3(0,.4,0)));if(s.ok&&!o.quiet)floatText(crit?`${d}!`:d,s.x+rnd(-18,18),s.y,crit?'crit':'');return d;}
+function duelEnd(res,why,fromPeer){if(!DUEL)return;const D=DUEL;DUEL=null;
+  if(D.proxy){const i=monsters.indexOf(D.proxy);if(i>=0)monsters.splice(i,1);}if(D.mark)scene.remove(D.mark);
+  if(D.state==='on'||D.state==='count'){P.hp=Math.max(P.hp,Math.min(P.maxhp,D.hp0));updateHud();}
+  if(!fromPeer&&res==='draw')dm(D.peer,{k:'xend',r:'draw',why});
+  const t=res==='win'?`${D.name}님과의 결투에서 이겼다!`:res==='lose'?`${D.name}님과의 결투에서 졌다`:`${D.name}님과의 결투가 끝났다${why?` (${why})`:''}`;
+  log(t,res==='win'?'good':res==='lose'?'bad':'sys');toast(res==='win'?'승리!':res==='lose'?'패배':'결투 끝');if(res==='win')sfx('levelup');
+  const h=document.getElementById('duelHud');if(h)h.hidden=true;}
+function duelHud(){let h=document.getElementById('duelHud');
+  if(!h){h=document.createElement('div');h.id='duelHud';h.style.cssText='position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:30;min-width:260px;padding:8px 14px;border:1px solid #8a6a3a;border-radius:8px;background:rgba(28,20,12,.82);color:#f0e2c0;font:14px "Gowun Batang",serif;text-align:center;pointer-events:none';
+    h.innerHTML='<b id="dhT"></b><div style="display:flex;gap:8px;align-items:center;margin-top:6px"><span id="dhMe" style="flex:1;text-align:right"></span><span>⚔</span><span id="dhOp" style="flex:1;text-align:left"></span></div><div style="display:flex;gap:8px;margin-top:4px"><div style="flex:1;height:6px;background:#3a2a1a;border-radius:3px;overflow:hidden;direction:rtl"><i id="dhMeB" style="display:block;height:100%;background:#c4493b"></i></div><div style="flex:1;height:6px;background:#3a2a1a;border-radius:3px;overflow:hidden"><i id="dhOpB" style="display:block;height:100%;background:#c4493b"></i></div></div>';
+    document.body.appendChild(h);}
+  if(!DUEL||DUEL.state==='ask'){h.hidden=true;return;}h.hidden=false;
+  const left=DUEL.state==='count'?Math.ceil(3-(tAll-DUEL.t0)):Math.max(0,Math.ceil(DUEL_SEC-(tAll-DUEL.t1)));
+  h.querySelector('#dhT').textContent=DUEL.state==='count'?`결투 ${left}`:`결투 · ${left}초`;h.querySelector('#dhMe').textContent=P.name;h.querySelector('#dhOp').textContent=DUEL.name;
+  h.querySelector('#dhMeB').style.width=Math.max(0,P.hp/P.maxhp*100)+'%';h.querySelector('#dhOpB').style.width=(DUEL.oppH*100)+'%';}
+/* 매 프레임 */
+function duelTick(dt){if(!DUEL)return;const D=DUEL;
+  if(D.state==='ask'){if(tAll-D.t>25)DUEL=null;return;}
+  const o=others.get(D.peer);if(!o){duelEnd('draw','상대가 떠났다');return;}
+  const q=o.mesh.position;D.proxy.mesh.position.copy(q);D.proxy.lv=o.lv;
+  if(D.mark){if(!D.mark.parent)scene.add(D.mark);D.mark.position.set(q.x,q.y+2.5,q.z);D.mark.rotation.y+=dt*2.5;D.mark.visible=o.mesh.visible;}
+  if(player&&Math.hypot(q.x-player.position.x,q.z-player.position.z)>DUEL_FAR){duelEnd('draw','너무 멀어졌다');return;}
+  if(D.state==='count'){if(tAll-D.t0>=3){D.state='on';D.t1=tAll;toast('시작!');sfx('ui');}}
+  else{if(!monsters.includes(D.proxy))monsters.push(D.proxy);if(tAll-D.t1>DUEL_SEC){duelEnd('draw','시간이 다 됐다');return;}
+    if(P.hp<=0){duelEnd('draw','');return;}}
+  if(((tAll*4)|0)!==D._h){D._h=(tAll*4)|0;duelHud();}}
 /* ---------- 마르쿠스 전체 지도: 엑시즈와 네 문 밖 사냥터 줄 (1 동문 · 2 북문 · 3 서문 · 4 남문) ----------
    사냥터에 있을 때 큰 지도(M)로 펴고, 설정에 따라 미니맵으로도 쓴다.
    사냥터 땅은 서쪽으로 들어와 동쪽으로 나가므로, 그 땅 안의 자리는 줄 방향을 따라 돌려 찍는다. */
@@ -14345,6 +14413,7 @@ function atkPow(){const b=P&&jobChain(P.job).includes('guardian')?P.atk*.5+P.max
 const SWORD_SKILL_HIT=new Set(['thrust1','thrust2','swing','downcut','dashcut','guardcut','guardstrike','axechop','axechopF','axespin','batswing']);
 function damageMonster(m,mult,o={}){
   if(m.dying!==null)return 0;
+  if(m.pvp)return typeof duelHit==='function'?duelHit(m,mult,o):0;   /* 결투 상대 */
   if(P&&!o.byPet){P.lastHit=m;P.lastHitT=tAll;}   /* 사제의 천사: 내가 치는 적을 먼저 노린다 */
   if(m.D.boss&&!(Math.hypot(player.position.x-DUN.x,player.position.z-DUN.z)<DUN.R-1.5))return 0; // 본실에 들어가야 싸울 수 있다
   if(m.D.dragon&&!inArenaOf(m))return 0; // 둥지 안에 들어가야 싸울 수 있다
@@ -15619,6 +15688,7 @@ function damagePlayer(d,src,mon){
   d=Math.max(1,Math.round(d-P.def*buffV('def')*.6));
   {const B=P.buffs.mshield;if(B&&B.v>0){const a=Math.min(d,B.v);B.v-=a;d-=a;const q=player.position;VFX.burst(new THREE.Vector3(q.x,q.y+1.1,q.z),0x9fd0ff,10,2.4,.3,{mix:0xffffff});
     if(B.v<=0)delete P.buffs.mshield;if(d<=0){floatText('보호막',innerWidth/2+rnd(-30,30),innerHeight*.6,'heal');sfx('block',null,.6,1.3);updateHud();return;}}}   /* 방출하기의 보호막이 먼저 받아낸다 */
+  if(typeof duelLethal==='function'&&duelLethal(d,src))return;   /* 결투에서는 쓰러지지 않고 진다 */
   P.hp-=d;hurtT=0;flash('#c4493b',.32);sfx('hurt');floatText(`-${d}`,innerWidth/2+rnd(-40,40),innerHeight*.62,'me');
   updateHud();
   if(P.hp<=0)die(src);
@@ -16591,10 +16661,11 @@ function monLod(m,i){if(!player||((m._lodT=(m._lodT||0)+1)+i)%8)return;const d=M
       if(s<H*.18||(o.material&&o.material.isMeshBasicMaterial&&o.material.transparent))m._small.add(o);});m._parts=ps;}
   for(const o of m._parts){o.castShadow=L===0&&o.userData._cs;if(L>=2&&m._small.has(o)){if(o.visible){o.visible=false;o.userData._lodHid=1;}}else if(o.userData._lodHid){o.visible=true;o.userData._lodHid=0;}}}
 function updateNetMonsters(dt){if(player&&tAll-_myMapT>.3){_myMapT=tAll;_myMap=mapKeyAt(player.position.x,player.position.z);}if(player){const _n=OR.spNear(player.position.x,player.position.z);player._spT=Math.hypot(player.position.x-OR.C2.x,player.position.z-OR.C2.z)<OR.TOWN_R+4?0:(_n?_n.t:0);}
-  updateDuelMarks(dt);
+  updateDuelMarks(dt);if(typeof duelTick==='function')duelTick(dt);
   if(DUMMIES.length&&!DUMMIES.ok){DUMMIES.ok=1;dummiesEnsure();}
   for(let i=monsters.length-1;i>=0;i--){
     const m=monsters[i],mp=m.mesh.position;
+    if(m.pvp){m.hp=m.mh;m.dying=null;m.tag.hidden=true;continue;}
     if(m.dummy){m.lv=P?P.lv:1;m.hp=m.mh;m.dying=null;mp.set(m.x0,m.y0,m.z0);m.mesh.visible=true;m.tag.hidden=true;continue;}
     if(m.dying!==null){
       m.dying+=dt;const k=Math.min(1,m.dying/.6),Ud=m.mesh.userData;if(Ud.die){Ud.die(m,dt);m.mesh.scale.setScalar((m.D.scale||1)*(1-Math.max(0,k-.55)/.45*.85));}else{m.mesh.scale.setScalar((m.D.scale||1)*(1-k*.85));m.mesh.rotation.z=k*1.2;}mp.y-=dt*.8;
