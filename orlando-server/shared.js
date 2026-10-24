@@ -63,6 +63,7 @@
     fort:   { x: 4150, z: 0, R: 190 },   // 통로 요새
     coachway: { x: 5300, z: 0, R: 400 }, // 왕도: 마차가 달리는 고리 길 (타고 가는 동안만 머문다)
     castle: { x: 6400, z: 0, R: 300 },   // 엑시즈 성: 엑시즈 시내 왕궁 남문으로 들어가면 나온다
+    guildhall: { x: 7100, z: 0, R: 140 }, // 길드홀: 엑시즈 시내 길드홀 정문으로 들어가면 나온다 (3층 건물과 뒤뜰)
     // 엑시즈 동문 밖 사냥터 (Lv 100–125): 서쪽 끝으로 들어와 동쪽 끝으로 나가면 다음 땅. 마지막 땅을 나가면 밀골
     mfield: { x: 2700, z: 900, R: 150 },   // 들판
     mhill:  { x: 3150, z: 900, R: 150 },   // 구릉
@@ -79,7 +80,7 @@
   ];
   for (const L of MLINES) L.zones.forEach(([id, kind], i) => { const I = ISLES[id] || (ISLES[id] = { x: 2700 + i * 450, z: 900 + (L.n - 1) * 450, R: 150 }); I.kind = kind; I.line = L.n; I.seq = i; });
   const MHUNT = MLINES.flatMap((L) => L.zones.map((q) => q[0]));
-  const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle', ...MHUNT];
+  const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle', 'guildhall', ...MHUNT];
   for (const k of ISLE_ORDER) { const I = ISLES[k]; I.id = k; I.entry = { x: I.x, z: I.z + I.R - 12 }; }   // 들어오는 자리 (남쪽 가장자리)
   for (const k of MHUNT) { const I = ISLES[k]; I.entry = { x: I.x - I.R + 14, z: I.z }; I.exit = { x: I.x + I.R - 14, z: I.z }; }   // 사냥터: 서쪽으로 들어와 동쪽으로 나간다
   // 섬 가장자리 반지름 (엑시즈는 둥글지 않게 들쭉날쭉: 언덕 너머로 이어지는 땅처럼 보이게)
@@ -103,7 +104,7 @@
     const n = spNear(x, z); const i = n ? clampN(Math.floor(n.t / SP.Q), 0, 7) : 0;
     return SP.ZONES[i];
   }
-  const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, marcus: 1, milgol: 1, fort: 1, coachway: 1, castle: 1 };
+  const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, marcus: 1, milgol: 1, fort: 1, coachway: 1, castle: 1, guildhall: 1 };
 
   // 걸어 다닐 수 있는 곳 안으로 붙잡는다 (첫 지역 원, 길, 두 번째 지역 원, 석굴)
   function roomClamp(p, rad) {
