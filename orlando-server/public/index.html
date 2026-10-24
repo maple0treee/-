@@ -1358,7 +1358,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@a4f74a807611dd377b5b356020a1a6660a0f8915/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@93c7047247c12ef8cec88e6df5cd863ec11a6e96/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -9695,6 +9695,10 @@ function makeCitizens(cx,cz){
   for(const b of MARCUS.benches||[]){if(rnd()<.35)continue;const n=rnd()<.4?2:1;const ss=n===2?[-.8,.8]:[rnd()<.5?-.7:.7];for(const s2 of ss){const px=b.x+Math.cos(b.ry)*s2,pz=b.z-Math.sin(b.ry)*s2;{const L=(rnd()<.2?RICH:COMMON).filter(i=>!CITM.skirt[i]);add({k:'st',x:px,z:pz,yaw:b.ry,id:pick(L.length?L:COMMON),mode:'sit',y:.04});}   /* 치마 입은 주민은 앉히지 않는다 (앉으면 치마를 다리가 뚫는다) */}}
   /* 8c. 바깥 정착지 주민 */
   if(typeof realmCitizens==='function')realmCitizens({add,standAt,circ,walkerOn,group,pick,rnd,rr,COMMON,FARM,ARMED,RICH,hit});
+  /* 8d. 예전 모습(막대 인형): 멀리 있는 사람을 따로 가볍게 그리지 않는 대신 주민 수를 줄인다.
+     엑시즈는 약 8명 중 1명, 바깥 정착지는 절반만 남긴다 (경비병은 더 많이). 같은 씨앗이라 모두가 같은 사람을 본다 */
+  if(CIT_OLD()){const at=c=>c.k==='rt'?[c.sch[0].x0??c.sch[0].x,c.sch[0].z0??c.sch[0].z]:c.k==='pl'?c.l.pts[0]:[c.x,c.z];
+    const kept=L.filter(c=>{const [x,z]=at(c),ex=Math.hypot(x-cx,z-cz)<480,g=c.mode==='guard';return rnd()<(ex?(g?.35:.12):(g?.8:.5));});L.length=0;L.push(...kept);}
   /* 9. 집 안에 있는 사람들 (그리지 않는다) */
   CROWD.indoor=Math.max(0,CROWD.total-L.length);
   /* 스프라이트 한 번에 그리기 */
@@ -9734,8 +9738,20 @@ function citStickLook(id){const P=(a,k)=>a[Math.floor(_chash(id,k)*a.length)];co
   else if(has('fisher','sailor','farmer','shepherd'))Object.assign(o,{hat:has('sailor')?'hair':'wide',hatC:P([0x8a6a3a,0x6a5030,0xc8b080],4)});
   else if(has('smith','butcher','dock','porter','mason'))Object.assign(o,{beard:_chash(id,5)<.5?o.hatC:undefined});
   if(has('boy','girl'))o.small=true;return o;}
+/* 주민 막대 인형을 가볍게: 둥근 마디는 면을 줄이고, 같은 마디에 붙은 같은 재질 조각들은 한 덩어리로 합친다 (움직이는 마디는 그대로) */
+const _slimG=new Map();
+function stickSlim(g){
+  g.traverse(o=>{if(!o.isMesh||o.geometry.type!=='SphereGeometry')return;const p=o.geometry.parameters;if(p.widthSegments<=8)return;
+    const k=[p.radius,p.phiStart,p.phiLength,p.thetaStart,p.thetaLength].join(',');let q=_slimG.get(k);if(!q){q=new THREE.SphereGeometry(p.radius,8,6,p.phiStart,p.phiLength,p.thetaStart,p.thetaLength);_slimG.set(k,q);}o.geometry=q;});
+  const groups=[];g.traverse(o=>{if(o.children&&o.children.length>1)groups.push(o);});
+  for(const G of groups){const by=new Map();for(const c of G.children){if(!c.isMesh||c.children.length||c.userData.marker||!c.visible||c.isSkinnedMesh)continue;const k=c.material.uuid;(by.get(k)||by.set(k,[]).get(k)).push(c);}
+    for(const list of by.values()){if(list.length<2)continue;const pos=[],nor=[];
+      for(const c of list){c.updateMatrix();const gi=c.geometry.index?c.geometry.toNonIndexed():c.geometry.clone();gi.applyMatrix4(c.matrix);const P=gi.attributes.position.array,N=gi.attributes.normal.array;for(let i=0;i<P.length;i++){pos.push(P[i]);nor.push(N[i]);}G.remove(c);}
+      const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));geo.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));geo.computeBoundingSphere();
+      const m=new THREE.Mesh(geo,list[0].material);m.castShadow=list[0].castShadow;G.add(m);}}
+  return g;}
 function citStickInst(type){const pool=CROWD.spool[type]||(CROWD.spool[type]=[]);if(pool.length)return pool.pop();
-  const g=makeNpcStick(citStickLook(CITM.ids[type]||'c'+type));if(g.userData.marker){g.remove(g.userData.marker);g.userData.marker=null;}
+  const g=makeNpcStick(citStickLook(CITM.ids[type]||'c'+type));if(g.userData.marker){g.remove(g.userData.marker);g.userData.marker=null;}stickSlim(g);
   g.traverse(o=>{if(o.isMesh)o.castShadow=false;});return {g,stick:true,id:type,sh:false};}
 const CIT_STICK_POSE={stand:'idle',walk:'idle',talk:'talk',lean:'cross',sit:'sitb',guard:'guard',hammer:'hammer',hoe:'hoe',reap:'hoe',sweep:'sweep',carry:'carry',shoulder:'carry',wave:'wave',cross:'cross',hips:'hips',think:'think',drink:'drink',read:'read',point:'point',stretch:'stretch',pray:'pray',shrug:'shrug',crouch:'crouch'};
 /* 먼 사람: 막대 인형 하나를 통째로 합친 모양을 수천 개 한 번에 그린다 (옷 색만 사람마다) */
@@ -9761,7 +9777,7 @@ function crowdInitSticks(){const cap=CROWD.cap,G=new THREE.Group();
   const mb=new THREE.InstancedMesh(body,patch(new THREE.MeshStandardMaterial({roughness:.6})),cap),mr=new THREE.InstancedMesh(rest,patch(new THREE.MeshStandardMaterial({roughness:.6,vertexColors:true})),cap);
   mb.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3);
   for(const m of [mb,mr,mh]){m.count=0;m.frustumCulled=false;m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);m.geometry.setAttribute('aVel',aVel);m.geometry.setAttribute('aWalk',aWalk);G.add(m);}
-  CROWD.NEAR=26;CROWD.MAXM=14;   /* 가까운 막대 인형은 부위가 많아 수를 줄이고, 그 밖은 위의 한 번에 그리는 인형이 맡는다 */
+  CROWD.NEAR=100;CROWD.MAXM=40;CROWD.FAR=0;   /* 주민을 줄인 대신 멀고 가까움을 나누지 않는다: 100m 안의 주민(가까운 순 40명)은 모두 같은 막대 인형 */
   G.visible=false;G.userData.noMap=1;scene.add(G);CROWD.mesh=G;CROWD.ims=[mb,mr,mh];CROWD.spool={};}
 function crowdInitMesh(){if(CIT_OLD())return crowdInitSticks();
   const A=CIT_ATLAS,cap=CROWD.cap;
@@ -9802,7 +9818,7 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
       if(d2<M.NEAR*M.NEAR&&(OLD||CITM.tmpl[CITM.ids[c.type]]))near.push(c);}
     near.sort((a,b)=>a.d-b.d);const want=new Set(near.slice(0,M.MAXM));
     for(const c of M.list)if(c.I&&!want.has(c)&&(c.d>M.NEAR+8||near.indexOf(c)>M.MAXM+4)){back(c.I);c.I=null;}
-    let made=0;for(const c of near){if(!want.has(c)||c.I)continue;if(made>=2)break;c.I=OLD?citStickInst(c.type):citInstance(CITM.tmpl[CITM.ids[c.type]]);c.I.v=c.v||(c.v=citVar(Math.floor(c.off*13)+c.type*31));c.I.g.rotation.y=Math.atan2(c.q.vx,c.q.vz);c.I.g.scale.setScalar(c.sc);scene.add(c.I.g);made++;}
+    let made=0;for(const c of near){if(!want.has(c)||c.I)continue;if(made>=(OLD?4:2))break;c.I=OLD?citStickInst(c.type):citInstance(CITM.tmpl[CITM.ids[c.type]]);c.I.v=c.v||(c.v=citVar(Math.floor(c.off*13)+c.type*31));c.I.g.rotation.y=Math.atan2(c.q.vx,c.q.vz);c.I.g.scale.setScalar(c.sc);scene.add(c.I.g);made++;}
     near.forEach((c,k)=>{if(!c.I)return;if(c.I.stick){const sh=k<6;if(c.I.sh!==sh){c.I.sh=sh;c.I.g.traverse(o=>{if(o.isMesh)o.castShadow=sh;});}return;}const sh=k<10;if(c.I.sh!==sh){c.I.sh=sh;c.I.g.traverse(o=>{if(o.isSkinnedMesh&&o.material!==_citOl)o.castShadow=sh&&!o.material.transparent;});}});
     if(OLD){const [mb,mr,mh]=M.ims,m4=_cM4,qq=_cQ,v=_cV,sc=_cS;for(const c of M.list){if(c.I||c.d>M.FAR||n>=M.cap)continue;const q=c.q;
         v.set(q.x,heightAt(q.x,q.z)+(c.y||0)+((q.mode||c.mode)==='sit'?-.45:0),q.z);qq.setFromAxisAngle(_cY,Math.atan2(q.vx,q.vz));const k=c.sc*(CIT_SMALL(c.type)?.7:1);sc.set(k,k,k);m4.compose(v,qq,sc);mb.setMatrixAt(n,m4);mr.setMatrixAt(n,m4);mh.setMatrixAt(n,m4);
@@ -9928,7 +9944,7 @@ function _marcusLife(cx,cz){
     let idx=0;for(const [x,z,n] of spots){const F={x,z,birds:[],st:'ground',stT:0};for(let k=0;k<n;k++){const a=rnd()*6.28,r=rr(.5,3.5);F.birds.push({i:idx++,ox:Math.cos(a)*r,oz:Math.sin(a)*r,yaw:rnd()*6.28,ph:rnd()*9,hop:0,x:x+Math.cos(a)*r,y:heightAt(x,z),z:z+Math.sin(a)*r,fa:rnd()*6.28,fr:rr(5,9),fh:rr(9,15)});}LIFE.flocks.push(F);}}
 
   /* ===== 거리 예술가 ===== */
-  const npc=(look,pose,x,z,face)=>{const g=makeNpcStick(look);const u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}g.position.set(x,heightAt(x,z),z);g.rotation.y=face;g.traverse(o=>{if(o.isMesh)o.castShadow=true;});G.add(g);return g;};
+  const npc=(look,pose,x,z,face)=>{const g=makeNpcStick(look);const u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}if(typeof stickSlim==='function')stickSlim(g);g.position.set(x,heightAt(x,z),z);g.rotation.y=face;g.traverse(o=>{if(o.isMesh)o.castShadow=true;});G.add(g);return g;};
   const faceTo=(x,z,tx,tz)=>Math.atan2(tx-x,tz-z);
   const fw=(x,z,a,d,sd=0)=>[x+Math.sin(a)*d+Math.cos(a)*sd,z+Math.cos(a)*d-Math.sin(a)*sd];
   const prop=(geo,mat,x,y,z,ry=0)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.y=ry;m.castShadow=true;G.add(m);return m;};
@@ -10890,7 +10906,7 @@ function buildGuildHallMap(K){
       PORTALS.push({id:'city_guildhall',x:GF.x,z:GF.z+.4,ry:0,hw:2.2,minLv:0,label:'길드홀로 들어가기',to:{x:cx,z:cz+HD-3.4,yaw:0,y:0},msg:null,color:0xffd23a,door:1,fx:{g:g2,cols:[]}});}}
 
   /* ===== 사람들 (꾸밈): 접수원·주인·모험가 ===== */
-  const N=(look,pose,x,z,y,face)=>{const g=makeNpcStick(look);const u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}g.position.set(cx+x,y,cz+z);g.rotation.y=face;g.visible=false;scene.add(g);
+  const N=(look,pose,x,z,y,face)=>{const g=makeNpcStick(look);const u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}if(typeof stickSlim==='function')stickSlim(g);g.position.set(cx+x,y,cz+z);g.rotation.y=face;g.visible=false;scene.add(g);
     rndC(x,z,.35,y,1.8);GHALL.npcs.push({g,pose,ph:rnd()*9});return g;};
   const HAIR=[0x2a1a10,0x6a4a2a,0xb07a3a,0xd8b060,0x1a1a1a,0x9a3a1a];
   N({robe:0x2a4a7a,robe2:0xf0e8d8,hat:'hair',hatC:0xc8a050,long:1},'counter',-2.7,-13.7,0,0);
