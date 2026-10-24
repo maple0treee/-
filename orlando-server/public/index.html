@@ -1358,7 +1358,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@c9a5b38762dd9953eec1bef30dab221fdaa06328/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@f694b80002d0ed6afc822aec81d0017f00af26c3/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -5487,7 +5487,91 @@ function gearCode(G){return [G.helm,G.armor,G.boots,G.weapon,G.sub??-1,G.acc??-1
 function parseGear(s){const a=String(s||'').split(',').map(v=>Math.max(-1,Math.min(10,Math.floor(Number(v))))).map(v=>isFinite(v)?v:-1);return{helm:a[0]??-1,armor:a[1]??-1,boots:a[2]??-1,weapon:a[3]??-1,sub:a[4]??-1,acc:a[5]??-1,shs:a[6]===1?1:0,wc:Math.max(0,a[7]|0)};}
 /* 예전 모습(팔 가느다란 막대 인형·만든 NPC)으로: 애니 모델(무료 VRoid)을 입히지 않는다 */
 const OLD_LOOK=true;
-var STICK_MOUTH=false;
+var STICK_MOUTH=false,STICK_FACE=-1;   /* STICK_FACE: 얼굴 모양 번호 (-1 = 지금 얼굴) */
+/* ---------- 얼굴 '스타일' 시안 (STICK_STYLE): 표정이 아니라 생김새 자체가 다른 것들 ----------
+   그림 얼굴은 머리 공에 그림(텍스처)을 입힌다: 그림판 가운데(가로 1/4 지점)가 얼굴 정면 */
+var STICK_STYLE=-1;
+function _faceTex(skin,draw,px){const W=1024,H=512,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');x.fillStyle='#'+new THREE.Color(skin).getHexString();x.fillRect(0,0,W,H);
+  x.save();x.translate(256,256);draw(x);x.restore();const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;if(px){t.magFilter=THREE.NearestFilter;t.minFilter=THREE.NearestFilter;t.generateMipmaps=false;}else t.anisotropy=4;return t;}
+function stickStyle(head,M,k,skin){const R=.222,put=(m,x,y,lift=0)=>{const z=Math.sqrt(Math.max(0,R*R-x*x-y*y));const n=new THREE.Vector3(x,y,z).normalize();m.position.copy(n).multiplyScalar(R+lift);m.quaternion.setFromUnitVectors(_fZ,n);head.add(m);return m;};
+  const tex=(draw,px)=>{const t=_faceTex(skin,draw,px);head.material=head.material.clone();head.material.map=t;head.material.color.set(0xffffff);head.material.flatShading=false;head.material.needsUpdate=true;
+    if(head.geometry.parameters&&head.geometry.parameters.widthSegments<24)head.geometry=new THREE.SphereGeometry(.22,32,20);};
+  const E=(x,cx,cy,rx,ry,col)=>{x.fillStyle=col;x.beginPath();x.ellipse(cx,cy,rx,ry,0,0,7);x.fill();};
+  switch(k){
+    case 0:tex(x=>{   /* 그림책: 펜 선으로 그린 얼굴 */
+      x.strokeStyle='#2a1c14';x.lineCap='round';x.lineJoin='round';
+      for(const s of [-1,1]){x.lineWidth=5;x.beginPath();x.ellipse(s*56,-22,13,17,0,0,7);x.stroke();E(x,s*56+3*s*0,-19,6,8,'#2a1c14');
+        x.lineWidth=4;x.beginPath();x.moveTo(s*40,-54);x.quadraticCurveTo(s*56,-64,s*74,-56);x.stroke();
+        x.lineWidth=3;for(let k=0;k<3;k++){x.beginPath();x.moveTo(s*(48+k*8),-38);x.lineTo(s*(46+k*10),-46);x.stroke();}}
+      x.lineWidth=3.5;x.beginPath();x.moveTo(-3,0);x.quadraticCurveTo(6,18,-6,22);x.stroke();
+      x.lineWidth=5;x.beginPath();x.moveTo(-26,42);x.quadraticCurveTo(0,62,26,42);x.stroke();
+      x.fillStyle='rgba(230,120,110,.35)';for(const s of [-1,1]){x.beginPath();x.ellipse(s*82,22,20,12,0,0,7);x.fill();}});break;
+    case 1:tex(x=>{   /* 애니풍: 큰 색 눈동자 */
+      for(const s of [-1,1]){const cx=s*58,cy=-18;E(x,cx,cy,26,34,'#ffffff');const g=x.createLinearGradient(0,cy-30,0,cy+30);g.addColorStop(0,'#2a3a6a');g.addColorStop(1,'#5a8ad0');x.fillStyle=g;x.beginPath();x.ellipse(cx+s*-2,cy+4,19,28,0,0,7);x.fill();
+        E(x,cx+s*-2,cy+6,9,13,'#141020');E(x,cx-6,cy-6,7,9,'#ffffff');E(x,cx+6,cy+16,3.5,4,'rgba(255,255,255,.85)');
+        x.strokeStyle='#1a1410';x.lineWidth=7;x.lineCap='round';x.beginPath();x.ellipse(cx,cy,27,35,0,Math.PI*1.1,Math.PI*1.9);x.stroke();
+        x.lineWidth=3;x.beginPath();x.moveTo(cx-20*s*-1,-70);x.quadraticCurveTo(cx,-78,cx+22*s,-72);x.stroke();}
+      x.strokeStyle='#8a3a30';x.lineWidth=3.5;x.beginPath();x.moveTo(-9,44);x.quadraticCurveTo(0,50,9,44);x.stroke();
+      x.fillStyle='rgba(240,130,130,.4)';for(const s of [-1,1]){x.beginPath();x.ellipse(s*86,26,18,8,0,0,7);x.fill();}});break;
+    case 2:{   /* 입체 조각 얼굴: 코·귀·흰자·눈썹 */
+      const WH=M(0xffffff),DK=M(0x1a120c),SK=M(skin),BR=M(0x3a2618),LIP=M(0xa8584a);
+      for(const s of [-1,1]){const w=new THREE.Mesh(new THREE.SphereGeometry(.032,12,8),WH);w.scale.set(1.25,.95,.5);put(w,s*.072,.028);
+        const p=new THREE.Mesh(new THREE.SphereGeometry(.017,10,6),DK);p.scale.z=.5;put(p,s*.07,.026,.012);
+        const b=new THREE.Mesh(new THREE.BoxGeometry(.062,.014,.02),BR);const g=new THREE.Group();b.rotation.z=s*-.15;g.add(b);put(g,s*.074,.078,.004);
+        const ear=new THREE.Mesh(new THREE.SphereGeometry(.05,10,8),SK);ear.scale.set(.45,1,.75);ear.position.set(s*.215,0,-.01);head.add(ear);}
+      const nose=new THREE.Mesh(new THREE.SphereGeometry(.03,10,8),SK);nose.scale.set(.85,1.1,1.1);put(nose,0,-.015,.006);
+      const lip=new THREE.Mesh(new THREE.CylinderGeometry(.009,.009,.06,8),LIP);const lg=new THREE.Group();lip.rotation.z=Math.PI/2;lg.add(lip);put(lg,0,-.075,.002);break;}
+    case 3:{   /* 단추 인형: 단추 눈, 바늘땀 입, 이음매 */
+      const BT=M(0x2a2a30),HO=M(0x0a0a0c),TH=M(0x6a2a22);
+      for(const s of [-1,1]){const b=new THREE.Mesh(new THREE.CylinderGeometry(.034,.034,.012,16),BT);b.rotation.x=Math.PI/2;const g=new THREE.Group();g.add(b);for(const [hx,hy] of [[-1,-1],[1,-1],[-1,1],[1,1]]){const h=new THREE.Mesh(new THREE.CylinderGeometry(.005,.005,.014,6),HO);h.rotation.x=Math.PI/2;h.position.set(hx*.009,hy*.009,.001);g.add(h);}put(g,s*.075,.03,.006);}
+      tex(x=>{x.strokeStyle='#6a2a22';x.lineWidth=5;x.lineCap='round';x.beginPath();x.moveTo(-34,44);x.lineTo(34,44);x.stroke();for(let k=-3;k<=3;k++){x.beginPath();x.moveTo(k*10,34);x.lineTo(k*10,54);x.stroke();}
+        x.strokeStyle='rgba(90,60,40,.55)';x.lineWidth=3;x.setLineDash([10,8]);x.beginPath();x.moveTo(-150,-140);x.lineTo(-150,140);x.moveTo(150,-140);x.lineTo(150,140);x.stroke();});break;}
+    case 4:tex(x=>{   /* 픽셀 아트 */
+      const P=(cx,cy,c)=>{x.fillStyle=c;x.fillRect(cx*12-6,cy*12-6,12,12);};
+      const map=['..##....##..','.#..#..#..#.','.#o.#..#o.#.','..##....##..','............','.....pp.....','............','...######...','....#rr#....'];
+      const C={'#':'#1a120c','o':'#ffffff','p':'#c08060','r':'#c84040'};map.forEach((row,j)=>[...row].forEach((ch,i)=>{if(C[ch])P(i-6,j-4,C[ch]);}));
+      P(-8,2,'#f0a0a0');P(-7,2,'#f0a0a0');P(7,2,'#f0a0a0');P(8,2,'#f0a0a0');},true);break;
+    case 5:tex(x=>{   /* 탈(하회탈 느낌): 초승달 눈, 굵은 눈썹, 크게 웃는 입과 주름 */
+      x.strokeStyle='#2a1810';x.lineCap='round';
+      for(const s of [-1,1]){x.lineWidth=9;x.beginPath();x.arc(s*56,-6,24,Math.PI*1.12,Math.PI*1.88);x.stroke();x.fillStyle='#2a1810';x.beginPath();x.moveTo(s*30,-66);x.quadraticCurveTo(s*58,-86,s*88,-62);x.quadraticCurveTo(s*58,-74,s*30,-66);x.fill();
+        x.lineWidth=3;x.strokeStyle='rgba(60,30,20,.6)';x.beginPath();x.arc(s*90,30,30,Math.PI*(s>0?.6:.1),Math.PI*(s>0?.9:.4));x.stroke();x.strokeStyle='#2a1810';}
+      x.fillStyle='#7a2a20';x.beginPath();x.moveTo(-46,30);x.quadraticCurveTo(0,96,46,30);x.quadraticCurveTo(0,52,-46,30);x.fill();
+      x.fillStyle='rgba(200,80,60,.35)';for(const s of [-1,1]){x.beginPath();x.ellipse(s*80,8,22,16,0,0,7);x.fill();}
+      x.strokeStyle='rgba(60,30,20,.7)';x.lineWidth=3;x.beginPath();x.moveTo(0,-30);x.quadraticCurveTo(14,4,0,12);x.stroke();});break;
+    case 6:tex(x=>{   /* 수묵화: 붓으로 그은 눈·입 */
+      x.fillStyle='rgba(20,16,14,.92)';const stroke=(x0,y0,x1,y1,w)=>{const n=24;for(let i=0;i<=n;i++){const t=i/n,px=x0+(x1-x0)*t,py=y0+(y1-y0)*t+Math.sin(t*Math.PI)*-6,r=w*Math.sin(Math.PI*Math.min(1,t*1.4+.05))*(.7+.3*Math.random());x.beginPath();x.arc(px,py,Math.max(.5,r),0,7);x.fill();}};
+      for(const s of [-1,1]){stroke(s*30,-18,s*82,-24,6);stroke(s*28,-58,s*84,-66,4);}stroke(-30,46,30,46,5);x.fillStyle='rgba(180,40,40,.85)';x.beginPath();x.arc(0,46,6,0,7);x.fill();});break;
+    case 7:{   /* 각진 얼굴: 머리를 다면체로, 삼각 눈과 쐐기 코 */
+      head.geometry=new THREE.IcosahedronGeometry(.23,1);head.material=head.material.clone();head.material.flatShading=true;head.material.needsUpdate=true;
+      const DK=M(0x141010),SK=M(skin);for(const s of [-1,1]){const e=new THREE.Mesh(new THREE.ConeGeometry(.03,.04,3),DK);e.rotation.z=s>0?Math.PI/2:-Math.PI/2;e.scale.z=.3;const g=new THREE.Group();g.add(e);put(g,s*.072,.03,.006);}
+      const n=new THREE.Mesh(new THREE.ConeGeometry(.028,.07,4),SK);n.rotation.x=Math.PI/2;n.scale.set(1,1,.8);const ng=new THREE.Group();n.position.z=.02;ng.add(n);put(ng,0,-.015);
+      const m=new THREE.Mesh(new THREE.BoxGeometry(.07,.012,.012),DK);put(m,0,-.075,.004);break;}
+    case 8:tex(x=>{   /* 만화: 굵은 테두리의 큰 타원 눈 */
+      for(const s of [-1,1]){const cx=s*46,cy=-16;E(x,cx,cy,22,30,'#1a1410');E(x,cx,cy,17,25,'#ffffff');E(x,cx+s*4,cy+6,11,15,'#1a1410');E(x,cx+s*-1,cy-1,4,5,'#ffffff');}
+      x.fillStyle='#1a1410';x.beginPath();x.moveTo(-34,30);x.quadraticCurveTo(0,82,34,30);x.closePath();x.fill();x.fillStyle='#d84a4a';x.beginPath();x.ellipse(0,52,15,9,0,0,7);x.fill();x.fillStyle='#fff';x.fillRect(-20,30,40,8);});break;
+  }}
+/* 얼굴 여러 가지: 머리(반지름 .22) 앞면에 눈·입·눈썹·볼을 붙인다 */
+const _fZ=new THREE.Vector3(0,0,1);
+function stickFace(head,M,k){const R=.222,DARK=M(0x14110e),LIP=M(0x6a2a22),WH=M(0xffffff),PINK=M(0xf0a0a0),MOUTHIN=M(0x5a1e1a);
+  const put=(m,x,y,lift=0)=>{const z=Math.sqrt(Math.max(0,R*R-x*x-y*y));const n=new THREE.Vector3(x,y,z).normalize();m.position.copy(n).multiplyScalar(R+lift);m.quaternion.setFromUnitVectors(_fZ,n);head.add(m);return m;};
+  const dot=(x,y,r,mat,sy=1)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(r,10,8),mat);m.scale.set(1,sy,.45);return put(m,x,y);};
+  const disc=(x,y,rx,ry,mat,lift=.002)=>{const m=new THREE.Mesh(new THREE.CircleGeometry(1,16),mat);m.scale.set(rx,ry,1);return put(m,x,y,lift);};
+  const arc=(x,y,rad,len,rot,th,mat,sy=1)=>{const m=new THREE.Mesh(new THREE.TorusGeometry(rad,th,5,12,len),mat);const g=new THREE.Group();m.rotation.z=rot;m.scale.y=sy;g.add(m);return put(g,x,y);};
+  const bar=(x,y,w,h,rz,mat)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,.012),mat);const g=new THREE.Group();m.rotation.z=rz;g.add(m);return put(g,x,y);};
+  const eyes=(r=.028,sy=1)=>{for(const x of [-.075,.075])dot(x,.03,r,DARK,sy);};
+  const smile=(w=.042,y=-.055,sy=.75)=>arc(0,y,w,Math.PI,Math.PI,.0095,LIP,sy);
+  switch(k){
+    case 0:eyes();smile();break;                                                     /* 점 눈 + 웃는 입 */
+    case 1:for(const x of [-.075,.075]){dot(x,.03,.04,DARK,1.25);disc(x+.014,.048,.012,.012,WH,.02);}arc(0,-.06,.03,Math.PI,Math.PI,.008,LIP,.7);break;   /* 큰 눈 + 반짝 */
+    case 2:eyes();smile();for(const x of [-.115,.115])disc(x,-.025,.03,.02,PINK,.004);break;   /* 볼터치 */
+    case 3:eyes(.026);for(const s of [-1,1])bar(s*.075,.085,.06,.012,s*-.12,DARK);bar(0,-.06,.05,.01,0,LIP);break;   /* 눈썹 + 일자 입 (진지) */
+    case 4:for(const x of [-.075,.075])arc(x,.02,.026,Math.PI,0,.009,DARK,.9);{const m=disc(0,-.06,.04,.03,MOUTHIN,.003);}arc(0,-.045,.04,Math.PI,Math.PI,.004,MOUTHIN,.75);for(const x of [-.115,.115])disc(x,-.03,.026,.017,PINK,.004);break;   /* 웃는 눈(^^) + 벌린 입 */
+    case 5:eyes(.03);disc(0,-.065,.018,.022,MOUTHIN,.003);break;                     /* 동그란 입 (놀람) */
+    case 6:eyes();arc(-.017,-.055,.017,Math.PI,Math.PI,.007,LIP);arc(.017,-.055,.017,Math.PI,Math.PI,.007,LIP);break;   /* 고양이 입 ω */
+    case 7:for(const x of [-.07,.07]){dot(x,.03,.024,DARK,1.9);disc(x+.008,.055,.008,.01,WH,.016);}for(const s of [-1,1])arc(s*.07,.1,.03,Math.PI*.6,Math.PI*.2,.006,DARK);arc(0,-.065,.018,Math.PI,Math.PI,.006,LIP,.7);break;   /* 세로로 긴 눈 + 눈썹 */
+    case 8:for(const s of [-1,1]){bar(s*.075,.03,.045,.012,0,DARK);}arc(0,-.05,.05,Math.PI,Math.PI,.01,LIP,.55);break;   /* 실눈(—) + 넓은 웃음 */
+  }}
+
 function makeStickPlayer(job,gear){
   const J=JOBS[job],G=gear||{helm:-1,armor:-1,boots:-1,weapon:-1},g=new THREE.Group(),mats=[];
   const dj=G.wc>0?(jobChain(job)[G.wc-1]||job):baseOf(job);   // 무기 생김새는 무기 류를 따른다
@@ -5503,9 +5587,11 @@ function makeStickPlayer(job,gear){
   const collar=new THREE.Mesh(new THREE.CylinderGeometry(.13,.19,.06,16),trim);collar.position.y=.6;upper.add(collar);
   const neck=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,.12,6),limb);neck.position.y=.66;upper.add(neck);
   const head=ball(.22,skin);head.position.y=.88;upper.add(head);
-  const eyeM=M(0x14110e);[-.075,.075].forEach(x=>{const e=new THREE.Mesh(new THREE.SphereGeometry(.028,8,6),eyeM);e.position.set(x,.03,.2);e.scale.z=.5;head.add(e);});
+  if(typeof STICK_STYLE!=='undefined'&&STICK_STYLE>=0)stickStyle(head,M,STICK_STYLE,skin.color.getHex());
+  else if(typeof STICK_FACE!=='undefined'&&STICK_FACE>=0)stickFace(head,M,STICK_FACE);
+  else{const eyeM=M(0x14110e);[-.075,.075].forEach(x=>{const e=new THREE.Mesh(new THREE.SphereGeometry(.028,8,6),eyeM);e.position.set(x,.03,.2);e.scale.z=.5;head.add(e);});
   /* 입: 살짝 웃는 작은 호 (사진으로 먼저 보여 드리는 중: STICK_MOUTH가 켜져 있을 때만) */
-  if(typeof STICK_MOUTH!=='undefined'&&STICK_MOUTH){const mo=new THREE.Mesh(new THREE.TorusGeometry(.042,.0095,5,10,Math.PI),M(0x6a2a22));mo.position.set(0,-.055,.207);mo.rotation.set(-.28,0,Math.PI);mo.scale.set(1,.75,1);head.add(mo);}
+  if(typeof STICK_MOUTH!=='undefined'&&STICK_MOUTH){const mo=new THREE.Mesh(new THREE.TorusGeometry(.042,.0095,5,10,Math.PI),M(0x6a2a22));mo.position.set(0,-.055,.207);mo.rotation.set(-.28,0,Math.PI);mo.scale.set(1,.75,1);head.add(mo);}}
   // 다리
   const mkLeg=x=>{const hip=new THREE.Group();hip.position.set(x,.96,0);hip.add(seg(.45,limb));
     const knee=new THREE.Group();knee.position.y=-.45;knee.add(ball(LR,limb),seg(.45,limb));
@@ -7486,27 +7572,126 @@ function stickNpcPose(g,pose,t){const S=g.userData.stick;if(!S)return;const AR=S
     case 'sitdrink':{S.body.position.y=-.47;legs(-1.55,1.5,-1.55,1.45);const d=_sn(t*.22,7)>.35;if(d){arm(AR,-1.15,0,.25,-2.4);S.head.rotation.set(-.3,0,0);}else{arm(AR,-.75,0,.1,-1.1);look(.6);}arm(AL,-.55,0,-.08,-1.0);S.upper.rotation.x=.05;break;}
     case 'sittalk':{S.body.position.y=-.47;legs(-1.55,1.5,-1.55,1.45);const g1=Math.max(0,_sn(t*.9,3));arm(AR,-.6-g1*.5,0,.15+g1*.2,-.9-g1*.6);arm(AL,-.6,0,-.08,-1.0);S.head.rotation.set(Math.max(0,_sn(t*1.7,2))*.1,_sn(t*.3,6)*.3,0);break;}
     case 'chin':{S.body.position.y=-.47;legs(-1.55,1.5,-1.55,1.45);arm(AR,-.85,0,-.25,-2.35);arm(AL,-.6,0,-.05,-1.25);S.upper.rotation.x=.3;S.head.rotation.set(.4,0,.1);break;}
-    default:arm(AR,.05,0,.1,-.15);arm(AL,.05,0,-.1,-.15);look();}}
+    default:arm(AR,.05,0,.1,-.15);arm(AL,.05,0,-.1,-.15);look();}
+  if(g.userData.cloth)clothSit(g,S.body.position.y<-.3);}
 /* 걷는 막대 인형 (주민): ph 걸음 위상, w 걷는 정도 */
 function stickWalkPose(g,ph,w,t){const S=g.userData.stick;if(!S)return;const s=Math.sin(ph)*w;
   S.L.hip.rotation.set(s*.6,0,0);S.R.hip.rotation.set(-s*.6,0,0);S.L.knee.rotation.x=Math.max(0,-Math.sin(ph))*w*.9+.05;S.R.knee.rotation.x=Math.max(0,Math.sin(ph))*w*.9+.05;
   S.AR.sh.rotation.set(s*.5,0,.08);S.AR.el.rotation.x=-.2;S.AL.sh.rotation.set(-s*.5,0,-.08);S.AL.el.rotation.x=-.2;S.AR.hand.rotation.set(0,0,0);S.AL.hand.rotation.set(0,0,0);
-  S.body.position.set(0,Math.abs(Math.cos(ph))*.03*w,0);S.body.rotation.set(0,0,0);S.upper.rotation.set(.04*w,0,0);S.head.rotation.set(0,0,0);}
+  S.body.position.set(0,Math.abs(Math.cos(ph))*.03*w,0);S.body.rotation.set(0,0,0);S.upper.rotation.set(.04*w,0,0);S.head.rotation.set(0,0,0);if(g.userData.cloth)clothSit(g,false);}
 function makeNpcStick(o){const g=makeStickPlayer('warrior',null),u=g.userData,J=JOBS.warrior;
   const jc=new THREE.Color(J.color).getHex(),tc=new THREE.Color(J.color).multiplyScalar(.55).getHex();
   for(const m of u.mats){if(!m.color)continue;const h=m.color.getHex();if(h===jc)m.color.setHex(o.robe);else if(h===tc)m.color.setHex(o.robe2||shade2(o.robe,.7));}
   const H=u.head,hm=c=>mat(c,{flatShading:false});
-  if(o.hat==='hair'||o.hat==='wide'||!o.hat){const c=new THREE.Mesh(new THREE.SphereGeometry(.235,14,8,0,Math.PI*2,0,Math.PI*.45),hm(o.hatC||0x4a3322));c.position.y=.02;c.rotation.x=-.25;H.add(c);
+  const HAIRY=['hair','wide','cap','beret','bandana','tiara','top','chef','bonnet'];
+  if(HAIRY.includes(o.hat)||!o.hat){const c=new THREE.Mesh(new THREE.SphereGeometry(.235,14,8,0,Math.PI*2,0,Math.PI*.45),hm(o.hatC||0x4a3322));c.position.y=.02;c.rotation.x=-.25;H.add(c);
     if(o.long){const lh=new THREE.Mesh(new THREE.CylinderGeometry(.19,.22,.42,12,1,true,Math.PI*.5,Math.PI),mat(o.hatC||0x4a3322,{side:THREE.DoubleSide,flatShading:false}));lh.position.set(0,-.18,-.03);H.add(lh);}}
   if(o.hat==='wide'){const b=new THREE.Mesh(new THREE.CylinderGeometry(.2,.42,.06,14),hm(o.hatC||0x6b4a2e));b.position.y=.19;const t=new THREE.Mesh(new THREE.CylinderGeometry(.15,.19,.2,12),hm(o.hatC||0x6b4a2e));t.position.y=.3;H.add(b,t);}
   else if(o.hat==='hood'){const h=new THREE.Mesh(new THREE.ConeGeometry(.29,.5,10),hm(o.hatC||o.robe));h.position.y=.24;H.add(h);}
   else if(o.hat==='helm'){const h=new THREE.Mesh(new THREE.SphereGeometry(.245,14,8,0,Math.PI*2,0,Math.PI/2),mat(0x9aa0a8,{metalness:.6,roughness:.35,flatShading:false}));H.add(h);}
+  /* 모자 더 (주민 옷차림용) */
+  {const hc=o.capC??o.hatC2??0x5a4a3a,P=(geo,c,x,y,z,o2={})=>{const m=new THREE.Mesh(geo,hm(c));m.position.set(x,y,z);if(o2.rx)m.rotation.x=o2.rx;if(o2.rz)m.rotation.z=o2.rz;if(o2.ry)m.rotation.y=o2.ry;if(o2.s)m.scale.set(...o2.s);H.add(m);return m;};
+    if(o.hat==='cap'){P(new THREE.SphereGeometry(.245,14,8,0,Math.PI*2,0,Math.PI*.4),hc,0,.04,-.01,{rx:-.15,s:[1,.85,1]});P(new THREE.CylinderGeometry(.13,.13,.025,14,1,false,-Math.PI*.5,Math.PI),hc,0,.12,.17,{rx:.25});}
+    else if(o.hat==='beret'){P(new THREE.SphereGeometry(.24,14,8),hc,.04,.17,0,{s:[1.05,.38,1.05],rz:-.25});if(o.feather)P(new THREE.ConeGeometry(.025,.3,5),o.feather,-.14,.3,-.02,{rz:.9});}
+    else if(o.hat==='bandana'){P(new THREE.SphereGeometry(.24,14,8,0,Math.PI*2,0,Math.PI*.36),hc,0,.04,0,{rx:-.2});P(new THREE.SphereGeometry(.05,8,6),hc,0,.02,-.24);P(new THREE.ConeGeometry(.04,.14,5),hc,.04,-.07,-.23,{rz:.3,rx:.4});}
+    else if(o.hat==='scarf'){P(new THREE.SphereGeometry(.25,16,10,0,Math.PI*2,0,Math.PI*.47),hc,0,.02,-.01,{rx:-.3});const dr=new THREE.Mesh(new THREE.CylinderGeometry(.235,.27,.34,14,1,true,Math.PI*.55,Math.PI*.9),mat(hc,{side:THREE.DoubleSide,flatShading:false}));dr.position.set(0,-.1,-.02);H.add(dr);P(new THREE.SphereGeometry(.055,8,6),hc,0,-.06,-.25);P(new THREE.ConeGeometry(.06,.2,5),hc,0,-.18,-.26,{rx:.2});}
+    else if(o.hat==='chef'){P(new THREE.CylinderGeometry(.18,.16,.26,14),0xf8f8f4,0,.27,0);P(new THREE.SphereGeometry(.22,12,8),0xf8f8f4,0,.42,0,{s:[1,.6,1]});}
+    else if(o.hat==='bonnet'){P(new THREE.SphereGeometry(.26,14,10,0,Math.PI*2,0,Math.PI*.55),hc,0,.02,-.03,{rx:-.95});P(new THREE.TorusGeometry(.215,.016,6,16,Math.PI),o.ribbon??0xc84a5a,0,.03,-.02,{rx:-.95+Math.PI/2});}
+    else if(o.hat==='tiara'){P(new THREE.TorusGeometry(.2,.018,6,18,Math.PI),0xd4af37,0,.14,.02,{rx:-.35});P(new THREE.OctahedronGeometry(.035,0),o.gem??0x6ac8ff,0,.2,.17);}
+    else if(o.hat==='top'){P(new THREE.CylinderGeometry(.3,.3,.03,16),hc,0,.19,0);P(new THREE.CylinderGeometry(.16,.17,.36,16),hc,0,.37,0);P(new THREE.CylinderGeometry(.172,.172,.05,16),o.band??0x8a2a22,0,.22,0);}
+    else if(o.hat==='bald'){if(o.fringe!==null){const fr=new THREE.Mesh(new THREE.CylinderGeometry(.228,.226,.11,14,1,true,Math.PI*.55,Math.PI*.9),mat(o.fringe??o.hatC??0x5a4a3a,{side:THREE.DoubleSide,flatShading:false}));fr.position.y=.0;H.add(fr);}}
+    if(HAIRY.includes(o.hat)||!o.hat){if(o.pony){P(new THREE.SphereGeometry(.07,10,8),o.hatC||0x4a3322,0,.05,-.23);P(new THREE.ConeGeometry(.06,.3,8),o.hatC||0x4a3322,0,-.12,-.26,{rx:Math.PI-.15});}
+      if(o.bun)P(new THREE.SphereGeometry(.09,10,8),o.hatC||0x4a3322,0,.15,-.17);}}
   if(o.beard){const b=new THREE.Mesh(new THREE.SphereGeometry(.13,12,8),hm(o.beard));b.scale.set(1.15,1.05,.7);b.position.set(0,-.13,.11);H.add(b);const mu=new THREE.Mesh(new THREE.BoxGeometry(.16,.035,.04),hm(o.beard));mu.position.set(0,-.03,.205);H.add(mu);}
   if(o.staff){const s=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,2,6),mat(0x5a3d22));s.position.set(.42,1,.12);g.add(s);
     const orb=new THREE.Mesh(new THREE.OctahedronGeometry(.11,0),mat(o.staff,{emissive:o.staff,emissiveIntensity:1.2}));orb.position.set(.42,2.05,.12);g.add(orb);}
   if(o.small)g.scale.setScalar(.7);
   const mk=new THREE.Mesh(new THREE.OctahedronGeometry(.16,0),mat(0xf0c95f,{emissive:0xb08a20,emissiveIntensity:.8}));mk.position.y=(o.small?2.2:2.6)/(o.small?.7:1);mk.userData.marker=true;g.add(mk);u.marker=mk;
+  if(o.cloth||(typeof NPC_CLOTHES!=='undefined'&&NPC_CLOTHES))npcClothes(g,o);
   g.traverse(m=>{if(m.isMesh)m.castShadow=true;});u.ph=Math.random()*6;return g;}
+/* ---------- NPC 옷: 바지·치마·긴 옷·소매·앞치마·망토·신발 (사진으로 먼저 보여 드리는 중: NPC_CLOTHES) ----------
+   o.cloth로 정할 수 있고, 없으면 생김새로 고른다: 긴 머리 → 치마, 지팡이·두건 → 긴 옷, 그 밖 → 바지 */
+var NPC_CLOTHES=false;
+/* 앉았는지에 따라 치마 ↔ 무릎 덮개 */
+function clothSit(g,sit){const c=g.userData.cloth;if(!c||c.sit===sit)return;c.sit=sit;for(const s of c.sk)s.visible=!sit;c.lap.visible=sit;}
+/* 손에 드는 것·메는 것 */
+function npcProp(S,k,m){const R=S.AR.hand,L=S.AL.hand,W=0x7a5232,DW=0x4a3020,ME=0xa8aab0;
+  const P=(par,geo,c,x,y,z,o={})=>{const q=new THREE.Mesh(geo,typeof c==='number'?m(c,o.mat):c);q.position.set(x,y,z);if(o.rx)q.rotation.x=o.rx;if(o.ry)q.rotation.y=o.ry;if(o.rz)q.rotation.z=o.rz;if(o.s)q.scale.set(...o.s);par.add(q);return q;};
+  const cyl=(r,h,n=6)=>new THREE.CylinderGeometry(r,r,h,n),box=(a,b,c)=>new THREE.BoxGeometry(a,b,c),sph=(r)=>new THREE.SphereGeometry(r,10,8);
+  switch(k){
+    case 'bag':P(L,box(.22,.24,.1),0x6a4a2a,0,-.17,.02);P(L,box(.23,.06,.11),0x5a3a20,0,-.06,.02);break;
+    case 'sack':P(S.upper,sph(.2),0xc8b088,.2,.66,-.08,{s:[1,.8,1.2]});break;
+    case 'spear':P(R,cyl(.022,2.2),W,0,.35,0);P(R,new THREE.ConeGeometry(.045,.22,4),ME,0,1.55,0);break;
+    case 'staff':P(R,cyl(.03,1.7),DW,0,.15,0);P(R,sph(.06),DW,0,1.02,0);break;
+    case 'book':P(L,box(.17,.23,.05),0x7a2a22,0,-.08,.05);P(L,box(.155,.215,.052),0xf0e8d8,.01,-.08,.05);break;
+    case 'bread':P(L,sph(.07),0xc89048,0,-.06,.06,{s:[2.2,1,1]});break;
+    case 'apple':P(R,sph(.05),0xc83a2a,0,-.06,.03);break;
+    case 'broom':P(R,cyl(.018,1.5),W,0,-.05,0);P(R,new THREE.ConeGeometry(.11,.3,8),0xc8a860,0,-.8,0);break;
+    case 'basket':case 'flowers':P(L,cyl(.13,.16,10),0xa8804a,0,-.24,.02);P(L,new THREE.TorusGeometry(.12,.012,5,12,Math.PI),0x8a6a3a,0,-.16,.02);
+      if(k==='flowers')for(let i=0;i<6;i++)P(L,sph(.035),[0xe04050,0xf0d040,0xf0f0f0,0xb050d0,0xf07ab0,0xf08a30][i],Math.cos(i)*.07,-.14,.02+Math.sin(i)*.07);
+      else for(let i=0;i<3;i++)P(L,sph(.045),[0xc83a2a,0x6a9a3a,0xd8a040][i],-.05+i*.05,-.16,.02);break;
+    case 'yarn':P(L,sph(.07),0xb83a5a,0,-.07,.04);break;
+    case 'cane':P(R,cyl(.02,.82),DW,0,-.38,.02);P(R,new THREE.TorusGeometry(.04,.015,5,10,Math.PI),DW,0,.03,.0);break;
+    case 'sword':{const sw=new THREE.Group();sw.position.set(-.22,.72,.02);sw.rotation.z=.2;S.body.add(sw);P(sw,box(.04,.62,.04),0x3a2a1a,0,-.1,0);P(sw,box(.14,.03,.05),0xc8a050,0,.22,0);P(sw,cyl(.018,.14),0x3a2a1a,0,.3,0);break;}
+    case 'axe':P(R,cyl(.022,.75),W,0,-.25,0);P(R,box(.16,.12,.02),ME,.07,-.58,0);break;
+    case 'bow':P(L,new THREE.TorusGeometry(.48,.018,5,16,Math.PI*.9),0x6a4a2a,0,-.02,.02,{rz:Math.PI/2+Math.PI*.05});P(L,cyl(.004,.9),0xe8e0d0,-.18,-.02,.02);break;
+    case 'hoe':P(R,cyl(.022,1.6),W,0,.35,0);P(R,box(.18,.08,.02),ME,.05,1.12,.05,{rx:.6});break;
+    case 'crook':P(R,cyl(.022,1.7),W,0,.2,0);P(R,new THREE.TorusGeometry(.09,.02,5,10,Math.PI*1.3),W,.09,1.05,0);break;
+    case 'rod':{const g=new THREE.Group();g.rotation.x=-.75;R.add(g);P(g,cyl(.014,2.4),W,0,.9,0);P(g,cyl(.003,.9),0xe8e0d0,0,1.6,.3,{rx:.9});break;}
+    case 'hammer':P(R,cyl(.02,.4),W,0,-.12,0);P(R,box(.16,.08,.08),0x4a4a50,0,-.33,0);break;
+    case 'potion':P(L,sph(.06),0x4ac87a,0,-.08,.04,{mat:{transparent:true,opacity:.85,emissive:0x2a8a4a,emissiveIntensity:.5}});P(L,cyl(.02,.06),0xc8c0a8,0,-.01,.04);break;
+    case 'pipe':P(S.head,cyl(.008,.12),0x3a2a1a,.04,-.07,.25,{rx:Math.PI/2+.3});P(S.head,cyl(.022,.05),0x3a2a1a,.04,-.04,.31);break;
+    case 'crutch':P(R,cyl(.022,1.25),W,0,-.05,.04);P(R,box(.18,.04,.05),W,0,.58,.04);break;
+    case 'mug':P(R,cyl(.055,.13,10),0x9a7a4a,0,-.06,.05);P(R,cyl(.056,.02,10),0xf0f0e8,0,.01,.05);break;
+    case 'fish':P(L,sph(.06),0xa8b4c0,0,-.2,.03,{s:[.7,2.6,.5]});P(L,new THREE.ConeGeometry(.06,.1,4),0xa8b4c0,0,-.38,.03,{rx:Math.PI});break;
+    case 'bucket':P(R,cyl(.12,.2,12),0x8a6a4a,0,-.26,.02);P(R,new THREE.TorusGeometry(.11,.01,5,12,Math.PI),0x4a4a50,0,-.16,.02);P(R,cyl(.11,.01,12),0xd8e8f0,0,-.17,.02);break;
+    case 'trowel':P(R,cyl(.015,.14),W,0,-.05,0);P(R,box(.08,.12,.01),ME,0,-.17,.02);break;
+    case 'lute':P(S.upper,sph(.15),0xa8703a,.08,.25,-.2,{s:[1,1.25,.45],rz:.5});P(S.upper,box(.05,.4,.03),0x6a4428,-.08,.52,-.22,{rz:.5});break;
+    case 'stick':P(R,cyl(.015,.7),W,0,-.15,.05,{rx:.4});break;
+    case 'plank':P(S.upper,box(.18,.04,2),0xc8a060,.22,.68,0);break;
+    case 'cleaver':P(R,cyl(.02,.14),DW,0,-.06,0);P(R,box(.02,.14,.16),ME,0,-.18,.05);break;
+    case 'crate':P(S.upper,box(.42,.32,.32),0x9a7a4a,0,.62,-.32);break;
+    case 'pole':P(R,cyl(.016,2.3),DW,0,.55,0);P(R,box(.06,.1,.06),0xffd080,0,1.72,.08,{mat:{emissive:0xffa040,emissiveIntensity:.8}});break;
+    case 'pitchfork':P(R,cyl(.02,1.7),W,0,.3,0);for(const x of [-.05,0,.05])P(R,cyl(.008,.22),ME,x,1.25,0);P(R,box(.14,.02,.02),ME,0,1.14,0);break;
+    case 'ladle':P(R,cyl(.012,.4),ME,0,-.1,.02);P(R,new THREE.SphereGeometry(.05,10,6,0,Math.PI*2,Math.PI/2,Math.PI/2),ME,0,-.32,.02);break;
+    case 'scroll':P(L,cyl(.03,.26,8),0xe8dcc0,0,-.06,.05,{rz:Math.PI/2});break;
+    case 'doll':P(L,sph(.04),0xf0e0d0,0,.02,.06);P(L,new THREE.ConeGeometry(.05,.11,8),0xc84a6a,0,-.06,.06);break;
+    case 'fan':P(L,new THREE.CircleGeometry(.14,12,0,Math.PI),m(0xf0d0e0,{side:THREE.DoubleSide}),0,.02,.06,{rz:Math.PI*.1});break;
+  }}
+function npcClothes(g,o){const S=g.userData.stick;if(!S)return;const C=o.cloth||{};
+  const h=(()=>{let v=0;const k=String(o.robe)+String(o.hatC)+String(o.robe2);for(let i=0;i<k.length;i++)v=(v*31+k.charCodeAt(i))>>>0;return v;})();
+  const pick=(a,s)=>a[(h>>>s)%a.length];
+  const long=C.long??(!!o.staff||o.hat==='hood'&&!o.long),skirt=C.skirt??(!long&&!!o.long);
+  const robe=o.robe,robe2=o.robe2??shade2(o.robe,.7);
+  const pantsC=C.pants??pick([0x3a3a44,0x4a3a2a,0x5a4a32,0x2a3a4a,0x6a5a40,0x3e3428],3),shoeC=C.shoes??pick([0x3a2618,0x2a1e14,0x5a3a22],7);
+  const sl=C.sleeve??(pick(['long','long','long','short'],11)),slC=C.sleeveC??robe;
+  const m=(c,x)=>mat(c,Object.assign({flatShading:false,roughness:.8},x||{}));
+  const tube=(r0,r1,len,mt,y)=>{const t=new THREE.Mesh(new THREE.CylinderGeometry(r0,r1,len,10),mt);t.position.y=y;return t;};
+  const shoe=m(shoeC);for(const L of [S.L,S.R]){L.foot.material=shoe;L.foot.scale.set(1.25,1.4,1.1);}
+  /* 다리: 바지 (치마·긴 옷 아래에도 짧게 보이는 바지) */
+  if(!skirt&&!long){const pm=m(pantsC);for(const L of [S.L,S.R]){L.hip.add(tube(.078,.068,.47,pm,-.225));L.knee.add(new THREE.Mesh(new THREE.SphereGeometry(.07,10,8),pm),tube(.066,.058,.36,pm,-.18));
+      const cuff=tube(.062,.062,.05,m(shade2(pantsC,.75)),-.36);L.knee.add(cuff);}
+    const band=new THREE.Mesh(new THREE.CylinderGeometry(.172,.172,.12,14),m(pantsC));band.position.y=.93;S.body.add(band);}
+  else{const sm=m(skirt?(C.skirtC??pick([robe,robe2,0x6a3a4a,0x3a4a6a,0x7a6a4a],5)):(C.longC??robe));
+    const len=skirt?.52:.86,bot=skirt?.36:.4;const sk=new THREE.Mesh(new THREE.CylinderGeometry(.17,bot,len,16),sm);sk.position.y=.97-len/2;S.body.add(sk);
+    const hem=new THREE.Mesh(new THREE.CylinderGeometry(bot+.005,bot+.01,.05,16),m(skirt?shade2(sm.color.getHex(),.72):robe2));hem.position.y=.97-len+.025;S.body.add(hem);
+    /* 앉으면 치마 대신 무릎 위로 덮인 천 (다리가 치마를 뚫지 않게) */
+    const lap=new THREE.Group();lap.visible=false;S.body.add(lap);{const a=new THREE.Mesh(new THREE.BoxGeometry(.38,.14,.58),sm);a.position.set(0,.95,.24);const f=new THREE.Mesh(new THREE.BoxGeometry(.38,skirt?.34:.62,.08),sm);f.position.set(0,skirt?.8:.65,.52);const r=new THREE.Mesh(new THREE.CylinderGeometry(.17,.22,.2,14),sm);r.position.y=.9;lap.add(a,f,r);}
+    g.userData.cloth={sk:[sk,hem],lap};
+    if(skirt){const lm=m(C.stock??0xe8e0d0);for(const L of [S.L,S.R])L.knee.add(tube(.05,.045,.38,lm,-.19));}}
+  /* 소매 */
+  if(sl!=='none'){const am=m(slC);for(const A of [S.AL,S.AR]){A.sh.add(new THREE.Mesh(new THREE.SphereGeometry(.072,10,8),am),tube(.066,.058,sl==='short'?.2:.36,am,sl==='short'?-.1:-.18));
+      if(sl==='long'){A.el.add(new THREE.Mesh(new THREE.SphereGeometry(.058,10,8),am),tube(.058,.064,.3,am,-.15));A.el.add(tube(.07,.07,.05,m(robe2),-.3));}
+      else A.sh.add(tube(.07,.07,.04,m(robe2),-.2));}}
+  /* 앞치마 */
+  if(C.apron){const ap=new THREE.Mesh(new THREE.BoxGeometry(.3,.62,.02),m(C.apron));ap.position.set(0,.66,skirt?.3:.2);ap.rotation.x=skirt?-.32:-.12;S.body.add(ap);const tp=new THREE.Mesh(new THREE.BoxGeometry(.24,.24,.02),m(C.apron));tp.position.set(0,.32,.19);S.upper.add(tp);}
+  /* 망토 */
+  if(C.cape){const cp=new THREE.Mesh(new THREE.BoxGeometry(.48,1.0,.03),m(C.cape,{side:THREE.DoubleSide}));cp.position.set(0,-.02,-.2);cp.rotation.x=.08;S.upper.add(cp);
+    const cl=new THREE.Mesh(new THREE.TorusGeometry(.16,.025,6,14,Math.PI),m(C.capeTrim??0xd4af37));cl.position.set(0,.58,-.02);cl.rotation.set(Math.PI/2,0,0);S.upper.add(cl);}
+  if(C.prop)npcProp(S,C.prop,m);
+  /* 조끼 */
+  if(C.vest){const v=new THREE.Mesh(new THREE.CylinderGeometry(.2,.175,.5,14,1,true,Math.PI*1.12,Math.PI*1.76),m(C.vest,{side:THREE.DoubleSide}));v.position.y=.32;S.upper.add(v);}}
+
 function makeNpcMesh(o){
   if(typeof OLD_LOOK!=='undefined'&&OLD_LOOK)return NPC_OLD==='stick'?makeNpcStick(o):makeNpcMeshOld(o);
   // 매끈하게 녹여 붙인 몸과 머리 (npcbody.js) + 눈 + 모자·소품
@@ -9732,17 +9917,71 @@ const CIT_FRAME_OF={stand:[0,0],walk:[1,2],hoe:[3,4],sit:[5,5],carry:[6,6],guard
 /* ---------- 예전 모습: 주민도 팔 가느다란 막대 인형 ---------- */
 const CIT_OLD=()=>typeof OLD_LOOK!=='undefined'&&OLD_LOOK;
 const _chash=(s,k)=>{let h=2166136261;for(let i=0;i<s.length;i++)h=Math.imul(h^s.charCodeAt(i),16777619);h=Math.imul(h^k,16777619);return ((h>>>0)%1000)/1000;};
-function citStickLook(id){const P=(a,k)=>a[Math.floor(_chash(id,k)*a.length)];const has=(...w)=>w.some(x=>id.includes(x));
-  const HAIR=[0x2a1a10,0x4a3322,0x6a4a2a,0x8a5a2a,0xb07a3a,0x1a1a1a,0x9a3a1a,0xd8c8a0];
-  const female=has('maid','lady','girl','granny','wife','nurse','fishwife','noble_f','laundress','flower','weaver','archer_f','farmer_f','herbalist');
-  const o={robe:P([0x8a5a3a,0x6a7a4a,0x4a5a7a,0x7a3a3a,0xa08a5a,0x5a4a6a,0x3a6a6a,0x9a6a3a,0x6a6a6a,0xb0a080],1),hat:'hair',hatC:P(HAIR,2),long:female?1:0};
-  o.robe2=new THREE.Color(o.robe).multiplyScalar(.7).getHex();
-  if(has('guard','knight','squire'))Object.assign(o,{robe:0x5a6a7a,robe2:0x7a8a9a,hat:'helm'});
-  else if(has('noble','rich'))Object.assign(o,{robe:P([0x6a2a6a,0x2a3a7a,0x7a1a2a],3),robe2:0xc8a040});
-  else if(has('elder','scholar','apothecary','granny'))Object.assign(o,{hat:has('granny')?'hair':'hood',hatC:has('granny')?0xd8d8d8:o.robe,beard:has('elder','scholar')?0xe0e0e0:undefined});
-  else if(has('fisher','sailor','farmer','shepherd'))Object.assign(o,{hat:has('sailor')?'hair':'wide',hatC:P([0x8a6a3a,0x6a5030,0xc8b080],4)});
-  else if(has('smith','butcher','dock','porter','mason'))Object.assign(o,{beard:_chash(id,5)<.5?o.hatC:undefined});
-  if(has('boy','girl'))o.small=true;return o;}
+/* 주민 60가지: 직업마다 머리·모자·옷·소품을 따로 정한다 (같은 직업은 같은 차림) */
+const CIT_OUTFIT={
+  c_merchant:{robe:0x7a3a2a,robe2:0xc8a050,hat:'beret',capC:0x3a2418,feather:0xd84a3a,hatC:0x4a3020,beard:0x4a3020,cloth:{pants:0x3a3020,vest:0x2a3a5a,sleeve:'long',prop:'bag'}},
+  c_worker:{robe:0x8a7a5a,robe2:0x5a4a3a,hat:'cap',capC:0x5a4a3a,hatC:0x3a2a1a,cloth:{pants:0x4a3a2a,sleeve:'short',prop:'sack'}},
+  c_guard:{robe:0x5a6a7a,robe2:0x8a2a2a,hat:'helm',cloth:{pants:0x3a3a44,vest:0x8a2a2a,sleeve:'long',prop:'spear'}},
+  c_noble_m:{robe:0x2a3a6a,robe2:0xd4af37,hat:'beret',capC:0x1a1a2a,feather:0xf0f0f0,hatC:0x1a1a1a,cloth:{pants:0x1a1a24,vest:0x6a1a3a,cape:0x4a2a6a,sleeve:'long',prop:'sword'}},
+  c_elder:{robe:0x6a6050,robe2:0x4a4030,hat:'bald',fringe:0xe0e0e0,beard:0xe8e8e8,cloth:{long:true,longC:0x5a5040,sleeve:'long',prop:'staff'}},
+  c_youth:{robe:0x4a8a6a,robe2:0x2a5a3a,hat:'hair',hatC:0x6a4a2a,cloth:{pants:0x3a4a6a,sleeve:'short',prop:'apple'}},
+  c_clerk:{robe:0x3a3a4a,robe2:0xe8e0d0,hat:'cap',capC:0x2a2a30,hatC:0x2a1a10,cloth:{pants:0x2a2a30,vest:0x5a5a6a,sleeve:'long',prop:'book'}},
+  c_baker:{robe:0xf0ece0,robe2:0xc8b088,hat:'chef',hatC:0x6a4a2a,beard:0x6a4a2a,cloth:{pants:0x6a5a40,apron:0xf8f8f8,sleeve:'short',prop:'bread'}},
+  c_boy:{robe:0xd8a040,robe2:0x8a5a2a,hat:'hair',hatC:0x3a2a1a,small:1,cloth:{pants:0x6a5a40,sleeve:'short',prop:'stick'}},
+  c_maid:{robe:0x2a2a3a,robe2:0xf0f0f0,hat:'bonnet',capC:0xf8f8f8,ribbon:0x2a2a3a,hatC:0x4a2a1a,long:1,cloth:{skirt:true,skirtC:0x2a2a3a,apron:0xf8f8f8,sleeve:'long',prop:'broom'}},
+  c_lady:{robe:0x8a4a7a,robe2:0xf0d8e0,hat:'hair',hatC:0xd8b060,bun:1,long:1,cloth:{long:true,longC:0x8a4a7a,sleeve:'long',prop:'fan'}},
+  c_vendor:{robe:0xa86a3a,robe2:0x6a3a1a,hat:'bandana',capC:0xc83a3a,hatC:0x2a1a10,cloth:{pants:0x4a3a2a,apron:0xd8c8a0,sleeve:'short',prop:'basket'}},
+  c_flower:{robe:0xf0d8e0,robe2:0xe07a9a,hat:'scarf',capC:0xf0e060,long:1,cloth:{skirt:true,skirtC:0x5a8a4a,sleeve:'short',prop:'flowers'}},
+  c_weaver:{robe:0x8a6a9a,robe2:0x5a3a6a,hat:'scarf',capC:0x6a4a7a,long:1,cloth:{skirt:true,skirtC:0x6a5a3a,apron:0xc8b8a0,sleeve:'long',prop:'yarn'}},
+  c_granny:{robe:0x5a4a5a,robe2:0x3a2a3a,hat:'scarf',capC:0x3a3a4a,long:1,cloth:{long:true,longC:0x4a3a4a,sleeve:'long',prop:'cane'}},
+  c_girl:{robe:0xe87a8a,robe2:0xffffff,hat:'hair',hatC:0xb07a3a,pony:1,long:1,small:1,cloth:{skirt:true,skirtC:0xf0c040,sleeve:'short',prop:'doll'}},
+  c_knight:{robe:0x9aa0a8,robe2:0xd4af37,hat:'helm',cloth:{pants:0x8a8e98,vest:0x2a4a8a,cape:0x2a4a8a,sleeve:'long',sleeveC:0x9aa0a8,shoes:0x5a5e68,prop:'sword'}},
+  c_merc:{robe:0x6a5a4a,robe2:0x3a2a1a,hat:'bandana',capC:0x2a2a2a,hatC:0x1a1a1a,beard:0x2a1a10,cloth:{pants:0x3a3020,vest:0x4a3020,sleeve:'short',prop:'axe'}},
+  c_archer_f:{robe:0x4a6a3a,robe2:0x2a3a1a,hat:'hair',hatC:0x8a3a1a,pony:1,cloth:{pants:0x5a4a32,vest:0x6a4a2a,sleeve:'long',prop:'bow'}},
+  c_squire:{robe:0xa08060,robe2:0x2a4a8a,hat:'hair',hatC:0xb07a3a,cloth:{pants:0x5a4a3a,vest:0x2a4a8a,sleeve:'long',prop:'sword'}},
+  c_farmer_m:{robe:0xd8c8a0,robe2:0x8a7a5a,hat:'wide',hatC:0xd8b860,cloth:{pants:0x4a5a6a,sleeve:'short',prop:'hoe'}},
+  c_farmer_f:{robe:0xc8a878,robe2:0x8a6a4a,hat:'scarf',capC:0xe8e0c8,long:1,cloth:{skirt:true,skirtC:0x7a5a3a,apron:0xe8dcc0,sleeve:'short',prop:'basket'}},
+  c_shepherd:{robe:0xe8e0c8,robe2:0x8a7a5a,hat:'wide',hatC:0x6a5030,beard:0x8a6a4a,cloth:{pants:0x6a5a40,cape:0x8a7a5a,sleeve:'long',prop:'crook'}},
+  c_sailor:{robe:0xf0f0f0,robe2:0x2a3a6a,hat:'bandana',capC:0x2a3a6a,hatC:0x3a2a1a,cloth:{pants:0x2a3a6a,sleeve:'short',prop:'sack'}},
+  c_fisher:{robe:0x5a6a5a,robe2:0x3a4a3a,hat:'wide',hatC:0xc8a860,beard:0x8a8070,cloth:{pants:0x4a4a3a,vest:0x8a7a50,sleeve:'long',prop:'rod'}},
+  c_smith:{robe:0x8a6a5a,robe2:0x3a2a1a,hat:'hair',hatC:0x2a1a10,beard:0x2a1a10,cloth:{pants:0x3a3020,apron:0x4a2a18,sleeve:'none',prop:'hammer'}},
+  c_dock:{robe:0x6a5040,robe2:0x3a2a1a,hat:'cap',capC:0x3a3a3a,hatC:0x5a3a22,cloth:{pants:0x3a3a3a,sleeve:'short',prop:'crate'}},
+  c_apothecary:{robe:0x3a5a4a,robe2:0xc8b080,hat:'hood',hatC:0x2a4a3a,beard:0x9a9a9a,cloth:{long:true,longC:0x3a5a4a,sleeve:'long',prop:'potion'}},
+  c_scholar:{robe:0x2a2a4a,robe2:0xc8a050,hat:'cap',capC:0x1a1a2a,hatC:0xd8d8d8,beard:0xe0e0e0,cloth:{long:true,longC:0x2a2a4a,sleeve:'long',prop:'book'}},
+  c_rich:{robe:0x6a2a1a,robe2:0xd4af37,hat:'beret',capC:0x3a1a0a,feather:0xf0c040,hatC:0x2a1a10,beard:0x2a1a10,cloth:{pants:0x2a1a10,vest:0xd4af37,cape:0x6a1a1a,capeTrim:0xf0f0f0,sleeve:'long',prop:'pipe'}},
+  c_beggar:{robe:0x6a6050,robe2:0x4a4030,hat:'hair',hatC:0x4a3a2a,beard:0x4a3a2a,cloth:{pants:0x5a5040,sleeve:'short',prop:'crutch'}},
+  c_innkeeper:{robe:0xc8a878,robe2:0x6a3a2a,hat:'bald',fringe:0x5a3a22,beard:0x5a3a22,cloth:{pants:0x4a3020,apron:0xf0e8d8,vest:0x6a3a2a,sleeve:'short',prop:'mug'}},
+  c_wife:{robe:0x7a8a5a,robe2:0x4a5a3a,hat:'bonnet',capC:0xf0e8d8,ribbon:0x7a8a5a,hatC:0x6a3a22,long:1,cloth:{skirt:true,skirtC:0x5a4a3a,apron:0xe8dcc0,sleeve:'long',prop:'basket'}},
+  c_nurse:{robe:0xf0f0f0,robe2:0x6a8aa8,hat:'scarf',capC:0xffffff,long:1,cloth:{long:true,longC:0x6a8aa8,apron:0xffffff,sleeve:'long',prop:'bag'}},
+  c_fishwife:{robe:0x6a7a8a,robe2:0x3a4a5a,hat:'scarf',capC:0x8a3a3a,long:1,cloth:{skirt:true,skirtC:0x4a5a6a,apron:0xc8c0a8,sleeve:'short',prop:'fish'}},
+  c_noble_f:{robe:0x2a5a6a,robe2:0xd4af37,hat:'tiara',hatC:0x2a1a10,bun:1,long:1,cloth:{long:true,longC:0x2a5a6a,sleeve:'long',cape:0xe8e0f0,capeTrim:0xd4af37}},
+  c_herbalist:{robe:0x5a7a3a,robe2:0x3a4a2a,hat:'hood',hatC:0x4a6a2a,long:1,cloth:{long:true,longC:0x6a5a3a,sleeve:'long',prop:'basket'}},
+  c_laundress:{robe:0xa8c0d0,robe2:0x6a8aa0,hat:'scarf',capC:0xf0f0f0,long:1,cloth:{skirt:true,skirtC:0x4a6a8a,apron:0xe8e8e8,sleeve:'short',prop:'bucket'}},
+  c_cooper:{robe:0x9a7a5a,robe2:0x5a3a20,hat:'cap',capC:0x6a4a2a,hatC:0x6a4a2a,cloth:{pants:0x4a3a2a,apron:0x7a5a3a,sleeve:'short',prop:'hammer'}},
+  c_mason:{robe:0xb8b0a0,robe2:0x6a6a60,hat:'cap',capC:0x8a8a80,hatC:0x5a4a3a,beard:0x6a5a4a,cloth:{pants:0x6a6a60,apron:0xa8a090,sleeve:'short',prop:'trowel'}},
+  c_tailor:{robe:0x6a3a5a,robe2:0xd4af37,hat:'hair',hatC:0x2a1a10,cloth:{pants:0x2a2a30,vest:0x8a7a3a,sleeve:'long',prop:'yarn'}},
+  c_bard:{robe:0xc83a3a,robe2:0xf0c040,hat:'beret',capC:0x2a6a3a,feather:0xf0f0f0,hatC:0xb07a3a,cloth:{pants:0x2a6a3a,vest:0xf0c040,cape:0x2a6a3a,sleeve:'long',prop:'lute'}},
+  c_old_knight:{robe:0x8a8e98,robe2:0x7a2a22,hat:'bald',fringe:0xe0e0e0,beard:0xe8e8e8,cloth:{pants:0x6a6e78,vest:0x7a2a22,cape:0x7a2a22,sleeve:'long',sleeveC:0x8a8e98,prop:'sword'}},
+  c_boy2:{robe:0x5a7aa8,robe2:0x2a3a5a,hat:'cap',capC:0xa83a2a,hatC:0x6a4a2a,small:1,cloth:{pants:0x6a5a40,sleeve:'short',prop:'apple'}},
+  c_carpenter:{robe:0xd8b878,robe2:0x8a6a3a,hat:'bandana',capC:0x3a6a8a,hatC:0x6a4a2a,cloth:{pants:0x6a4a2a,apron:0x8a6a3a,sleeve:'short',prop:'plank'}},
+  c_butcher:{robe:0xf0e8e0,robe2:0x8a2a2a,hat:'bald',fringe:0x3a2a1a,beard:0x3a2a1a,cloth:{pants:0x4a3a3a,apron:0xe0c8c8,sleeve:'short',prop:'cleaver'}},
+  c_porter:{robe:0x8a7a6a,robe2:0x5a4a3a,hat:'bandana',capC:0x6a5a40,hatC:0x2a1a10,cloth:{pants:0x4a3a2a,sleeve:'none',prop:'crate'}},
+  c_courier:{robe:0x2a6a8a,robe2:0xd4af37,hat:'cap',capC:0x2a6a8a,hatC:0xb07a3a,cloth:{pants:0x3a3a3a,vest:0x6a4a2a,sleeve:'long',prop:'bag'}},
+  c_lamplighter:{robe:0x3a3a3a,robe2:0x8a7a3a,hat:'top',capC:0x1a1a1a,hatC:0x6a6a6a,cloth:{pants:0x2a2a2a,cape:0x3a3a3a,sleeve:'long',prop:'pole'}},
+  c_hunter:{robe:0x5a6a3a,robe2:0x3a2a1a,hat:'beret',capC:0x3a5a2a,feather:0xc83a2a,hatC:0x5a3a22,beard:0x5a3a22,cloth:{pants:0x5a4a32,vest:0x7a5a3a,cape:0x4a5a2a,sleeve:'long',prop:'bow'}},
+  c_stablehand:{robe:0xb89a6a,robe2:0x6a5a3a,hat:'cap',capC:0x5a4a3a,hatC:0xd8b060,cloth:{pants:0x5a6a7a,sleeve:'short',prop:'pitchfork'}},
+  c_noble_youth:{robe:0x4a2a6a,robe2:0xd4af37,hat:'hair',hatC:0xd8b060,cloth:{pants:0xe8e0d0,vest:0x2a2a5a,cape:0x8a1a2a,sleeve:'long',prop:'sword'}},
+  c_cook:{robe:0xf0ece0,robe2:0x3a3a3a,hat:'chef',hatC:0x3a2a1a,beard:0x3a2a1a,cloth:{pants:0x3a3a3a,apron:0xffffff,sleeve:'short',prop:'ladle'}},
+  c_scribe_old:{robe:0x4a3a2a,robe2:0xc8b080,hat:'cap',capC:0x2a1a10,hatC:0xe0e0e0,beard:0xe8e8e8,cloth:{long:true,longC:0x4a3a2a,sleeve:'long',prop:'scroll'}},
+  c_baker_f:{robe:0xf0d8a8,robe2:0x8a6a3a,hat:'bonnet',capC:0xffffff,ribbon:0xc8a050,hatC:0x8a4a2a,long:1,cloth:{skirt:true,skirtC:0x8a6a3a,apron:0xffffff,sleeve:'short',prop:'bread'}},
+  c_milkmaid:{robe:0xa8c8e8,robe2:0x5a7aa0,hat:'scarf',capC:0xf0d040,long:1,cloth:{skirt:true,skirtC:0x6a8a4a,apron:0xf0f0f0,sleeve:'short',prop:'bucket'}},
+  c_seamstress:{robe:0xc8a0c0,robe2:0x7a4a7a,hat:'hair',hatC:0x4a2a1a,bun:1,long:1,cloth:{skirt:true,skirtC:0x5a3a5a,apron:0xe8e0d0,sleeve:'long',prop:'yarn'}},
+  c_noble_girl:{robe:0xf0b8c8,robe2:0xffffff,hat:'tiara',hatC:0xd8b060,gem:0xf06a9a,long:1,small:1,cloth:{long:true,longC:0xf0b8c8,sleeve:'short',prop:'doll'}},
+  c_washer_old:{robe:0x7a7a6a,robe2:0x4a4a3a,hat:'scarf',capC:0x5a5a6a,long:1,cloth:{skirt:true,skirtC:0x4a4a5a,apron:0xc8c8c0,sleeve:'short',prop:'bucket'}},
+  c_merchant_f:{robe:0x7a2a3a,robe2:0xc8a050,hat:'scarf',capC:0xc8a050,long:1,cloth:{long:true,longC:0x7a2a3a,vest:0x3a2a4a,sleeve:'long',prop:'bag'}},
+};
+function citStickLook(id){const o=CIT_OUTFIT[id];if(o)return o;return {robe:0x8a6a4a,robe2:0x5a4a3a,hat:'hair',hatC:0x4a3322,cloth:{pants:0x4a3a2a,sleeve:'long'}};}
+
 /* 주민 막대 인형을 가볍게: 둥근 마디는 면을 줄이고, 같은 마디에 붙은 같은 재질 조각들은 한 덩어리로 합친다 (움직이는 마디는 그대로) */
 const _slimG=new Map();
 function stickSlim(g){
