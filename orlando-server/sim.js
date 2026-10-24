@@ -6,6 +6,8 @@
   function createSim(opts) {
     const { MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, zoneAt, SAFE, worldClamp, roomClamp, keepOutOfSafe, DUN, BOSS_HOME, C2, R2, ROAD, PIT, TOWN_R, LAIR, WLAIR } = OR;
     const TICK = 0.1;
+    const NEAR_R2 = 125 * 125;   // 이만큼 안쪽의 몬스터만 그 사람에게 보낸다 (안개가 140m에서 끝난다)
+    const muRow = (m) => [m.i, r2(m.x), r2(m.z), r2(m.ry), Math.max(0, Math.round(m.hp)), (m.windup > 0 || (m.sk && !m.sk.done) || (m.sks && m.sks.length) ? 1 : 0) | (m.stun > 0 ? 2 : 0) | (m.dot ? 4 : 0) | (m.vuln > 0 ? 8 : 0) | (m.air > 0 ? 16 : 0)];
     const rnd = (a, b) => a + Math.random() * (b - a);
     const pick = (a) => a[Math.floor(Math.random() * a.length)];
     const r2 = (v) => Math.round(v * 100) / 100;
@@ -512,10 +514,26 @@
         const after = [m.x, m.z, m.ry, Math.round(m.hp), m.windup > 0 || !!(m.sk && !m.sk.done) || !!(m.sks && m.sks.length), m.stun > 0, !!m.dot, m.vuln > 0, m.air > 0];
         if (m.dirty || after.some((v, k) => v !== m.before[k])) {
           m.dirty = false;
-          updates.push([m.i, r2(m.x), r2(m.z), r2(m.ry), Math.max(0, Math.round(m.hp)), (m.windup > 0 || (m.sk && !m.sk.done) || (m.sks && m.sks.length) ? 1 : 0) | (m.stun > 0 ? 2 : 0) | (m.dot ? 4 : 0) | (m.vuln > 0 ? 8 : 0) | (m.air > 0 ? 16 : 0)]);
+          updates.push(muRow(m));
         }
       }
-      if (updates.length) broadcast({ t: 'mu', u: updates });
+      // 접속자마다 가까운(안개 안쪽) 몬스터만 보낸다: 멀리 있는 몬스터 소식까지 모두에게 보내던 것이 서버 전송량의 대부분이었다
+      // 처음 가까워진 몬스터는 바뀐 게 없어도 지금 상태를 한 번 보내서, 멀리 있던 동안 움직인 자리를 맞춘다
+      const byId = new Map(updates.map((u) => [u[0], u]));
+      for (const c of clients.values()) {
+        const p = c.pres || {};
+        if (typeof p.x !== 'number' || typeof p.z !== 'number') { if (updates.length) c.send({ t: 'mu', u: updates }); continue; }
+        const was = c.near, near = new Set(), out = [];
+        for (const m of monsters.values()) {
+          const dx = m.x - p.x, dz = m.z - p.z;
+          if (dx * dx + dz * dz > NEAR_R2) continue;
+          near.add(m.i);
+          const u = byId.get(m.i);
+          if (u) out.push(u); else if (!was || !was.has(m.i)) out.push(muRow(m));
+        }
+        c.near = near;
+        if (out.length) c.send({ t: 'mu', u: out });
+      }
     }
 
     // ---------- 바깥과 주고받기 ----------

@@ -26,6 +26,7 @@ const files = {
   '/sitemap.xml': { file: 'sitemap.xml', type: 'application/xml; charset=utf-8', cache: 'public, max-age=86400' },
   '/manifest.webmanifest': { file: 'manifest.webmanifest', type: 'application/manifest+json; charset=utf-8', cache: 'public, max-age=86400' },
   '/og.jpg': { file: 'og.jpg', type: 'image/jpeg', cache: 'public, max-age=604800' },
+  '/sfx.json': { file: 'sfx.json', type: 'application/json; charset=utf-8', cache: 'public, max-age=604800' },
   '/SkeletonUtils.js': { file: 'SkeletonUtils.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=604800' },
 };
 // 미리 구운 NPC 모델 (public/npcbake/*.json)
@@ -40,9 +41,16 @@ try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'npcbake'))) if (/^[a-z0
 // 배경 음악 (public/music/*.mp3): 압축하지 않고, 부분 요청(Range)을 받아 준다 (휴대폰 브라우저가 음악을 나눠 받는다)
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'fonts'))) if (/^[A-Za-z0-9_-]+\.woff2$/.test(fn)) files['/fonts/' + fn] = { file: 'fonts/' + fn, type: 'font/woff2', cache: 'public, max-age=2592000' }; } catch (e) {}
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'music'))) if (/^[a-z0-9_]+\.mp3$/.test(fn)) files['/music/' + fn] = { file: 'music/' + fn, type: 'audio/mpeg', cache: 'public, max-age=86400', raw: true }; } catch (e) {}
+// 지금 배포된 커밋: 효과음(sfx.json)처럼 자주 바뀌지 않는 작은 파일을 CDN의 이 커밋에서 받게 한다
+const GIT_SHA = process.env.RENDER_GIT_COMMIT || process.env.RAILWAY_GIT_COMMIT_SHA || '';
 for (const f of Object.values(files)) {
   f.body = fs.readFileSync(path.join(PUBLIC, f.file));
+  if (f.file === 'index.html' && /^[0-9a-f]{7,40}$/.test(GIT_SHA)) {
+    const html = f.body.toString('utf8'), m = /window\.ORLANDO_CDN="(https:\/\/cdn\.jsdelivr\.net\/gh\/[^@"]+@)[0-9a-f]+(\/[^"]*)"/.exec(html);
+    if (m) f.body = Buffer.from(html.replace('<script>window.ORLANDO_WS=', `<script>window.ORLANDO_CDN_HEAD="${m[1]}${GIT_SHA}${m[2]}";</script><script>window.ORLANDO_WS=`), 'utf8');
+  }
   if (!f.raw) f.gz = zlib.gzipSync(f.body, { level: 9 });
+  if (f.file === 'index.html') f.br = zlib.brotliCompressSync(f.body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: f.body.length } });   // 브라우저가 받으면 gzip보다 더 작게
   f.etag = '"' + require('crypto').createHash('sha1').update(f.body).digest('base64').slice(0, 20) + '"';   // 바뀌지 않았으면 304로 끝낸다
 }
 
@@ -65,9 +73,9 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': f.cache, ETag: f.etag, 'Accept-Ranges': 'bytes', 'Content-Length': L });
     return res.end(f.body);
   }
-  const gzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
-  res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': f.cache, ETag: f.etag, Vary: 'Accept-Encoding', ...(gzip ? { 'Content-Encoding': 'gzip' } : {}) });
-  res.end(gzip ? f.gz : f.body);
+  const ae = req.headers['accept-encoding'] || '', br = f.br && /\bbr\b/.test(ae), gzip = !br && /\bgzip\b/.test(ae);
+  res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': f.cache, ETag: f.etag, Vary: 'Accept-Encoding', ...(br ? { 'Content-Encoding': 'br' } : gzip ? { 'Content-Encoding': 'gzip' } : {}) });
+  res.end(br ? f.br : gzip ? f.gz : f.body);
 });
 
 // ---------- 동시접속 ----------
@@ -82,6 +90,30 @@ function broadcast(obj, except) {
   const msg = JSON.stringify(obj);
   for (const ws of clients.values()) if (ws !== except && ws.readyState === 1) ws.send(msg);
 }
+// 가까운 사람에게만 (멀리 있는 사람은 볼 수 없는 스킬 효과 등)
+const NEAR = 125;
+const isNear = (ws, x, z) => { const p = ws.pres; return typeof p.x !== 'number' || typeof x !== 'number' || Math.hypot(p.x - x, p.z - z) < NEAR; };
+function broadcastNear(obj, x, z, except) {
+  let msg = null;
+  for (const ws of clients.values()) if (ws !== except && ws.readyState === 1 && isNear(ws, x, z)) ws.send(msg || (msg = JSON.stringify(obj)));
+}
+// 위치 소식: 가까운 사람에게는 바로, 먼 사람에게는 3초에 한 번 마지막 것만 (접속자 목록·지도용)
+function broadcastPres(id, from) {
+  const d = from.pres;
+  let msg = null;
+  for (const ws of clients.values()) {
+    if (ws === from || ws.readyState !== 1) continue;
+    if (isNear(ws, d.x, d.z)) { if (ws.farPend) ws.farPend.delete(id); ws.send(msg || (msg = JSON.stringify({ t: 'p', id, d }))); }
+    else (ws.farPend || (ws.farPend = new Map())).set(id, from);
+  }
+}
+setInterval(() => {
+  for (const ws of clients.values()) {
+    if (!ws.farPend || !ws.farPend.size || ws.readyState !== 1) continue;
+    for (const [id, from] of ws.farPend) if (clients.get(id) === from) ws.send(JSON.stringify({ t: 'p', id, d: from.pres }));
+    ws.farPend.clear();
+  }
+}, 3000);
 const cleanText = (s, n) => (typeof s === 'string' ? s.replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, '').trim().slice(0, n) : '');
 // 다른 사람에게 그대로 전달하기 전에, 정해진 모양만 남긴다
 function cleanPresence(d) {
@@ -151,7 +183,7 @@ wss.on('connection', (ws) => {
     if (m.t === 'p') {
       ws.pres = cleanPresence(m.d);
       sim.presence(id, ws.pres);
-      broadcast({ t: 'p', id, d: ws.pres }, ws);
+      broadcastPres(id, ws);
     } else if (m.t === 'hit') {
       sim.hit(id, m.d);
     } else if (m.t === 'fx' && m.d && typeof m.d === 'object') {
@@ -159,7 +191,7 @@ wss.on('connection', (ws) => {
       const d = m.d, n = (v) => (typeof v === 'number' && isFinite(v) ? Math.round(v * 100) / 100 : 0);
       const out = { k: ['p', 'r', 'b', 'l'].includes(d.k) ? d.k : 'b' };
       for (const key of ['x', 'y', 'z', 'dx', 'dy', 'dz', 'sp', 's', 'c', 'g', 'd', 'r', 'a']) if (key in d) out[key] = n(d[key]);
-      broadcast({ t: 'fx', id, d: out }, ws);
+      broadcastNear({ t: 'fx', id, d: out }, out.x, out.z, ws);
     } else if (m.t === 'dm' && m.d && typeof m.d === 'object' && typeof m.d.to === 'string') {
       // 파티·거래: 한 사람에게만 전달
       const to = clients.get(m.d.to);
