@@ -754,6 +754,8 @@ body.touch.inv-open #hotbar{display:none}
 #hideFx.on{opacity:1}
 #bowHud{position:fixed;left:50%;top:50%;transform:translate(34px,-30px);text-align:left;pointer-events:none;color:#fff3d6;font-weight:700;font-size:13px;line-height:1.35;letter-spacing:.02em;white-space:nowrap;text-shadow:0 0 2px #000,0 0 5px #000,0 1px 1px #000}
 #bowHud[hidden]{display:none}
+#xbHud{position:fixed;left:50%;top:50%;transform:translate(-50%,22px);pointer-events:none;font-weight:700;font-size:12px;letter-spacing:.02em;white-space:nowrap;color:#fff3d6;text-shadow:0 0 2px #000,0 0 5px #000,0 1px 1px #000}
+#xbHud[hidden]{display:none}#xbHud i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:0;box-shadow:0 0 0 1px rgba(0,0,0,.6)}
 #bowHud .bar{width:84px;height:4px;margin:4px 0 0;background:rgba(0,0,0,.45);border:1px solid rgba(239,228,204,.5);border-radius:2px;overflow:hidden}
 #bowHud .bar i{display:block;height:100%;width:0;background:#f3cf6a}
 #bowHud.full{color:#ffd86a}#bowHud.full .bar i{background:#ffd86a}
@@ -913,6 +915,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <canvas id="c" tabindex="0" aria-label="오를란도 3D 월드"></canvas>
   <div id="hideFx" aria-hidden="true"></div>
   <div id="bowHud" hidden><span></span><div class="bar"><i></i></div></div>
+  <div id="xbHud" hidden><i></i><span></span></div>
   <div id="rayHud" hidden><span></span><div class="bar"><i></i></div></div>
   <div id="tags"></div>
 
@@ -2340,7 +2343,7 @@ const JOBS={
   priest:{name:'사제',from:'cleric',tier:2,bonus:[18,8,2,50],color:0xf0e0b0,weapon:'staff',crit:.08,pitch:'빛으로 아군을 지키고, 그 빛으로 적을 태운다.'},
   monk:{name:'승려',from:'cleric',tier:2,bonus:[26,10,3,30],color:0x8a5a30,weapon:'staff',crit:.1,pitch:'수행으로 단련한 몸과 마음.'},
   wizard:{name:'전광자',from:'mage',bonus:[10,7,1,25],color:0x4b2f7a,weapon:'staff',crit:.1,adv:['bmage','wizz'],pitch:'빛으로 표식을 새기고, 표식을 꿰뚫는다.'},
-  hunter:{name:'석궁병',from:'archer',bonus:[25,3,3,10],color:0x5b4a2c,weapon:'bow',noun:'석궁',crit:.12,pitch:'세 가지 화살을 장전하고, 덫을 놓고, 구른다.'},
+  hunter:{name:'석궁병',from:'archer',aspd:.88,bonus:[25,3,3,10],color:0x5b4a2c,weapon:'bow',noun:'석궁',crit:.12,pitch:'세 가지 화살을 장전하고, 덫을 놓고, 구른다.'},
   sniper:{name:'궁병',from:'archer',bonus:[10,6,1,10],color:0x3d4a3a,weapon:'bow',crit:.3,pitch:'세 번 이어 쏘고, 끝까지 당기고, 쏟아붓는다.'},
 };
 const BASES=['warrior','rogue','mage','archer'];
@@ -4976,6 +4979,60 @@ const TIER_LOOK=[
   {metal:0x3c3c4c,wood:0x1a1a22,acc:0x5444a8,gem:0x5038d0},
   {metal:0xf6e4a6,wood:0x6a4a1a,acc:0xffd060,gem:0xffe080}];
 function tierLook(t){return TIER_LOOK[Math.max(0,Math.min(9,t|0))];}
+/* ---------- 석궁 (석궁병): 두 손으로 쥐고, 시위를 걸고, 화살을 얹는다 ---------- */
+// 홈에 얹는 화살 세 가지 (화살 장전하기의 순서와 같다): 0 폭발 = 검은 화약 단지, 1 관통 = 길고 붉은 쇠촉, 2 감전 = 구리 코일 촉. 깃 색도 다르다
+// 화살은 +z를 향하고 꼬리(깃)가 원점 근처
+function xbBolts(){const all=new THREE.Group(),wd=mat(0x8a6a4a,{roughness:.8});
+  const head=[[0x2a2826,0xd8762a],[0x7a2a26,0xc83030],[0xb87333,0x3a7ad0]];
+  for(let k=0;k<3;k++){const b=new THREE.Group();b.visible=false;all.add(b);const [hc,fc]=head[k],hm=mat(hc,{metalness:k?.6:.2,roughness:k?.35:.8}),fm=mat(fc,{roughness:.7});
+    const sh=new THREE.Mesh(new THREE.CylinderGeometry(.009,.009,.2,5),wd);sh.rotation.x=Math.PI/2;sh.position.z=.1;b.add(sh);
+    for(const r of [-.6,.6]){const f=new THREE.Mesh(new THREE.BoxGeometry(.004,.034,.06),fm);f.position.set(0,0,.035);f.rotation.z=r;b.add(f);}
+    if(k===0){const pot=new THREE.Mesh(new THREE.SphereGeometry(.034,10,8),hm);pot.position.z=.225;pot.scale.z=1.25;b.add(pot);
+      const band=new THREE.Mesh(new THREE.TorusGeometry(.034,.007,5,12),fm);band.position.z=.225;b.add(band);
+      const fuse=new THREE.Mesh(new THREE.CylinderGeometry(.003,.003,.04,4),mat(0x3a2a1a));fuse.position.set(0,.04,.215);fuse.rotation.x=-.4;b.add(fuse);}
+    else if(k===1){const c=new THREE.Mesh(new THREE.ConeGeometry(.015,.1,4),hm);c.rotation.x=Math.PI/2;c.position.z=.25;b.add(c);
+      for(const s of [-1,1]){const w=new THREE.Mesh(new THREE.BoxGeometry(.004,.03,.03),hm);w.position.set(0,s*.012,.21);w.rotation.x=s*.5;b.add(w);}}
+    else{const c=new THREE.Mesh(new THREE.ConeGeometry(.016,.065,6),hm);c.rotation.x=Math.PI/2;c.position.z=.232;b.add(c);
+      for(let i=0;i<3;i++){const t=new THREE.Mesh(new THREE.TorusGeometry(.014,.004,4,10),hm);t.position.z=.17+i*.014;b.add(t);}}}
+  all.traverse(o=>{if(o.isMesh)o.castShadow=true;});return all;}
+function xbShowBolt(all,k){if(!all)return;all.children.forEach((b,i)=>b.visible=i===k);}
+// d: 시위를 당긴 정도 (0 = 풀려서 앞, 1 = 걸쇠에 걸림), k: 홈 위에 보일 화살 (-1이면 빈 홈)
+const _xbT=new THREE.Vector3(),_xbC=new THREE.Vector3(),_xbD=new THREE.Vector3(),_xbUp=new THREE.Vector3(0,1,0);
+function xbSet(w,d,k){const x=w&&w.userData.xb;if(!x)return;d=d<.01?0:d>.99?1:d;
+  if(x.d!==d){x.d=d;_xbC.set(0,.1,x.rest+(x.latch-x.rest)*d);
+    for(const [m,t] of [[x.L,x.tipL],[x.R,x.tipR]]){_xbD.subVectors(_xbC,t);m.scale.y=_xbD.length();m.position.copy(t).add(_xbC).multiplyScalar(.5);m.quaternion.setFromUnitVectors(_xbUp,_xbD.normalize());}}
+  if(x.k!==k){x.k=k;xbShowBolt(x.bolts,k);}}
+// 석궁 위 두 손 자리 (석궁 기준): 오른손은 손잡이(원점), 왼손은 앞 받침, 화살을 얹는 홈
+const XB_FORE=new THREE.Vector3(0,-.005,.17),XB_RAIL=new THREE.Vector3(0,.13,.08);
+// 화살 장전하기에서 오른손이 가는 곳: g 손잡이 → q 등의 화살통 → r 홈 (화살을 얹는다) → g
+const XB_RH=[[0,'g'],[.12,'g'],[.32,'q'],[.4,'q'],[.6,'r'],[.68,'r'],[.86,'g'],[1,'g']];
+function xbKey(keys,p){let a=keys[0],b=keys[keys.length-1];for(let i=0;i<keys.length-1;i++)if(p>=keys[i][0]&&p<=keys[i+1][0]){a=keys[i];b=keys[i+1];break;}
+  return [a[1],b[1],_sm(Math.max(0,Math.min(1,(p-a[0])/Math.max(1e-4,b[0]-a[0]))))];}
+function xbLerp(keys,p){const [A,B,k]=xbKey(keys,p);return A.map((v,i)=>v+(B[i]-v)*k);}
+// 지금 동작에서 석궁이 어떤 상태인지: 자세 묶음, 시위, 홈의 화살, 손에 든 화살
+function xbState(mo,p,k){const v=mo&&p<1?mo.v:'';
+  if(v==='bowshot')return{set:'shot',p,draw:p<.45?0:_sm(Math.min(1,(p-.45)/.35)),rail:-1,hand:-1};   // 쏘면 시위가 튕겨 나가고, 반동이 가라앉은 뒤 다시 건다
+  if(v==='xreload')return{set:'load',p,draw:1,rail:p>=.62?k:-1,hand:p>.33&&p<.62?k:-1};
+  return{set:'idle',p:1,draw:1,rail:k,hand:-1};}
+// 석궁 자세 [x,y,z, 숙이기(+면 앞이 아래), 돌리기, 기울이기]
+// 3인칭은 윗몸 기준 손잡이 자리, 1인칭은 카메라 기준
+const XB3={idle:[.14,.18,.28,.42,-.32,0],
+  shot:[[0,[.16,.42,.34,0,-.03,0]],[.1,[.16,.45,.29,-.24,-.03,0]],[.3,[.16,.42,.34,0,-.03,0]],[.8,[.16,.42,.34,0,-.03,0]],[1,[.14,.18,.28,.42,-.32,0]]],
+  load:[[0,[.14,.18,.28,.42,-.32,0]],[.16,[.06,.3,.36,-.45,-.55,.35]],[.84,[.06,.3,.36,-.45,-.55,.35]],[1,[.14,.18,.28,.42,-.32,0]]],
+  q:[.13,.7,-.22]};
+const XBF={idle:[.19,-.21,-.52,.04,.08,0],
+  shot:[[0,[.11,-.16,-.52,0,.03,0]],[.1,[.11,-.13,-.45,.2,.03,0]],[.3,[.11,-.16,-.52,0,.03,0]],[.8,[.11,-.16,-.52,0,.03,0]],[1,[.19,-.21,-.52,.04,.08,0]]],
+  load:[[0,[.19,-.21,-.52,.04,.08,0]],[.16,[.08,-.19,-.5,.5,.55,.55]],[.84,[.08,-.19,-.5,.5,.55,.55]],[1,[.19,-.21,-.52,.04,.08,0]]],
+  q:[.42,-.85,-.2]};
+function xbPose(T,st){return st.set==='idle'?T.idle:xbLerp(T[st.set],st.p);}
+// 오른손 자리: 손잡이·홈은 석궁(M: 석궁 행렬)을 따라가고, 화살통은 몸에 붙어 있다
+function xbRightHand(T,st,M,out){const pt=a=>a==='q'?new THREE.Vector3(...T.q):(a==='r'?XB_RAIL.clone():new THREE.Vector3()).applyMatrix4(M);
+  if(st.set!=='load')return out.set(0,0,0).applyMatrix4(M);const [A,B,k]=xbKey(XB_RH,st.p);return out.copy(pt(A)).lerp(pt(B),k);}
+// 막대 팔을 목표점(윗몸 기준)에 닿게: 위팔·아래팔 길이가 같은 두 마디 팔, 어깨는 x·z만 돌린다
+function stickReach(arm,t){const L=.36,s=arm.sh.position,dx=t.x-s.x,dy=t.y-s.y,dz=t.z-s.z;let d=Math.hypot(dx,dy,dz);d=Math.max(.08,Math.min(2*L-.002,d));
+  const e=-Math.acos(Math.max(-1,Math.min(1,(d*d-2*L*L)/(2*L*L)))),vy=-L-L*Math.cos(e),vz=-L*Math.sin(e);
+  const sz=Math.max(-1,Math.min(1,-dx/vy)),Y=vy*Math.sqrt(1-sz*sz);
+  arm.sh.rotation.set(Math.atan2(dz,dy)-Math.atan2(vz,Y),0,Math.asin(sz));arm.el.rotation.x=e;}
 function stickWeapon(kind,job,tier=-1){
   const g=new THREE.Group();
   const basic=!!(JOBS[job]&&!JOBS[job].from)&&tier>=0&&tier<=9,TL=basic?tierLook(tier):null;   // 기본류(기본 직업 생김새)만 등급별 색이 바뀐다
@@ -5291,17 +5348,17 @@ function stickWeapon(kind,job,tier=-1){
       g.userData.orb=orb;g.userData.ring=ring;
     }
   }else if(kind==='bow'&&job==='hunter'){
-    // 석궁: 손잡이가 원점, 개머리(나무 몸통)는 앞뒤(z)로 길게, 앞(+z)에 가로로 누운 활, 시위는 걸쇠까지 당겨 둔 채
+    // 석궁: 손잡이가 원점, 개머리(나무 몸통)는 앞뒤(z)로 길게, 앞(+z)에 가로로 누운 활
+    // 시위와 홈 위의 화살은 xbSet이 움직인다: 쏘면 시위가 앞으로 튕겨 나갔다가 다시 걸쇠에 걸리고, 화살 장전하기로 얹은 화살만 홈 위에 보인다
     const stock=mat(0x5a3a1e,{roughness:.7,flatShading:false}),iron=mat(0x4a4e54,{metalness:.65,roughness:.35,flatShading:false});
     add(box(.06,.07,.82,stock),0,.06,-.12);add(box(.07,.12,.2,stock),0,.02,-.5);add(box(.035,.13,.05,stock),0,-.05,0,-.25,0,0);
     add(box(.02,.012,.42,iron),0,.1,.02);add(box(.05,.05,.06,iron),0,.07,.26);
+    add(box(.04,.025,.03,iron),0,.115,-.03);add(box(.012,.05,.012,iron),0,-.01,-.06,.3,0,0);   // 걸쇠와 방아쇠
     const pts=[[-.46,.1],[-.36,.2],[-.2,.27],[0,.29],[.2,.27],[.36,.2],[.46,.1]].map(([x,z])=>new THREE.Vector3(x,.08,z));
     g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),24,.022,6,false),iron));
-    {const sm=mat(0xf0ead8);const latch=new THREE.Vector3(0,.1,-.02);for(const sx of [-1,1]){const tip=new THREE.Vector3(sx*.46,.08,.1),mid=tip.clone().add(latch).multiplyScalar(.5),L=tip.distanceTo(latch);
-        const c=new THREE.Mesh(new THREE.CylinderGeometry(.004,.004,L,4),sm);c.position.copy(mid);c.lookAt(latch);c.rotateX(Math.PI/2);g.add(c);}}
-    add(new THREE.Mesh(new THREE.ConeGeometry(.012,.06,4),iron),0,.115,.14,Math.PI/2,0,0);add(cyl(.008,.008,.2,mat(0x8a6a4a),5),0,.115,.02,Math.PI/2,0,0);
-    {const sg=new THREE.Group();sg.visible=false;const sm=mat(0xf0ead8);const seg=()=>{const c=new THREE.Mesh(new THREE.CylinderGeometry(.004,.004,1,4),sm);sg.add(c);return c;};g.userData.string={g:sg,up:seg(),dn:seg(),half:.3,d:-1};g.add(sg);}
-    g.rotation.z=0;
+    const sm=mat(0xf0ead8),seg=()=>{const c=new THREE.Mesh(new THREE.CylinderGeometry(.005,.005,1,4),sm);g.add(c);return c;};
+    const bolts=xbBolts();bolts.position.set(0,.125,-.03);bolts.scale.setScalar(1.25);g.add(bolts);
+    g.userData.xb={L:seg(),R:seg(),tipL:new THREE.Vector3(-.46,.08,.1),tipR:new THREE.Vector3(.46,.08,.1),rest:.1,latch:-.02,bolts,d:null,k:null};xbSet(g,1,-1);
   }else if(kind==='bow'){
     // 활: 가운데 손잡이가 원점, 활 등은 +z(앞)으로 볼록, 시위는 뒤(-z)
     const sniper=job==='sniper',hunter=job==='hunter';
@@ -5623,12 +5680,15 @@ function makeStickPlayer(job,gear){
   // 무기가 없으면 어느 직업이든 맨손
   const style=(G.weapon??-1)<0?'fist':J.weapon==='shield'?'shield':J.weapon;
   let w,w2=null,shield=null,quiver=null,nock=null,shdInfo=null;
-  if(style==='bow'){w=stickWeapon('bow',dj,G.weapon);const holder=new THREE.Group();holder.add(w);AL.hand.add(holder);w=holder;
+  let xb=null,xbH=null;
+  if(style==='bow'){w=stickWeapon('bow',dj,G.weapon);const holder=new THREE.Group();holder.add(w);
+    if(w.userData.xb){xb=w;upper.add(holder);xbH=xbBolts();xbH.position.y=-.03;xbH.scale.setScalar(.85);AR.hand.add(xbH);}   /* 석궁: 윗몸 앞에 자세대로 두고 두 손이 찾아가 쥔다 (animStick) */
+    else AL.hand.add(holder);w=holder;
     quiver=new THREE.Group();const q=new THREE.Mesh(new THREE.CylinderGeometry(.07,.06,.48,10),mat(0x5a3a22));quiver.add(q);
     const qs=new THREE.Mesh(new THREE.TorusGeometry(.075,.012,4,12),mat(0xc79a3e,{metalness:.5}));qs.rotation.x=Math.PI/2;qs.position.y=.22;quiver.add(qs);
     for(let k=0;k<4;k++){const f=new THREE.Mesh(new THREE.BoxGeometry(.008,.08,.05),mat([0xd8d0c0,0xc04030,0xd8d0c0,0x3060b0][k]));f.position.set((k%2-.5)*.05,.3,(k>1?1:-1)*.02);quiver.add(f);}
     quiver.position.set(.1,.36,-.2);quiver.rotation.z=-.45;upper.add(quiver);
-    nock=arrowMesh();nock.visible=false;AR.hand.add(nock);}
+    if(!xb){nock=arrowMesh();nock.visible=false;AR.hand.add(nock);}}
   else if(style==='staff'){w=stickWeapon('staff',dj,G.weapon);const holder=new THREE.Group();holder.add(w);AR.hand.add(holder);if(w.userData.tall)holder.userData.upright=1;w=holder;   /* 위저드 지팡이: 서 있을 땐 땅과 수직으로 */
     if(JOBS[job].sub==='grimoire'&&(G.sub??-1)>=0){const bk=makeGrimoire(G.sub);bk.position.set(0,0,.1);bk.rotation.set(-Math.PI/2,0,0);AL.hand.add(bk);shield=bk;}}   /* 위저드: 왼손에 펼친 그리모어 */
   else if(style==='shield'){
@@ -5651,7 +5711,7 @@ function makeStickPlayer(job,gear){
     if(style==='sword'&&(G.sub??-1)>=0){const sh=new THREE.Group();const S2=makeShield('buckler',G.sub);mountShield(S2,'buckler',.8);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;}}
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   const bodyG=new THREE.Group();while(g.children.length)bodyG.add(g.children[0]);g.add(bodyG);
-  g.userData={mats,stick:{shd:shdInfo,L,R,AL,AR,upper,torso,head,style,w,w2,shield,nock,body:bodyG,one:!!ONE_DAGGER[job],fwd:dj==='thief'||dj==='rogue',rg:dj==='rogue'},weapon:w,head,torso};
+  g.userData={mats,stick:{shd:shdInfo,L,R,AL,AR,upper,torso,head,style,w,w2,shield,nock,xb,xbH,body:bodyG,one:!!ONE_DAGGER[job],fwd:dj==='thief'||dj==='rogue',rg:dj==='rogue'},weapon:w,head,torso};
   return g;
 }
 /* 막대 인형에 외모 입히기: 새 캐릭터 화면·'외모 바꾸기'에서 고른 성별·머리·머리색·눈색·피부·키·체형·윗옷·바지 */
@@ -5751,7 +5811,11 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   S.AR.hand.rotation.y=ex&&ex.wy?ex.wy:0;S.AR.hand.rotation.z=0;if(S.fwd&&S.w)S.w.rotation.y=-THIEF_KY+(atk&&mo&&mo.v==='reap'?reapTwist(swing):atk&&mo&&mo.v==='reapOut'?reapTwist2(swing):0);
   S.head.position.y=.88+Math.sin(t*2)*.012*(1-k);S.head.rotation.y=-q[6]*.6;S.head.rotation.x=ex&&ex.rl>.2&&ex.rl<6?.7:0;   // 구르는 동안 턱 당기기 (몸 축 방향과 무관하게 앞으로)
   // 활과 지팡이는 손 방향과 상관없이 세워 든다
-  if(S.style==='bow'){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.w.rotation.set(-lx,0,-S.AL.sh.rotation.z);
+  if(S.xb){const xl=typeof player!=='undefined'&&mesh===player?(P&&P.xload&&P.buffs.xload?P.xload.k:-1):(mesh.userData.xl??-1);
+    const st=xbState(mo,swing,xl),c=xbPose(XB3,st);S.w.position.set(c[0],c[1],c[2]);S.w.rotation.set(c[3],c[4],c[5]);S.w.scale.setScalar(.85);S.w.updateMatrix();
+    xbSet(S.xb,st.draw,st.rail);xbShowBolt(S.xbH,st.hand);
+    stickReach(S.AR,xbRightHand(XB3,st,S.w.matrix,_xbT));stickReach(S.AL,_xbT.copy(XB_FORE).applyMatrix4(S.w.matrix));S.AR.hand.rotation.set(0,0,0);S.AL.hand.rotation.set(0,0,0);}
+  else if(S.style==='bow'){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.w.rotation.set(-lx,0,-S.AL.sh.rotation.z);
     if(S.nock)S.nock.visible=atk&&(mo&&mo.k3&&mo.v==='bowdraw'?swing>.1:mo&&mo.k3&&mo.v==='bowshot'?swing<.05:(swing>.15&&swing<.6));
     S.bowDrawOn=!!(atk&&mo&&mo.k3&&(mo.v==='bowdraw'?swing>.1:mo.v==='bowshot'?swing<.05:false));
     if(S.nock&&S.nock.visible){if(mo&&mo.k3&&(mo.v==='bowdraw'||mo.v==='bowshot')){   // 화살은 몸이 보는 앞쪽을 똑바로 향한다
@@ -6157,7 +6221,7 @@ const MOTION_OF={
   pierce2:{v:'shoot',dur:.8,c:.35},blast:{v:'quick',n:1,dur:.5,a:1.25},precise:{v:'channel',dur:.8,a:.6,sd:-1},scatter:{v:'multi',n:2,dur:.75},doom:{v:'shoot',dur:1.15,c:.38,a:1.35},
 };
 // 활 기본공격: 시위 당기기(누르고 있는 동안 .99에서 멈춘다) → 쏘기
-Object.assign(MOTION_OF,{xload:{v:'pump',dur:.5,a:.7},xtrap:{v:'place',dur:.6},triple:{v:'shoot',dur:.42,c:.1},pull2:{v:'pump',dur:.5,a:.7},barrage:{v:'multi',dur:.45},arrows:{v:'multi',dur:.6},pull:{v:'pump',dur:.5,a:.7},bdraw:{v:'bowdraw',dur:.8},bshot:{v:'bowshot',dur:.42},rapid:{v:'pump',dur:.5,a:.7},roll:{v:'roll',dur:.7},burstout:{v:'channel',dur:.6},holycircle:{v:'castup',dur:.7},lightning:{v:'quick',n:1,dur:.45},flame:{v:'flamecast',dur:.6},empower:{v:'pump',dur:.7,a:.8},dupe:{v:'pump',dur:.6,a:.7},approach:{v:'dash',dur:.5},counterm:{v:'shove',dur:.55,a:1.1},leapblast:{v:'leap',j:.5,dur:.45},lbcast:{v:'staffshot',dur:.5},whack:{v:'overhead',dur:.55,a:1.1},grasp:{v:'castdown',dur:.7,a:1.2},beams:{v:'channel',dur:1.0,a:1.1},farblast:{v:'castup',dur:1.5,a:1.15},fbfire:{v:'staffshot',dur:.5,a:1.2},ride:{v:'ride',dur:1},holyray:{v:'channel',dur:.8},angel:{v:'castup',dur:.8},fizzle:{v:'pump',dur:.45,a:.5},roll0:{v:'roll',dur:.7,dir:0},roll4:{v:'roll',dur:.7,dir:4}});
+Object.assign(MOTION_OF,{xload:{v:'xreload',dur:.7},xtrap:{v:'place',dur:.6},triple:{v:'shoot',dur:.42,c:.1},pull2:{v:'pump',dur:.5,a:.7},barrage:{v:'multi',dur:.45},arrows:{v:'multi',dur:.6},pull:{v:'pump',dur:.5,a:.7},bdraw:{v:'bowdraw',dur:.8},bshot:{v:'bowshot',dur:.42},rapid:{v:'pump',dur:.5,a:.7},roll:{v:'roll',dur:.7},burstout:{v:'channel',dur:.6},holycircle:{v:'castup',dur:.7},lightning:{v:'quick',n:1,dur:.45},flame:{v:'flamecast',dur:.6},empower:{v:'pump',dur:.7,a:.8},dupe:{v:'pump',dur:.6,a:.7},approach:{v:'dash',dur:.5},counterm:{v:'shove',dur:.55,a:1.1},leapblast:{v:'leap',j:.5,dur:.45},lbcast:{v:'staffshot',dur:.5},whack:{v:'overhead',dur:.55,a:1.1},grasp:{v:'castdown',dur:.7,a:1.2},beams:{v:'channel',dur:1.0,a:1.1},farblast:{v:'castup',dur:1.5,a:1.15},fbfire:{v:'staffshot',dur:.5,a:1.2},ride:{v:'ride',dur:1},holyray:{v:'channel',dur:.8},angel:{v:'castup',dur:.8},fizzle:{v:'pump',dur:.45,a:.5},roll0:{v:'roll',dur:.7,dir:0},roll4:{v:'roll',dur:.7,dir:4}});
 const M3=['rx','rz','re','lx','lz','le','tw','ln','wr','sp','lf','cr','wy','kr','rl'];
 // 3인칭 열쇠 자세들
 function verb3(v,o,style){
@@ -6855,6 +6919,8 @@ const SFX_DEF={
   bow:(o,t,p)=>{_tone(o,'triangle',220*p,140*p,t,.16,.6);_noise(o,'highpass',3000,5000,t,.06,.5,1);_noise(o,'bandpass',1800,900,t+.02,.14,.35,2);},
   cast:(o,t,p)=>{_tone(o,'sine',420*p,1100*p,t,.28,.45,.02);_tone(o,'triangle',840*p,1700*p,t+.03,.22,.2,.02);_noise(o,'bandpass',4000,2500,t,.25,.2,3,.03);},
   fire:(o,t,p)=>{_noise(o,'lowpass',2500*p,500,t,.45,.9,1,.02);_tone(o,'sawtooth',90*p,60,t,.35,.25);},
+  xb_click:(o,t,p)=>{_tone(o,'square',2100*p,1600*p,t,.03,.3,.001);_noise(o,'highpass',4500,3500,t,.035,.55,1,.001);_tone(o,'triangle',520*p,380*p,t+.012,.07,.35,.002);},   // 석궁 걸쇠가 딸깍 걸리는 소리
+  xb_slide:(o,t,p)=>{_noise(o,'bandpass',1500*p,2600*p,t,.16,.35,3,.02);},   // 화살통에서 화살을 뽑는 소리
   ice:(o,t,p)=>{[0,.04,.08].forEach((d,i)=>_tone(o,'sine',1800*p+i*400,2400*p+i*300,t+d,.18,.25));_noise(o,'highpass',5000,7000,t,.25,.3,1);},
   zap:(o,t,p)=>{_tone(o,'sawtooth',900*p,120*p,t,.22,.45);_noise(o,'highpass',2000,6000,t,.18,.5,1);},
   holy:(o,t,p)=>{[523,659,784,1046].forEach((f,i)=>_tone(o,'sine',f*p,f*p,t+i*.06,.6,.25,.02));},
@@ -13146,7 +13212,7 @@ function animBiped(mesh,speed,t){
 /* ---------- 1인칭 손 ---------- */
 let viewModel=null;
 const SWING_SPD={sword:2.1,shield:.95,dagger:2.8,staff:1.85,bow:1.8};
-const swingSpd=job=>P&&!P.equip.weapon?2.6:JOBS[job]&&JOBS[job].aspd?SWING_SPD.dagger/JOBS[job].aspd:job==='swordsman'||job==='swordmaster'?(job==='swordsman'?2.4:2.7)*(1+famLv()*.05*(P&&P.buffs.fam?P.famN||0:0)):SWING_SPD[JOBS[job]?(JOBS[job].weapon):'sword']||2;
+const swingSpd=job=>P&&!P.equip.weapon?2.6:JOBS[job]&&JOBS[job].aspd?(SWING_SPD[JOBS[job].weapon]||SWING_SPD.dagger)/JOBS[job].aspd:job==='swordsman'||job==='swordmaster'?(job==='swordsman'?2.4:2.7)*(1+famLv()*.05*(P&&P.buffs.fam?P.famN||0:0)):SWING_SPD[JOBS[job]?(JOBS[job].weapon):'sword']||2;
 function fpHand(side,root,skinC=0xf6dccb,sleeveC=0x24201c){
   const g=new THREE.Group();
   // 주먹: 손등이 조금 넓은 둥근 주먹 + 엄지
@@ -13195,8 +13261,9 @@ function makeViewModel(job){const jobReal=job;job=drawJobOf(jobReal,P?wclsOf(P.e
   else if(style==='dagger'){(ONE_DAGGER[job]?[R]:[R,L]).forEach((h,k)=>{let w=stickWeapon('dagger',job,G.weapon);if(job==='thief'||job==='rogue'){const g=new THREE.Group();w.rotation.y=job==='rogue'?-Math.PI/2:Math.PI/2;g.add(w);if(job==='thief')u.kIn=w;w=g;}const tz=ONE_DAGGER[job]?-.05:-.55;w.rotation.set(-.45,0,k?.55:tz);w.scale.setScalar(.95);h.add(w);});L.visible=!ONE_DAGGER[job];if(ONE_DAGGER[job])u.oneD=1;}
   else if(style==='staff'){const w=stickWeapon('staff',job,G.weapon);if(job==='bmage'){w.scale.setScalar(.95);w.position.set(.02,.16,-.1);w.rotation.set(-1.05,0,-.2);}else if(w.userData.tall){w.scale.setScalar(.7);w.position.set(0,-.3,0);w.rotation.set(0,0,0);}else{w.scale.setScalar(.62);w.position.y=-.1;w.rotation.set(-.12,0,-.08);}R.add(w);u.orb=w.userData.orb;u.ring=w.userData.ring;L.visible=true;
     if(J.sub==='grimoire'&&(G.sub??-1)>=0){const bk=makeGrimoire(G.sub);bk.scale.setScalar(1.15);bk.position.set(.03,.0,-.05);bk.rotation.set(.45,0,.1);L.add(bk);u.hasL=true;u.grim=bk;}}
-  else if(style==='bow'&&job==='hunter'){const w=stickWeapon('bow',job,G.weapon);w.rotation.set(-.04,Math.PI,0);w.scale.setScalar(.52);w.position.set(-.14,.26,-.1);R.add(w);L.visible=false;   /* 석궁: 오른손으로 앞을 겨눈다 */
-    const a=arrowMesh();a.visible=false;R.add(a);u.arrow=a;u.bow=w;u.xbow=true;}
+  else if(style==='bow'&&job==='hunter'){const w=stickWeapon('bow',job,G.weapon);w.scale.setScalar(.5);root.add(w);L.visible=true;u.hasL=true;u.xbow=w;   /* 석궁: 두 손으로 쥐고 앞을 겨눈다 (updateViewModel이 손을 석궁에 붙인다) */
+    const hb=xbBolts();hb.scale.setScalar(.5);hb.rotation.set(-.3,Math.PI,0);R.add(hb);u.xbH=hb;
+    w.traverse(o=>{if(o.isMesh&&o.material&&o.material.isMeshStandardMaterial){const m=o.material.clone();m.metalness=Math.min(m.metalness,.3);m.roughness=Math.max(m.roughness,.6);o.material=m;}});}
   else if(style==='bow'){const w=stickWeapon('bow',job,G.weapon);w.rotation.set(0,Math.PI,0);w.scale.setScalar(.52);L.add(w);L.visible=true;
     const a=arrowMesh();a.rotation.y=Math.PI;a.visible=false;R.add(a);u.arrow=a;u.bow=w;}
   // 무기를 빼면 1인칭에서도 손만 보인다 (보조무기 방패는 그대로)
@@ -13233,6 +13300,9 @@ function updateViewModel(dt,moving){
   }else{apply(u.R,F.R,false);apply(u.L,u.grim?FP_GRIM:F.L,false);if(u.style==='sword')u.L.visible=!!u.hasL;if(u.swapLR)u.L.visible=!!u.hasL;if(u.noR)u.R.visible=false;}
   if(u.swapLR){const L=u.L,R=u.R,lp=L.position.clone(),lr=L.rotation.clone(),lv=L.visible,rv=R.visible;
     L.position.set(-R.position.x,R.position.y,R.position.z);L.rotation.set(R.rotation.x,-R.rotation.y,-R.rotation.z);R.position.set(-lp.x,lp.y,lp.z);R.rotation.set(lr.x,-lr.y,-lr.z);L.visible=rv;R.visible=lv;}
+  if(u.xbow){const xl=P&&P.xload&&P.buffs.xload?P.xload.k:-1,st=xbState(myMo,swingT,xl),c=xbPose(XBF,st),w=u.xbow;
+    w.position.set(c[0]+sx,c[1]+sy-jumpY*.02,c[2]);w.rotation.set(c[3],Math.PI+c[4],c[5]);w.updateMatrix();xbSet(w,st.draw,st.rail);xbShowBolt(u.xbH,st.hand);
+    xbRightHand(XBF,st,w.matrix,u.R.position);u.R.rotation.set(.2,0,0);u.L.position.copy(XB_FORE).applyMatrix4(w.matrix);u.L.rotation.set(.3,0,.5);u.R.visible=u.L.visible=true;}
   if(u.A){for(const h of [u.R,u.L]){h.position.y+=.07;h.position.z+=.03;}viewModel.updateMatrixWorld(true);u.R.userData.arm.visible=u.L.userData.arm.visible=false;try{pmFPPose(u.A,viewModel,{R:u.R,L:u.L});}catch(e){}}else{fpArm(u.R);fpArm(u.L);}
   if(u.style==='sword'&&(P.job==='barbarian')){const w=u.R.userData.wpn;if(w){if(w.userData.ry0===undefined)w.userData.ry0=w.rotation.y;w.rotation.y=w.userData.ry0+(myMoId==='axeb2'&&swingT<1?Math.PI:0);}}
   if(u.style==='dagger'){const w=u.R.userData.wpn;if(w){if(w.userData.rx0===undefined)w.userData.rx0=w.rotation.x;w.rotation.x=w.userData.rx0+(P&&P.deepHold&&!(myMoId==='deepstab'&&swingT<.82)?Math.PI:0);}}
@@ -14497,7 +14567,9 @@ function xloadFire(opt){const L=P.xload,S=L.S,pw=L.pw,o={...L.opt,...opt};P.xloa
     fireProj({color:0x60c0ff,rim:0x2080ff,speed:B.speed,size:B.size,mult:0,noDirect:true,arrow:true,g:2,life:1.4,opt:o,onHit:m=>{const c=mCenter(m);
       shared(()=>{for(const q of alive()){if(mCenter(q).distanceTo(c)>S.shockR+q.r)continue;damageMonster(q,S.shock*pw,{...o,slow:S.slow,noKnock:true});}});
       VFX.shock(c.clone().setY(m.mesh.position.y+.05),0x80d0ff,S.shockR,.4);VFX.burst(c,0xbfe8ff,22,5,.4,{mix:0xffffff});if(typeof boltFx==='function')for(let k=0;k<3;k++){const a=Math.random()*6.28;boltFx(c,c.clone().add(new THREE.Vector3(Math.cos(a)*S.shockR*.8,-.6,Math.sin(a)*S.shockR*.8)),0x80d0ff,.7);}sfx('mg_zap',c,.8,1.2);}});}
-  basicCd=B.cd;swingT=0;swingN++;myMoId='bshot';myMo=motionFor('bow','bshot');sfx('bw_fire');updateHud();}
+  basicCd=B.cd*(JOBS[P.job].aspd||1);swingT=0;swingN++;myMoId='bshot';myMo=motionFor('bow','bshot');sfx('bw_fire');xbRecockSfx();updateHud();}
+// 석궁: 쏜 뒤 시위를 다시 걸쇠에 거는 소리 (xbState의 'shot'에서 시위가 다 돌아오는 때)
+function xbRecockSfx(){if(P.job!=='hunter')return;const sn=swingN;setTimeout(()=>{if(mode==='world'&&swingN===sn)sfx('xb_click',null,.35,1.15);},MOTION_OF.bshot.dur*.8*1000);}
 const XTRAPS=[];
 function xtrapPlace(S,pw,opt){const q=player.position,y=heightAt(q.x,q.z),g=new THREE.Group();g.position.set(q.x,y+.02,q.z);
   const iron=new THREE.MeshStandardMaterial({color:0x5a5650,metalness:.6,roughness:.45}),dark=new THREE.MeshStandardMaterial({color:0x3a2a1a,roughness:.9});
@@ -14989,6 +15061,9 @@ function swingCap(){if(!P)return 1;if(P.ray&&myMoId==='holyray')return .8;if(P.f
 // 활 기본공격: 마우스를 누르면 시위를 당기기 시작하고, 떼면 쏜다. 오래 당길수록 치명타 확률이 오른다 (최대 +BOW_CRIT)
 const BOW_CRIT=.35,BOW_DMG=[.6,1.6],BOW_SPD=[22,52],BOW_G=7,BOW_LIFE=[.8,1.8];   // 당김 0→1: 대미지 배율, 화살 속도, 중력(끝까지 당기면 0), 사거리(초)
 function bowStat(dp){return{dmg:BOW_DMG[0]+(BOW_DMG[1]-BOW_DMG[0])*dp,crit:dp*BOW_CRIT,spd:BOW_SPD[0]+(BOW_SPD[1]-BOW_SPD[0])*dp,g:BOW_G*(1-dp),life:BOW_LIFE[0]+(BOW_LIFE[1]-BOW_LIFE[0])*dp};}
+// 석궁병: 지금 홈에 얹어 둔 화살 (조준점 바로 아래)
+let xbHudK=null;function xbHud(){const k=P&&mode==='world'&&P.xload&&P.buffs.xload?P.xload.k:-1;if(k===xbHudK)return;xbHudK=k;const h=$('#xbHud');if(!h)return;h.hidden=k<0;if(k<0)return;
+  h.querySelector('i').style.background=['#d8762a','#c83030','#3a7ad0'][k];h.querySelector('span').textContent=['폭발 화살 장전됨','관통 화살 장전됨','감전 화살 장전됨'][k];}
 function bowHud(){const h=$('#bowHud');if(!h)return;const on=!!(P&&P.bowDraw&&myMoId==='bdraw'&&mode==='world');if(h.hidden!==!on)h.hidden=!on;if(!on)return;
   const dp=bowDrawP(),s=bowStat(dp);h.firstChild.textContent=`대미지 ${Math.round(s.dmg*100)}%\n치명타 +${Math.round(s.crit*100)}%`;h.firstChild.style.whiteSpace='pre';h.querySelector('.bar i').style.width=(dp*100).toFixed(0)+'%';h.classList.toggle('full',dp>=1);}
 function bowDrawP(){return P&&P.bowDraw&&myMoId==='bdraw'?clamp((swingT-.12)/.76,0,1):0;}
@@ -15022,7 +15097,7 @@ function basicAttackInner(){
     const B=BASIC.bow;basicCd=B.cd*(P.equip.weapon&&JOBS[P.job].aspd||1)/(1+famLv()*.05*(P.famN||0))/buffV('draw');swingT=0;swingN++;myMoId='bshot';myMo=motionFor('bow','bshot');sfx('bw_fire');
     const opt={};if(P.buffs.roll){opt.critMul=2.2;delete P.buffs.roll;}
     if(P.xload&&P.buffs.xload){xloadFire(opt);return;}
-    fireProj({color:B.color,speed:B.speed,size:B.size,mult:B.mult,arrow:true,g:2.5,life:1.4,opt});return;}
+    xbRecockSfx();fireProj({color:B.color,speed:B.speed,size:B.size,mult:B.mult,arrow:true,g:2.5,life:1.4,opt});return;}
   const B=BASIC[JOBS[P.job].weapon];basicCd=B.cd*(P.job==='swordsman'?.86:P.job==='swordmaster'?.75:1)*(P.equip.weapon&&JOBS[P.job].aspd||1)/(1+famLv()*.05*(P.famN||0));swingT=0;swingN++;myMo=null;myMoId='';if(P.job==='barbarian'&&P.equip.weapon)sfx('a_basic');else if(/^(warrior|swordsman|swordmaster)$/.test(P.job)&&P.equip.weapon)sfx('w_swing');else if(jobChain(P.job).includes('mage'))sfx('mg_basic');else if(!(P.job==='fowler'&&B.kind==='melee')&&JOBS[P.job].weapon!=='shield')sfxWeapon(JOBS[P.job].weapon);   // 방패는 맞는 소리만 낸다
   // 방패병: 크게 휘둘러서, 방패가 앞으로 나가는 순간(약 0.5초 뒤)에 맞는다
   if(B.kind==='melee'&&P.job==='fowler'){const now=performance.now();fowlN=now-fowlAt<1300&&fowlN===2?3:2;  // 1타는 없앴다: 2타 → 3타
@@ -15214,7 +15289,10 @@ function useSkillInner(i){
     case 'scatter':{const n=S.count;sfx('bw_fire');for(let k=0;k<n;k++){const yo=(k-(n-1)/2)*S.spread;fireProj({color:0xf5e2b0,speed:BOW_SPD[1],size:BASIC.bow.size,mult:S.mult*pw,arrow:true,g:0,life:.42,yawOff:yo,opt});}
       fxAt=player.position.clone().add(new THREE.Vector3(0,1.3,0));break;}
     case 'xload':{const k=Math.floor(Math.random()*3);P.xload={k,pw,S,opt:{...opt}};P.buffs.xload={v:1,t:20,max:20};const c=[0xff8a30,0xd03040,0x60c0ff][k];
-      sfx('bw_draw',null,.7,1.4);VFX.aura(player.position,c,22,.7,1.2);log(['폭발 화살을 장전했다','관통 화살을 장전했다','감전 화살을 장전했다'][k],'sys');fxAt=player.position.clone().add(new THREE.Vector3(0,1.2,0));break;}
+      /* 마법 같은 빛 대신: 화살통에서 화살을 뽑아(쓱) 홈에 얹고 걸쇠에 건다(딸깍). 동작은 xbState('xreload') */
+      const dur=MOTION_OF.xload.dur*1000,sn=swingN+1;setTimeout(()=>{if(mode==='world')sfx('xb_slide',null,.8);},dur*.25);
+      setTimeout(()=>{if(mode!=='world'||swingN!==sn)return;sfx('xb_click',null,1);shakeT=Math.max(shakeT,.03);},dur*.62);
+      log(['폭발 화살을 장전했다','관통 화살을 장전했다','감전 화살을 장전했다'][k],'sys');fxAt=null;break;}
     case 'xtrap':{xtrapPlace(S,pw,opt);fxAt=null;break;}
     case 'triple':{if(!triRe){P.tri={id,n:1,until:tAll+S.window,hits:new Map()};cds[id]=0;}else{P.tri.n++;P.tri.until=tAll+S.window;}
       const T=P.tri;if(P.tri.n>S.re){P.tri=null;cds[id]=S.cd;}sfx('bw_fire');
@@ -15652,7 +15730,7 @@ function publishPresence(force){
   if(!room||!P||!player)return;
   const now=performance.now();if(!force&&now-lastPres<100)return;lastPres=now;
   const f2=v=>isFinite(v)?+v.toFixed(2):0;
-  const pr={n:P.name,j:P.job,lv:P.lv,x:f2(player.position.x),y:f2(player.position.y),z:f2(player.position.z),r:f2(cam.yaw%(Math.PI*2)),sw:swingN,on:mode!=='title'?1:0,al:P.hp>0&&mode!=='title'?1:0,pt:party?party.id:null,h:+clamp(P.hp/P.maxhp,0,1).toFixed(2),g:gearCode(gearOf(P)),st:sitting||P.fly?1:0,hd:P.hideT>tAll?1:0,sd:P.skills.deepaura?1:0,...shdPres(),mo:myMoId,ap:apCode(P.ap),cr:ccarPresence(),gd:guildPres()};
+  const pr={n:P.name,j:P.job,lv:P.lv,x:f2(player.position.x),y:f2(player.position.y),z:f2(player.position.z),r:f2(cam.yaw%(Math.PI*2)),sw:swingN,on:mode!=='title'?1:0,al:P.hp>0&&mode!=='title'?1:0,pt:party?party.id:null,h:+clamp(P.hp/P.maxhp,0,1).toFixed(2),g:gearCode(gearOf(P)),st:sitting||P.fly?1:0,hd:P.hideT>tAll?1:0,sd:P.skills.deepaura?1:0,...shdPres(),mo:myMoId,xl:P.xload&&P.buffs.xload?P.xload.k:-1,ap:apCode(P.ap),cr:ccarPresence(),gd:guildPres()};
   const key=JSON.stringify(pr);if(key===lastPresKey)return;lastPresKey=key;
   room.presence(pr).catch(e=>{presErr=(e&&e.code)||'오류';renderOnline();});
 }
@@ -15726,6 +15804,7 @@ function updateOthers(dt){
     let dr=(o.r+Math.PI)-m.rotation.y;dr=Math.atan2(Math.sin(dr),Math.cos(dr));m.rotation.y+=dr*Math.min(1,dt*10);
     if(o.pr&&o.pr.cr)ccarPeerSeat(o);
     const sp=prev.distanceTo(m.position)/Math.max(dt,1e-3);
+    m.userData.xl=o.pr&&o.pr.xl!=null?o.pr.xl:-1;   // 석궁병이 홈에 얹어 둔 화살
     {const rd=!!(o.pr&&o.pr.mo==='ride');if(rd!==!!m.userData.ride)setRide(m,rd);if(rd){fitRide(m);rideTrail(m,dt);}}
     if(o.swT<1)o.swT=Math.min(o.pr&&(o.pr.mo==='bdraw'&&o.moObj&&o.moObj.v==='bowdraw'||o.pr.mo==='ride')?.99:1,o.swT+dt*(o.moObj?1/o.moObj.dur:swingSpd(o.job)));
     {const u=m.userData;u.sitK=Math.max(0,Math.min(1,(u.sitK||0)+(u.sit?dt:-dt)*4));}
@@ -17088,7 +17167,7 @@ function loop(){
   try{loopBody();}catch(e){if(loopErr++<1){console.error(e);try{log('화면 갱신 중 오류: '+String(e&&e.message||e).slice(0,120),'bad');}catch(_){}}try{renderer.render(scene,camera);}catch(_){}}
 }
 function loopBody(){
-  const dt=Math.min(clock.getDelta(),.05);tAll+=dt;dtLast=dt;
+  const dt=Math.min(clock.getDelta(),.05);tAll+=dt;dtLast=dt;xbHud();
   if(mode!=='title')ccarTick(dt);
   if(mode==='title'){const a=tAll*.05;camera.position.set(Math.cos(a)*30,14,Math.sin(a)*30);camera.lookAt(0,2,0);apPreviewTick(dt);}
   else if(mode==='world')updateWorld(dt);
