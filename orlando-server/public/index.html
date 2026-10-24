@@ -1358,7 +1358,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@b8b1a9ad37867cd9c898bd8f9fa440f4f0892d08/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@6630dbdf4026794cb4d53e90259900eeed3a6975/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -10070,6 +10070,17 @@ void main(){vec4 c=texture2D(map,vUv);if(c.a<.5)discard;c.rgb*=uTint;float f=smo
   const _upd=()=>{if(tex.image&&tex.image.height){m.uniforms.uTH.value=tex.image.height;m.uniforms.uTW.value=tex.image.width;m.uniforms.uCols.value=Math.floor(tex.image.width/A.cols);}else setTimeout(_upd,300);};_upd();}
 const _cM4=new THREE.Matrix4(),_cQ=new THREE.Quaternion(),_cV=new THREE.Vector3(),_cS=new THREE.Vector3(),_cY=new THREE.Vector3(0,1,0),_cC=new THREE.Color();
 const CIT_SMALL=type=>{const id=CITM.ids[type]||'';return id.includes('boy')||id.includes('girl');};
+/* 마차 길: 길 위에 서 있거나 제자리에서 맴도는 주민은 치운다 (걷는 사람은 마차가 오면 비켜선다) */
+function crowdClearRoute(R){const cell=new Set(),k=(x,z)=>Math.floor(x/2)+','+Math.floor(z/2);
+  for(let i=0;i<R.length;i+=1)for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++)cell.add(k(R[i][0]+dx*1.6,R[i][1]+dz*1.6));
+  const on=(x,z)=>cell.has(k(x,z));let n=0;
+  CROWD.list=CROWD.list.filter(c=>{let hit=false;if(c.k==='st')hit=on(c.x,c.z);else if(c.k==='circ'){for(let a=0;a<6.28&&!hit;a+=.5)hit=on(c.x+Math.cos(a)*c.r,c.z+Math.sin(a)*c.r);}
+    if(hit){n++;if(c.I){scene.remove(c.I.g);(c.I.stick?CROWD.spool:CITM.pool)[c.I.id].push(c.I);c.I=null;}}return !hit;});
+  console.log('crowd off coach route',n);}
+/* 마차가 가까이 오면 비켜선다 (마차 몸통 둘레 밖으로) */
+function crowdYield(c,G,dt){let ox=0,oz=0;if(typeof CCAR!=='undefined'&&CCAR.ready)for(const car of CCAR.cars){if(!car.W.g.visible)continue;const dx=G.position.x-car.x,dz=G.position.z-car.z;if(dx*dx+dz*dz>64)continue;
+    const sn=Math.sin(car.ry),cs=Math.cos(car.ry),al=dx*sn+dz*cs,lat=dx*cs-dz*sn;if(al<-4.2||al>5.6||Math.abs(lat)>2.6)continue;const need=(lat<0?-2.6:2.6)-lat;ox+=need*cs;oz+=-need*sn;}
+  c.yx=(c.yx||0)+(ox-(c.yx||0))*Math.min(1,dt*6);c.yz=(c.yz||0)+(oz-(c.yz||0))*Math.min(1,dt*6);G.position.x+=c.yx;G.position.z+=c.yz;}
 /* 매 프레임: 가까운 사람은 모델, 중간은 스프라이트 */
 let _cwT=0;
 function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()/1000-CIT_T0;
@@ -10100,7 +10111,7 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
   for(const c of M.list){if(!c.I)continue;const q=refresh?c.q:citPose(c,t);const G=c.I.g;G.position.set(q.x,heightAt(q.x,q.z)+(c.y||0),q.z);
     const want=Math.atan2(q.vx,q.vz);let dr=Math.atan2(Math.sin(want-G.rotation.y),Math.cos(want-G.rotation.y));G.rotation.y+=Math.sign(dr)*Math.min(Math.abs(dr),Math.abs(dr)*dt*4.5+dt*1.2);   /* 사람처럼 천천히 돌아선다 */
     const mode=q.mode||c.mode,walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const vk=q.v??1;c.w=(c.w??0)+(((walking&&q.walk)?Math.max(.25,vk):0)-(c.w??0))*Math.min(1,dt*5);
-    if(c.I.stick){if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2*Math.max(.3,vk);stickWalkPose(G,c.ph,c.w,t);}else stickNpcPose(G,CIT_STICK_POSE[mode]||'idle',t+c.off);if(CIT_SMALL(c.type)&&G.scale.x>.8)G.scale.setScalar(c.sc*.7);continue;}
+    if(c.I.stick){crowdYield(c,G,dt);if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2*Math.max(.3,vk);stickWalkPose(G,c.ph,c.w,t);}else stickNpcPose(G,CIT_STICK_POSE[mode]||'idle',t+c.off);if(CIT_SMALL(c.type)&&G.scale.x>.8)G.scale.setScalar(c.sc*.7);continue;}
     if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2*Math.max(.3,vk);citPoseBones(c.I,c.ph,c.w,t+c.off,c.mode==='walk'||c.w<.05&&c.mode!=='carry'?'walk':c.mode);}
     else{c.ph+=dt*(mode==='hoe'?3.2:mode==='hammer'?4.5:mode==='reap'?2:1.5)*(c.v?c.v.tempo:1);citPoseBones(c.I,c.ph,0,t+c.off,mode);}}}
 let _mcT=0;
@@ -10262,7 +10273,13 @@ function _marcusLife(cx,cz){
     d.rotation.set(-PI/2,0,a+PI);d.position.set(dx,heightAt(dx,dz)+.13,dz);d.receiveShadow=true;G.add(d);claim(dx,dz,1.3);
     const g=npc({robe:pick([0xd87a3a,0x3a7ab0]),robe2:0xf0e8d8,hat:'hair',hatC:0xb07a3a,small:1},'chalk',x,z,a);addAct({g,pose:'chalk',ph:rnd()*9});
     for(const [cx2,col] of [[.18,0xf06070],[-.15,0x60b0f0],[.05,0xf0f0f0]]){const [qx,qz]=fw(x,z,a,.55,cx2);prop(new THREE.BoxGeometry(.03,.03,.09),M(col),qx,heightAt(qx,qz)+.02,qz,rnd()*3);}}
-  for(const [x0,z0,r] of [pz[2],pz[5],pz[6]].filter(Boolean)){const s=spotRing(x0,z0,r-3.2,4.4,1.8);if(!s)continue;const [x,z,a0]=s,a=a0+PI/2;
+  /* 체스: 길 한가운데가 아니라 건물 벽 옆 (여관가·주거 지구) */
+  const chessSpots=[];for(const [zid,n] of [['inns',3],['residential',1]]){const Zn=PL.zone(zid);if(!Zn)continue;let got=0;
+    for(let t=0;t<400&&got<n;t++){const mx=Zn.x+rr(-Zn.w/2-6,Zn.w/2+6),my=Zn.y+rr(-Zn.h/2-6,Zn.h/2+6),x=cx+mx,z=cz+my;
+      if(PL.nearStreet(mx,my,-1.8)||!free(x,z,1.9)||!clear(x,z,2.4)||!blocked(x,z,3.4))continue;
+      let wa=null;for(let k=0;k<16;k++){const q=k/16*PI*2;if(blocked(x+Math.sin(q)*3.3,z+Math.cos(q)*3.3,.2)){wa=q;break;}}if(wa===null)continue;
+      chessSpots.push([x,z,wa+PI/2]);claim(x,z,2.4);got++;}}
+  for(const [x,z,a] of chessSpots){
     const W=M(0x6a4a2a);prop(merge([[CYL(10),0,.36,0,.12,.72,.12,0x5a3a20],[CYL(12),0,.73,0,.9,.05,.9,0x7a5232],[BOX,0,.765,0,.46,.02,.46,0xe8dcc8],...Array.from({length:16},(_,i)=>[BOX,-.2+(i%4)*.13+((i>>2)%2)*.0,.775,-.2+Math.floor(i/4)*.13,.06,.005,.06,(i+Math.floor(i/4))%2?0x2a2420:0xe8dcc8]),
       ...Array.from({length:10},(_,i)=>[CYL(6),-.22+(i%5)*.11,.81,(i<5?-.24:.24)+rr(-.02,.02),.035,.06,.035,i<5?0xf0ece0:0x2a2420])]),VC,x,heightAt(x,z),z,a);take(x,z,.6);
     for(const sd of [-1,1]){const [sx,sz]=fw(x,z,a,.75*sd);prop(merge([[CYL(8),0,.22,0,.36,.44,.36,0x7a5232]]),VC,sx,heightAt(sx,sz),sz);
@@ -11445,7 +11462,7 @@ function ccarInit(){
   if(CCAR._init||!MARCUS.ready)return;CCAR._init=true;
   try{_ccarBuild();CCAR.ready=true;}catch(e){CCAR.failed=true;console.warn('city coach',e);}}
 function _ccarBuild(){
-  const t0=performance.now(),PL=marcusPlan(),I=OR.ISLES.marcus,cx=I.x,cz=I.z,C=CCAR.cell,CL=CCAR.CL;
+  const t0=performance.now(),PL=marcusPlan(),I=OR.ISLES.marcus,cx=I.x,cz=I.z,C=CCAR.cell,CL=CCAR.CL+CCAR.lane;   /* 마차는 길 가운데에서 오른쪽으로 비켜 달리므로 그만큼 더 넓게 막는다 */
   let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const [x,y] of PL.wall){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);}
   x0-=4;y0-=4;const NX=Math.ceil((x1-x0)/C)+2,NY=Math.ceil((y1-y0)/C)+2,NN=NX*NY;
   const blk=new Uint8Array(NN),hs=new Float32Array(NN),cost=new Float32Array(NN);
@@ -11503,8 +11520,9 @@ function _ccarBuild(){
     stopIdx.push(pts.length);for(let q=0;q<sp.length-1;q++){const k=sp[q];pts.push([WX(k%NX)+cx,WY((k/NX)|0)+cz]);}}
   /* 모서리 둥글게 (차이킨 두 번), 정류장 자리는 그대로 */
   let P2=pts.map((p,i)=>({x:p[0],z:p[1],stop:stopIdx.indexOf(i)}));
-  for(let it=0;it<2;it++){const Q=[];for(let i=0;i<P2.length;i++){const a=P2[i],b=P2[(i+1)%P2.length];if(a.stop>=0)Q.push(a);else Q.push({x:a.x*.75+b.x*.25,z:a.z*.75+b.z*.25,stop:-1});
-      if(b.stop>=0)Q.push({x:a.x*.5+b.x*.5,z:a.z*.5+b.z*.5,stop:-1});else Q.push({x:a.x*.25+b.x*.75,z:a.z*.25+b.z*.75,stop:-1});}P2=Q;}
+  for(let it=0;it<2;it++){const Q=[];for(let i=0;i<P2.length;i++){const a=P2[i],b=P2[(i+1)%P2.length],L=Math.hypot(b.x-a.x,b.z-a.z)||1,f=Math.min(.25,(it?1.2:3)/L);
+      if(a.stop>=0)Q.push(a);else Q.push({x:a.x*(1-f)+b.x*f,z:a.z*(1-f)+b.z*f,stop:-1});
+      if(b.stop>=0)Q.push({x:a.x*.5+b.x*.5,z:a.z*.5+b.z*.5,stop:-1});else Q.push({x:a.x*f+b.x*(1-f),z:a.z*f+b.z*(1-f),stop:-1});}P2=Q;}
   /* 1m 간격으로 고르게 */
   const R=[],sAt=[];let acc=0;for(let i=0;i<P2.length;i++){const a=P2[i],b=P2[(i+1)%P2.length];if(a.stop>=0)sAt[a.stop]=acc;const L=Math.hypot(b.x-a.x,b.z-a.z),n=Math.max(1,Math.ceil(L));
     for(let q=0;q<n;q++){R.push([a.x+(b.x-a.x)*q/n,a.z+(b.z-a.z)*q/n]);}acc+=L;}
@@ -11520,6 +11538,7 @@ function _ccarBuild(){
   /* 마차와 정류장 표지 */
   for(let k=0;k<CCAR.N;k++){const W=makeWagon({open:1,driver:'c_worker',trim:[0x8a2a2a,0x2a4a7a,0x2a6a3a,0x7a5a1a,0x5a2a6a,0x6a3a1a][k%6],canvas:0xece2c8});W.g.visible=false;W.g.userData.noMap=1;scene.add(W.g);CCAR.cars.push({W,k,s:0,ry:0,v:0,stop:-1,on:false});}
   for(const st of CCAR.stops)ccarSign(st);
+  if(typeof crowdClearRoute==='function')crowdClearRoute(R);
   console.log('city coach',(performance.now()-t0|0)+'ms',stops.length,'stops',CCAR.L|0,'m',CCAR.cycle|0,'s');}
 function ccarLanePoint(s){const [x,z]=ccarPointAt(s),[xa,za]=ccarPointAt(s+1.5),[xb,zb]=ccarPointAt(s-1.5),tx=xa-xb,tz=za-zb,l=Math.hypot(tx,tz)||1;return [x-tz/l*CCAR.lane,z+tx/l*CCAR.lane];}
 function ccarPointAt(s){const L=CCAR.L;s=((s%L)+L)%L;const cum=CCAR.cum,R=CCAR.pts;let lo=0,hi=R.length;while(hi-lo>1){const m=(lo+hi)>>1;if(cum[m]<=s)lo=m;else hi=m;}
