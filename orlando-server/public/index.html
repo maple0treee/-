@@ -5654,6 +5654,45 @@ function makeStickPlayer(job,gear){
   g.userData={mats,stick:{shd:shdInfo,L,R,AL,AR,upper,torso,head,style,w,w2,shield,nock,body:bodyG,one:!!ONE_DAGGER[job],fwd:dj==='thief'||dj==='rogue',rg:dj==='rogue'},weapon:w,head,torso};
   return g;
 }
+/* 막대 인형에 외모 입히기: 새 캐릭터 화면·'외모 바꾸기'에서 고른 성별·머리·머리색·눈색·피부·키·체형·윗옷·바지 */
+function stickAp(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{};
+  const [limb,skin,body,trim]=u.mats,head=S.head,hc=ap.h??HAIR_COLORS[1],f=ap.g==='f';
+  skin.color.setHex(0xf1e6d2).multiply(new THREE.Color(SKIN_TONES[ap.k|0]??0xffffff));
+  if(ap.c){body.color.setHex(ap.c);trim.color.setHex(new THREE.Color(ap.c).multiplyScalar(.55).getHex());}
+  for(const e of head.children)if(e.isMesh&&e.material.color&&e.material.color.getHex()===0x14110e){e.material=e.material.clone();e.material.color.setHex(ap.e??0x14110e).multiplyScalar(.75);}
+  // 바지: 다리(발은 신발이라 그대로)
+  const pm=mat(ap.p??PANTS_COLORS[0],{roughness:.6});u.mats.push(pm);
+  for(const l of [S.L,S.R])l.hip.traverse(o=>{if(o.isMesh&&o.material===limb&&o!==l.foot)o.material=pm;});
+  // 키·체형 (여자는 어깨를 조금 좁게)
+  const bw=[.86,1,1.1,1.22][ap.b??1]*(f?.93:1);
+  for(const o of S.upper.children){if(o===head||(o.isMesh&&o.material===limb))continue;o.position.x*=bw;o.position.z*=bw;if(o.isMesh){o.scale.x*=bw;o.scale.z*=bw;}}
+  for(const l of [S.L,S.R])l.hip.position.x*=1+(bw-1)*.6;
+  S.body.scale.setScalar(HEIGHTS[ap.t??2]??1);
+  // 머리 모양 (투구를 쓰면 정수리는 투구가 덮는다)
+  const nm=(HAIR_STYLES[ap.g]||HAIR_STYLES.m)[ap.s|0]||'';if(nm==='대머리')return;
+  const hm=mat(hc,{flatShading:false,roughness:.7}),hd=mat(hc,{side:THREE.DoubleSide,flatShading:false,roughness:.7});u.mats.push(hm,hd);
+  const P=(geo,m,x,y,z,r=[0,0,0],s=null)=>{const o=new THREE.Mesh(geo,m);o.position.set(x,y,z);o.rotation.set(...r);if(s)o.scale.set(...s);o.castShadow=true;head.add(o);return o;};
+  const cap=(cov=.45,rx=-.25,R=.235,s=null)=>{if(G.helm>=0)return;P(new THREE.SphereGeometry(R,16,10,0,Math.PI*2,0,Math.PI*cov),hm,0,.02,0,[rx,0,0],s);};
+  const back=(len,r1=.19,r2=.22,y=-.18,arc=1)=>P(new THREE.CylinderGeometry(r1,r2,len,14,1,true,Math.PI*(1-arc)/2+Math.PI*.5,Math.PI*arc),hd,0,y,-.03);
+  const bangs=(w=.9)=>{if(G.helm>=0)return;P(new THREE.CylinderGeometry(.232,.236,.09,16,1,true,-Math.PI*w/2,Math.PI*w),hd,0,.13,0,[-.12,0,0]);};
+  switch(nm){
+    case '짧은 머리':cap(.45);break;
+    case '스포츠 머리':cap(.36,-.2,.228);break;
+    case '뾰족 머리':cap(.42);if(G.helm<0)for(let i=0;i<7;i++){const a=i/7*Math.PI*2;P(new THREE.ConeGeometry(.05,.16,5),hm,Math.cos(a)*.13,.2,Math.sin(a)*.13-.02,[Math.sin(a)*.6,0,-Math.cos(a)*.6]);}break;
+    case '덥수룩 머리':cap(.5,-.2,.255,[1.05,1,1.05]);break;
+    case '단발':cap(.47);back(.22,.215,.235,-.08);break;
+    case '흐트러진 머리':cap(.45);if(G.helm<0)for(let i=0;i<6;i++){const a=i*1.1;P(new THREE.SphereGeometry(.07,8,6),hm,Math.cos(a)*.15,.15+(i%2)*.04,Math.sin(a)*.15-.03);}break;
+    case '덮은 머리':cap(.5,.05);bangs(.8);break;
+    case '긴 머리':cap(.47);back(.46,.2,.24,-.2);break;
+    case '묶은 긴 머리':cap(.45);P(new THREE.SphereGeometry(.07,10,8),hm,0,.05,-.23);P(new THREE.ConeGeometry(.06,.36,8),hm,0,-.14,-.27,[Math.PI-.15,0,0]);break;
+    case '긴 생머리':cap(.47);bangs(.6);back(.62,.2,.24,-.27);break;
+    case '어깨 머리':cap(.47);bangs(.6);back(.38,.205,.24,-.15);break;
+    case '올림 단발':cap(.45,-.3);P(new THREE.SphereGeometry(.1,10,8),hm,0,.16,-.18);break;
+    case '보브':cap(.5,-.15,.25);back(.26,.235,.255,-.07,1.35);bangs(.7);break;
+    case '히메컷':cap(.47);bangs(.7);back(.6,.2,.24,-.26);[-1,1].forEach(s=>P(new THREE.BoxGeometry(.05,.24,.07),hm,s*.2,-.06,.07));break;
+    case '뻗친 머리':cap(.47);back(.24,.21,.3,-.1);break;
+    default:cap(.45);}
+}
 /* 공격 동작: 직업(무기)마다 다른 열쇠 자세를 시간에 따라 섞는다
    값: [오른어깨x, 오른어깨z, 오른팔꿈치, 왼어깨x, 왼어깨z, 왼팔꿈치, 허리비틀기, 숙이기] */
 let SHIELD_TW=.6;
@@ -13055,6 +13094,7 @@ function shdOrient(M,dx,dz,spin){M.rotation.order='YXZ';const l=Math.hypot(dx,dz
 
 /* ---------- 플레이어 모델: 막대 인간 ---------- */
 function makePlayerMesh(job,gear,ap){const m=makeStickPlayer(job,gear);m.userData.gcode=gear?gearCode(gear):'';
+  if(ap&&OLD_LOOK)stickAp(m,ap,gear);
   // 애니 모델: 준비되어 있으면 바로, 아니면 불러온 뒤 입힌다 (그동안은 막대 인형)
   if(ap&&!OLD_LOOK){m.userData.ap=ap;m.userData.job=job;m.userData.gear=gear;if(PM.data[ap.g])pmAttach(m,job,gear,ap);else pmLoad(ap.g).catch(()=>{});}
   return m;}
@@ -13145,7 +13185,8 @@ function makeViewModel(job){const jobReal=job;job=drawJobOf(jobReal,P?wclsOf(P.e
   const J=JOBS[jobReal],G=P?gearOf(P):{weapon:-1},style=(G.weapon??-1)<0||(jobReal==='shielder'&&!shdHandKind())?'fist':J.weapon,root=new THREE.Group();   // 쉴더: 든 방패가 없으면 맨손
   // 소매 색: 갑옷을 입었으면 갑옷 색, 아니면 직업 셔츠 색
   const Gq=P?gearOf(P):{armor:-1};const slv=(Gq.armor>=1?pmTint('armor',Gq.armor,jobReal):pmTint('shirt',-1,jobReal,P&&P.ap)).getHex();
-  const R=fpHand(1,root,0xf6dccb,slv),L=fpHand(-1,root,0xf6dccb,slv);root.add(R,L);L.visible=false;
+  const skC=new THREE.Color(0xf6dccb).multiply(new THREE.Color(P&&P.ap?SKIN_TONES[P.ap.k|0]??0xffffff:0xffffff)).getHex();   // 피부: 고른 피부색
+  const R=fpHand(1,root,skC,slv),L=fpHand(-1,root,skC,slv);root.add(R,L);L.visible=false;
   const u={style,R,L,arrow:null,orb:null};
   if(style==='fist'){L.visible=true;if((G.sub??-1)>=0&&J.sub==='shield'){u.hasL=true;u.shieldL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
   else if(style==='sword'){const w=stickWeapon(style,job,G.weapon);w.rotation.set(-.5,0,-.12);w.scale.setScalar(job==='barbarian'||job==='fowler'?.6:.85);if(job==='barbarian'||job==='fowler')w.position.y=-.08;R.add(w);
