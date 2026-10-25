@@ -64,6 +64,7 @@
     coachway: { x: 5300, z: 0, R: 400 }, // 왕도: 마차가 달리는 고리 길 (타고 가는 동안만 머문다)
     castle: { x: 6400, z: 0, R: 300 },   // 엑시즈 성: 엑시즈 시내 왕궁 남문으로 들어가면 나온다
     guildhall: { x: 7100, z: 0, R: 140 }, // 길드홀: 엑시즈 시내 길드홀 정문으로 들어가면 나온다 (3층 건물과 뒤뜰)
+    market: { x: 7500, z: 0, R: 62 },    // 중앙 시장: 엑시즈 시내 시장 남쪽 큰 문으로 들어가면 나온다 (장옥과 좌판이 있는 장터)
     // 엑시즈 동문 밖 사냥터 (Lv 100–125): 서쪽 끝으로 들어와 동쪽 끝으로 나가면 다음 땅. 마지막 땅을 나가면 밀골
     mfield: { x: 2700, z: 900, R: 150 },   // 들판
     mhill:  { x: 3150, z: 900, R: 150 },   // 구릉
@@ -80,7 +81,7 @@
   ];
   for (const L of MLINES) L.zones.forEach(([id, kind], i) => { const I = ISLES[id] || (ISLES[id] = { x: 2700 + i * 450, z: 900 + (L.n - 1) * 450, R: 150 }); I.kind = kind; I.line = L.n; I.seq = i; });
   const MHUNT = MLINES.flatMap((L) => L.zones.map((q) => q[0]));
-  const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle', 'guildhall', ...MHUNT];
+  const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle', 'guildhall', 'market', ...MHUNT];
   // 엑시즈 성벽(섬 중심 기준 m, 시계 방향)과 가장자리: 성벽에서 바깥으로 약 70m까지만 땅이 있다 (들쭉날쭉)
   const MARCUS_WALL_M = [[-303,-218],[-247,-216],[-173,-213],[-112,-240],[-57,-264],[11,-277],[134,-264],[214,-234],[282,-206],[355,-151],[380,-58],[380,28],[368,101],[355,138],[331,194],[282,243],[220,280],[134,292],[42,286],[-63,264],[-161,249],[-260,218],[-333,175],[-370,89],[-376,15],[-361,-46],[-352,-114],[-333,-169]];
   const MARCUS_EDGE_GAP = 70;
@@ -109,7 +110,7 @@
     const n = spNear(x, z); const i = n ? clampN(Math.floor(n.t / SP.Q), 0, 7) : 0;
     return SP.ZONES[i];
   }
-  const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, marcus: 1, milgol: 1, fort: 1, coachway: 1, castle: 1, guildhall: 1 };
+  const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, marcus: 1, milgol: 1, fort: 1, coachway: 1, castle: 1, guildhall: 1, market: 1 };
 
   // 걸어 다닐 수 있는 곳 안으로 붙잡는다 (첫 지역 원, 길, 두 번째 지역 원, 석굴)
   function roomClamp(p, rad) {
@@ -292,7 +293,7 @@
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0], coachway: [0, 0], castle: [0, 0] , mfield: [100, 105], mhill: [105, 110], mwood: [110, 115], mvale: [115, 120], mpass: [120, 125] };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], market: [0, 0], mfield: [100, 105], mhill: [105, 110], mwood: [110, 115], mvale: [115, 120], mpass: [120, 125] };
   MLINES.forEach((L) => { if (L.n > 1) L.zones.forEach(([id], i) => { const a = 125 + (L.n - 2) * 25 + i * 5; ZONE_LEVELS[id] = [a, a + 5]; }); });
 
   // ---------- 의뢰 게시판 포스터 ----------
