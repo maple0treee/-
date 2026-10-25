@@ -81,10 +81,15 @@
   for (const L of MLINES) L.zones.forEach(([id, kind], i) => { const I = ISLES[id] || (ISLES[id] = { x: 2700 + i * 450, z: 900 + (L.n - 1) * 450, R: 150 }); I.kind = kind; I.line = L.n; I.seq = i; });
   const MHUNT = MLINES.flatMap((L) => L.zones.map((q) => q[0]));
   const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle', 'guildhall', ...MHUNT];
+  // 엑시즈 성벽(섬 중심 기준 m, 시계 방향)과 가장자리: 성벽에서 바깥으로 약 70m까지만 땅이 있다 (들쭉날쭉)
+  const MARCUS_WALL_M = [[-303,-218],[-247,-216],[-173,-213],[-112,-240],[-57,-264],[11,-277],[134,-264],[214,-234],[282,-206],[355,-151],[380,-58],[380,28],[368,101],[355,138],[331,194],[282,243],[220,280],[134,292],[42,286],[-63,264],[-161,249],[-260,218],[-333,175],[-370,89],[-376,15],[-361,-46],[-352,-114],[-333,-169]];
+  const MARCUS_EDGE_GAP = 70;
+  function polyRay(P, a) { const ux = Math.cos(a), uz = Math.sin(a); let best = 0; for (let i = 0; i < P.length; i++) { const A = P[i], B = P[(i + 1) % P.length], dx = B[0] - A[0], dz = B[1] - A[1], den = ux * dz - uz * dx; if (Math.abs(den) < 1e-9) continue; const t = (A[0] * dz - A[1] * dx) / den, s = (A[0] * uz - A[1] * ux) / den; if (t > best && s >= 0 && s <= 1) best = t; } return best; }
   for (const k of ISLE_ORDER) { const I = ISLES[k]; I.id = k; I.entry = { x: I.x, z: I.z + I.R - 12 }; }   // 들어오는 자리 (남쪽 가장자리)
+  ISLES.marcus.entry = { x: ISLES.marcus.x, z: ISLES.marcus.z + isleEdge(ISLES.marcus, Math.PI / 2) - 12 };   // 엑시즈: 가장자리가 성벽을 따르므로 남쪽 끝에서 잰다
   for (const k of MHUNT) { const I = ISLES[k]; I.entry = { x: I.x - I.R + 14, z: I.z }; I.exit = { x: I.x + I.R - 14, z: I.z }; }   // 사냥터: 서쪽으로 들어와 동쪽으로 나간다
   // 섬 가장자리 반지름 (엑시즈는 둥글지 않게 들쭉날쭉: 언덕 너머로 이어지는 땅처럼 보이게)
-  function isleEdge(I, a) { if (I.id !== 'marcus') return I.R; return I.R - 8 + 14 * Math.sin(3 * a + 1.3) + 7 * Math.sin(7 * a + 0.4) + 4 * Math.sin(13 * a + 2.1); }
+  function isleEdge(I, a) { if (I.id !== 'marcus') return I.R; return polyRay(MARCUS_WALL_M, a) + MARCUS_EDGE_GAP + 6 * Math.sin(3 * a + 1.3) + 4 * Math.sin(7 * a + 0.4) + 2 * Math.sin(13 * a + 2.1); }
   function isleAt(x, z) { let b = null, bd = 1e9; for (const k of ISLE_ORDER) { const I = ISLES[k]; const d = Math.hypot(x - I.x, z - I.z) - I.R; if (d < bd) { bd = d; b = I; } } return b; }
   // 지하실 위층의 작은 방 (계단을 올라가면 나온다)
   const HALL_ROOM = { x: 0, z0: -500 - 24 - 8.3 - 10, z1: -500 - 24 - 8.3, hw: 4.5, y: 4.5, corHw: 1.8, stHw: 1.5, stLen: 16, stRise: 9, stLand: 3.4 };
