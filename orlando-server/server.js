@@ -138,6 +138,7 @@ function cleanPresence(d) {
     hd: d.hd ? 1 : 0,
     mo: typeof d.mo === 'string' && /^[a-z0-9]{0,16}$/.test(d.mo) ? d.mo : '',
     xl: d.xl === 0 || d.xl === 1 || d.xl === 2 ? d.xl : -1,
+    mt: typeof d.mt === 'string' && /^[a-z]{0,8}$/.test(d.mt) ? d.mt : '',
     cr: typeof d.cr === 'string' && /^k\d{1,2}s\d$/.test(d.cr) ? d.cr : '',
     gd: typeof d.gd === 'string' && /^[a-z0-9]{8}\|[\uac00-\ud7a3A-Za-z0-9 ]{2,12}\|[mn]\|\d{1,7}\|[0-9a-f]{6}$/.test(d.gd) ? d.gd : null,
     ap: typeof d.ap === 'string' && /^[mf],[0-9a-f]{6},[0-9a-f]{6}(,\d(,\d,\d,[0-9a-f]{6},[0-9a-f]{6}(,\d)?)?)?$/.test(d.ap) ? d.ap : '',
