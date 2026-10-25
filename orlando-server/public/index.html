@@ -1365,7 +1365,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@dab8e182580025a0162b0b1c498072e7c30b713a/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@3103789a3ed5f0ff7a13f81e79cd35824672c5ee/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -12873,7 +12873,7 @@ function ninChainModel(on){const S=player.userData.stick;if(!S)return;
 /* ---------- 사슬 물리: 고리 하나하나가 점으로 이어져 따로 움직인다 (베를레 적분) ----------
    0번 고리는 오른손에 쥔 낫자루 끝 고리에 매여 있고, 끝에는 분동. 왼손은 쓰지 않는다: 오른손을 작게 돌리면 원심력으로 분동이 큰 원을 그리며 돈다.
    사슬 후려치기 때는 분동이 앞으로 날아갔다 돌아온다. 3인칭·1인칭 모두 세계 좌표의 같은 사슬을 쓴다 */
-const ROPE={N:18,LK:.05,R:.8,SPIN:8.5};
+const ROPE={N:18,LK:.05,R:.8,SPIN:8.5,S:5};
 const _rA=new THREE.Vector3(),_rG=new THREE.Vector3(),_rW=new THREE.Vector3(),_rD=new THREE.Vector3(),_rM=new THREE.Vector3(),_rU=new THREE.Vector3(0,1,0),_rQ=new THREE.Quaternion(),_rQ2=new THREE.Quaternion();
 function ninRopeMake(){if(NIN.rope)return NIN.rope;const g=new THREE.Group();g.frustumCulled=false;
   const steel=new THREE.MeshStandardMaterial({color:0xd8dce2,metalness:.85,roughness:.22}),dark=new THREE.MeshStandardMaterial({color:0x2e2e36,metalness:.7,roughness:.35}),iron=new THREE.MeshStandardMaterial({color:0x5a5e66,metalness:.75,roughness:.4}),brass=new THREE.MeshStandardMaterial({color:0xc8a040,metalness:.8,roughness:.3});
@@ -12886,21 +12886,35 @@ function ninRopeMake(){if(NIN.rope)return NIN.rope;const g=new THREE.Group();g.f
   add(new THREE.Mesh(new THREE.CylinderGeometry(.038,.046,.1,8),dark),-.09);add(new THREE.Mesh(new THREE.CylinderGeometry(.046,.028,.05,8),dark),-.165);
   const tip=new THREE.Mesh(new THREE.ConeGeometry(.028,.045,8),iron);tip.rotation.x=Math.PI;add(tip,-.21);
   const band=new THREE.Mesh(new THREE.TorusGeometry(.046,.005,5,16),brass);band.rotation.x=Math.PI/2;add(band,-.135);
+  /* 손에서 낫까지 짧은 사슬 (손은 사슬을 쥐고, 낫은 그 아래 매달린다) */
+  const spts=[];for(let i=0;i<=ROPE.S;i++)spts.push({p:new THREE.Vector3(),pp:new THREE.Vector3()});
+  const slinks=[];for(let i=0;i<ROPE.S;i++){const l=new THREE.Mesh(lg,i%3===2?dark:steel);l.scale.set(1,1.35,1);l.castShadow=true;l.frustumCulled=false;g.add(l);slinks.push(l);}
+  const sk=ninChainMesh(false);sk.userData.chain.visible=false;sk.traverse(o=>{o.frustumCulled=false;});g.add(sk);
   g.add(wt);g.visible=false;scene.add(g);
-  return NIN.rope={g,pts,links,wt,init:false,ang:0,lash:null,hitDone:false};}
+  return NIN.rope={g,pts,links,wt,spts,slinks,sk,init:false,ang:0,lash:null,hitDone:false};}
 function ninRopeOn(on){const R=ninRopeMake();R.g.visible=on;if(on){R.init=false;R.lash=null;}}
 /* 사슬을 돌리는 오른손 자세 (3인칭 막대 인형 / 1인칭 손). ang: 돌리는 각도, l: 후려치기 진행도 0~1 (없으면 돌리는 자세) */
 function ninPoseChain(ang,l){const S=player.userData.stick,atk=myMo&&swingT<1,k=l==null?0:l,wx=Math.cos(ang)*.09,wy=Math.sin(ang)*.09;
   if(S&&!atk){S.AR.sh.rotation.set(-.55-1.0*k+wy,0,.55-.25*k+wx);S.AR.el.rotation.x=-.35+.1*k;S.AR.hand.rotation.set(0,0,0);}   /* 오른팔을 옆앞으로 내밀고 손목을 작게 돌린다 → 후려칠 때 앞으로 뻗는다 */
   const u=viewModel&&viewModel.userData;if(u&&!atk&&viewModel.visible){const F=FP.dagger.R[0][1];
-    u.R.position.set(F[0]+.03-.08*k+wx*.4,F[1]+.02+.03*k+wy*.4,F[2]-.3*k);u.R.rotation.set(-.35*k,0,0);fpArm(u.R);}}
+    u.R.position.set(F[0]+.03-.08*k+wx*.4,F[1]+.06+.03*k+wy*.4,F[2]-.3*k);u.R.rotation.set(-.35*k,0,0);fpArm(u.R);}}
 function ninRopeTick(dt){const R=NIN.rope;if(!R||!R.g.visible||!player)return;
   const third=cam.third,hand=third?NIN.hand3:NIN.handFp;if(!hand){R.g.visible=false;return;}
   R.ang+=Math.min(dt,.05)*ROPE.SPIN;
   let lk=null;if(R.lash){R.lash.t+=dt;const L=R.lash,u=L.t/L.dur;lk=u<.3?u/.3:Math.max(0,1-(u-.3)/.7);if(u>=1)R.lash=null;}
   ninPoseChain(R.ang,lk);   /* 자세를 먼저 잡고 (손 위치가 정해진다) */
   player.updateMatrixWorld(true);if(viewModel)viewModel.updateMatrixWorld(true);
-  hand.updateMatrixWorld(true);_rA.set(0,-.16,0);hand.localToWorld(_rA);   /* 자루 끝 고리 */
+  /* 낫 휩쓸기 동작 중에만 자루를 쥐고, 평소엔 사슬을 쥐어 낫이 손 아래에 매달린다 */
+  const inHand=myMoId==='nscythe'&&swingT<1;hand.visible=inHand;R.sk.visible=!inHand;for(const l of R.slinks)l.visible=!inHand;
+  hand.updateMatrixWorld(true);
+  if(inHand){_rA.set(0,-.16,0);hand.localToWorld(_rA);}   /* 자루 끝 고리 */
+  else{const S0=player.userData.stick;if(third&&S0)S0.AR.hand.getWorldPosition(_rA);else if(viewModel){viewModel.userData.R.getWorldPosition(_rA);}else{_rA.set(0,-.16,0);hand.localToWorld(_rA);}   /* 사슬을 쥔 손 */
+    const sp=R.spts,S=ROPE.S;if(!R.init||sp[0].p.distanceTo(_rA)>3){for(let i=0;i<=S;i++){sp[i].p.set(_rA.x,_rA.y-i*ROPE.LK,_rA.z);sp[i].pp.copy(sp[i].p);}}
+    const steps=Math.min(4,Math.max(1,Math.ceil(dt/.016))),h=dt/steps;
+    for(let st=0;st<steps;st++){for(let i=1;i<=S;i++){const q=sp[i];_rD.subVectors(q.p,q.pp).multiplyScalar(.97);q.pp.copy(q.p);q.p.add(_rD);q.p.y-=9.8*h*h*(i===S?1.6:1);}
+      sp[0].p.copy(_rA);for(let it=0;it<8;it++)for(let i=0;i<S;i++){const a=sp[i],b=sp[i+1];_rD.subVectors(b.p,a.p);const d=_rD.length()||1e-6,c=(d-ROPE.LK)/d;if(i===0)b.p.addScaledVector(_rD,-c);else{a.p.addScaledVector(_rD,c*.5);b.p.addScaledVector(_rD,-c*.5);}}}
+    for(let i=0;i<S;i++){const a=sp[i].p,b=sp[i+1].p,l=R.slinks[i];l.position.lerpVectors(a,b,.5);_rD.subVectors(b,a).normalize();l.quaternion.setFromUnitVectors(_rU,_rD);if(i%2){_rQ2.setFromAxisAngle(_rU,Math.PI/2);l.quaternion.multiply(_rQ2);}}
+    {const a=sp[S-1].p,b=sp[S].p;_rD.subVectors(b,a).normalize();R.sk.quaternion.setFromUnitVectors(_rU,_rD);R.sk.position.copy(b).addScaledVector(_rD,.16);}}   /* 낫: 자루 끝 고리가 사슬 끝에, 날은 아래로 */
   const f=flatFwd(),cx=Math.cos(cam.yaw),cz=-Math.sin(cam.yaw);   /* 앞·오른쪽 */
   /* 분동 목표: 평소엔 손을 중심으로 몸 오른쪽 옆에서 세로 큰 원 (앞·위 평면, 원심력으로 팽팽하게), 후려칠 때는 앞으로 날아갔다 온다 */
   const r=ROPE.R;
