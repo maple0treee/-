@@ -450,6 +450,7 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 #board header{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
 #board h2{margin:0;font-family:var(--f-display);font-weight:400;font-size:26px}
 #board .bnote{font-size:12px;color:var(--dim)}
+#boardTabs{display:flex;gap:6px;flex-wrap:wrap}#boardTabs .btab{font:inherit;font-size:13px;padding:6px 14px;border-radius:6px 6px 0 0;border:1px solid #6a5030;border-bottom:none;background:#2a2018;color:#c8b890;cursor:pointer}#boardTabs .btab.on{background:#8a6a3a;color:#fff4dc;font-weight:600}
 #boardCork{position:relative;z-index:0;overflow:auto;max-height:min(64vh,620px);border-radius:8px;
   background:radial-gradient(circle at 20% 30%,rgba(255,255,255,.06) 0 2px,transparent 3px) 0 0/22px 22px,radial-gradient(circle at 70% 60%,rgba(0,0,0,.12) 0 2px,transparent 3px) 0 0/18px 18px,#8a6440;
   box-shadow:inset 0 0 0 6px #5a3e24,inset 0 0 24px rgba(0,0,0,.45)}
@@ -1365,7 +1366,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@503100862f05e59eb6a59b9d1d01f579f9d5ddd7/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@8fe77c3b57e167616ffda09ddc88250c66c78e7d/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -1500,6 +1501,11 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     if (p.x >= 800) { const I = isleAt(p.x, p.z); const d = Math.hypot(p.x - I.x, p.z - I.z), r = isleEdge(I, Math.atan2(p.z - I.z, p.x - I.x)) - rad; if (d > r) { p.x = I.x + (p.x - I.x) * r / d; p.z = I.z + (p.z - I.z) * r / d; } return; }
     if (p.z > 300) return roomClamp(p, rad);
     if (p.z < -300 && p.x <= 100 && inHallAnnex(p, rad)) return;
+    /* 지하실 딸린 방·계단·창고 밖으로 나갔으면 (벽을 뚫었으면) 가장 가까운 안쪽 자리로 되민다 — 둥근 방 가장자리로 튕겨 보내지 않는다 */
+    if (p.z < -300 && p.x <= 100 && p.z < HALL.z - HALL.R + 2 && Math.hypot(p.x - HALL.x, p.z - HALL.z) > HALL.R - rad) { const H = HALL_ROOM, C = CELLAR, zS = H.z0 - H.stLen - H.stLand;
+      const R = [[H.x - H.hw + rad, H.x + H.hw - rad, H.z0 + rad, H.z1 + 1], [H.x - H.stHw + rad, H.x + H.stHw - rad, zS - 1, H.z0 + rad], [C.x - C.hw + rad, C.x + C.hw - rad, C.z0 + rad, C.z1], [H.x - H.corHw + rad * 0.5, H.x + H.corHw - rad * 0.5, H.z1 - 1, HALL.z - HALL.R + 2]];
+      let bx = p.x, bz = p.z, bd = 1e9; for (const [x0, x1, z0, z1] of R) { const qx = clampN(p.x, x0, x1), qz = clampN(p.z, z0, z1), d = Math.hypot(qx - p.x, qz - p.z); if (d < bd) { bd = d; bx = qx; bz = qz; } }
+      p.x = bx; p.z = bz; return; }
     if (p.z < -300) { const A = p.x > 100 ? { x: WLAIR.x, z: WLAIR.z, R: WLAIR.r } : HALL; const d = Math.hypot(p.x - A.x, p.z - A.z), r = A.R - rad; if (d > r) { p.x = A.x + (p.x - A.x) * r / d; p.z = A.z + (p.z - A.z) * r / d; } return; }
     // 하레나 둘레: 도시 · 서문 목 · 길 · 석굴 입구 안으로 (가장 가까운 자리로 민다)
     if (hInside(p.x, p.z, rad)) return;
@@ -1687,9 +1693,23 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
       G('티모', '아이', ['아빠가 {z}로 장 보러 갔는데 {m}이(가) 무섭대요… 아빠가 무사히 돌아오게 해 주세요!']),
       G('나그네', '두건 쓴 여행자', ['…{z}를 지나야 하는데 {m}이(가) 길을 막고 있다. 대가는 넉넉히 치르지.'])] },
   };
+  /* 엑시즈 모험가 길드의 큰 게시판: 등급(레벨대)별로 칸이 나뉘어 있고, 칸마다 의뢰가 고르게 붙는다 */
+  BOARDS.guild = { title: '모험가 길드 의뢰 게시판', cap: 40, zones: [],
+    tiers: [{ id: 'd', name: '초급', lv: [1, 15], zones: ['forest', 'plains', 'swamp', 'ruins'] }, { id: 'c', name: '중급', lv: [16, 59], zones: ['wwest', 'wnorth', 'wsouth', 'weast'] },
+      { id: 'b', name: '상급', lv: [60, 100], zones: ['silva', 'arbus', 'kaolis', 'subcus'] }, { id: 'a', name: '특급', lv: [100, 999], zones: MHUNT.filter((z) => ZONE_MON[z]) }],
+    givers: [
+      G('엑시즈 상인', '상인', ['{z}를 지나는 상단이 {m}에게 번번이 털립니다. 길이 안전해지면 왕도 물가도 내려갈 거예요.', '{z}에서 들여오는 물건이 {m} 때문에 끊겼어요. 가게 선반이 비어 갑니다.']),
+      G('길드 접수원', '모험가 길드', ['{z}에 나간 모험가들이 {m} 때문에 돌아오지 못하고 있어요. 수를 줄여 길을 열어 주세요.', '{z}의 {m}에 대한 신고가 길드에 쌓였어요. 처리해 주실 분을 찾습니다.']),
+      G('왕성 경비대', '경비대', ['{z}에서 {m}이(가) 왕도 쪽으로 몰려오고 있다. 성벽 밖에서 막아라.', '{z}로 나간 순찰대가 {m}에게 밀려 돌아왔다. 길드의 힘을 빌린다.']),
+      G('엑시즈 농부', '농부', ['{z} 가까운 밭이 {m} 때문에 엉망이에요. 가을걷이 전에 쫓아 주세요.']),
+      G('마차 조합', '마부', ['{z} 길에서 {m}이(가) 마차를 세웁니다. 노선을 지키려면 길을 쓸어야 해요.']),
+      G('왕실 학자', '학자', ['{z}에서 {m}을(를) 조사하려는데 수가 너무 많아 가까이 갈 수 없습니다. 좀 줄여 주시면 사례하지요.']),
+      G('항구 조합', '뱃사람', ['{z} 쪽 뱃길 근처에 {m}이(가) 꼬였소. 짐을 내릴 수가 없어.'])] };
   const BOARD_CAP = {}; for (const k in BOARDS) BOARD_CAP[k] = BOARDS[k].cap;
+  const boardTierOf = (board, zone) => { const B = BOARDS[board]; if (!B || !B.tiers) return null; for (const t of B.tiers) if (t.zones.includes(zone)) return t.id; return null; };
   function makePoster(board, rnd, id) {
-    const B = BOARDS[board]; const zone = B.zones[Math.floor(rnd() * B.zones.length)];
+    const B = BOARDS[board]; let zone;
+    if (B.tiers) { const t = B.tiers[Math.floor(rnd() * B.tiers.length)]; zone = t.zones[Math.floor(rnd() * t.zones.length)]; } else zone = B.zones[Math.floor(rnd() * B.zones.length)];
     const L = ZONE_LEVELS[zone]; const tys = [...new Set(ZONE_MON[zone])];
     const lv = Math.round(L[0] + rnd() * (L[1] - L[0]));
     // 무거운 의뢰: 한 종류를 많이, 또는 두 종류를 함께
@@ -1703,7 +1723,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { MHUNT, MLINES, THOUSE, inTHouse, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { boardTierOf, MHUNT, MLINES, THOUSE, inTHouse, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2503,6 +2523,12 @@ const ITEMS={
   def_p:{name:'수호의 비약',short:'수호',kind:'use',tier:4,buff:{def:1.4},dur:60,desc:'60초 동안 방어력 40% 증가'},
   spd_p:{name:'신속의 비약',short:'신속',kind:'use',tier:4,buff:{speed:1.3},dur:60,desc:'60초 동안 이동 속도 30% 증가'},
   recall:{name:'귀환 주문서',short:'귀환',kind:'use',tier:2,recall:true,desc:'하레나로 돌아간다'},
+  /* 길드홀 술집 음식과 술: 자리에 앉아서 먹는다 */
+  f_bread:{name:'빵과 치즈',short:'빵',kind:'use',tier:0,food:1,price:40,hp:.25,desc:'HP를 25% 회복한다. 자리에 앉아서 먹는다'},
+  f_beer:{name:'맥주',short:'맥주',kind:'use',tier:0,food:1,price:30,hp:.15,buff:{atk:1.05},dur:90,desc:'HP 15% 회복, 90초 동안 공격력 5% 증가. 자리에 앉아서 마신다'},
+  f_wine:{name:'포도주',short:'포도주',kind:'use',tier:1,food:1,price:80,mp:.3,buff:{crit:.05},dur:90,desc:'MP 30% 회복, 90초 동안 치명타 5% 증가. 자리에 앉아서 마신다'},
+  f_stew:{name:'양고기 스튜',short:'스튜',kind:'use',tier:1,food:1,price:120,hp:.5,buff:{def:1.15},dur:120,desc:'HP 50% 회복, 120초 동안 방어력 15% 증가. 자리에 앉아서 먹는다'},
+  f_mead:{name:'벌꿀술',short:'벌꿀술',kind:'use',tier:2,food:1,price:150,hp:.3,mp:.3,buff:{speed:1.1},dur:120,desc:'HP·MP 30% 회복, 120초 동안 이동 속도 10% 증가. 자리에 앉아서 마신다'},
 };
 (function(){
   const pre=['견습','강철','미스릴','고대의','룬','서리','화염','망령','심연','전설의'];
@@ -2599,6 +2625,15 @@ function dummyMake(q,k){const g=new THREE.Group();g.position.set(q.x,heightAt(q.
   return {dummy:true,r:.45,mesh:g,D:{name:'허수아비',lv:1,build:'none',scale:1},t:'dummy',ty:'dummy',zone:'marcus',dying:null,hp:1e9,mh:1e9,lv:1,st:{def:0,exp:0,atk:0,hp:1e9,lv:1},
     flags:0,tag:document.createElement('div'),sid:'dummy'+k,tx:q.x,tz:q.z,tr:0,phase:0,x0:q.x,y0:g.position.y,z0:q.z};}
 function dummiesEnsure(){DUMMIES.forEach((q,k)=>{if(!q.m)q.m=dummyMake(q,k);if(!q.m.mesh.parent)scene.add(q.m.mesh);if(!monsters.includes(q.m))monsters.push(q.m);});}
+/* 누적 피해와 초당 피해: 허수아비를 때리는 동안 화면 위에 뜬다. 3초 동안 안 때리면 사라지고 처음부터 다시 센다 */
+const DMG={total:0,t0:0,last:-1,hits:0};
+function dummyHit(d){const now=tAll;if(DMG.last<0||now-DMG.last>3){DMG.total=0;DMG.t0=now;DMG.hits=0;}DMG.total+=d;DMG.hits++;DMG.last=now;dummyHud();}
+function dummyHud(){let h=document.getElementById('dmgHud');
+  if(!h){h=document.createElement('div');h.id='dmgHud';h.style.cssText='position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:30;min-width:220px;padding:7px 14px;border:1px solid #8a6a3a;border-radius:8px;background:rgba(28,20,12,.82);color:#f0e2c0;font:14px "Gowun Batang",serif;text-align:center;pointer-events:none;display:flex;gap:16px;justify-content:center';
+    h.innerHTML='<span>전체 피해 <b id="dmT" style="color:#ffd06a"></b></span><span>초당 피해 <b id="dmD" style="color:#ff9a7a"></b></span><span id="dmN" style="opacity:.7"></span>';document.body.appendChild(h);}
+  if(DMG.last<0){h.hidden=true;return;}h.hidden=false;const el=Math.max(1,DMG.last-DMG.t0);
+  h.querySelector('#dmT').textContent=Math.round(DMG.total).toLocaleString('ko-KR');h.querySelector('#dmD').textContent=Math.round(DMG.total/el).toLocaleString('ko-KR');h.querySelector('#dmN').textContent=`${DMG.hits}타 · ${el.toFixed(1)}초`;}
+function dummyTick(dt){if(DMG.last<0)return;if(tAll-DMG.last>3){DMG.last=-1;dummyHud();}}
 const MAP_HOUSES=[]; // 지도에 그릴 집 자리 {x,z,r}
 /* ---------- 지형 ---------- */
 // 지역 구분과 치수는 공용 데이터(shared.js)를 쓴다
@@ -2659,11 +2694,11 @@ renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMapping=THREE.LinearTone
 const scene=new THREE.Scene();
 const skyCol=new THREE.Color(ZONES.village.sky);
 scene.background=skyCol.clone();scene.fog=new THREE.Fog(skyCol.clone(),38,140);
-const camera=new THREE.PerspectiveCamera(60,1,.1,400);
+const camera=new THREE.PerspectiveCamera(60,1,.25,400);   /* 가까운 면 .25: 깊이 정밀도를 높여 멀리 있는 벽·창이 깜빡이지(z-fighting) 않게 */
 const hemi=new THREE.HemisphereLight(0xe4ecf0,0x4d4128,.62);scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xfff0d4,.88);
 sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
-const sc=sun.shadow.camera;sc.left=-36;sc.right=36;sc.top=36;sc.bottom=-36;sc.near=1;sc.far=140;sun.shadow.bias=-.0005;sun.shadow.normalBias=.035;
+const sc=sun.shadow.camera;sc.left=-36;sc.right=36;sc.top=36;sc.bottom=-36;sc.near=1;sc.far=140;sun.shadow.bias=-.0008;sun.shadow.normalBias=.06;
 /* 해 방향(그림자 상자) 기준 축: 그림자 상자를 그림자 그림 칸에 맞춰 옮길 때 쓴다 */
 const _sunBasis=(()=>{const z=new THREE.Vector3(30,60,20).normalize(),x=new THREE.Vector3(0,1,0).cross(z).normalize(),y=z.clone().cross(x);return {x,y,z};})();
 scene.add(sun,sun.target);
@@ -2693,6 +2728,12 @@ skyDome.renderOrder=-1000;skyDome.frustumCulled=false;scene.add(skyDome);
 
 const mat=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.85,flatShading:true},o));
 const colliders=[];
+/* 앉을 자리: 벤치·걸상·소파. {x,z,y:앉는 높이(세계), ry:앉아서 보는 방향} — F로 앉고, 움직이면 일어난다 */
+const SEATS=[];
+function seatAdd(x,z,y,ry){SEATS.push({x,z,y,ry});}
+function seatNear(){if(!player||!P||P.seat!=null)return -1;const q=player.position;let b=-1,bd=1.7;for(let i=0;i<SEATS.length;i++){const s=SEATS[i];if(Math.abs(s.y-q.y)>2.5)continue;const d=Math.hypot(s.x-q.x,s.z-q.z);if(d<bd){bd=d;b=i;}}return b;}
+function seatSit(i){const s=SEATS[i];if(!s||!P)return;if(P.ride&&typeof rideOff==='function')rideOff(true);P.seat=i;sitting=true;player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;cam.yaw=s.ry+Math.PI;interactTarget=null;sfx('ui');if(typeof publishPresence==='function')publishPresence(true);}
+function seatLeave(){if(!P||P.seat==null)return;const s=SEATS[P.seat];P.seat=null;sitting=false;if(s){player.position.set(s.x+Math.sin(s.ry)*.7,heightAt(s.x,s.z),s.z+Math.cos(s.ry)*.7);player.position.y=floorAt(player.position.x,player.position.z,s.y+1);}}
 /* 부딪힘 칸 나누기: 1만 개가 넘는 충돌체를 매번 다 훑지 않고, 10m 칸에 나눠 두고 가까운 칸만 본다.
    목록 길이가 바뀌면(새로 넣거나 빼면) 다시 나눈다. 아주 큰 충돌체(반지름 40m 넘는 것)는 늘 본다 */
 const COLG={cs:10,map:new Map(),n:-1,big:[],out:[],stamp:0};
@@ -7737,17 +7778,26 @@ function makeNpcStick(o){const g=makeStickPlayer('warrior',null),u=g.userData,J=
   const HAIRY=['hair','wide','cap','beret','bandana','tiara','top','chef','bonnet'];
   if(HAIRY.includes(o.hat)||!o.hat){const c=new THREE.Mesh(new THREE.SphereGeometry(.235,14,8,0,Math.PI*2,0,Math.PI*.45),hm(o.hatC||0x4a3322));c.position.y=.02;c.rotation.x=-.25;H.add(c);
     if(o.long){const lh=new THREE.Mesh(new THREE.CylinderGeometry(.19,.22,.42,12,1,true,Math.PI*.5,Math.PI),mat(o.hatC||0x4a3322,{side:THREE.DoubleSide,flatShading:false}));lh.position.set(0,-.18,-.03);H.add(lh);}}
-  if(o.hat==='wide'){const b=new THREE.Mesh(new THREE.CylinderGeometry(.2,.42,.06,14),hm(o.hatC||0x6b4a2e));b.position.y=.19;const t=new THREE.Mesh(new THREE.CylinderGeometry(.15,.19,.2,12),hm(o.hatC||0x6b4a2e));t.position.y=.3;H.add(b,t);}
-  else if(o.hat==='hood'){const h=new THREE.Mesh(new THREE.ConeGeometry(.29,.5,10),hm(o.hatC||o.robe));h.position.y=.335;H.add(h);}   /* 두건: 눈이 보이게 조금 위로 */
+  if(o.hat==='wide'){const wc=o.hatC||0x6b4a2e,b=new THREE.Mesh(new THREE.CylinderGeometry(.2,.42,.06,16),hm(wc));b.position.y=.19;const t=new THREE.Mesh(new THREE.CylinderGeometry(.15,.19,.2,14),hm(wc));t.position.y=.3;H.add(b,t);
+    const rim=new THREE.Mesh(new THREE.TorusGeometry(.41,.02,6,20),hm(wc));rim.position.y=.175;rim.rotation.x=Math.PI/2;H.add(rim);   /* 챙 끝 말림 */
+    const band=new THREE.Mesh(new THREE.CylinderGeometry(.195,.2,.05,14),hm(o.band??shade2(wc,.55)));band.position.y=.245;H.add(band);   /* 모자 띠 */
+    const dent=new THREE.Mesh(new THREE.SphereGeometry(.12,10,6),hm(shade2(wc,.85)));dent.scale.set(1,.3,1);dent.position.y=.39;H.add(dent);}
+  else if(o.hat==='hood'){const hcol=o.hatC||o.robe,h=new THREE.Mesh(new THREE.ConeGeometry(.29,.5,12),hm(hcol));h.position.y=.335;H.add(h);   /* 두건: 눈이 보이게 조금 위로 */
+    const cowl=new THREE.Mesh(new THREE.CylinderGeometry(.26,.34,.3,14,1,true,Math.PI*.6,Math.PI*.8),mat(hcol,{side:THREE.DoubleSide,flatShading:false}));cowl.position.set(0,-.08,-.03);H.add(cowl);   /* 뒤로 드리운 깃 */
+    const fold=new THREE.Mesh(new THREE.TorusGeometry(.26,.03,6,18,Math.PI*1.25),hm(shade2(hcol,.8)));fold.position.set(0,.1,0);fold.rotation.set(Math.PI/2,0,-Math.PI*.125);H.add(fold);}   /* 얼굴 둘레 접힌 단 */
   else if(o.hat==='helm'){/* 투구: 눈 위로 올려 쓰고, 코가리개만 내려온다 */
     const st=mat(0x9aa0a8,{metalness:.6,roughness:.35,flatShading:false});const h=new THREE.Mesh(new THREE.SphereGeometry(.245,14,8,0,Math.PI*2,0,Math.PI/2),st);h.position.y=.075;H.add(h);
     const rim=new THREE.Mesh(new THREE.TorusGeometry(.245,.012,6,20),st);rim.position.y=.075;rim.rotation.x=Math.PI/2;H.add(rim);
-    const nose=new THREE.Mesh(new THREE.BoxGeometry(.03,.12,.02),st);nose.position.set(0,.03,.235);H.add(nose);}
+    const nose=new THREE.Mesh(new THREE.BoxGeometry(.03,.12,.02),st);nose.position.set(0,.03,.235);H.add(nose);
+    const ridge=new THREE.Mesh(new THREE.BoxGeometry(.03,.05,.4),st);ridge.position.y=.3;H.add(ridge);   /* 정수리 능선 */
+    for(const sx of [-1,1]){const ch=new THREE.Mesh(new THREE.BoxGeometry(.03,.16,.12),st);ch.position.set(sx*.235,-.03,.06);ch.rotation.z=sx*.08;H.add(ch);}   /* 볼가리개 */
+    const lth=new THREE.Mesh(new THREE.TorusGeometry(.248,.014,6,20),mat(0x4a3220,{flatShading:false}));lth.position.y=.06;lth.rotation.x=Math.PI/2;H.add(lth);}   /* 가죽 테 */
   /* 모자 더 (주민 옷차림용) */
   {const hc=o.capC??o.hatC2??0x5a4a3a,P=(geo,c,x,y,z,o2={})=>{const m=new THREE.Mesh(geo,hm(c));m.position.set(x,y,z);if(o2.rx)m.rotation.x=o2.rx;if(o2.rz)m.rotation.z=o2.rz;if(o2.ry)m.rotation.y=o2.ry;if(o2.s)m.scale.set(...o2.s);H.add(m);return m;};
-    if(o.hat==='cap'){P(new THREE.SphereGeometry(.245,14,8,0,Math.PI*2,0,Math.PI*.4),hc,0,.04,-.01,{rx:-.15,s:[1,.85,1]});P(new THREE.CylinderGeometry(.13,.13,.025,14,1,false,-Math.PI*.5,Math.PI),hc,0,.12,.17,{rx:.25});}
-    else if(o.hat==='beret'){P(new THREE.SphereGeometry(.24,14,8),hc,.04,.17,0,{s:[1.05,.38,1.05],rz:-.25});if(o.feather)P(new THREE.ConeGeometry(.025,.3,5),o.feather,-.14,.3,-.02,{rz:.9});}
-    else if(o.hat==='bandana'){P(new THREE.SphereGeometry(.24,14,8,0,Math.PI*2,0,Math.PI*.36),hc,0,.04,0,{rx:-.2});P(new THREE.SphereGeometry(.05,8,6),hc,0,.02,-.24);P(new THREE.ConeGeometry(.04,.14,5),hc,.04,-.07,-.23,{rz:.3,rx:.4});}
+    if(o.hat==='cap'){P(new THREE.SphereGeometry(.245,14,8,0,Math.PI*2,0,Math.PI*.4),hc,0,.04,-.01,{rx:-.15,s:[1,.85,1]});P(new THREE.CylinderGeometry(.13,.13,.025,14,1,false,-Math.PI*.5,Math.PI),hc,0,.12,.17,{rx:.25});
+      P(new THREE.SphereGeometry(.03,8,6),shade2(hc,.6),0,.245,-.03);P(new THREE.TorusGeometry(.236,.012,5,18,Math.PI*1.1),shade2(hc,.7),0,.1,0,{rx:Math.PI/2+.1,ry:0,rz:Math.PI*.95});}   /* 단추·이마 띠 */
+    else if(o.hat==='beret'){P(new THREE.SphereGeometry(.24,14,8),hc,.04,.17,0,{s:[1.05,.38,1.05],rz:-.25});P(new THREE.CylinderGeometry(.012,.012,.07,6),shade2(hc,.5),.06,.3,0,{rz:-.25});P(new THREE.TorusGeometry(.225,.014,5,18),shade2(hc,.75),0,.1,0,{rx:Math.PI/2});   /* 꼭지·테 */if(o.feather)P(new THREE.ConeGeometry(.025,.3,5),o.feather,-.14,.3,-.02,{rz:.9});}
+    else if(o.hat==='bandana'){P(new THREE.SphereGeometry(.24,14,8,0,Math.PI*2,0,Math.PI*.36),hc,0,.04,0,{rx:-.2});P(new THREE.TorusGeometry(.238,.022,6,20),hc,0,.08,0,{rx:Math.PI/2-.2});   /* 이마에 두른 단 */P(new THREE.SphereGeometry(.05,8,6),hc,0,.02,-.24);P(new THREE.ConeGeometry(.04,.14,5),hc,.04,-.07,-.23,{rz:.3,rx:.4});}
     else if(o.hat==='scarf'){P(new THREE.SphereGeometry(.25,16,10,0,Math.PI*2,0,Math.PI*.47),hc,0,.02,-.01,{rx:-.3});const dr=new THREE.Mesh(new THREE.CylinderGeometry(.235,.27,.34,14,1,true,Math.PI*.55,Math.PI*.9),mat(hc,{side:THREE.DoubleSide,flatShading:false}));dr.position.set(0,-.1,-.02);H.add(dr);P(new THREE.SphereGeometry(.055,8,6),hc,0,-.06,-.25);P(new THREE.ConeGeometry(.06,.2,5),hc,0,-.18,-.26,{rx:.2});}
     else if(o.hat==='chef'){P(new THREE.CylinderGeometry(.18,.16,.26,14),0xf8f8f4,0,.27,0);P(new THREE.SphereGeometry(.22,12,8),0xf8f8f4,0,.42,0,{s:[1,.6,1]});}
     else if(o.hat==='bonnet'){P(new THREE.SphereGeometry(.26,14,10,0,Math.PI*2,0,Math.PI*.55),hc,0,.02,-.03,{rx:-.95});P(new THREE.TorusGeometry(.215,.016,6,16,Math.PI),o.ribbon??0xc84a5a,0,.03,-.02,{rx:-.95+Math.PI/2});}
@@ -9467,7 +9517,7 @@ function buildMarcus(H){
       for(let t=10;t<L-6;t+=26)for(const sd of [-1,1]){const mx=ax+ux*t-uy*sd*(st.w/2-.7),my=ay+uy*t+ux*sd*(st.w/2-.7);if(!inWall(mx,my,6)||bigZone(mx,my,1)||PL.waterDepth(mx,my)>0)continue;
         if(PL.streets.some(o=>o!==st&&o.p.some((q,k)=>k<o.p.length-1&&PL.segDist(mx,my,q,o.p[k+1])<o.w/2+.5)))continue;lamp(cx+mx,cz+my,Math.atan2(uy*sd,-ux*sd));}}}
   /* 길가 벤치: 가로등 사이사이, 길 쪽을 보고 놓는다. 주민들은 이 벤치에만 앉는다 */
-  const bench=(x,z,ry)=>{const B=frame(x,z,ry);B.P(BOX,0,.45,0,2.6,.18,.7,MAR2);for(const s2 of [-1,1])B.P(BOX,s2*1.05,.22,0,.3,.45,.6,MAR2);B.P(BOX,0,.8,-.3,2.6,.5,.12,MAR2);B.box(0,0,2.6,.8,.6);MARCUS.benches.push({x,z,ry});};
+  const bench=(x,z,ry)=>{const B=frame(x,z,ry);for(const lx of [-.7,.7]){const q=B.W(lx,0);seatAdd(q.x,q.z,B.y+.54,ry);}B.P(BOX,0,.45,0,2.6,.18,.7,MAR2);for(const s2 of [-1,1])B.P(BOX,s2*1.05,.22,0,.3,.45,.6,MAR2);B.P(BOX,0,.8,-.3,2.6,.5,.12,MAR2);B.box(0,0,2.6,.8,.6);MARCUS.benches.push({x,z,ry});};
   MARCUS.benches=[];
   for(const st of PL.streets){if(st.w<7)continue;for(let i=0;i<st.p.length-1;i++){const [ax,ay]=st.p[i],[bx,by]=st.p[i+1],L=Math.hypot(bx-ax,by-ay),ux=(bx-ax)/L,uy=(by-ay)/L;
       for(let t=23;t<L-8;t+=(st.w>=10?26:34)){const sd=Math.round(t/26)%2?-1:1;const mx=ax+ux*t-uy*sd*(st.w/2-.95),my=ay+uy*t+ux*sd*(st.w/2-.95);if(!inWall(mx,my,6)||bigZone(mx,my,1)||PL.waterDepth(mx,my)>0||PL.riverDist(mx,my)<RVW/2+3)continue;
@@ -9544,7 +9594,7 @@ function buildMarcus(H){
         if(bh>y0){pc(y0,Math.min(bh,y1),bc,th+.12);pc(Math.max(bh,y0),y1,wall,th);}else pc(y0,y1,wall,th);
         if(y0<.1){if(along==='x')F.box(m,fz,len,th,h+1);else F.box(fx,m,th,len,h+1);}};
       for(const D of ds){seg(a,D[1]-D[2]/2,0,h);seg(D[1]-D[2]/2,D[1]+D[2]/2,D[3],h);a=D[1]+D[2]/2;
-        const fr=q===0?0:q===1?PI/2:q===2?PI:-PI/2,ca=Math.cos(fr),sa=Math.sin(fr),off=(q%2===0?d:w)/2+.02;
+        const fr=q===0?0:q===1?PI/2:q===2?PI:-PI/2,ca=Math.cos(fr),sa=Math.sin(fr),off=(q%2===0?d:w)/2+.05;
         for(const sg of [1,-1]){const lz=(off+.05)*sg,lx=D[1];F.P(ARCHRING,lx*ca+lz*sa,0,-lx*sa+lz*ca,D[2]/.8+.1,D[3]*1.12+.3,1,SERENA,{ry:fr+(sg<0?PI:0)});}}
       seg(a,L/2,0,h);}
     F.P(BOX,0,.06,0,w-th*2+.1,.08,d-th*2+.1,o.floor??0x8a6a4a,{b:'ip'});
@@ -11134,12 +11184,13 @@ function buildGuildHallMap(K){
   const S1={x0:-19.4,x1:-16.4,z0:-3,z1:11},S2={x0:16.4,x1:19.4,z0:-11,z1:3},HOLE=0;   /* 1→2층 (남에서 북으로 오른다), 2→3층 (북에서 남으로 오른다) */
   const slab=(x0,x1,z0,z1,y,top,under)=>{if(x1-x0<.05||z1-z0<.05)return;P(BOX,(x0+x1)/2,y-.2,(z0+z1)/2,x1-x0,.4,z1-z0,top,IP);P(BOX,(x0+x1)/2,y-.405,(z0+z1)/2,x1-x0,.01,z1-z0,under,IP);floor(x0,x1,z0,z1,y);};
   /* 2층: 북쪽 띠 · 남쪽 띠 · 서쪽(계단 구멍 빼고) · 동쪽 */
-  slab(-HW,HW,-HD,-AZ,Y2,FLOOR,CEIL);slab(-HW,S1.x0,AZ,HD,Y2,FLOOR,CEIL);slab(S1.x0,S1.x1,S1.z1,HD,Y2,FLOOR,CEIL);slab(S1.x1,HW,AZ,HD,Y2,FLOOR,CEIL);
-  slab(-HW,S1.x0,-AZ,AZ,Y2,FLOOR,CEIL);slab(S1.x1,-AX,-AZ,AZ,Y2,FLOOR,CEIL);slab(S1.x0,S1.x1,-AZ,S1.z0-HOLE,Y2,FLOOR,CEIL);
+  const W1=S1.x1+3,W2=S2.x0-3;   /* 계단 옆으로 더 튼 구멍의 가장자리 (올라갈 때 머리 위가 트여 보이게) */
+  slab(-HW,HW,-HD,-AZ,Y2,FLOOR,CEIL);slab(-HW,S1.x0,AZ,HD,Y2,FLOOR,CEIL);slab(S1.x0,W1,S1.z1,HD,Y2,FLOOR,CEIL);slab(W1,HW,AZ,HD,Y2,FLOOR,CEIL);
+  slab(-HW,S1.x0,-AZ,AZ,Y2,FLOOR,CEIL);slab(W1,-AX,-AZ,AZ,Y2,FLOOR,CEIL);slab(S1.x0,W1,-AZ,S1.z0-HOLE,Y2,FLOOR,CEIL);
   slab(AX,HW,-AZ,AZ,Y2,FLOOR,CEIL);
   /* 서쪽 계단 구멍이 남쪽 띠까지 이어진다: 남쪽 띠에서 구멍 자리를 다시 뺀다 (S1.z1=11 > AZ) */
   /* 3층: 계단 구멍 빼고 전부 */
-  slab(-HW,S2.x0,-HD,HD,Y3,FLOOR,CEIL);slab(S2.x1,HW,-HD,HD,Y3,FLOOR,CEIL);slab(S2.x0,S2.x1,-HD,S2.z0,Y3,FLOOR,CEIL);slab(S2.x0,S2.x1,S2.z1+HOLE,HD,Y3,FLOOR,CEIL);
+  slab(-HW,W2,-HD,HD,Y3,FLOOR,CEIL);slab(S2.x1,HW,-HD,HD,Y3,FLOOR,CEIL);slab(W2,S2.x1,-HD,S2.z0,Y3,FLOOR,CEIL);slab(W2,S2.x1,S2.z1+HOLE,HD,Y3,FLOOR,CEIL);
   /* 지붕 아래 천장 */
   P(BOX,0,YR-.15,0,HW*2,.3,HD*2,CEIL,IP);
   /* 큰 홀 천장의 들보 */
@@ -11158,7 +11209,7 @@ function buildGuildHallMap(K){
   const pane=(axis,fx,c,ya,yb,w,out)=>{const g={glow:true,b:'ip'};const cy=(ya+yb)/2,h=yb-ya;
     if(axis==='x'){P(QUAD,c,cy,fx+out*.02,w,h,1,GLOW,{...g,ry:out>0?0:PI});P(BOX,c,cy,fx+out*.06,.08,h,.06,DARKW,IP);P(BOX,c,cy+h*.1,fx+out*.06,w,.07,.06,DARKW,IP);P(BOX,c,ya-.05,fx+out*.1,w+.3,.1,.2,BEAM,IP);P(BOX,c,yb+.05,fx+out*.06,w+.2,.12,.1,BEAM,IP);}
     else{P(QUAD,fx+out*.02,cy,c,w,h,1,GLOW,{...g,ry:out>0?PI/2:-PI/2});P(BOX,fx+out*.06,cy,c,.06,h,.08,DARKW,IP);P(BOX,fx+out*.06,cy+h*.1,c,.06,.07,w,DARKW,IP);P(BOX,fx+out*.1,ya-.05,c,.2,.1,w+.3,BEAM,IP);P(BOX,fx+out*.06,yb+.05,c,.1,.12,w+.2,BEAM,IP);}};
-  const FRONT=[0,4.4,0,4.6],BACK=[-11,3,0,3.2];
+  const FRONT=[0,4.4,0,3.7],BACK=[-11,3,0,3.2];
   for(const [f0,f1,i] of [[0,Y2,0],[Y2,Y3,1],[Y3,YR,2]]){
     const wx=[-15,-9,-4.5,4.5,9,15].filter(c=>!(i===0&&Math.abs(c)<3)),wn=[-16.5,-6,6,16.5],wz=[-12,-6,0,6,12];
     const sH=i===0?[FRONT,...winX(wx,f0)]:winX(wx,f0);
@@ -11167,8 +11218,9 @@ function buildGuildHallMap(K){
     /* 안쪽: 회반죽(위)·나무 판벽(아래) */
     face('x',HD-T/2,-HW,HW,f0,f1,sH,PLA);face('x',-HD+T/2,-HW,HW,f0,f1,nH,PLA);face('z',-HW+T/2,-HD,HD,f0,f1,zHw,PLA);face('z',HW-T/2,-HD,HD,f0,f1,zH,PLA);
     /* 판벽 (허리 높이) */
-    const wain=(axis,fx,out)=>{const L=axis==='x'?HW*2-T*2:HD*2-T*2;if(axis==='x')P(BOX,0,f0+.6,fx+out*.32,L,1.2,.06,WOOD,IP);else P(BOX,fx+out*.32,f0+.6,0,.06,1.2,L,WOOD,IP);};
-    wain('x',HD-T/2,-1);wain('x',-HD+T/2,1);wain('z',-HW+T/2,1);wain('z',HW-T/2,-1);
+    /* 문 자리(정문·뒷문)는 판벽을 끊는다: 문 앞을 가로지르는 낮은 벽처럼 보이지 않게 */
+    const wain=(axis,fx,out,gap)=>{const L=axis==='x'?HW*2-T*2:HD*2-T*2;if(axis==='x'){const segs=gap?[[-L/2,gap[0]],[gap[1],L/2]]:[[-L/2,L/2]];for(const [a,b] of segs)P(BOX,(a+b)/2,f0+.6,fx+out*.32,b-a,1.2,.06,WOOD,IP);}else P(BOX,fx+out*.32,f0+.6,0,.06,1.2,L,WOOD,IP);};
+    wain('x',HD-T/2,-1,i===0?[-2.5,2.5]:null);wain('x',-HD+T/2,1,i===0?[-12.8,-9.2]:null);wain('z',-HW+T/2,1);wain('z',HW-T/2,-1);
     for(const [c,,ya,yb] of sH)if(yb-ya<3)pane('x',HD-T/2,c,ya,yb,1.5,-1),pane('x',HD-T/2,c,ya,yb,1.5,1);
     for(const [c,,ya,yb] of nH)if(yb-ya<3&&!(i===0&&c===BACK[0]))pane('x',-HD+T/2,c,ya,yb,1.5,1),pane('x',-HD+T/2,c,ya,yb,1.5,-1);
     for(const [c,,ya,yb] of zHw)pane('z',-HW+T/2,c,ya,yb,1.5,1),pane('z',-HW+T/2,c,ya,yb,1.5,-1);
@@ -11179,9 +11231,12 @@ function buildGuildHallMap(K){
   wallC(-HW,-HD,-HW,HD,-2,YR);wallC(HW,-HD,HW,HD,-2,YR);
   /* 바깥 모습: 돌 받침, 반목조(나무 틀) 회반죽, 높은 지붕 */
   /* 돌 받침: 안이 비어 있는 띠 (통째로 두면 1층 바닥 위로 돌이 차올라 사람이 허리까지 묻힌다) */
-  for(const s of [-1,1]){P(BOX,0,.7,s*(HD+.25-.4),HW*2+.5,1.4,.8,PIETRA2);P(BOX,s*(HW+.25-.4),.7,0,.8,1.4,HD*2+.5,PIETRA2);}
-  for(const [y] of [[Y2-.1],[Y3-.1]])P(BOX,0,y,0,HW*2+.35,.35,HD*2+.35,BEAM);P(BOX,0,YR-.1,0,HW*2+.6,.4,HD*2+.6,BEAM);
-  for(let x=-HW;x<=HW+.01;x+=4)for(const s of [-1,1]){P(BOX,x,(1.4+YR)/2,s*(HD+.18),.3,YR-1.4,.1,BEAM);}
+  {const zb=HD+.25-.4;P(BOX,(-HW-.25+(-2.3))/2,.7,zb,(-2.3)-(-HW-.25),1.4,.8,PIETRA2);P(BOX,(2.3+HW+.25)/2,.7,zb,HW+.25-2.3,1.4,.8,PIETRA2);   /* 남쪽: 정문 자리 비움 */
+    P(BOX,(-HW-.25+(-12.6))/2,.7,-zb,(-12.6)-(-HW-.25),1.4,.8,PIETRA2);P(BOX,(-9.4+HW+.25)/2,.7,-zb,HW+.25+9.4,1.4,.8,PIETRA2);   /* 북쪽: 뒷문 자리 비움 */
+    for(const s of [-1,1])P(BOX,s*(HW+.25-.4),.7,0,.8,1.4,HD*2+.5,PIETRA2);}
+  /* 층 사이 바깥 띠: 네 변의 띠만 (통째 판으로 두면 홀 가운데와 계단 구멍 위를 막아 "계단 위가 막혀" 보인다) */
+  {const band=(y,ex,h)=>{const WX=HW*2+ex,WZ=HD*2+ex;for(const s of [-1,1]){P(BOX,0,y,s*(HD+ex/2-.2),WX,h,.4,BEAM);P(BOX,s*(HW+ex/2-.2),y,0,.4,h,WZ,BEAM);}};band(Y2-.1,.35,.35);band(Y3-.1,.35,.35);band(YR-.1,.6,.4);}
+  for(let x=-HW;x<=HW+.01;x+=4)for(const s of [-1,1]){if(s>0&&Math.abs(x)<2.6||s<0&&x>-13&&x<-9)continue;P(BOX,x,(1.4+YR)/2,s*(HD+.18),.3,YR-1.4,.1,BEAM);}
   for(let z=-HD;z<=HD+.01;z+=4)for(const s of [-1,1]){P(BOX,s*(HW+.18),(1.4+YR)/2,z,.1,YR-1.4,.3,BEAM);}
   P(HIP,0,YR+.2,0,HW*2+2.4,8,HD*2+2.4,TERRA[2]);
   for(const [x,z] of [[-12,-6],[13,8]]){P(BOX,x,YR+5,z,1.6,7,1.6,STONE2);P(BOX,x,YR+8.6,z,2,.4,2,PIETRA2);}
@@ -11192,8 +11247,8 @@ function buildGuildHallMap(K){
   P(BOX,0,6.4,HD+.4,5,1.2,.15,0x7a2a22);P(BOX,0,6.4,HD+.48,4.4,.8,.05,GOLD);
 
   /* ===== 정문 (안쪽): 엑시즈 시내로 나가는 문 ===== */
-  if(typeof makeDoorway==='function')makeDoorway(cx,0,cz+HD-T-.02,PI,{w:4.2,h:4.4});
-  P(BOX,0,2.3,HD-T-.04,4.2,4.5,.08,DARKW,IP);for(const s of [-1,1]){P(BOX,s*1.05,2.2,HD-T-.1,1.9,4.2,.08,0x6a4428,IP);P(SPH,s*.35,2,HD-T-.16,.09,.09,.09,GOLD,IP);}
+  if(typeof makeDoorway==='function')makeDoorway(cx,0,cz+HD-T-.02,PI,{w:4.2,h:3.7});
+  P(BOX,0,1.85,HD-T-.04,4.2,3.7,.08,DARKW,IP);for(const s of [-1,1]){P(BOX,s*1.05,1.8,HD-T-.1,1.9,3.4,.08,0x6a4428,IP);P(SPH,s*.35,2,HD-T-.16,.09,.09,.09,GOLD,IP);}
   /* 지하 창고 문 (북쪽 벽, 술집 쪽) */
   const BD={x:11,z:-HD+T+.05};if(typeof makeDoorway==='function')makeDoorway(cx+BD.x,0,cz+BD.z,0,{w:2.2,h:2.6,light:false});
   MARCUS.guildDoor={tx:cx+BD.x,tz:cz+BD.z+.75,y:0,ry:0,ax:cx+BD.x,az:cz+BD.z+2.8,ayaw:Math.PI};
@@ -11207,7 +11262,7 @@ function buildGuildHallMap(K){
     P(BOX,mx,y+1.05,mz,alongX?L:.16,.12,alongX?.16:L,BEAM,IP);P(BOX,mx,y+.12,mz,alongX?L:.12,.08,alongX?.12:L,BEAM,IP);
     const n=Math.floor(L/.45);for(let k=0;k<=n;k++){const t=k/n;P(BOX,x0+(x1-x0)*t,y+.6,z0+(z1-z0)*t,.07,.9,.07,DARKW,IP);}wallC(x0,z0,x1,z1,y-.3,y+1.5,.3);};
   rail(-AX,-AZ,AX,-AZ,Y2);rail(-AX,AZ,AX,AZ,Y2);rail(-AX,-AZ,-AX,AZ,Y2);rail(AX,-AZ,AX,AZ,Y2);
-  rail(S1.x1,S1.z0,S1.x1,AZ,Y2);rail(S1.x1,AZ,S1.x1,S1.z1,Y2);rail(S1.x0-.3,S1.z1,S1.x1,S1.z1,Y2);
+  rail(W1,S1.z0,W1,S1.z1,Y2);rail(S1.x0-.3,S1.z1,W1,S1.z1,Y2);rail(S1.x1,S1.z0,W1,S1.z0,Y2);
 
   /* ===== 계단 ===== */
   const stair=(S,yLow,yHigh,lowAtZ1,col=WOOD)=>{const n=20,L=S.z1-S.z0,w=S.x1-S.x0,mx=(S.x0+S.x1)/2;
@@ -11230,7 +11285,7 @@ function buildGuildHallMap(K){
     if(b-cur>.05)alongX?wallC(cur,z0,b,z0,y0-.3,y1,.3):wallC(x0,cur,x0,b,y0-.3,y1,.3);
     for(const [c,w,ha,hb] of doors){if(alongX){P(BOX,c-w/2-.08,(ha+hb)/2,z0,.16,hb-ha,.34,BEAM,IP);P(BOX,c+w/2+.08,(ha+hb)/2,z0,.16,hb-ha,.34,BEAM,IP);P(BOX,c,hb+.08,z0,w+.32,.16,.34,BEAM,IP);}
       else{P(BOX,x0,(ha+hb)/2,c-w/2-.08,.34,hb-ha,.16,BEAM,IP);P(BOX,x0,(ha+hb)/2,c+w/2+.08,.34,hb-ha,.16,BEAM,IP);P(BOX,x0,hb+.08,c,.34,.16,w+.32,BEAM,IP);}}};
-  iwall(S2.x0-.2,-ID,S2.x0-.2,S2.z1,Y3,YR);iwall(S2.x0-.2,S2.z0,IN,S2.z0,Y3,YR);
+  iwall(W2-.2,-ID,W2-.2,S2.z1,Y3,YR);iwall(W2-.2,S2.z0,IN,S2.z0,Y3,YR);iwall(W2-.2,S2.z1,S2.x0,S2.z1,Y3,YR);
 
   /* ===== 3층 방 나누기 ===== */
   const CZ0=3,CZ1=7.5;   /* 복도 */
@@ -11241,7 +11296,7 @@ function buildGuildHallMap(K){
 
   /* ===== 가구 ===== */
   const tableR=(x,z,y,r=.9,stools=4)=>{P(CYL(1,1,12),x,y+.82,z,r,.08,r,WOOD,IP);P(CYL(.18,.25,8),x,y+.4,z,1,.8,1,DARKW,IP);P(CYL(1,1,8),x,y+.04,z,.5,.08,.5,DARKW,IP);rndC(x,z,r*.8,y,.9);
-    for(let k=0;k<stools;k++){const a=k/stools*PI*2+.4,sx=x+Math.cos(a)*(r+.55),sz=z+Math.sin(a)*(r+.55);P(CYL(1,1,8),sx,y+.45,sz,.26,.08,.26,WOOD,IP);P(CYL(.06,.06,4),sx,y+.22,sz,1,.44,1,DARKW,IP);}
+    for(let k=0;k<stools;k++){const a=k/stools*PI*2+.4,sx=x+Math.cos(a)*(r+.55),sz=z+Math.sin(a)*(r+.55);P(CYL(1,1,8),sx,y+.45,sz,.26,.08,.26,WOOD,IP);P(CYL(.06,.06,4),sx,y+.22,sz,1,.44,1,DARKW,IP);seatAdd(cx+sx,cz+sz,y+.49,Math.atan2(x-sx,z-sz));}
     /* 잔·접시 */
     for(let k=0;k<3;k++){const a=rr(0,6.28),d=rr(.2,r-.25);P(CYL(.07,.06,8),x+Math.cos(a)*d,y+.95,z+Math.sin(a)*d,1,.18,1,pick([0xc8a050,0xb8b0a0,0x8a6a48]),IP);}
     if(rnd()<.6)P(CYL(1,1,10),x+rr(-.2,.2),y+.88,z+rr(-.2,.2),.25,.04,.25,0xe8e0d0,IP);};
@@ -11272,10 +11327,14 @@ function buildGuildHallMap(K){
   /* 길드 명부: 접수대 서쪽 끝 독서대 */
   {const lx=-9.6,lz=-11.4;P(BOX,lx,.5,lz,.5,1,.45,WOOD,IP);P(BOX,lx,1.02,lz,.75,.08,.6,WOOD,{b:'ip',rx:-.3});P(BOX,lx-.17,1.09,lz,.32,.05,.48,0xf0e8d8,{b:'ip',rx:-.3});P(BOX,lx+.17,1.09,lz,.32,.05,.48,0xf0e8d8,{b:'ip',rx:-.3});P(BOX,lx,1.07,lz,.7,.03,.52,0x7a2a22,{b:'ip',rx:-.3});objC(lx,lz,.8,.7,0,1.2);
     const p=W(lx,lz);MARCUS.guildBook={x:p.x,z:p.z,y:0};}
-  /* 의뢰 게시판 (북쪽 벽 서쪽) */
-  {const bx=-16,bz=-ID+.1;P(BOX,bx,2.4,bz+.06,5.4,2.8,.12,0xa8885a,IP);P(BOX,bx,2.4,bz+.02,5.8,3.2,.08,DARKW,IP);P(BOX,bx,4.05,bz+.15,5.8,.25,.3,DARKW,IP);
-    for(let k=0;k<16;k++){const px=bx-2.2+(k%6)*.88+rr(-.1,.1),py=1.4+Math.floor(k/6)*.95+rr(-.1,.1);if(py>3.6)continue;P(QUAD,px,py,bz+.14,.62,.78,1,pick([0xf0e8d8,0xe8dcc0,0xf4ecd8,0xe0c8a0]),{b:'ip',rz:rr(-.12,.12)});P(SPH,px,py+.34,bz+.16,.04,.04,.03,0xc83a3a,IP);}
-    P(BOX,bx,4.35,bz+.2,2.4,.4,.06,0x7a2a22,IP);}
+  /* 의뢰 게시판: 남쪽 벽 서쪽 절반을 다 차지하는 큰 판. 네 칸(초급·중급·상급·특급)으로 나뉘고 칸마다 색띠가 다르다 */
+  {const bx=-11.2,bz=ID-.1,BW=13.2,BH=3.3,yc=2.05;P(BOX,bx,yc,bz-.02,BW+.4,BH+.4,.1,DARKW,IP);P(BOX,bx,yc,bz-.07,BW,BH,.1,0xa8885a,IP);P(BOX,bx,yc+BH/2+.3,bz-.18,BW+.6,.28,.36,DARKW,IP);P(BOX,bx,yc-BH/2-.2,bz-.18,BW+.6,.16,.3,DARKW,IP);
+    const TC=[0x6a9a4a,0x4a7ab8,0xb8782a,0x8a2a3a],cw=BW/4;
+    for(let t=0;t<4;t++){const tx=bx-BW/2+cw*(t+.5);P(BOX,tx,yc+BH/2-.2,bz-.13,cw-.3,.3,.03,TC[t],IP);if(t)P(BOX,bx-BW/2+cw*t,yc,bz-.13,.08,BH,.05,DARKW,IP);
+      for(let k=0;k<9;k++){const px=tx-cw/2+.55+(k%3)*(cw-1.1)/2+rr(-.08,.08),py=yc-BH/2+.55+Math.floor(k/3)*.86+rr(-.06,.06);P(QUAD,px,py,bz-.14,.6,.76,1,pick([0xf0e8d8,0xe8dcc0,0xf4ecd8,0xe0c8a0]),{b:'ip',rz:rr(-.1,.1),ry:PI});P(SPH,px,py+.33,bz-.16,.04,.04,.03,pick([0xc83a3a,0x2a5aa3,0xa3861c]),IP);}}
+    /* 게시판 앞 받침대 둘 (등불) */
+    for(const s of [-1,1]){P(CYL(.06,.08,6),bx+s*(BW/2-.6),.75,bz-.8,1,1.5,1,DARKW,IP);P(BOX,bx+s*(BW/2-.6),1.62,bz-.8,.3,.34,.3,0xffd27a,{glow:true,b:'ip'});}
+    MARCUS.guildBoard={x:cx+bx,z:cz+bz,y:0,hw:BW/2};}
   /* 술집 카운터 (동쪽 회랑 아래) */
   {const xc=14.2;P(BOX,xc,.55,0,1,1.1,11,WOOD,IP);P(BOX,xc-.05,1.15,0,1.3,.1,11.4,DARKW,IP);objC(xc,0,1.3,11.4,0,1.2);
     for(let k=0;k<6;k++){const z=-4.5+k*1.8;P(CYL(1,1,8),xc-1.2,.75,z,.25,.08,.25,WOOD,IP);P(CYL(.06,.06,4),xc-1.2,.37,z,1,.74,1,DARKW,IP);}
@@ -11290,11 +11349,11 @@ function buildGuildHallMap(K){
     for(let k=0;k<3;k++)P(CYL(.12,.12,6),fx+.8,.35+k*.06,fz-.4+k*.4,1,1.1,1,0x5a3a20,{b:'ip',rz:PI/2,ry:k*.6});P(CONE(5),fx+.85,.75,fz,.5,.8,.6,0xff9a30,{glow:true});P(CONE(5),fx+.85,.6,fz+.3,.35,.55,.4,0xffc040,{glow:true});
     objC(fx+.6,fz,1.3,3.8,0,3);
     /* 난롯가 소파와 탁자 */
-    rug(fx+3.6,fz,0,4.4,4.4,0x3a4a6a,0xc8a050);for(const s of [-1,1]){P(BOX,fx+3.6,.42,fz+s*1.7,2.2,.5,.8,0x7a2a22,IP);P(BOX,fx+3.6,.85,fz+s*2.05,2.2,.6,.15,0x7a2a22,IP);objC(fx+3.6,fz+s*1.8,2.2,1,0,.9);}
+    rug(fx+3.6,fz,0,4.4,4.4,0x3a4a6a,0xc8a050);for(const s of [-1,1]){P(BOX,fx+3.6,.42,fz+s*1.7,2.2,.5,.8,0x7a2a22,IP);P(BOX,fx+3.6,.85,fz+s*2.05,2.2,.6,.15,0x7a2a22,IP);objC(fx+3.6,fz+s*1.8,2.2,1,0,.9);seatAdd(cx+fx+3.6+.65,cz+fz+s*1.7,.67,s>0?PI:0);}
     tableL(fx+3.6,fz,0,1.2,1);}
   /* 남쪽 벽 정문 양옆: 화분, 갑옷 */
-  for(const s of [-1,1]){plant(s*3.4,ID-.8,0,1.1);plant(s*(IN-1),ID-.8,0,1);}
-  for(const x of [-7,7]){P(BOX,x,.15,ID-.6,.8,.3,.6,STONE2,IP);P(BOX,x,1.2,ID-.6,.5,.8,.35,0x8a8e98,IP);P(SPH,x,1.85,ID-.6,.18,.22,.18,0x8a8e98,IP);P(BOX,x,1.3,ID-.6,.7,.15,.3,0x7a7e88,IP);objC(x,ID-.6,1,.8,0,2.2);}
+  for(const s of [-1,1])plant(s*3.4,ID-.8,0,1.1);plant(IN-1,ID-.8,0,1);   /* 서쪽은 게시판 자리 */
+  for(const x of [7,11]){P(BOX,x,.15,ID-.6,.8,.3,.6,STONE2,IP);P(BOX,x,1.2,ID-.6,.5,.8,.35,0x8a8e98,IP);P(SPH,x,1.85,ID-.6,.18,.22,.18,0x8a8e98,IP);P(BOX,x,1.3,ID-.6,.7,.15,.3,0x7a7e88,IP);objC(x,ID-.6,1,.8,0,2.2);}
   /* 1층 회랑 아래 서쪽(계단 앞) 탁자들 */
   for(const z of [-6,0,5])tableR(-13.6,z,0,.75,3);
   /* 홀 천장의 큰 샹들리에와 회랑 등 */
@@ -11362,13 +11421,21 @@ function buildGuildHallMap(K){
     rndC(x,z,.35,y,1.8);GHALL.npcs.push({g,pose,ph:rnd()*9});return g;};
   const HAIR=[0x2a1a10,0x6a4a2a,0xb07a3a,0xd8b060,0x1a1a1a,0x9a3a1a];
   N({robe:0x2a4a7a,robe2:0xf0e8d8,hat:'hair',hatC:0xc8a050,long:1},'counter',-2.7,-13.7,0,0);
-  N({robe:0x2a4a7a,robe2:0xf0e8d8,hat:'hair',hatC:0x6a3a2a,long:1},'counter',2.7,-13.7,0,0);
-  N({robe:0x5a3a22,robe2:0xe8e0d0,hat:'hair',hatC:0x2a1a10,beard:0x2a1a10},'counter',IN-1.4,0,0,-PI/2);
+  /* 오른쪽 창구의 접수원은 실제로 말을 거는 사람: 의뢰 보고와 게시판 */
+  if(typeof addNpc==='function'){NPC_POSE.guild='counter';addNpc({id:'guild',name:'마리엘',role:'길드 접수원',x:cx+2.7,z:cz-13.7,y:0,faceX:cx+2.7,faceZ:cz,look:{robe:0x2a4a7a,robe2:0xf0e8d8,hat:'hair',hatC:0x6a3a2a,long:1},
+    lines:['모험가 길드 엑시즈 지부예요. 의뢰는 남쪽 벽 게시판에서 고르세요.','등급에 맞는 칸을 보세요. 초급부터 특급까지 나뉘어 있어요.','끝낸 의뢰는 저한테 보고하시면 돼요.'],acts:[['의뢰 보고','quest']]});}
+  else N({robe:0x2a4a7a,robe2:0xf0e8d8,hat:'hair',hatC:0x6a3a2a,long:1},'counter',2.7,-13.7,0,0);
+  /* 술집 주인: 음식과 술을 판다 (자리에 앉아서 먹는다) */
+  if(typeof addNpc==='function'){NPC_POSE.pub='counter';addNpc({id:'pub',name:'브람',role:'술집 주인',x:cx+IN-1.4,z:cz,y:0,faceX:cx,faceZ:cz,look:{robe:0x5a3a22,robe2:0xe8e0d0,hat:'hair',hatC:0x2a1a10,beard:0x2a1a10,cloth:{apron:0x3a2a1a}},
+    lines:['오늘 스튜는 양고기야. 자리에 앉아서 천천히 들라고.','맥주 한 잔이면 팔에 힘이 붙지.','먹을 건 탁자에서. 서서 먹다 흘리면 내가 닦아야 하거든.'],acts:[['음식과 술 사기','shop:pub'],['물건 팔기','sell']]});}
+  else N({robe:0x5a3a22,robe2:0xe8e0d0,hat:'hair',hatC:0x2a1a10,beard:0x2a1a10},'counter',IN-1.4,0,0,-PI/2);
   const sitAt=(x,z,a,d,pose)=>N({robe:pick([0x7a3a3a,0x3a5a7a,0x5a6a3a,0x8a6a3a,0x5a4a6a,0x9a9aa2]),robe2:pick([0xc8b080,0x5a4a3a,0x8a8a8a]),hat:pick(['hair','hair','hood','helm','wide']),hatC:pick(HAIR),beard:rnd()<.3?pick(HAIR):undefined,long:rnd()<.35?1:0},pose,x+Math.cos(a)*d,z+Math.sin(a)*d,0,Math.atan2(-Math.cos(a),-Math.sin(a)));
   sitAt(-7,-4.5,.4,1.55,'sitdrink');sitAt(-7,-4.5,.4+PI,1.55,'sittalk');sitAt(7.5,2.5,1.2,1.55,'sittalk');sitAt(7.5,2.5,1.2+PI*.8,1.55,'sitdrink');sitAt(0,-5.5,2,1.55,'sitdrink');
-  N({robe:0x6a4a8a,robe2:0xc8b080,hat:'hood',hatC:0x4a3a6a},'think',-16.5,-13.2,0,PI);N({robe:0x8a5a3a,robe2:0x5a4a3a,hat:'helm',hatC:0},'read',-14.8,-13.4,0,PI+.2);
+  N({robe:0x6a4a8a,robe2:0xc8b080,hat:'hood',hatC:0x4a3a6a},'sitdrink',-IN+3.6-.6,-11.5+1.7,.2,PI);N({robe:0x8a5a3a,robe2:0x5a4a3a,hat:'hair',hatC:0x3a2a1a},'sittalk',-IN+3.6-.6,-11.5-1.7,.2,0);   /* 난롯가 소파에 앉아 마시고 읽는다 */
   N({robe:0x3a6a5a,robe2:0xe8e0d0,hat:'hair',hatC:0xd8b060,long:1},'cross',-AX-1,-AZ-1.2,Y2,PI*.75);
   N({robe:0x7a2a22,robe2:0xd4af37,hat:'hair',hatC:0xe0e0e0,beard:0xe0e0e0},'think',-10,-13.4,Y3,0);
+  /* 앉아 있는 사람 자리는 손님 자리에서 뺀다 */
+  for(const n of GHALL.npcs){if(!/^sit/.test(n.pose))continue;for(let i=SEATS.length-1;i>=0;i--){const s=SEATS[i];if(Math.hypot(s.x-n.g.position.x,s.z-n.g.position.z)<.6)SEATS.splice(i,1);}}
   GHALL.ready=true;}
 /* 맵 안에 있을 때만 사람들을 움직이고 보인다 */
 function guildHallTick(t,dt){if(!GHALL.ready||!player)return;const I=OR.ISLES.guildhall,p=player.position,inG=Math.abs(p.x-I.x)<I.R&&Math.abs(p.z-I.z)<I.R;
@@ -11491,15 +11558,16 @@ function quadInstance(kind){const L=QUAD_LOOK[kind]||QUAD_LOOK.wolf,wolf=kind===
       [SPH,-.085,.13,.215,.02,.02,.02,dark],[SPH,.085,.13,.215,.02,.02,.02,dark],[SPH,0,-.02,.22,.13,.07,.18,c2],
       [CONE,-.1,.28,-.02,.11,.22,.07,c,-.15,0,.28],[CONE,.1,.28,-.02,.11,.22,.07,c,-.15,0,-.28],[CONE,-.1,.26,-.01,.06,.14,.04,c2,-.15,0,.28],[CONE,.1,.26,-.01,.06,.14,.04,c2,-.15,0,-.28]];}
   else{const dk=kind==='donkey',LE=0x3a1a10;
-    /* 머리통·눈·귀·이마끈은 H에, 얼굴(긴 주둥이)은 아래·앞으로 숙인 하위 그룹 F에 +z 방향으로 놓는다 */
-    head=[[SPH,0,.06,-.02,.27,.27,.28,c],
-      [SPH,-.125,.08,.1,.05,.05,.035,dark],[SPH,.125,.08,.1,.05,.05,.035,dark],[SPH,-.125,.085,.118,.02,.02,.012,0xf0f0f0],[SPH,.125,.085,.118,.02,.02,.012,0xf0f0f0]];
-    const el=dk?.34:.17,ew=dk?.09:.07;head.push([CONE,-.1,.3,-.06,ew,el,.055,c,-.3,0,.35],[CONE,.1,.3,-.06,ew,el,.055,c,-.3,0,-.35],[CONE,-.1,.28,-.05,ew*.55,el*.6,.04,c2,-.3,0,.35],[CONE,.1,.28,-.05,ew*.55,el*.6,.04,c2,-.3,0,-.35]);
-    if(!dk)head.push([SPH,0,.26,.1,.09,.07,.16,L.mane,.5,0,0]);
-    const F=new THREE.Group();F.position.set(0,-.02,.1);F.rotation.x=.8;H.add(F);
-    F.add(new THREE.Mesh(merge([[SPH,0,0,.16,.17,.2,.34,c],[SPH,0,-.02,.42,.14,.14,.15,c2],[SPH,-.05,-.04,.54,.03,.022,.03,dark],[SPH,.05,-.04,.54,.03,.022,.03,dark],[SPH,0,-.1,.4,.11,.05,.12,c2],
-      [TOR,0,0,.34,.3,.3,.3,LE],[BOX,-.15,.02,.14,.025,.08,.3,LE],[BOX,.15,.02,.14,.025,.08,.3,LE],[BOX,0,-.14,.0,.03,.06,.36,LE,-.8,0,0]]),VC));}
-  H.add(new THREE.Mesh(merge(head),VC));
+    /* 말·당나귀 머리: 머리통→얼굴→주둥이가 한 덩어리로 이어지게 모두 숙인 하위 그룹 F(+z가 코끝)에 놓는다. 고삐 코끈은 주둥이 둘레에 꼭 맞는 크기 */
+    head=[];const F=new THREE.Group();F.position.set(0,0,.04);F.rotation.x=.8;H.add(F);
+    const sk=dk?.27:.3,face=[[SPH,0,0,0,sk,sk,sk*1.1,c],[SPH,0,-.03,.2,sk*.8,sk*.78,.4,c],[SPH,0,-.06,.4,sk*.66,sk*.62,.26,dk?c2:c],   /* 머리통·얼굴·주둥이 */
+      [SPH,0,-.07,.5,.16,.14,.13,c2],[SPH,-.045,-.1,.555,.028,.022,.028,dark],[SPH,.045,-.1,.555,.028,.022,.028,dark],[BOX,0,-.135,.49,.11,.012,.05,dark],   /* 코끝·콧구멍·입선 */
+      [SPH,-.13,.05,.1,.05,.05,.035,dark],[SPH,.13,.05,.1,.05,.05,.035,dark],[SPH,-.132,.055,.118,.02,.02,.012,0xf0f0f0],[SPH,.132,.055,.118,.02,.02,.012,0xf0f0f0],   /* 눈 */
+      [TOR,0,-.055,.42,.2,.19,.2,LE],[BOX,-.1,-.02,.3,.02,.03,.3,LE,-.25,0,0],[BOX,.1,-.02,.3,.02,.03,.3,LE,-.25,0,0],[BOX,0,.1,.03,.3,.03,.02,LE],[BOX,0,-.12,.0,.26,.03,.02,LE]];   /* 코끈·볼끈·이마끈·목끈 */
+    const el=dk?.34:.18,ew=dk?.09:.07;face.push([CONE,-.09,.2,-.06,ew,el,.055,c,-.5,0,.35],[CONE,.09,.2,-.06,ew,el,.055,c,-.5,0,-.35],[CONE,-.09,.19,-.05,ew*.55,el*.6,.04,c2,-.5,0,.35],[CONE,.09,.19,-.05,ew*.55,el*.6,.04,c2,-.5,0,-.35]);   /* 귀 */
+    if(!dk)face.push([SPH,0,.15,.08,.1,.07,.18,L.mane,.4,0,0]);   /* 앞머리 */
+    F.add(new THREE.Mesh(merge(face),VC));}
+  if(head.length)H.add(new THREE.Mesh(merge(head),VC));
   const leg=(x,z)=>{const Lg=new THREE.Group();Lg.position.set(x,wolf?.44:.5,z);
     Lg.add(new THREE.Mesh(merge(wolf?[[CYL,0,-.1,0,.1,.24,.12,c],[SPH,0,-.22,0,.09,.09,.1,c],[CYL,0,-.32,.01,.07,.22,.075,c],[SPH,0,-.43,.03,.1,.06,.13,c2]]
       :[[SPH,0,-.02,0,.15,.2,.17,c],[CYL,0,-.14,0,.1,.26,.11,c],[SPH,0,-.27,.01,.085,.085,.09,c],[CYL,0,-.39,.01,.065,.22,.07,c],[SPH,0,-.5,.02,.075,.06,.08,c],[CYL,0,-.56,.03,.085,.07,.095,dark]]),VC));B.add(Lg);return Lg;};
@@ -11577,6 +11645,19 @@ function buildExMarket(K){
     edge(X0,Y0+4,X0,Y1-4,0);edge(X1,Y0+4,X1,Y1-4,0);edge(X0+4,Y0,X1-4,Y0,0);edge(X0+4,Y1,X1-4,Y1,0);
     /* 서쪽 빈터: 격자로 채운다 (길 사이사이) */
     for(let gx=X0-11;gx>X0-46;gx-=11)for(let gy=Y0-6;gy<Y1+8;gy+=11){const mx=gx+(rnd()-.5)*2,my=gy+(rnd()-.5)*2;if(!free(mx,my,6))continue;hs.push({mx,my,w:9.5,d:8.5,rot:(rnd()-.5)*.1,roof:K.TERRA[(n++)%K.TERRA.length],dk:rnd()<.5?'commerce':'residential',fl:rnd()<.5?2:3});}
+    /* 중앙 광장 둘레: 광장을 울타리처럼 빙 둘러 집을 세운다 (앞면이 광장을 본다). 길이 지나는 자리는 비운다 */
+    {const pz=PL.zone('plaza');if(pz){const R=pz.r+6,n1=Math.round(2*PI*R/11.2);
+      /* 울타리처럼 촘촘히: 둥근 반지름 대신 상자 모양 그대로 겹침을 본다 (광장 가장자리 바로 바깥 띠) */
+      const freeR=(mx,my,hw,hd,ry)=>{if(PL.nearStreet(mx,my,2.0)||PL.waterDepth(mx,my)>0||PL.riverDist(mx,my)<MARCUS_RIVER_W/2+6||PL.wallDist(mx,my)>-8)return false;
+        const wx=M.x+mx,wz=M.z+my,rr=Math.max(hw,hd);for(const c of colliders){if(c.r<1.5)continue;const dx=wx-c.x,dz=wz-c.z;if(Math.hypot(dx,dz)>c.r+rr)continue;
+          if(!c.box)return false;const cs=c.cs==null?1:c.cs,sn=c.sn||0,lx=dx*cs-dz*sn,lz=dx*sn+dz*cs;if(Math.abs(lx)<c.hw+Math.min(hw,hd)*.9&&Math.abs(lz)<c.hd+Math.min(hw,hd)*.9)return false;}
+        for(const h of hs)if(Math.hypot(h.mx-mx,h.my-my)<9.4)return false;return true;};
+      for(let k=0;k<n1;k++){const a0=k/n1*PI*2+.03;let put=false;
+        for(const [dr,da] of [[0,0],[3,0],[-2.5,0],[0,.05],[0,-.05],[3,.06],[3,-.06]]){const a=a0+da,r=R+dr,mx=pz.x+Math.cos(a)*r,my=pz.y+Math.sin(a)*r;if(!freeR(mx,my,4.8,4,a))continue;
+          hs.push({mx,my,w:9.6,d:8,rot:Math.atan2(-Math.cos(a),-Math.sin(a)),roof:K.TERRA[(n++)%K.TERRA.length],dk:rnd()<.6?'commerce':'residential',fl:rnd()<.5?2:3});put=true;break;}}
+      /* 바깥 두 번째 줄: 틈을 메운다 */
+      const R2=R+9.5,n2=Math.round(2*PI*R2/11.2);for(let k=0;k<n2;k++){const a=(k+.5)/n2*PI*2,mx=pz.x+Math.cos(a)*R2,my=pz.y+Math.sin(a)*R2;if(!freeR(mx,my,4.6,4,a))continue;
+        hs.push({mx,my,w:9.2,d:8,rot:Math.atan2(-Math.cos(a),-Math.sin(a))+(rnd()-.5)*.1,roof:K.TERRA[(n++)%K.TERRA.length],dk:'residential',fl:rnd()<.5?2:3});}}}
     hs.forEach((h,i)=>{try{K.buildHouse(h,1200+i);}catch(e){}});EXM.houses=hs.length;}
   EXM.ready=true;}
 /* 매여 있는 짐승들: 가끔 고개를 움직이는 정도 (쉬는 동작) */
@@ -12987,7 +13068,7 @@ function ninSkill(S,id,pw,opt){const q0=player.position;
   if(id==='nrush'){let best=null,bd=1e9;const f=flatFwd();
     for(const m of alive()){if(!(m.nStk>0&&m.nStkT>tAll))continue;const dx=m.mesh.position.x-q0.x,dz=m.mesh.position.z-q0.z,d=Math.hypot(dx,dz);if(d>S.range+m.r)continue;const sc=d-(dx*f.x+dz*f.z)/Math.max(d,1e-3)*3;if(sc<bd){bd=sc;best=m;}}
     if(!best){toast('수리검이 꽂힌 적이 가까이 없다');cds[id]=0;P.mp+=S.mp;return null;}
-    const m=best,dx=m.mesh.position.x-q0.x,dz=m.mesh.position.z-q0.z,d=Math.hypot(dx,dz)||1,ff={x:dx/d,z:dz/d},dist=Math.max(0,d-m.r-.8),dd=Math.max(.12,Math.min(.4,dist/30));
+    const m=best,dx=m.mesh.position.x-q0.x,dz=m.mesh.position.z-q0.z,d=Math.hypot(dx,dz)||1,ff={x:dx/d,z:dz/d},dist=Math.max(0,d-m.r-.8),dd=Math.max(.08,Math.min(.22,dist/60));   /* 기습 돌진: 60m/s */
     P.dash={t:dd,dur:dd,dist,mult:0,opt,hit:new Set(),f:ff,push:false,nohit:true,tgt:m,stop:m.r+.9,onDone:()=>{if(mode!=='world'||!P||m.dying!==null)return;const n=m.nStk||0;m.nStk=0;
       const c=mCenter(m);VFX.burst(c,0xb060ff,22,5,.4,{mix:0xffffff});VFX.burst(c,0xc02020,12,3,.4,{grav:6});sfx('d_deep',c,1);shakeT=Math.max(shakeT,.14);myMoId='deepslash';myMo=motionFor('dagger','deepslash');swingT=0;
       shared(()=>damageMonster(m,S.mult*pw*Math.max(1,n),{...opt,sk:'nrush',skHit:true}));}};
@@ -14383,7 +14464,7 @@ function startGame(data){const ap=apParse(data.ap)||(data.ap&&data.ap.g?data.ap:
   pmLoad(ap.g).catch(()=>{}).then(()=>{L.hidden=true;startGameNow(data);});}
 function startGameNow(data){
   setTimeout(precompileAll,4000);setTimeout(precompileAll,12000);setTimeout(()=>warmGpu(),1500);
-  P={...data,buffs:{}};if(!P.id)P.id='c'+Date.now().toString(36);
+  P={...data,buffs:{}};if(!P.id)P.id='c'+Date.now().toString(36);P.seat=null;P.ride=null;
   P.gold=data.gold||0;P.equip={weapon:null,sub:null,helm:null,armor:null,boots:null,acc:null,...(data.equip||{})};
   for(const k in P.equip)if(P.equip[k]&&!ITEMS[P.equip[k]])P.equip[k]=null;
   P.enh={...(data.enh||{})};P.home='town';P.quest=data.quest&&(data.quest.goals||MON[data.quest.ty])&&ZONES[data.quest.zone]?{...data.quest}:null;if(P.quest)qGoals(P.quest);
@@ -14483,9 +14564,9 @@ function faceMe(obj){if(!obj||!player)return;if(!obj.userData.baseQ)obj.userData
 function easeFacing(dt){for(const o of facing){const talking=mode==='dialog';o.userData.faceT+=dt;
   const target=talking?o.userData.faceQ:o.userData.baseQ;o.quaternion.slerp(target,Math.min(1,dt*(talking?8:2.5)));
   if(!talking&&o.quaternion.angleTo(o.userData.baseQ)<.01){o.quaternion.copy(o.userData.baseQ);facing.delete(o);}}}
-function doInteract(){if(performance.now()<npcQuietUntil)return;if(interactTarget==='gbook'){openGuild();return;}if(interactTarget&&interactTarget.startsWith('ccar:')){ccarAct(interactTarget);return;}if(interactTarget&&interactTarget.startsWith('portal:')){usePortal(+interactTarget.split(':')[1]);return;}if(interactTarget&&interactTarget.startsWith('lib:')){const id=LIB_LIST[+interactTarget.slice(4)%LIB_LIST.length];interactTarget=null;$('#interact').hidden=true;openBook(id);return;}if(interactTarget&&interactTarget.startsWith('chest:')){openBossChest(+interactTarget.slice(6));interactTarget=null;return;}if(interactTarget&&interactTarget.startsWith('player:')){openPlayerMenu(interactTarget.slice(7));return;}if(interactTarget&&interactTarget.startsWith('npc:')){const n=NPCS.find(q=>q.id===interactTarget.slice(4));if(n){faceMe(n.mesh);openNpc(n);}return;}if(interactTarget==='shop'){faceMe(merchant.userData.npc);openShop('village');}else if(interactTarget==='mentor'){faceMe(mentor);openMentor();}else if(interactTarget==='door_in')enterDungeon();else if(interactTarget==='door_out')leaveDungeon();}
+function doInteract(){if(performance.now()<npcQuietUntil)return;if(interactTarget==='gbook'){openGuild();return;}if(interactTarget==='gboard'){npcCur=null;openBoard('guild');boardGiver={id:'guild',name:'마리엘'};return;}if(interactTarget&&interactTarget.startsWith('ccar:')){ccarAct(interactTarget);return;}if(interactTarget&&interactTarget.startsWith('seat:')){seatSit(+interactTarget.slice(5));return;}if(interactTarget&&interactTarget.startsWith('portal:')){usePortal(+interactTarget.split(':')[1]);return;}if(interactTarget&&interactTarget.startsWith('lib:')){const id=LIB_LIST[+interactTarget.slice(4)%LIB_LIST.length];interactTarget=null;$('#interact').hidden=true;openBook(id);return;}if(interactTarget&&interactTarget.startsWith('chest:')){openBossChest(+interactTarget.slice(6));interactTarget=null;return;}if(interactTarget&&interactTarget.startsWith('player:')){openPlayerMenu(interactTarget.slice(7));return;}if(interactTarget&&interactTarget.startsWith('npc:')){const n=NPCS.find(q=>q.id===interactTarget.slice(4));if(n){faceMe(n.mesh);openNpc(n);}return;}if(interactTarget==='shop'){faceMe(merchant.userData.npc);openShop('village');}else if(interactTarget==='mentor'){faceMe(mentor);openMentor();}else if(interactTarget==='door_in')enterDungeon();else if(interactTarget==='door_out')leaveDungeon();}
 let warping=false;
-function warpTo(x,z,yaw,msg,fy){if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
+function warpTo(x,z,yaw,msg,fy){if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.seat!=null){P.seat=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
   if(warping)return;warping=true;
   const f=$('#fade');f.classList.add('on');
   setTimeout(()=>{const gy=heightAt(x,z);player.position.set(x,Math.max(gy,floorAt(x,z,fy!=null?fy:gy+20)),z);   /* fy: 여러 층 건물 안에서는 도착할 층 높이 */pvel.x=pvel.z=0;vy=0;cam.yaw=yaw;cam.pitch=0;
@@ -14509,6 +14590,7 @@ const SHOPS={
   ex_rog:{title:'케인의 도적 장비점',base:'rogue',list:[...['w','h','a','b','r'].flatMap(k=>[1,2,3,4,5,6,7,8,9].map(n=>k+n))]},
   ex_arc:{title:'니나의 궁수 장비점',base:'archer',list:[...['w','h','a','b','r'].flatMap(k=>[1,2,3,4,5,6,7,8,9].map(n=>k+n))]},
   mounts:{title:'올라프의 마구간',list:['mt_donkey','mt_horse','mt_wolf']},
+  pub:{title:'브람의 술집',list:['f_bread','f_beer','f_wine','f_stew','f_mead']},
 };
 let shopTab='buy',shopId='village';
 function openShop(id='village'){if(mode!=='world'&&mode!=='dialog')return;$('#npc').hidden=true;mode='dialog';attackHeld=false;unlockPointer();syncLockTip();shopId=id;shopTab='buy';$('#shopTitle').textContent=SHOPS[id].title;renderShop();$('#shop').hidden=false;}
@@ -14671,7 +14753,7 @@ function npcAct(act){
   const n=npcCur;
   if(act.startsWith('ir:'))return ireneAct(act.slice(3));
   if(act.startsWith('shop:')){closeNpc();openShop(act.slice(5));return;}
-  if(act==='sell'){closeNpc();shopId=n.id==='mina'?'goods':n.id==='ex_stable'?'mounts':/^ex_/.test(n.id)&&SHOPS[n.id]?n.id:'arms';openSell();return;}
+  if(act==='sell'){closeNpc();shopId=n.id==='mina'?'goods':n.id==='ex_stable'?'mounts':n.id==='pub'?'pub':/^ex_/.test(n.id)&&SHOPS[n.id]?n.id:'arms';openSell();return;}
   // 이야기: 짧은 대사와 긴 이야기(여러 장)를 한 버튼에서 차례로
   if(act==='talk'||act==='story'){const L=n.lines.map(l=>[l]).concat(n.story||[]);n.ti=((n.ti??0)+1)%L.length;showPages(L[n.ti]);return;}
   if(act==='giveheal'){
@@ -14731,6 +14813,7 @@ function questOffers(){
 }
 // 의뢰를 주는 NPC마다 게시판·말투가 따로다. 의뢰는 받은 NPC에게 보고한다
 const QTONE={
+  guild:{done:'확인했어요. 길드가 약속한 보수예요. 게시판에 새 의뢰가 또 붙었답니다.',doing:'아직 진행 중인 의뢰예요. 끝나면 보고해 주세요.',quit:'알겠어요. 다른 의뢰를 골라 보세요.',other:n=>`그 의뢰는 ${n} 쪽 게시판 것이에요. ${n}에게 보고하세요.`},
   kyle:{done:'훌륭해! 약속한 보상이다. 게시판에 다른 의뢰도 붙어 있네.',doing:'아직 끝나지 않았군. 끝나면 다시 오게.',quit:'알겠네. 다른 일을 맡아 보게.',other:n=>`그건 ${n}의 의뢰로군. 보고는 ${n}에게 하게.`},
   marta:{done:'고생 많았어요! 약속한 사례예요.',doing:'아직 부탁드린 일이 남았어요. 끝나면 다시 와 주세요.',quit:'괜찮아요. 다른 부탁을 맡아 주세요.',other:n=>`그건 ${n} 씨가 붙인 의뢰네요. ${n} 씨에게 보고해 주세요.`},
   rowen:{done:'수고했다. 경비대가 약속한 보수다.',doing:'임무가 아직 남았다. 끝내고 보고하라.',quit:'알겠다. 다른 임무를 골라라.',other:n=>`그 임무는 ${n} 소관이다. ${n}에게 보고하라.`},
@@ -14767,11 +14850,18 @@ const localBoards={};
 function boardLocal(b){if(!localBoards[b])localBoards[b]=[];const L=localBoards[b];let k=0;while(L.length<OR.BOARD_CAP[b]&&k++<60)L.push(OR.makePoster(b,Math.random,'l'+Math.random().toString(36).slice(2,9)));return L;}
 function openBoard(b){boardGiver=npcCur?{id:npcCur.id,name:npcCur.name}:{id:'kyle',name:'카일'};
   $('#npc').hidden=true;document.body.classList.remove('talking');$('#npcChoices').hidden=true;mode='dialog';attackHeld=false;unlockPointer();syncLockTip();
-  boardId=b;$('#boardTitle').textContent=OR.BOARDS[b].title;$('#boardDetail').hidden=true;
+  boardId=b;$('#boardTitle').textContent=OR.BOARDS[b].title;$('#boardDetail').hidden=true;boardTabsBuild(b);
   const shared=!!(window.ORLANDO_WS&&room&&room.connected());
   $('#boardNote').textContent='';
   boardList=shared?[]:boardLocal(b);$('#board').hidden=false;renderBoard();
   if(shared)room.emit('board',{b}).catch(()=>{});}
+/* 등급별 칸이 있는 게시판: 머리글 아래 탭으로 칸을 고른다. 내 레벨에 맞는 칸이 먼저 열린다 */
+let boardTab=null;
+function boardTabsBuild(b){let box=$('#boardTabs');const B=OR.BOARDS[b];
+  if(!box){box=document.createElement('div');box.id='boardTabs';$('#board header').after(box);}
+  if(!B.tiers){box.hidden=true;boardTab=null;return;}
+  box.hidden=false;box.innerHTML='';const lv=P?P.lv:1;let cur=B.tiers.find(t=>lv>=t.lv[0]&&lv<=t.lv[1])||B.tiers[0];if(boardTab&&B.tiers.some(t=>t.id===boardTab))cur=B.tiers.find(t=>t.id===boardTab);boardTab=cur.id;
+  for(const t of B.tiers){const bt=document.createElement('button');bt.type='button';bt.className='btab'+(t.id===boardTab?' on':'');bt.textContent=`${t.name} · Lv ${t.lv[0]}${t.lv[1]>=999?'+':'–'+t.lv[1]}`;bt.onclick=()=>{boardTab=t.id;boardTabsBuild(b);renderBoard();};box.appendChild(bt);}}
 function closeBoard(){$('#board').hidden=true;boardId=null;mode='world';syncLockTip();focusGame();relock();}
 $('#boardClose').onclick=closeBoard;
 addEventListener('keydown',e=>{if(codeOf(e)==='Escape'&&!$('#board').hidden){e.stopImmediatePropagation();if(!$('#boardDetail').hidden)$('#boardDetail').hidden=true;else closeBoard();}},true);
@@ -14779,7 +14869,8 @@ $('#boardDetail').addEventListener('click',e=>{if(e.target.id==='boardDetail')$(
 function renderBoard(){const box=$('#boardCork');box.innerHTML='';
   if(!boardList.length){const p=document.createElement('p');p.style.cssText='color:#f3e6c8;text-align:center;padding:40px 10px';p.textContent='게시판을 불러오는 중…';box.appendChild(p);return;}
   // 사람들이 손으로 아무렇게나 붙인 것처럼: 크기·기울기·위치가 제각각이고 서로 겹쳐도 된다
-  const W=Math.max(300,box.clientWidth-12),L=(boardId==='kyle'&&portalPosterUp()?[PORTAL_POSTER]:[]).concat(boardList),n=L.length;
+  const W=Math.max(300,box.clientWidth-12),L=(boardId==='kyle'&&portalPosterUp()?[PORTAL_POSTER]:[]).concat(boardTab?boardList.filter(p=>OR.boardTierOf(boardId,p.zone)===boardTab):boardList),n=L.length;
+  if(!n){const p=document.createElement('p');p.style.cssText='color:#f3e6c8;text-align:center;padding:40px 10px';p.textContent='이 칸에는 지금 붙은 의뢰가 없다.';box.appendChild(p);return;}
   const rnd=s=>{let h=2166136261;for(const ch of s)h=Math.imul(h^ch.charCodeAt(0),16777619);return ()=>{h=Math.imul(h^(h>>>15),2246822507);h=Math.imul(h^(h>>>13),3266489909);h^=h>>>16;return (h>>>0)/4294967296;};};
   const avg=W<520?112:150,cols=Math.max(2,Math.floor(W/(avg*.82))),rows=Math.ceil(n/cols),cellW=W/cols,cellH=avg*1.414*.78,H=rows*cellH+avg*.7;
   const pin=document.createElement('div');pin.id='boardPin';pin.style.height=H+'px';box.appendChild(pin);
@@ -14957,7 +15048,7 @@ function damageMonster(m,mult,o={}){
   if(P.job==='assassin'&&m.sMark>tAll&&!o.noMark){d*=1.4;const c=mCenter(m);VFX.burst(c,0xb060ff,8,3,.3,{mix:0xffffff});}
   if(P.skills.pile&&o.stun>0&&(m.flags&2)){d*=1.5+.1*(P.skills.pile-1);o={...o,stun:Math.min(8,o.stun*2)};}
   d=Math.max(1,Math.round(d));if(execKill)d=Math.max(d,Math.ceil(m.hp));
-  m.hp-=d;m.flash=.18;m.hitT=tAll;if(m.dummy)m.hp=m.mh;   /* 서버가 이 타격을 반영하기 전에 온 HP로 바가 다시 차지 않게 */
+  m.hp-=d;m.flash=.18;m.hitT=tAll;if(m.dummy){m.hp=m.mh;if(typeof dummyHit==='function')dummyHit(d);}   /* 서버가 이 타격을 반영하기 전에 온 HP로 바가 다시 차지 않게 */
   if(P.skills.madness){const miss=1-P.hp/P.maxhp,h=d*miss*(1+.15*(P.skills.madness-1));P.hp=Math.min(P.maxhp,P.hp+h);P.lsAcc=(P.lsAcc||0)+h;}
   VFX.burst(mCenter(m),crit?0xffd040:0xfff0d0,crit?18:8,crit?6:3.5,.35,{up:.3,glow:crit});
   {const at=m.mesh.position,D=m.D,blade=P.equip.weapon&&(JOBS[P.job].weapon==='sword'&&P.job!=='fowler'||JOBS[P.job].weapon==='dagger');const axe=P.job==='barbarian',sk=swingT<1&&SWORD_SKILL_HIT.has(myMoId);const hammer=P.job==='fowler'&&P.equip.weapon,staff=JOBS[P.job].weapon==='staff'&&P.equip.weapon&&o.bhit;   /* 지팡이 피격음은 일반공격에만 */if(!o.nohs)sfx(blade?(crit?(axe&&!sk?'ahit2':'blood2'):sk?'blood3':axe?'ahit1':'blood1'):hammer?'h_hit':staff?'st_hit':'hit',at,1,hammer?.86:staff?.94+Math.random()*.12:1);if(crit)sfx('crit',at,.8);}
@@ -15971,6 +16062,7 @@ function useItem(id){
   if(I.hp&&!I.mp&&P.hp>=P.maxhp){toast('HP가 가득 차 있어요');return false;}
   if(I.mp&&!I.hp&&P.mp>=P.maxmp){toast('MP가 가득 차 있어요');return false;}
   if(I.recall&&(mode!=='world'||warping)){return false;}
+  if(I.food&&P.seat==null){toast('자리에 앉아서 먹는 음식이다');return false;}
   removeItem(id);cds.item=1;sfx(I.recall?'holy':'potion');
   if(I.hp)heal(P.maxhp*I.hp);
   if(I.mp){P.mp=Math.min(P.maxmp,P.mp+P.maxmp*I.mp);flash('#4f7fc4',.15);}
@@ -16227,7 +16319,7 @@ function damagePlayer(d,src,mon){
   updateHud();
   if(P.hp<=0)die(src);
 }
-function die(src){if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
+function die(src){if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.seat!=null){P.seat=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
   P.hp=0;P.barbLast=null;P.pushPrep=null;P.empShield=false;P.guardT=0;P.guardId=null;P.leap=null;P.lblast=null;P.charge=null;P.reLeap=null;if(P.blk)blkEnd();sfxStop('mg_fire');if(P.fly)toggleFly(false);rayEnd();if(P.angel)angelEnd();const lost=Math.floor(P.exp*.3);P.exp-=lost;
   mode='dialog';unlockPointer();syncLockTip();attackHeld=false;
   $('#deadMsg').textContent=`${src}에게 쓰러졌다. EXP ${lost}을(를) 잃었다.`;
@@ -16530,6 +16622,7 @@ function updatePlayer(dt){
   let f=0,r=0;
   if(keys.KeyW||keys.ArrowUp)f+=1;if(keys.KeyS||keys.ArrowDown)f-=1;if(keys.KeyD||keys.ArrowRight)r+=1;if(keys.KeyA||keys.ArrowLeft)r-=1;
   f-=joy.y;r+=joy.x;
+  if(P.seat!=null){if(Math.hypot(f,r)>.1||keys.Space||attackHeld||P.dash)seatLeave();else{f=0;r=0;sitting=true;}}
   if(CCAR.ride){f=0;r=0;sitting=true;keys.Space=false;}
   if(P.pushPrep){f=0;r=0;}
   // 휴대폰: 이동 방향을 따라 시선도 저절로 돈다 (화면을 끌어 보고 있을 때는 그대로)
@@ -16615,7 +16708,7 @@ function updatePlayer(dt){
     if(touchUI&&cam.third&&swingT>=1&&!P.guardT&&!P.pushPrep&&!P.dash&&Math.hypot(pvel.x,pvel.z)>1.2)by=Math.atan2(-pvel.x,-pvel.z)+Math.PI;
     const cur=player.rotation.y,d=Math.atan2(Math.sin(by-cur),Math.cos(by-cur));player.rotation.y=cur+d*Math.min(1,dt*(touchUI?12:60));}
   if(moving&&jumpY===0){const st0=Math.floor(cam.bob/Math.PI);cam.bob+=dt*moving*9;if(Math.floor(cam.bob/Math.PI)!==st0&&!(P.dash||P.leap))sfx('step',null,1,.9+Math.random()*.2);}
-  if(CCAR.ride)ccarSeatPlayer();
+  if(CCAR.ride)ccarSeatPlayer();else if(P.seat!=null){const s=SEATS[P.seat];if(s){player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;}else P.seat=null;}
   const bobY=(moving&&jumpY===0?Math.sin(cam.bob)*.06:0)-(cam.land||0);
   camera.rotation.set(cam.pitch,cam.yaw,0);
   let rollA=0,rollCr=0;if(myMo&&myMo.v==='roll'&&swingT<1){const v=blendKeys(myMo.k3,swingT,{},M3);rollA=v[14]||0;rollCr=v[11]||0;}   // 1인칭 구르기: 시야도 같이 한 바퀴
@@ -16690,6 +16783,7 @@ function updateWorld(dt){
   if(!it){const ci=chestNear();if(ci>=0)it='chest:'+ci;}
   portalWalk();
   if(!it){const pi=portalNear();if(pi>=0&&PORTALS[pi].coach)it='portal:'+pi;}   /* 포탈은 걸어 들어가면 넘어간다: 키 안내는 마차 정류장만 */
+  if(!it&&MARCUS.guildBoard&&Math.abs(player.position.x-MARCUS.guildBoard.x)<MARCUS.guildBoard.hw&&Math.abs(player.position.z-MARCUS.guildBoard.z)<2.6&&Math.abs(player.position.y-MARCUS.guildBoard.y)<2)it='gboard';
   if(!it&&MARCUS.guildBook&&Math.hypot(player.position.x-MARCUS.guildBook.x,player.position.z-MARCUS.guildBook.z)<2.4&&Math.abs(player.position.y-MARCUS.guildBook.y)<2)it='gbook';
   if(!it&&Math.hypot(player.position.x-DOOR_IN.x,player.position.z-DOOR_IN.z)<2.8)it='door_in';
   if(!it&&Math.hypot(player.position.x-DOOR_OUT.x,player.position.z-DOOR_OUT.z)<2.6)it='door_out';
@@ -16703,8 +16797,9 @@ function updateWorld(dt){
   let bestP=null;
   if(!it&&room){let pd=3;for(const [k,o] of others){if(!o.mesh.visible)continue;const d=Math.hypot(player.position.x-o.mesh.position.x,player.position.z-o.mesh.position.z);if(d<pd&&Math.abs(player.position.y-o.mesh.position.y)<3){pd=d;bestP=k;}}if(bestP)it='player:'+bestP;}
   {const q=ccarNear();if(q&&(CCAR.ride||!it))it=q;}
+  if(!it&&typeof seatNear==='function'){const si=seatNear();if(si>=0)it='seat:'+si;}
   if(it!==interactTarget||(!it&&!$('#interact').hidden)){interactTarget=it;const b=$('#interact');b.hidden=!it;   /* 다른 곳에서 대상을 비우고 단추만 남은 경우(마차에서 내림·상자를 엶)도 숨긴다 */
-    if(it)b.textContent='F · '+(it.startsWith('ccar:')?ccarLabel(it):it.startsWith('player:')?`${(others.get(bestP)||{}).name||'모험가'}에게 말 걸기`:it.startsWith('npc:')?(bestN.role?`${bestN.name} (${bestN.role})`:bestN.name):(it.startsWith('lib:')?`『${libBook(+it.slice(4)).title}』 읽기`:it.startsWith('chest:')?'상자 열기':it.startsWith('portal:')?(q=>it.endsWith(':x')?`${q.label} (Lv ${q.minLv})`:q.label)(PORTALS[+it.split(':')[1]]):{shop:'상인과 거래',mentor:'스승과 대화',door_in:'석문 열기',door_out:'석굴에서 나가기',gbook:'길드 명부'}[it]));}
+    if(it)b.textContent='F · '+(it.startsWith('seat:')?'앉기':it.startsWith('ccar:')?ccarLabel(it):it.startsWith('player:')?`${(others.get(bestP)||{}).name||'모험가'}에게 말 걸기`:it.startsWith('npc:')?(bestN.role?`${bestN.name} (${bestN.role})`:bestN.name):(it.startsWith('lib:')?`『${libBook(+it.slice(4)).title}』 읽기`:it.startsWith('chest:')?'상자 열기':it.startsWith('portal:')?(q=>it.endsWith(':x')?`${q.label} (Lv ${q.minLv})`:q.label)(PORTALS[+it.split(':')[1]]):{shop:'상인과 거래',mentor:'스승과 대화',door_in:'석문 열기',door_out:'석굴에서 나가기',gbook:'길드 명부',gboard:'의뢰 게시판 보기'}[it]));}
   const inCave=z==='subcus';targetSky.set(ZONES[z].sky);scene.background.lerp(targetSky,z==='dungeon'||(z==='hall'||z==='thouse')||inCave?1:dt*1.2);scene.fog.color.copy(scene.background);
   const inRealm=z==='marcus'||z==='milgol'||z==='fort'||z==='coachway'||z==='castle'||z==='guildhall',inMil=z==='milgol'||z==='coachway';const hi=OR.SP.ZONES.indexOf(z),inHa=hi>=0||z==='town',inMh=OR.MHUNT.includes(z);   /* 하레나 둘레 길: 앞 구역은 맑고 멀리 보이며, 뒤로 갈수록 먼지·연기로 흐려진다 */
   scene.fog.near=z==='dungeon'?14:(z==='hall'||z==='thouse')?30:inCave?18:inMil?95:inRealm?70:inMh?60:inHa?(hi<0?70:82-7*hi):38;scene.fog.far=z==='dungeon'?60:(z==='hall'||z==='thouse')?95:inCave?80:inMil?370:inRealm?280:inMh?240:inHa?(hi<0?300:330-18*hi):140;
@@ -17196,7 +17291,7 @@ function monLod(m,i){if(!player||((m._lodT=(m._lodT||0)+1)+i)%8)return;const d=M
       if(s<H*.18||(o.material&&o.material.isMeshBasicMaterial&&o.material.transparent))m._small.add(o);});m._parts=ps;}
   for(const o of m._parts){o.castShadow=L===0&&o.userData._cs;if(L>=2&&m._small.has(o)){if(o.visible){o.visible=false;o.userData._lodHid=1;}}else if(o.userData._lodHid){o.visible=true;o.userData._lodHid=0;}}}
 function updateNetMonsters(dt){if(player&&tAll-_myMapT>.3){_myMapT=tAll;_myMap=mapKeyAt(player.position.x,player.position.z);}if(player){const _n=OR.spNear(player.position.x,player.position.z);player._spT=Math.hypot(player.position.x-OR.C2.x,player.position.z-OR.C2.z)<OR.TOWN_R+4?0:(_n?_n.t:0);}
-  updateDuelMarks(dt);if(typeof duelTick==='function')duelTick(dt);
+  updateDuelMarks(dt);if(typeof duelTick==='function')duelTick(dt);if(typeof dummyTick==='function')dummyTick(dt);
   if(DUMMIES.length&&!DUMMIES.ok){DUMMIES.ok=1;dummiesEnsure();}
   for(let i=monsters.length-1;i>=0;i--){
     const m=monsters[i],mp=m.mesh.position;

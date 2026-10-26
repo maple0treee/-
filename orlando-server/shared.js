@@ -128,6 +128,11 @@
     if (p.x >= 800) { const I = isleAt(p.x, p.z); const d = Math.hypot(p.x - I.x, p.z - I.z), r = isleEdge(I, Math.atan2(p.z - I.z, p.x - I.x)) - rad; if (d > r) { p.x = I.x + (p.x - I.x) * r / d; p.z = I.z + (p.z - I.z) * r / d; } return; }
     if (p.z > 300) return roomClamp(p, rad);
     if (p.z < -300 && p.x <= 100 && inHallAnnex(p, rad)) return;
+    /* 지하실 딸린 방·계단·창고 밖으로 나갔으면 (벽을 뚫었으면) 가장 가까운 안쪽 자리로 되민다 — 둥근 방 가장자리로 튕겨 보내지 않는다 */
+    if (p.z < -300 && p.x <= 100 && p.z < HALL.z - HALL.R + 2 && Math.hypot(p.x - HALL.x, p.z - HALL.z) > HALL.R - rad) { const H = HALL_ROOM, C = CELLAR, zS = H.z0 - H.stLen - H.stLand;
+      const R = [[H.x - H.hw + rad, H.x + H.hw - rad, H.z0 + rad, H.z1 + 1], [H.x - H.stHw + rad, H.x + H.stHw - rad, zS - 1, H.z0 + rad], [C.x - C.hw + rad, C.x + C.hw - rad, C.z0 + rad, C.z1], [H.x - H.corHw + rad * 0.5, H.x + H.corHw - rad * 0.5, H.z1 - 1, HALL.z - HALL.R + 2]];
+      let bx = p.x, bz = p.z, bd = 1e9; for (const [x0, x1, z0, z1] of R) { const qx = clampN(p.x, x0, x1), qz = clampN(p.z, z0, z1), d = Math.hypot(qx - p.x, qz - p.z); if (d < bd) { bd = d; bx = qx; bz = qz; } }
+      p.x = bx; p.z = bz; return; }
     if (p.z < -300) { const A = p.x > 100 ? { x: WLAIR.x, z: WLAIR.z, R: WLAIR.r } : HALL; const d = Math.hypot(p.x - A.x, p.z - A.z), r = A.R - rad; if (d > r) { p.x = A.x + (p.x - A.x) * r / d; p.z = A.z + (p.z - A.z) * r / d; } return; }
     // 하레나 둘레: 도시 · 서문 목 · 길 · 석굴 입구 안으로 (가장 가까운 자리로 민다)
     if (hInside(p.x, p.z, rad)) return;
@@ -315,9 +320,23 @@
       G('티모', '아이', ['아빠가 {z}로 장 보러 갔는데 {m}이(가) 무섭대요… 아빠가 무사히 돌아오게 해 주세요!']),
       G('나그네', '두건 쓴 여행자', ['…{z}를 지나야 하는데 {m}이(가) 길을 막고 있다. 대가는 넉넉히 치르지.'])] },
   };
+  /* 엑시즈 모험가 길드의 큰 게시판: 등급(레벨대)별로 칸이 나뉘어 있고, 칸마다 의뢰가 고르게 붙는다 */
+  BOARDS.guild = { title: '모험가 길드 의뢰 게시판', cap: 40, zones: [],
+    tiers: [{ id: 'd', name: '초급', lv: [1, 15], zones: ['forest', 'plains', 'swamp', 'ruins'] }, { id: 'c', name: '중급', lv: [16, 59], zones: ['wwest', 'wnorth', 'wsouth', 'weast'] },
+      { id: 'b', name: '상급', lv: [60, 100], zones: ['silva', 'arbus', 'kaolis', 'subcus'] }, { id: 'a', name: '특급', lv: [100, 999], zones: MHUNT.filter((z) => ZONE_MON[z]) }],
+    givers: [
+      G('엑시즈 상인', '상인', ['{z}를 지나는 상단이 {m}에게 번번이 털립니다. 길이 안전해지면 왕도 물가도 내려갈 거예요.', '{z}에서 들여오는 물건이 {m} 때문에 끊겼어요. 가게 선반이 비어 갑니다.']),
+      G('길드 접수원', '모험가 길드', ['{z}에 나간 모험가들이 {m} 때문에 돌아오지 못하고 있어요. 수를 줄여 길을 열어 주세요.', '{z}의 {m}에 대한 신고가 길드에 쌓였어요. 처리해 주실 분을 찾습니다.']),
+      G('왕성 경비대', '경비대', ['{z}에서 {m}이(가) 왕도 쪽으로 몰려오고 있다. 성벽 밖에서 막아라.', '{z}로 나간 순찰대가 {m}에게 밀려 돌아왔다. 길드의 힘을 빌린다.']),
+      G('엑시즈 농부', '농부', ['{z} 가까운 밭이 {m} 때문에 엉망이에요. 가을걷이 전에 쫓아 주세요.']),
+      G('마차 조합', '마부', ['{z} 길에서 {m}이(가) 마차를 세웁니다. 노선을 지키려면 길을 쓸어야 해요.']),
+      G('왕실 학자', '학자', ['{z}에서 {m}을(를) 조사하려는데 수가 너무 많아 가까이 갈 수 없습니다. 좀 줄여 주시면 사례하지요.']),
+      G('항구 조합', '뱃사람', ['{z} 쪽 뱃길 근처에 {m}이(가) 꼬였소. 짐을 내릴 수가 없어.'])] };
   const BOARD_CAP = {}; for (const k in BOARDS) BOARD_CAP[k] = BOARDS[k].cap;
+  const boardTierOf = (board, zone) => { const B = BOARDS[board]; if (!B || !B.tiers) return null; for (const t of B.tiers) if (t.zones.includes(zone)) return t.id; return null; };
   function makePoster(board, rnd, id) {
-    const B = BOARDS[board]; const zone = B.zones[Math.floor(rnd() * B.zones.length)];
+    const B = BOARDS[board]; let zone;
+    if (B.tiers) { const t = B.tiers[Math.floor(rnd() * B.tiers.length)]; zone = t.zones[Math.floor(rnd() * t.zones.length)]; } else zone = B.zones[Math.floor(rnd() * B.zones.length)];
     const L = ZONE_LEVELS[zone]; const tys = [...new Set(ZONE_MON[zone])];
     const lv = Math.round(L[0] + rnd() * (L[1] - L[0]));
     // 무거운 의뢰: 한 종류를 많이, 또는 두 종류를 함께
@@ -331,6 +350,6 @@
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { MHUNT, MLINES, THOUSE, inTHouse, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { boardTierOf, MHUNT, MLINES, THOUSE, inTHouse, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
