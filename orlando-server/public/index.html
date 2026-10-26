@@ -1365,7 +1365,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@8d6cef3a81ac10fbac197ea0ba94aac312c2633a/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@a532cb52e1dc0398bd0430ba8db9c0a88bde41ae/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -2689,6 +2689,17 @@ skyDome.renderOrder=-1000;skyDome.frustumCulled=false;scene.add(skyDome);
 
 const mat=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.85,flatShading:true},o));
 const colliders=[];
+/* 부딪힘 칸 나누기: 1만 개가 넘는 충돌체를 매번 다 훑지 않고, 10m 칸에 나눠 두고 가까운 칸만 본다.
+   목록 길이가 바뀌면(새로 넣거나 빼면) 다시 나눈다. 아주 큰 충돌체(반지름 40m 넘는 것)는 늘 본다 */
+const COLG={cs:10,map:new Map(),n:-1,big:[],out:[],stamp:0};
+function colGridBuild(){const M=COLG.map;M.clear();COLG.big.length=0;COLG.n=colliders.length;const cs=COLG.cs;
+  for(const c of colliders){const r=(c.r||0)+.5;if(r>40){COLG.big.push(c);continue;}const x0=Math.floor((c.x-r)/cs),x1=Math.floor((c.x+r)/cs),z0=Math.floor((c.z-r)/cs),z1=Math.floor((c.z+r)/cs);
+    for(let i=x0;i<=x1;i++)for(let j=z0;j<=z1;j++){const k=i*200003+j;let a=M.get(k);if(!a)M.set(k,a=[]);a.push(c);}}}
+function colNear(x,z,r){if(COLG.n!==colliders.length)colGridBuild();const cs=COLG.cs,out=COLG.out,st=++COLG.stamp;out.length=0;
+  for(const c of COLG.big){c._cst=st;out.push(c);}
+  const x0=Math.floor((x-r)/cs),x1=Math.floor((x+r)/cs),z0=Math.floor((z-r)/cs),z1=Math.floor((z+r)/cs);
+  for(let i=x0;i<=x1;i++)for(let j=z0;j<=z1;j++){const a=COLG.map.get(i*200003+j);if(!a)continue;for(const c of a){if(c._cst===st)continue;c._cst=st;out.push(c);}}
+  return out;}
 // 점프로 넘거나 올라설 수 있는 것(바위·낮은 담): 발이 꼭대기보다 높으면 지나가고, 위에 서면 그 높이를 바닥으로 쓴다
 const JUMP_SURF=[],JUMP_GRID=new Map();
 const ROOFS=[];   // 올라서서 걸을 수 있는 지붕 {x,z,r,y} (원형 근사)
@@ -8081,7 +8092,7 @@ function floorAt(x,z,y){
     if(h<=y+.6&&h>g)g=h;}
   for(const s of ROOFS){if(s.y<=y+.6&&s.y>g&&(x-s.x)**2+(z-s.z)**2<s.r*s.r)g=s.y;}
   // 높이(h)가 있는 물체(상자·탁자·우물 등)는 위에 올라서면 그 꼭대기를 평평한 바닥으로 쓴다 (전에는 바닥이 없어 미끄러져 내려왔다)
-  for(const c of colliders){if(c.h===undefined||c.y0!==undefined)continue;const dx=x-c.x,dz=z-c.z;if(Math.abs(dx)>c.r||Math.abs(dz)>c.r)continue;
+  for(const c of colNear(x,z,.6)){if(c.h===undefined||c.y0!==undefined)continue;const dx=x-c.x,dz=z-c.z;if(Math.abs(dx)>c.r||Math.abs(dz)>c.r)continue;
     if(c.box){const lx=dx*c.cs-dz*c.sn,lz=dx*c.sn+dz*c.cs;if(Math.abs(lx)>c.hw+.15||Math.abs(lz)>c.hd+.15)continue;}else if(dx*dx+dz*dz>(c.r+.15)*(c.r+.15))continue;
     const top=heightAt(c.x,c.z)+c.h;if(top<=y+.6&&top>g)g=top;}
   return jumpFloor(x,z,y,g);
@@ -10031,6 +10042,9 @@ function makeCitizens(cx,cz){
   /* 스프라이트 한 번에 그리기 */
   crowdInitMesh();
   CROWD.ready=true;
+  /* 사람 모형 미리 만들어 두기: 종류(60가지)마다 두 벌씩 창고에 넣는다. 처음 만드는 데 종류당 15ms쯤 걸려서, 놀다가 새 종류가 나타날 때마다 화면이 멈칫했다.
+     로딩이 1~2초 길어지는 대신 노는 중에는 창고에서 꺼내기만 한다 */
+  if(CIT_OLD()){const t0=performance.now();for(let t=0;t<CITM.ids.length;t++){const pool=CROWD.spool[t]||(CROWD.spool[t]=[]);while(pool.length<2)pool.push(citStickMake(t));}console.log('crowd prewarm',(performance.now()-t0|0)+'ms');}
 }
 /* 주민 한 명의 지금 자리: 시계로 정한다 */
 function citPose(c,t){
@@ -10153,7 +10167,8 @@ function stickSkin(g,key){const cl=g.userData.cloth;if(cl){cl.skG.scale.setScala
   for(const p of parts){if(bi.has(p))p.visible=false;else if(p.parent)p.parent.remove(p);}
   const sm=new THREE.SkinnedMesh(geo,_skinMat());g.add(sm);g.updateMatrixWorld(true);
   sm.bind(new THREE.Skeleton(bones),sm.matrixWorld);sm.castShadow=false;g.userData.skin=sm;if(cl){cl.sit=undefined;clothSit(g,false);}return g;}
-function citStickInst(type){const pool=CROWD.spool[type]||(CROWD.spool[type]=[]);if(pool.length)return pool.pop();
+function citStickInst(type){const pool=CROWD.spool[type]||(CROWD.spool[type]=[]);if(pool.length)return pool.pop();return citStickMake(type);}
+function citStickMake(type){
   const g=makeNpcStick(citStickLook(CITM.ids[type]||'c'+type));if(g.userData.marker){g.remove(g.userData.marker);g.userData.marker=null;}stickSkin(g,'cit:'+type);
   g.traverse(o=>{if(o.isMesh)o.castShadow=false;});return {g,stick:true,id:type,sh:false};}
 const CIT_STICK_POSE={stand:'idle',walk:'idle',talk:'talk',lean:'cross',sit:'sitb',guard:'guard',hammer:'hammer',hoe:'hoe',reap:'hoe',sweep:'sweep',carry:'carry',shoulder:'carry',wave:'wave',cross:'cross',hips:'hips',think:'think',drink:'drink',read:'read',point:'point',stretch:'stretch',pray:'pray',shrug:'shrug',crouch:'crouch'};
@@ -10232,7 +10247,7 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
       if(d2<M.NEAR*M.NEAR&&(OLD||CITM.tmpl[CITM.ids[c.type]]))near.push(c);}
     near.sort((a,b)=>a.d-b.d);const want=new Set(near.slice(0,M.MAXM));
     for(const c of M.list)if(c.I&&!want.has(c)&&(c.d>M.NEAR+8||near.indexOf(c)>M.MAXM+4)){back(c.I);c.I=null;}
-    let made=0;for(const c of near){if(!want.has(c)||c.I)continue;if(made>=(OLD?4:2))break;c.I=OLD?citStickInst(c.type):citInstance(CITM.tmpl[CITM.ids[c.type]]);c.I.v=c.v||(c.v=citVar(Math.floor(c.off*13)+c.type*31));c.I.g.rotation.y=Math.atan2(c.q.vx,c.q.vz);c.I.g.scale.setScalar(c.sc);scene.add(c.I.g);made++;}
+    let made=0;for(const c of near){if(!want.has(c)||c.I)continue;if(made>=(OLD?3:2))break;c.I=OLD?citStickInst(c.type):citInstance(CITM.tmpl[CITM.ids[c.type]]);c.I.v=c.v||(c.v=citVar(Math.floor(c.off*13)+c.type*31));c.I.g.rotation.y=Math.atan2(c.q.vx,c.q.vz);c.I.g.scale.setScalar(c.sc);scene.add(c.I.g);made++;}
     near.forEach((c,k)=>{if(!c.I)return;if(c.I.stick){const sh=k<6;if(c.I.sh!==sh){c.I.sh=sh;c.I.g.traverse(o=>{if(o.isMesh)o.castShadow=sh;});}return;}const sh=k<10;if(c.I.sh!==sh){c.I.sh=sh;c.I.g.traverse(o=>{if(o.isSkinnedMesh&&o.material!==_citOl)o.castShadow=sh&&!o.material.transparent;});}});
     if(OLD){const [mb,mr,mh]=M.ims,m4=_cM4,qq=_cQ,v=_cV,sc=_cS;for(const c of M.list){if(c.I||c.d>M.FAR||n>=M.cap)continue;const q=c.q;
         v.set(q.x,heightAt(q.x,q.z)+(c.y||0)+((q.mode||c.mode)==='sit'?-.45:0),q.z);qq.setFromAxisAngle(_cY,Math.atan2(q.vx,q.vz));const k=c.sc*(CIT_SMALL(c.type)?.7:1);sc.set(k,k,k);m4.compose(v,qq,sc);mb.setMatrixAt(n,m4);mr.setMatrixAt(n,m4);mh.setMatrixAt(n,m4);
@@ -11855,11 +11870,12 @@ function ccarTick(dt){
   if(!CCAR.ready)return;
   const T=ccarNow(),inM=player&&zoneAt(player.position.x,player.position.z)==='marcus',pp=player?player.position:null;
   for(const c of CCAR.cars){const st=ccarStateAt(T+c.k*CCAR.cycle/CCAR.N);c.stop=st.stop;c.v=st.v;c.left=st.left||0;c.next=st.next;
-    const [x,z]=ccarLanePoint(st.s),[xa,za]=ccarLanePoint(st.s+2.2),[xb,zb]=ccarLanePoint(st.s-2.2),tx=xa-xb,tz=za-zb,ry=Math.atan2(tx,tz);
-    const W=c.W,d=pp?Math.hypot(x-pp.x,z-pp.z):1e9,vis=inM&&d<230||(CCAR.ride&&CCAR.ride.k===c.k);if(W.g.visible!==vis)W.g.visible=vis;
+    const [x,z]=ccarLanePoint(st.s);const W=c.W,d=pp?Math.hypot(x-pp.x,z-pp.z):1e9,vis=inM&&d<230||(CCAR.ride&&CCAR.ride.k===c.k);if(W.g.visible!==vis)W.g.visible=vis;
+    c.x=x;c.z=z;if(!vis){c.ry=c.ry||0;W.dist+=st.v*dt;continue;}   /* 안 보이는 마차는 자리만 기억하고 높이·기울기 계산은 하지 않는다 (바닥 찾기가 비싸다) */
+    const [xa,za]=ccarLanePoint(st.s+2.2),[xb,zb]=ccarLanePoint(st.s-2.2),tx=xa-xb,tz=za-zb,ry=Math.atan2(tx,tz);
     const fy=(X,Z)=>floorAt(X,Z,heightAt(X,Z)+2.5),y=fy(x,z),pitch=Math.atan2(fy(xa,za)-fy(xb,zb),4.4);
-    W.g.position.set(x,y,z);W.g.rotation.set(0,ry,0);W.g.rotateX(-pitch);W.pitch=pitch;c.ry=ry;c.x=x;c.z=z;
-    if(vis&&d<90)W.update(dt,st.v);else{W.dist+=st.v*dt;}}
+    W.g.position.set(x,y,z);W.g.rotation.set(0,ry,0);W.g.rotateX(-pitch);W.pitch=pitch;c.ry=ry;
+    if(d<90)W.update(dt,st.v);else{W.dist+=st.v*dt;}}
   /* 다른 사람이 앉은 자리 */
   CCAR.occ={};for(const [k,o] of others)if(o.pr&&typeof o.pr.cr==='string'&&o.pr.cr)CCAR.occ[o.pr.cr]=k;
   const R=CCAR.ride;if(R){const c=CCAR.cars[R.k];if(!c){CCAR.ride=null;return;}
@@ -14170,7 +14186,7 @@ function drawIslePlan(c,X,Z,sc,I){const Zd=ZONES[I.id];
     c.strokeStyle='#6e6860';c.lineWidth=Math.max(2,3*sc);poly(PL.wall);c.stroke();
     c.fillStyle='#8a7c64';for(const g of PL.gates){c.beginPath();c.arc(mX(g.x),mZ(g.y),Math.max(3,5*sc),0,7);c.fill();}
     /* 시내 마차 길: 점선 고리, 정류장 점, 달리는 마차 */
-    if(typeof CCAR!=='undefined'&&CCAR.ready&&CCAR.pts){c.save();c.strokeStyle='#f0c860';c.lineWidth=Math.max(1.5,2.2*sc);c.setLineDash([Math.max(3,6*sc),Math.max(2,4*sc)]);c.beginPath();CCAR.pts.forEach((q,i)=>i?c.lineTo(X(q[0]),Z(q[1])):c.moveTo(X(q[0]),Z(q[1])));c.closePath();c.stroke();c.setLineDash([]);
+    if(typeof CCAR!=='undefined'&&CCAR.ready&&CCAR.pts){c.save();c.strokeStyle='#f0c860';c.lineWidth=Math.max(1.5,2.2*sc);c.setLineDash([Math.max(3,6*sc),Math.max(2,4*sc)]);c.beginPath();for(let i=0;i<CCAR.pts.length;i+=4){const q=CCAR.pts[i];i?c.lineTo(X(q[0]),Z(q[1])):c.moveTo(X(q[0]),Z(q[1]));}c.closePath();c.stroke();c.setLineDash([]);
       c.fillStyle='#f0c860';c.strokeStyle='#3a2a12';c.lineWidth=1.2;for(const st of CCAR.stops){const [qx,qz]=ccarLanePoint(st.s);c.beginPath();c.arc(X(qx),Z(qz),Math.max(2.6,.9*sc),0,7);c.fill();c.stroke();}
       c.fillStyle='#fff0c0';for(const car of CCAR.cars){if(car.x==null)continue;c.save();c.translate(X(car.x),Z(car.z));c.rotate(-car.ry);const w=Math.max(3,1.1*sc),h=Math.max(5,2.2*sc);c.fillRect(-w/2,-h/2,w,h);c.strokeRect(-w/2,-h/2,w,h);c.restore();}c.restore();}}
   else if(typeof REALM!=='undefined'&&REALM[I.id])drawRealmPlan(c,X,Z,sc,I);
@@ -16508,8 +16524,8 @@ function _boxPush(p,c,r){const dx=p.x-c.x,dz=p.z-c.z,lx=dx*c.cs-dz*c.sn,lz=dx*c.
   if(d<1e-6){const px=c.hw-Math.abs(lx),pz=c.hd-Math.abs(lz);if(px<pz){nx=(lx<0?-1:1)*(c.hw+r);nz=lz;}else{nx=lx;nz=(lz<0?-1:1)*(c.hd+r);}}
   else{if(d>=r)return;nx=qx+ex/d*r;nz=qz+ez/d*r;}
   p.x=c.x+nx*c.cs+nz*c.sn;p.z=c.z-nx*c.sn+nz*c.cs;}
-function pushOutFly(p,r){for(const c of colliders){const _r=c.r+r,_x=p.x-c.x,_z=p.z-c.z;if(_x>_r||_x<-_r||_z>_r||_z<-_r)continue;if(c.y0!==undefined){if(p.y<c.y0||p.y>c.y1)continue;}else if(p.y>heightAt(c.x,c.z)+(c.h||7))continue;if(c.box){_boxPush(p,c,r);continue;}const dx=p.x-c.x,dz=p.z-c.z,d=Math.hypot(dx,dz),mn=c.r+r;if(d<mn&&d>1e-4){p.x=c.x+dx/d*mn;p.z=c.z+dz/d*mn;}}}
-function pushOut(p,r){for(const c of colliders){const _r=c.r+r,_x=p.x-c.x,_z=p.z-c.z;if(_x>_r||_x<-_r||_z>_r||_z<-_r)continue;if(c.y0!==undefined&&(p.y===undefined||p.y<c.y0||p.y>c.y1))continue;if(c.h!==undefined&&p.y!==undefined&&p.y>heightAt(c.x,c.z)+c.h-.7)continue;if(c.box){_boxPush(p,c,r);continue;}const dx=p.x-c.x,dz=p.z-c.z,d=Math.hypot(dx,dz),mn=c.r+r;if(d<mn&&d>1e-4){p.x=c.x+dx/d*mn;p.z=c.z+dz/d*mn;}}}
+function pushOutFly(p,r){for(const c of colNear(p.x,p.z,r+.5)){const _r=c.r+r,_x=p.x-c.x,_z=p.z-c.z;if(_x>_r||_x<-_r||_z>_r||_z<-_r)continue;if(c.y0!==undefined){if(p.y<c.y0||p.y>c.y1)continue;}else if(p.y>heightAt(c.x,c.z)+(c.h||7))continue;if(c.box){_boxPush(p,c,r);continue;}const dx=p.x-c.x,dz=p.z-c.z,d=Math.hypot(dx,dz),mn=c.r+r;if(d<mn&&d>1e-4){p.x=c.x+dx/d*mn;p.z=c.z+dz/d*mn;}}}
+function pushOut(p,r){for(const c of colNear(p.x,p.z,r+.5)){const _r=c.r+r,_x=p.x-c.x,_z=p.z-c.z;if(_x>_r||_x<-_r||_z>_r||_z<-_r)continue;if(c.y0!==undefined&&(p.y===undefined||p.y<c.y0||p.y>c.y1))continue;if(c.h!==undefined&&p.y!==undefined&&p.y>heightAt(c.x,c.z)+c.h-.7)continue;if(c.box){_boxPush(p,c,r);continue;}const dx=p.x-c.x,dz=p.z-c.z,d=Math.hypot(dx,dz),mn=c.r+r;if(d<mn&&d>1e-4){p.x=c.x+dx/d*mn;p.z=c.z+dz/d*mn;}}}
 
 function updatePlayer(dt){
   let f=0,r=0;
