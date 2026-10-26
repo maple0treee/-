@@ -1366,7 +1366,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@4249d2794df36efc9402211ac0c2ef445d5a9d84/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@360b236375b1247c70e9744458b13ae0a5583160/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -11532,58 +11532,63 @@ const QUAD_LOOK={
   donkey:{S:1.6,c:0x8a7a6a,c2:0xcfc4b4,dark:0x3a3028,mane:0x3a3028,saddle:0x6a3a24,ears:'long',muzzle:'long',tail:'tuft'},
   wolf:{S:1.9,c:0x5e5e66,c2:0xc8c6c0,dark:0x1a1612,back:0x3e3e46,saddle:0x4a2a18,ears:'point',muzzle:'sharp',tail:'bushy'}};
 function quadInstance(kind){const L=QUAD_LOOK[kind]||QUAD_LOOK.wolf,wolf=kind==='wolf',dk=kind==='donkey',c=L.c,c2=L.c2,dark=L.dark,PI=Math.PI;
-  const VC=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.85,flatShading:false}),SPH=new THREE.SphereGeometry(.5,18,14),CYL=new THREE.CylinderGeometry(.5,.5,1,14),CONE=new THREE.ConeGeometry(.5,1,12),BOX=new THREE.BoxGeometry(1,1,1),TOR=new THREE.TorusGeometry(.5,.08,8,20);
-  /* 부품 [geo,x,y,z,sx,sy,sz,색,rx,ry,rz] — 크기는 지름(SPH 반지름 .5). 한 덩어리로 합쳐 그린다 */
-  const merge=parts=>{const pos=[],nor=[],col=[];const m4=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler();
-    for(const [geo,x,y,z,sx,sy,sz,cc,rx=0,ry=0,rz=0] of parts){const g2=geo.index?geo.toNonIndexed():geo.clone();m4.compose(new THREE.Vector3(x,y,z),q.setFromEuler(e.set(rx,ry,rz)),new THREE.Vector3(sx,sy,sz));g2.applyMatrix4(m4);
-      const Pp=g2.attributes.position,N=g2.attributes.normal,C=new THREE.Color(cc);for(let i=0;i<Pp.count;i++){pos.push(Pp.getX(i),Pp.getY(i),Pp.getZ(i));nor.push(N.getX(i),N.getY(i),N.getZ(i));col.push(C.r,C.g,C.b);}}
-    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));return g;};
-  /* 비스듬한 통: a에서 b까지 이어지는 타원체 (목·허벅지처럼 두 점을 잇는 부위) */
-  const tube=(ax,ay,az,bx,by,bz,w,h,cc)=>{const dx=bx-ax,dy=by-ay,dz=bz-az,len=Math.hypot(dx,dy,dz);return [SPH,(ax+bx)/2,(ay+by)/2,(az+bz)/2,w,len+h,h,cc,Math.atan2(dz,dy),0,-Math.atan2(dx,Math.hypot(dy,dz))];};
+  /* 각진 저폴리: 둥근 공 대신 모난 통(6~8각 기둥)을 이어 붙이고 면 음영을 살린다. 부품은 {geo,m:행렬,c:색}으로 모아 한 덩어리로 합친다 */
+  const VC=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.8,flatShading:true});
+  const parts=[],_m=new THREE.Matrix4(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0),_d=new THREE.Vector3();
+  /* seg: a→b로 뻗는 모난 통 (ra: a쪽 반지름, rb: b쪽 반지름, n: 각 수, sx/sz: 단면 납작하게) */
+  const seg=(ax,ay,az,bx,by,bz,ra,rb,cc,n=6,sx=1,sz=1,twist=0)=>{_d.set(bx-ax,by-ay,bz-az);const len=_d.length();_d.normalize();_q.setFromUnitVectors(_up,_d);
+    const geo=new THREE.CylinderGeometry(rb,ra,len,n,1);if(twist)geo.rotateY(twist);geo.scale(sx,1,sz);
+    _m.compose(new THREE.Vector3((ax+bx)/2,(ay+by)/2,(az+bz)/2),_q,new THREE.Vector3(1,1,1));parts.push({geo,m:_m.clone(),c:cc});};
+  const box=(x,y,z,w,h,d,cc,rx=0,ry=0,rz=0)=>{const geo=new THREE.BoxGeometry(w,h,d);_m.compose(new THREE.Vector3(x,y,z),_q.setFromEuler(new THREE.Euler(rx,ry,rz)),new THREE.Vector3(1,1,1));parts.push({geo,m:_m.clone(),c:cc});};
+  const ball=(x,y,z,r,cc,n=6,sy=1,sz=1)=>{const geo=new THREE.SphereGeometry(r,n,Math.max(3,n-2));geo.scale(1,sy,sz);_m.makeTranslation(x,y,z);parts.push({geo,m:_m.clone(),c:cc});};
+  const cone=(x,y,z,r,h,cc,rx=0,ry=0,rz=0,n=4)=>{const geo=new THREE.ConeGeometry(r,h,n);_m.compose(new THREE.Vector3(x,y,z),_q.setFromEuler(new THREE.Euler(rx,ry,rz)),new THREE.Vector3(1,1,1));parts.push({geo,m:_m.clone(),c:cc});};
+  const ring=(x,y,z,r,t,cc,rx=0,ry=0,rz=0)=>{const geo=new THREE.TorusGeometry(r,t,4,10);_m.compose(new THREE.Vector3(x,y,z),_q.setFromEuler(new THREE.Euler(rx,ry,rz)),new THREE.Vector3(1,1,1));parts.push({geo,m:_m.clone(),c:cc});};
+  const flush=()=>{const pos=[],col=[];for(const {geo,m,c:cc} of parts){const g2=geo.index?geo.toNonIndexed():geo;g2.applyMatrix4(m);const Pp=g2.attributes.position,C=new THREE.Color(cc);for(let i=0;i<Pp.count;i++){pos.push(Pp.getX(i),Pp.getY(i),Pp.getZ(i));col.push(C.r,C.g,C.b);}}
+    parts.length=0;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.computeVertexNormals();return new THREE.Mesh(g,VC);};
   const g=new THREE.Group(),B=new THREE.Group();g.add(B);const S=L.S,SD=L.saddle,LE=0x3a1a10;
-  let body=[];
+  /* ===== 몸통 ===== */
   if(wolf){const bk=L.back;
-    body=[[SPH,0,.5,-.02,.36,.34,.9,c],[SPH,0,.52,.3,.4,.42,.46,c],[SPH,0,.5,-.3,.32,.32,.4,c],[SPH,0,.43,.0,.3,.24,.68,c2],   /* 몸통·깊은 가슴·엉덩이·밝은 배 */
-      [SPH,0,.62,-.02,.24,.12,.78,bk],[SPH,0,.6,.4,.46,.36,.36,c2],[SPH,0,.5,.46,.34,.3,.3,c2],   /* 등줄기, 두툼한 목털(러프), 가슴털 */
-      tube(0,.56,.36,0,.74,.56,.28,.26,c),[SPH,0,.7,.5,.2,.14,.3,bk],   /* 목, 목덜미 */
-      [SPH,0,.68,-.02,.3,.03,.42,SD],[BOX,0,.66,-.02,.34,.02,.36,0x2a1a10],[CYL,0,.5,-.02,.64,.03,.64,LE,0,0,PI/2]];}   /* 가죽 안장 깔개·배끈 */
-  else{const BL=dk?0x6a3a5a:0x8a2a2a;
-    body=[[SPH,0,.58,0,.46,.44,1.0,c],[SPH,0,.6,.42,.42,.46,.48,c],[SPH,0,.6,-.4,.44,.46,.52,c],[SPH,0,.5,.02,.4,.3,.8,c2],   /* 몸통(통)·가슴·엉덩이·배 */
-      tube(0,.66,.44,0,1.02,.68,dk?.3:.28,dk?.3:.32,c),   /* 목 (가슴에서 머리로 비스듬히) */
-      [SPH,0,.88,0,.52,.14,.72,BL],[SPH,0,.92,-.04,.34,.14,.52,SD],[SPH,0,.99,.18,.1,.1,.08,SD],[SPH,0,.99,-.28,.22,.1,.06,SD],   /* 안장 깔개·안장·안장머리·뒷턱 */
-      [CYL,0,.6,0,.7,.05,.7,LE,0,0,PI/2],[BOX,-.26,.72,-.02,.03,.36,.08,LE],[BOX,.26,.72,-.02,.03,.36,.08,LE],[TOR,-.27,.52,-.02,.12,.12,.12,0x8a8a90,0,PI/2,0],[TOR,.27,.52,-.02,.12,.12,.12,0x8a8a90,0,PI/2,0],   /* 뱃대끈·등자 끈·등자 */
-      [BOX,-.1,1.0,.42,.012,.012,.5,LE,.08,0,0],[BOX,.1,1.0,.42,.012,.012,.5,LE,.08,0,0],   /* 고삐 (머리에서 안장머리로) */
-      [SPH,0,.7,-.6,.12,.12,.12,c]];   /* 꼬리 뿌리 */
-    if(dk){body.push([SPH,0,.8,0,.08,.04,.9,dark],[SPH,0,.78,.3,.5,.04,.08,dark]);}   /* 당나귀: 등줄기와 어깨 십자 무늬 */
-    /* 갈기: 목 윗선을 따라 (말은 늘어진 긴 갈기, 당나귀는 짧고 빳빳이 선 갈기) */
-    for(let k=0;k<9;k++){const t=k/8,x=0,y=1.1-t*.34,z=.76-t*.5;if(dk)body.push([SPH,x,y+.04,z,.06,.1,.08,L.mane]);else body.push([SPH,x+(k%2?.05:-.05),y-.06,z,.09,.22,.1,L.mane,-.35,0,k%2?.3:-.3]);}}
-  if(!wolf)for(const q of body)q[2]+=.12;   /* 말·당나귀: 몸통을 올려 다리를 길게 */
-  B.add(new THREE.Mesh(merge(body),VC));
-  /* 머리 */
-  const H=new THREE.Group();H.position.set(0,wolf?.74:1.22,wolf?.56:.68);B.add(H);
-  if(wolf){const F=new THREE.Group();H.add(F);
-    F.add(new THREE.Mesh(merge([[SPH,0,.06,0,.28,.25,.3,c],[SPH,0,.0,.2,.18,.15,.3,c],[SPH,0,.0,.34,.12,.1,.12,c2],[SPH,0,.03,.4,.06,.045,.05,dark],   /* 머리통·주둥이·주둥이 끝·코 */
-      [SPH,0,-.07,.2,.14,.08,.26,c2],[SPH,-.11,.0,.02,.15,.17,.2,c2],[SPH,.11,.0,.02,.15,.17,.2,c2],   /* 아래턱·볼털 */
-      [SPH,0,.14,.08,.22,.08,.2,L.back],[SPH,-.09,.11,.17,.05,.045,.03,0xe8c040],[SPH,.09,.11,.17,.05,.045,.03,0xe8c040],[SPH,-.09,.11,.19,.022,.022,.02,dark],[SPH,.09,.11,.19,.022,.022,.02,dark],   /* 이마 무늬·눈·눈동자 */
-      [CONE,-.1,.28,-.02,.12,.24,.08,c,-.2,0,.3],[CONE,.1,.28,-.02,.12,.24,.08,c,-.2,0,-.3],[CONE,-.1,.27,-.005,.07,.15,.045,c2,-.2,0,.3],[CONE,.1,.27,-.005,.07,.15,.045,c2,-.2,0,-.3]]),VC));}   /* 귀 */
-  else{const F=new THREE.Group();F.position.set(0,0,.04);F.rotation.x=.8;H.add(F);
-    const sk=dk?.27:.3,face=[[SPH,0,0,0,sk,sk,sk*1.1,c],[SPH,0,-.03,.2,sk*.8,sk*.78,.4,c],[SPH,0,-.06,.4,sk*.66,sk*.62,.26,dk?c2:c],
-      [SPH,0,-.07,.5,.16,.14,.13,c2],[SPH,-.045,-.1,.555,.028,.022,.028,dark],[SPH,.045,-.1,.555,.028,.022,.028,dark],[BOX,0,-.135,.49,.11,.012,.05,dark],
-      [SPH,-.13,.05,.1,.05,.05,.035,dark],[SPH,.13,.05,.1,.05,.05,.035,dark],[SPH,-.132,.055,.118,.02,.02,.012,0xf0f0f0],[SPH,.132,.055,.118,.02,.02,.012,0xf0f0f0],
-      [TOR,0,-.055,.42,.2,.19,.2,LE],[BOX,-.1,-.02,.3,.02,.03,.3,LE,-.25,0,0],[BOX,.1,-.02,.3,.02,.03,.3,LE,-.25,0,0],[BOX,0,.1,.03,.3,.03,.02,LE],[BOX,0,-.12,.0,.26,.03,.02,LE]];
-    const el=dk?.34:.18,ew=dk?.09:.07;face.push([CONE,-.09,.2,-.06,ew,el,.055,c,-.5,0,.35],[CONE,.09,.2,-.06,ew,el,.055,c,-.5,0,-.35],[CONE,-.09,.19,-.05,ew*.55,el*.6,.04,c2,-.5,0,.35],[CONE,.09,.19,-.05,ew*.55,el*.6,.04,c2,-.5,0,-.35]);
-    if(!dk)face.push([SPH,0,.15,.08,.1,.07,.18,L.mane,.4,0,0]);
-    F.add(new THREE.Mesh(merge(face),VC));}
-  /* 다리: 엉덩이/어깨 관절에서 늘어지는 마디 (앞다리는 곧게, 뒷다리는 무릎(비절)이 뒤로 꺾인다). 발굽/발은 땅(y=0)에 닿는다 */
-  const leg=(x,z,rear)=>{const Lg=new THREE.Group(),y0=wolf?.46:.68;Lg.position.set(x,y0,z);const k=rear?-.05:0;
-    const parts=wolf?[[SPH,0,-.02,rear?-.04:0,rear?.2:.15,rear?.26:.22,rear?.22:.17,c],[CYL,0,-.16,k,.09,.24,.1,c,rear?.3:0,0,0],[SPH,0,-.27,rear?-.06:.01,.085,.085,.09,c],[CYL,0,-.37,rear?-.03:.01,.065,.2,.07,c,rear?-.1:0,0,0],[SPH,0,-y0+.05,rear?.0:.04,.1,.07,.15,c2]]
-      :[[SPH,0,-.02,rear?-.04:0,rear?.24:.17,rear?.3:.24,rear?.26:.19,c],[CYL,0,-.17,k,.11,.28,.12,c,rear?.28:0,0,0],[SPH,0,-.31,rear?-.07:.01,.095,.095,.1,c],[CYL,0,-.46,rear?-.04:.01,.07,.3,.075,c,rear?-.08:0,0,0],[SPH,0,-y0+.12,rear?-.02:.02,.08,.07,.085,c],[CYL,0,-y0+.035,rear?-.01:.03,.095,.07,.105,dark]];
-    Lg.add(new THREE.Mesh(merge(parts),VC));B.add(Lg);return Lg;};
-  const legs=wolf?[leg(-.15,.3,false),leg(.15,.3,false),leg(-.14,-.3,true),leg(.14,-.3,true)]:[leg(-.17,.34,false),leg(.17,.34,false),leg(-.17,-.38,true),leg(.17,-.38,true)];
-  /* 꼬리 */
-  const T=new THREE.Group();T.position.set(0,wolf?.56:.82,wolf?-.42:-.62);B.add(T);
-  T.add(new THREE.Mesh(merge(wolf?[[SPH,0,-.04,-.1,.14,.14,.3,c],[SPH,0,-.14,-.32,.16,.16,.3,c],[SPH,0,-.3,-.5,.12,.12,.22,c2]]
-    :L.tail==='hair'?[[SPH,0,-.1,-.04,.1,.28,.12,L.mane],[SPH,0,-.32,-.08,.13,.32,.14,L.mane],[SPH,0,-.56,-.1,.1,.28,.11,L.mane]]:[[CYL,0,-.18,-.02,.04,.4,.04,c,-.25,0,0],[SPH,0,-.4,-.08,.08,.14,.08,dark]]),VC));
+    seg(0,.56,.36,0,.52,-.34,.2,.17,c,8,.9,1.1,PI/8);seg(0,.56,.36,0,.5,.52,.2,.1,c,8,.9,1.1,PI/8);seg(0,.52,-.34,0,.46,-.5,.17,.08,c,8,.9,1.1,PI/8);   /* 몸통·가슴·엉덩이 */
+    seg(0,.66,.3,0,.68,-.3,.08,.07,bk,6,1.6,.6);seg(0,.42,.2,0,.4,-.2,.12,.1,c2,6,1.2,.5);   /* 등줄기·밝은 배 */
+    seg(0,.58,.28,0,.66,.46,.27,.22,c2,8,1,1,PI/8);seg(0,.6,.42,0,.76,.56,.15,.12,c,6,.9,1);   /* 목털(러프)·목 */
+    box(0,.68,-.04,.3,.03,.4,SD);box(0,.66,-.04,.34,.015,.38,0x2a1a10);ring(0,.52,-.04,.21,.014,LE,0,0,PI/2);}   /* 가죽 깔개·배끈 */
+  else{const BL=dk?0x6a3a5a:0x8a2a2a,bodyR=dk?.23:.25;
+    seg(0,.78,.5,0,.78,-.5,bodyR,bodyR*1.02,c,8,.9,1.15,PI/8);seg(0,.78,.5,0,.72,.68,bodyR,bodyR*.5,c,8,.9,1.15,PI/8);seg(0,.78,-.5,0,.7,-.68,bodyR*1.02,bodyR*.45,c,8,.9,1.15,PI/8);   /* 통·가슴·엉덩이 */
+    seg(0,.62,.3,0,.6,-.25,.17,.16,c2,6,1.3,.6);   /* 밝은 배 */
+    seg(0,.84,.42,0,1.2,.7,dk?.2:.18,dk?.16:.13,c,6,.8,1);seg(0,.86,.4,0,.92,.6,.22,.16,c,6,.85,1);   /* 목·목 뿌리 */
+    box(0,1.02,0,.5,.03,.66,BL);box(0,1.06,-.04,.32,.07,.46,SD);box(0,1.12,.19,.1,.08,.08,SD);box(0,1.13,-.28,.24,.1,.05,SD);   /* 안장 깔개·안장·안장머리·뒷턱 */
+    ring(0,.78,-.02,.3,.014,LE,0,0,PI/2);for(const sx of [-1,1]){box(sx*.27,.9,-.02,.025,.3,.07,LE);ring(sx*.28,.73,-.02,.06,.012,0x8a8a90,0,PI/2,0);box(sx*.1,1.16,.44,.012,.012,.5,LE,.1,0,0);}   /* 뱃대끈·등자 끈·등자·고삐 */
+    if(dk){box(0,1.0,0,.06,.015,.9,dark);box(0,.98,.3,.44,.015,.06,dark);}   /* 당나귀: 등줄기·어깨 십자 */
+    /* 갈기: 목 윗선을 따라 (말은 늘어진 갈기 판, 당나귀는 짧게 선 솔) */
+    if(dk)for(let k=0;k<7;k++){const t=k/6;box(0,1.26-t*.36+.02,.72-t*.42,.05,.1,.07,L.mane,-.55,0,0);}
+    else{for(let k=0;k<6;k++){const t=k/5;box((k%2?1:-1)*.06,1.2-t*.34,.74-t*.4,.04,.22,.1,L.mane,-.55,0,(k%2?-.35:.35));}}}
+  B.add(flush());
+  /* ===== 머리 ===== */
+  const H=new THREE.Group();H.position.set(0,wolf?.76:1.22,wolf?.56:.7);B.add(H);const F=new THREE.Group();H.add(F);
+  if(wolf){seg(0,.04,-.12,0,.02,.12,.14,.13,c,6,1.1,1,PI/6);seg(0,.02,.12,0,-.02,.4,.12,.065,c,6,1,1,PI/6);ball(0,-.01,.42,.045,dark,5);   /* 머리통·주둥이·코 */
+    seg(0,-.07,.1,0,-.09,.36,.09,.05,c2,5,1.2,.6);for(const sx of [-1,1]){seg(sx*.1,-.02,-.06,sx*.14,-.04,.06,.1,.07,c2,5,.6,1);}   /* 아래턱·볼털 */
+    box(0,.13,.05,.2,.05,.2,L.back);for(const sx of [-1,1]){ball(sx*.085,.09,.17,.035,0xe8c040,6,.8,.5);ball(sx*.085,.09,.19,.016,dark,4);cone(sx*.1,.26,-.03,.06,.22,c,-.2,0,sx*-.3,4);cone(sx*.1,.25,-.015,.035,.14,c2,-.2,0,sx*-.3,4);}}   /* 이마·눈·귀 */
+  else{F.position.set(0,0,.04);F.rotation.x=.8;const sk=dk?.15:.16;
+    seg(0,.02,-.14,0,0,.16,sk*.95,sk,c,6,1.1,1,PI/6);seg(0,0,.16,0,-.06,.46,sk,sk*.6,c,6,1,1,PI/6);seg(0,-.06,.46,0,-.08,.58,sk*.6,sk*.35,dk?c2:c2,6,1,1,PI/6);   /* 머리통·얼굴·주둥이 끝 */
+    for(const sx of [-1,1]){ball(sx*.04,-.1,.57,.02,dark,4);ball(sx*.14,.05,.08,.03,dark,6,1,.7);ball(sx*.15,.055,.1,.012,0xf0f0f0,4);}box(0,-.14,.5,.1,.012,.05,dark);   /* 콧구멍·눈·입선 */
+    ring(0,-.06,.42,.11,.012,LE);for(const sx of [-1,1])box(sx*.1,-.02,.3,.02,.025,.3,LE,-.25,0,0);box(0,.11,.0,.3,.025,.02,LE);box(0,-.13,-.02,.26,.025,.02,LE);   /* 코끈·볼끈·이마끈·목끈 */
+    const el=dk?.34:.18,ew=dk?.06:.05;for(const sx of [-1,1]){cone(sx*.09,.2,-.06,ew,el,c,-.5,0,sx*-.35,4);cone(sx*.09,.19,-.045,ew*.5,el*.6,c2,-.5,0,sx*-.35,4);}   /* 귀 */
+    if(!dk)box(0,.14,.1,.08,.06,.18,L.mane,.4,0,0);}   /* 앞머리 */
+  F.add(flush());
+  /* ===== 다리: 어깨/엉덩이 관절에서 늘어지는 모난 마디. 뒷다리는 비절이 뒤로 꺾인다. 발굽/발은 땅(y=0) ===== */
+  const leg=(x,z,rear)=>{const Lg=new THREE.Group(),y0=wolf?.5:.72;Lg.position.set(x,y0,z);
+    if(wolf){if(rear){seg(0,.04,0,0,-.22,-.08,.1,.06,c,6,.8,1.3);seg(0,-.22,-.08,0,-.36,-.04,.06,.045,c,6);seg(0,-.36,-.04,0,-y0+.05,.02,.045,.045,c,6);}
+      else{seg(0,.04,0,0,-.26,0,.085,.055,c,6);seg(0,-.26,0,0,-y0+.05,.01,.055,.045,c,6);}seg(0,-y0+.06,rear?0:.0,0,-y0+.01,.04,.05,.055,c2,6,1,1.4);}
+    else{if(rear){seg(0,.06,-.02,0,-.26,-.1,.13,.07,c,6,.75,1.3);seg(0,-.26,-.1,0,-.42,-.06,.065,.05,c,6);seg(0,-.42,-.06,0,-y0+.06,.0,.05,.045,c,6);}
+      else{seg(0,.06,0,0,-.3,0,.11,.06,c,6,.9,1);seg(0,-.3,0,0,-y0+.06,.01,.06,.045,c,6);}seg(0,-y0+.06,.01,0,-y0,.02,.05,.06,dark,6);}   /* 발굽 */
+    Lg.add(flush());B.add(Lg);return Lg;};
+  const legs=wolf?[leg(-.13,.3,false),leg(.13,.3,false),leg(-.12,-.3,true),leg(.12,-.3,true)]:[leg(-.16,.4,false),leg(.16,.4,false),leg(-.16,-.42,true),leg(.16,-.42,true)];
+  /* ===== 꼬리 ===== */
+  const T=new THREE.Group();T.position.set(0,wolf?.52:.82,wolf?-.48:-.68);B.add(T);
+  if(wolf){seg(0,0,0,0,-.14,-.3,.07,.08,c,6);seg(0,-.14,-.3,0,-.32,-.48,.08,.03,c2,6);}
+  else if(L.tail==='hair'){seg(0,0,0,0,-.5,-.14,.05,.07,L.mane,5,1.3,1);seg(0,-.5,-.14,0,-.68,-.16,.07,.02,L.mane,5,1.3,1);}
+  else{seg(0,0,0,0,-.36,-.08,.025,.02,c,4);seg(0,-.36,-.08,0,-.52,-.1,.045,.015,dark,5);}
+  T.add(flush());
   g.scale.setScalar(S);g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   const M={g,ph:0,set(speed,dt){const v=speed/S;M.ph+=dt*Math.min(14,v*5.5);const k=Math.min(1,v/1.5),s=Math.sin(M.ph);
       B.position.y=Math.abs(Math.cos(M.ph))*.04*k;legs[0].rotation.x=s*.7*k;legs[3].rotation.x=s*.7*k;legs[1].rotation.x=-s*.7*k;legs[2].rotation.x=-s*.7*k;
