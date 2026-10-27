@@ -323,9 +323,11 @@
       G('나그네', '두건 쓴 여행자', ['…{z}를 지나야 하는데 {m}이(가) 길을 막고 있다. 대가는 넉넉히 치르지.'])] },
   };
   /* 엑시즈 모험가 길드의 큰 게시판: 등급(레벨대)별로 칸이 나뉘어 있고, 칸마다 의뢰가 고르게 붙는다 */
-  BOARDS.guild = { title: '모험가 길드 의뢰 게시판', cap: 40, zones: [],
+  BOARDS.guild = { title: '모험가 길드 의뢰 게시판', cap: 56, zones: [],
     tiers: [{ id: 'd', name: '초급', lv: [1, 15], zones: ['forest', 'plains', 'swamp', 'ruins'] }, { id: 'c', name: '중급', lv: [16, 59], zones: ['wwest', 'wnorth', 'wsouth', 'weast'] },
-      { id: 'b', name: '상급', lv: [60, 100], zones: ['silva', 'arbus', 'kaolis', 'subcus'] }, { id: 'a', name: '특급', lv: [100, 999], zones: MHUNT.filter((z) => ZONE_MON[z]) }],
+      { id: 'b', name: '상급', lv: [60, 100], zones: ['silva', 'arbus', 'kaolis', 'subcus'] },
+      /* 100레벨 뒤는 스무 레벨씩 칸을 나눈다 (사냥터의 시작 레벨로 가른다) */
+      ...[[100, 120], [120, 140], [140, 160], [160, 180], [180, 200]].map(([lo, hi], i) => ({ id: 'a' + i, name: '특급 ' + (i + 1), lv: [lo, hi], zones: MHUNT.filter((z) => ZONE_MON[z] && ZONE_LEVELS[z] && ZONE_LEVELS[z][0] >= lo && ZONE_LEVELS[z][0] < hi) }))].filter((t) => t.zones.length),
     givers: [
       G('엑시즈 상인', '상인', ['{z}를 지나는 상단이 {m}에게 번번이 털립니다. 길이 안전해지면 왕도 물가도 내려갈 거예요.', '{z}에서 들여오는 물건이 {m} 때문에 끊겼어요. 가게 선반이 비어 갑니다.']),
       G('길드 접수원', '모험가 길드', ['{z}에 나간 모험가들이 {m} 때문에 돌아오지 못하고 있어요. 수를 줄여 길을 열어 주세요.', '{z}의 {m}에 대한 신고가 길드에 쌓였어요. 처리해 주실 분을 찾습니다.']),
