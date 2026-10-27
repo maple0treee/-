@@ -1367,7 +1367,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@05e87d62911863fa8681168d1923f45e06fb96cd/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@717e9026b41be73a15341736948f7556e0bebc9b/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -14380,7 +14380,7 @@ function setZone(z){
   if(z===curZone)return;curZone=z;bgmZone(z);
   {const q=P&&P.quest;if(q&&q.special==='portal'){const inside=z==='wlair'||z==='hall';
     if(inside||(q.stage|0)>=1){q.stage=2;questPayout(q);}}}   /* 포탈을 넘으면 조사는 끝: 보고 없이 바로 보상 */const Z=ZONES[z];if(z==='village'||z==='town')P.home=z;
-  $('#wName').textContent=Z.name;$('#wCountry').textContent=((typeof COUNTRY_OF!=='undefined'&&COUNTRY_OF[z])||'')+(typeof DL!=='undefined'?' · '+DL.name:'');$('#wStars').textContent=stars(Z.diff);$('#wRec').textContent=Z.rec;
+  $('#wName').textContent=Z.name;$('#wCountry').textContent=((typeof COUNTRY_OF!=='undefined'&&COUNTRY_OF[z])||'')+(typeof DL!=='undefined'?' · '+DL.name+' '+Math.floor(DL.h%24)+'시':'');$('#wStars').textContent=stars(Z.diff);$('#wRec').textContent=Z.rec;
   $('#bT').textContent=Z.name;$('#bS').textContent=Z.diff?`${stars(Z.diff)}  ${Z.rec||''}`:'';
   if(!(typeof arriveBanner==='function'&&performance.now()-(arriveBanner.at||0)<4000)){   /* 문·포탈로 막 넘어왔으면 도착 글자만 띄운다 (두 글자가 겹치지 않게) */
   $('#banner').classList.add('on');clearTimeout(bannerT);bannerT=setTimeout(()=>$('#banner').classList.remove('on'),2200);}
@@ -17050,17 +17050,20 @@ function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);c
 Perf.init();mergeStaticGroups(3);LightPool.init();InstChunks.init();
 addEventListener('resize',resize);resize();
 const clock=new THREE.Clock();let tAll=0;
-/* ---------- 하루의 때: 실제 한국 시간을 따른다. 새벽(4–7)·아침(7–11)·낮(11–17)·저녁(17–20)·밤(20–4). 바깥에서만 빛이 달라진다 ----------
+/* ---------- 오를란도의 하루: 이 세계만의 시간이 따로 흐른다. 하루(24시)가 실제 2시간 — 1시가 실제 5분. 모든 사람이 같은 시각을 본다(실제 시각에서 계산).
+   새벽(4–7)·아침(7–11)·낮(11–17)·저녁(17–20)·밤(20–4). 바깥에서만 빛이 달라진다 ----------
    각 때의 빛: 해 세기, 하늘빛 세기, 해 색, 하늘(배경) 어둡기와 물드는 색. 때가 바뀌는 한 시간 동안 부드럽게 넘어간다 */
 const DAY_KEYS=[[4,'새벽',.35,.55,0xa8b8e0,.55,0x7080b0],[7,'아침',.9,.9,0xffe2b8,.95,0xffd0a0],[11,'낮',1,1,0xffffff,1,0xffffff],[17,'저녁',.8,.8,0xffa868,.8,0xff9a60],[20,'밤',.09,.2,0x5a70b8,.16,0x2a3658],[28,'새벽',.35,.55,0xa8b8e0,.55,0x7080b0]];
 const DL={name:'낮',sun:1,hemi:1,tint:new THREE.Color(1,1,1),bg:1,bgTint:new THREE.Color(1,1,1),h:12,_t:0,_c1:new THREE.Color(),_c2:new THREE.Color()};
-function kstHour(){try{const s=new Date().toLocaleString('en-US',{timeZone:'Asia/Seoul',hour12:false,hour:'2-digit',minute:'2-digit'});const [h,m]=s.split(':').map(Number);return (h%24)+m/60;}catch(e){const d=new Date();return (d.getUTCHours()+9)%24+d.getUTCMinutes()/60;}}
-function dayLightTick(dt){DL._t-=dt;if(DL._t>0)return;DL._t=5;let h=kstHour();if(h<4)h+=24;DL.h=h;
+const ORL_DAY=7200;   /* 오를란도 하루 = 실제 7200초 */
+function kstHour(){const t=(Date.now()/1000+ORL_DAY*.35)%ORL_DAY;return t/ORL_DAY*24;}   /* 오를란도 시각 (0~24) */
+function orlandoClock(){const h=kstHour(),hh=Math.floor(h),mm=Math.floor((h-hh)*60);return `${hh}시 ${mm<10?'0':''}${mm}분`;}
+function dayLightTick(dt){DL._t-=dt;if(DL._t>0)return;DL._t=2;let h=kstHour();if(h<4)h+=24;DL.h=h;
   let i=0;for(let k=0;k<DAY_KEYS.length-1;k++)if(h>=DAY_KEYS[k][0])i=k;const A=DAY_KEYS[i],B=DAY_KEYS[i+1];
   const span=1,t=Math.min(1,Math.max(0,(h-A[0])/span));   /* 그 때의 첫 한 시간 동안 앞 때에서 이 때로 넘어간다 */
   const Pp=DAY_KEYS[(i+DAY_KEYS.length-2)%(DAY_KEYS.length-1)],mix=(a,b)=>a+(b-a)*t;
   DL.sun=mix(Pp[2],A[2]);DL.hemi=mix(Pp[3],A[3]);DL.bg=mix(Pp[5],A[5]);DL.tint.copy(DL._c1.set(Pp[4])).lerp(DL._c2.set(A[4]),t);DL.bgTint.copy(DL._c1.set(Pp[6])).lerp(DL._c2.set(A[6]),t);
-  if(DL.name!==A[1]){DL.name=A[1];const el=$('#wCountry');if(el&&P){const Z=ZONES[curZone];el.textContent=((typeof COUNTRY_OF!=='undefined'&&COUNTRY_OF[curZone])||'')+' · '+DL.name;}}}
+  const hh=Math.floor(h%24);if(DL.name!==A[1]||DL.hh!==hh){DL.name=A[1];DL.hh=hh;const el=$('#wCountry');if(el&&P){el.textContent=((typeof COUNTRY_OF!=='undefined'&&COUNTRY_OF[curZone])||'')+' · '+DL.name+' '+hh+'시';}}}
 const targetSky=new THREE.Color(),_hemC=new THREE.Color(),_hemG=new THREE.Color(),_sunC=new THREE.Color(),_zenC=new THREE.Color(),_skyBlue=new THREE.Color(),_hc2=new THREE.Color();
 // 비행 중 충돌: 높이 범위가 없는 것(벽·나무·집)은 그 높이(h, 없으면 7m) 위로는 넘어간다
 // 네모 충돌물: 돌려 놓은 직사각형 (hw·hd 반폭, cs·sn 회전)
