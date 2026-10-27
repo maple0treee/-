@@ -1366,7 +1366,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@bd682d1401156dfe2291c2a05801a60d397353db/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@91675825878949d0d607b45566fe6cd676d5b0fe/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -9294,6 +9294,11 @@ function marcusPlan(){if(MARCUS.plan)return MARCUS.plan;
     const wd=wallDist(x,y);if(wd<0){const rd=riverDist(x,y);if(rd<MARCUS_RIVER_W/2+2&&!bridgeAt(x,y))return MARCUS_RIVER_DEEP*smooth(MARCUS_RIVER_W/2-1,MARCUS_RIVER_W/2-4.5,rd);   /* 둑 선(W/2+.5) 안쪽에서부터 내려간다: 땅 그물이 성겨도 둑 뒤 땅은 평평하게 */return 0;}
     /* 성벽 밖으로 나간 항구 물은 해자와 이어 준다 (그 사이에 물 위로 뜬 듯한 땅 띠가 남지 않게) */
     return Math.max(moatDepth(x,y),polyDist(harbor,x,y)<26?3.2*smooth(26,14,polyDist(harbor,x,y)):0);};
+  /* 길 끝이 물(강·항구) 위에 걸치면 뭍까지 잘라 낸다: 물 위에 떠 있는 길이 생기지 않게 (다리 자리는 그대로) */
+  for(const st of streets){const P=st.p;if(P.length<2)continue;const wet=(x,y)=>waterDepth(x,y)>0||(wallDist(x,y)<0&&riverDist(x,y)<MARCUS_RIVER_W/2+st.w/2+1.5&&!bridgeAt(x,y))||inHarbor(x,y,st.w/2+1.5);
+    for(let pass=0;pass<2;pass++){const i0=pass?P.length-1:0,i1=pass?P.length-2:1;if(P.length<2)break;let [ax,ay]=P[i0];const [bx,by]=P[i1];if(!wet(ax,ay))continue;
+      const L=Math.hypot(bx-ax,by-ay);let t=0,found=false;for(t=1;t<L-1;t+=1){const x=ax+(bx-ax)*t/L,y=ay+(by-ay)*t/L;if(!wet(x,y)){found=true;break;}}
+      if(found){P[i0]=[ax+(bx-ax)*(t+1)/L,ay+(by-ay)*(t+1)/L];}else{P.splice(i0,1);}}}
   return MARCUS.plan={hillStairs,onPlateau,wall,gates,river,harbor,hill,zones,streets,piazze,bridges,inPoly,segDist,polyDist,wallDist,inZone,riverDist,riverNear,bridgeAt,moatDepth,inHarbor,hillH,nearStreet,zone,waterDepth};}
 /* 땅 높이 보정 (isleHeight가 부른다): 강·해자·항구는 파이고, 왕궁 언덕은 솟는다 */
 function marcusTerrain(mx,my){const PL=marcusPlan();return PL.hillH(mx,my)-PL.waterDepth(mx,my);}
@@ -11854,7 +11859,7 @@ function buildStreetProps(K){
   let n=0;
   for(const st of PL.streets){if(st.w<5)continue;for(let i=0;i<st.p.length-1;i++){const [ax,ay]=st.p[i],[bx,by]=st.p[i+1],L=Math.hypot(bx-ax,by-ay),ux=(bx-ax)/L,uy=(by-ay)/L;
     for(let t=9;t<L-6;t+=14+rnd()*10){const sd=rnd()<.5?-1:1,mx=ax+ux*t-uy*sd*(st.w/2-1.3),my=ay+uy*t+ux*sd*(st.w/2-1.3);
-      if(PL.waterDepth(mx,my)>0||PL.hillH(mx,my)>.3||PL.wallDist(mx,my)>-6)continue;{const MR=MARCUS.marketRect;if(MR&&Math.abs(M.x+mx-MR.x)<MR.w/2+22&&Math.abs(M.z+my-MR.z)<MR.d/2+22)continue;}   /* 시장 길목은 비운다 */
+      if(PL.waterDepth(mx,my)>0||PL.hillH(mx,my)>.3||PL.wallDist(mx,my)>-6||PL.riverDist(mx,my)<MARCUS_RIVER_W/2+3.5||PL.inHarbor(mx,my,3.5))continue;   /* 강둑·부두 가장자리에는 놓지 않는다 (물 위에 뜨지 않게) */{const MR=MARCUS.marketRect;if(MR&&Math.abs(M.x+mx-MR.x)<MR.w/2+22&&Math.abs(M.z+my-MR.z)<MR.d/2+22)continue;}   /* 시장 길목은 비운다 */
       const wx=M.x+mx,wz=M.z+my;if(!free(wx,wz,1.6))continue;
       const k=pick(kinds),F=frame(wx,wz,Math.atan2(ux,uy)+(sd>0?PI:0)+rr(-.2,.2)),r=k(F);colliders.push({x:wx,z:wz,r,h:2});n++;}}}
   EXM.props=n;}
