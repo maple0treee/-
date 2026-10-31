@@ -1376,7 +1376,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@26dc580deed704a15a6bf8cca14578d175f1873c/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@7147e2e78b069b82d500763dabb8f5e173bf9bbe/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -2625,7 +2625,8 @@ const NO_BASE={};
 const ONE_DAGGER={rogue:1,thief:1,assassin:1,ninja:1};
 // 기본 직업 → 1차 → 2차 순서
 function jobChain(job){const c=[job];while(JOBS[c[0]].from)c.unshift(JOBS[c[0]].from);return c;}
-function treeOf(job){const c=jobChain(job);for(let k=0;k<(NO_BASE[job]|0);k++)c.shift();const t=[];for(const j of c)t.push(...SKILLS[j]);return t;}
+/* 전직하면 앞 직업의 쓰는 스킬은 내려놓는다. 특성과 패시브만 그대로 남는다 */
+function treeOf(job){const c=jobChain(job);for(let k=0;k<(NO_BASE[job]|0);k++)c.shift();const t=[];for(const j of c)for(const s of SKILLS[j])if(j===job||isTrait(s)||s.type==='passive')t.push(s);return t;}
 // 전직할 수 있는 레벨: 기본 직업 10, 1차 직업 30
 const SKJOB={};for(const j in SKILLS)for(const s of SKILLS[j])SKJOB[s.id]=j;
 // 전직한 직업의 스킬은 레벨 제한이 없다 (SP만 있으면 아무 것이나)
@@ -15039,11 +15040,11 @@ function renderSkills(){
   const tabs=document.createElement('div');tabs.className='sktabs';body.appendChild(tabs);
   full.forEach((j,k)=>{const b=document.createElement('button');b.type='button';b.setAttribute('aria-pressed',j===skTab);
     const t=document.createElement('small');t.textContent=k?`${k}차`:'기본';const n=document.createElement('b');n.textContent=JOBS[j].name;b.append(t,n);
-    if(!SKILLS[j].some(s=>usable.has(s.id)))b.classList.add('past');
+    if(j!==P.job)b.classList.add('past');
     b.onclick=()=>{skTab=j;renderSkills();};tabs.appendChild(b);});
-  const list=SKILLS[skTab]||[];const past=!list.some(s=>usable.has(s.id));$('#skSp').textContent=`SP ${spOf(full.indexOf(skTab))}`;
+  const list=SKILLS[skTab]||[];const pastTab=skTab!==P.job;$('#skSp').textContent=`SP ${spOf(full.indexOf(skTab))}`;
   const wrap=document.createElement('div');wrap.className='sk-list';body.appendChild(wrap);
-  for(const S of list){
+  for(const S of list){const past=pastTab&&!usable.has(S.id);
     const lvl=past?(P.pastSkills&&P.pastSkills[S.id]||0):(P.skills[S.id]||0),locked=P.lv<skReq(S);
     const card=document.createElement('div');card.className='sk'+(locked?' locked':'')+(past?' past':'');
     const nm=document.createElement('div');nm.className='nm';
@@ -16601,11 +16602,11 @@ function useItem(id){
 function useQuick(i){if(mode!=='world'||!P)return;const id=P.quick[i];if(!id){toast(`${i+1}번 칸에 등록된 아이템이 없어요`);return;}useItem(id);}
 function setQuick(i,id){if(!ITEMS[id]||ITEMS[id].kind!=='use')return;const cur=P.quick.indexOf(id);if(cur>=0)P.quick[cur]=null;P.quick[i]=id;invDirty();save();}
 // 지금 직업에 없는 스킬은 SP를 돌려주고 칸에서 뺀다
-const SKILL_VER=25;
+const SKILL_VER=26;
 function fixSkills(why){const valid=new Set(treeOf(P.job).map(s=>s.id));let back=0;
   // 전직하며 내려놓은 스킬은 몇 단계였는지 기록해 둔다 (스킬창의 지난 직업 탭에서 본다)
   const inChain=new Set(jobChain(P.job).flatMap(j=>SKILLS[j].map(s=>s.id)));P.pastSkills=P.pastSkills||{};
-  for(const id in P.skills)if(!valid.has(id)){if(inChain.has(id))P.pastSkills[id]=P.skills[id];if(!isTrait(SK[id]))back+=P.skills[id]||0;delete P.skills[id];}
+  for(const id in P.skills)if(!valid.has(id)){if(inChain.has(id))P.pastSkills[id]=P.skills[id];else if(!isTrait(SK[id]))back+=P.skills[id]||0;delete P.skills[id];}
   for(const id in P.skills)if(isTrait(SK[id])&&P.skills[id]>1){back+=P.skills[id]-1;P.skills[id]=1;}   // 예전에 SP로 배운 특성은 돌려준다
   grantTraits();
   P.slots=P.slots.map(id=>id&&valid.has(id)&&P.skills[id]?id:null);
