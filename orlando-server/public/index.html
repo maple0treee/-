@@ -149,8 +149,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brass);outline-
 #mbtns button{position:absolute;left:0;top:0;transform:translate(-50%,-50%);border-radius:50%;border:1px solid var(--brass);background:rgba(30,25,19,.72);color:var(--parch);font-size:14px;touch-action:none;padding:0;display:grid;place-items:center;overflow:hidden}
 #mAtk{width:76px;height:76px;font-size:16px!important;background:rgba(60,40,22,.8)!important;border-width:2px!important}
 #mJump{width:48px;height:48px;font-size:12px!important}
-#mbtns .msk{width:52px;height:52px;font-size:10.5px;line-height:1.15;letter-spacing:-.02em;word-break:keep-all;text-align:center}
-#mbtns .msk.o{width:46px;height:46px;font-size:9.5px}
+#mbtns .msk{width:calc(52px*var(--mk,1));height:calc(52px*var(--mk,1));font-size:calc(10.5px*var(--mk,1));line-height:1.15;letter-spacing:-.02em;word-break:keep-all;text-align:center}
+#mbtns .msk.o{width:calc(46px*var(--mk,1));height:calc(46px*var(--mk,1));font-size:calc(9.5px*var(--mk,1))}
 #mbtns .msk[hidden]{display:none}
 #mbtns .msk b{position:relative;z-index:1;font-weight:600;padding:0 4px;text-shadow:0 1px 2px #000}
 #mbtns .msk i{position:absolute;inset:0;border-radius:50%;background:conic-gradient(rgba(10,8,6,.78) var(--cd,0%),transparent 0)}
@@ -692,6 +692,9 @@ body.touch #where .country{font-size:10px;margin-top:-2px}
 body.touch #where .stars{font-size:10px}
 body.touch #where .rec{display:none}
 body.touch #mini{width:72px;height:72px}
+/* 휴대폰: 지도 둘레 고리도 작은 지도에 맞춘다 (고리만 커서 아래 스킬 버튼을 밀어내지 않게) */
+body.touch .mring{width:72px;height:72px;margin:6px}
+body.touch .mring::after{inset:-9px}
 body.touch #side{top:auto;bottom:auto;left:calc(var(--gut) - 6px);right:auto;width:200px}
 body.touch #logbox{padding:4px 6px;gap:2px;background:rgba(30,25,19,.55)}
 body.touch #logbox h3{display:none}
@@ -728,11 +731,11 @@ body.touch .ptag q{font-size:11px;max-width:160px}
 @media (orientation:portrait){
   body.touch #side{top:calc(var(--safe-t) + 96px)}
   body.touch #hotbar{bottom:calc(var(--safe-b) + 112px);left:calc(var(--gut) - 6px);transform:none}
-  body.touch #interact{bottom:calc(var(--safe-b) + 170px)}
+  body.touch #interact{bottom:calc(var(--safe-b) + 236px)}   /* 스킬 부채꼴 위로 (겹치지 않게) */
   body.touch .slot{width:30px;height:34px;font-size:8px}
   body.touch #hotbar{flex-wrap:nowrap;gap:2px}
-  body.touch #mBag{left:auto;right:calc(var(--gut) - 6px);top:calc(var(--safe-t) + 112px)}
-  body.touch #mMenu{right:calc(var(--gut) + 50px);top:calc(var(--safe-t) + 112px)}
+  body.touch #mBag{left:auto;right:calc(var(--gut) - 6px);top:calc(var(--safe-t) + 146px)}   /* 지도 아래 */
+  body.touch #mMenu{right:calc(var(--gut) + 50px);top:calc(var(--safe-t) + 146px)}
 }
 body.touch.inv-open #hotbar{display:none}
 /* 창(가방·상점·스킬·대화·거래)은 키 작은 화면에서 축소 */
@@ -15983,13 +15986,14 @@ function updateHotbar(){
 // 휴대폰 스킬 버튼: 안쪽 고리 4개, 바깥 고리 3개 (공격 버튼 중심 기준, 각도는 화면 위쪽이 90°)
 const mskEls=[];let mskLayout=()=>{};
 (function(){
-  const box=$('#mbtns');const pos=[[100,170],[100,138],[100,106],[100,74],[160,172],[160,150],[160,128]];
+  const box=$('#mbtns');const pos=[[100,176],[100,142],[100,108],[100,74],[160,178],[160,154],[160,130]];
   const place=(el,r,a)=>{const t=a*Math.PI/180;el.style.left=(r*Math.cos(t)).toFixed(1)+'px';el.style.top=(-r*Math.sin(t)).toFixed(1)+'px';};
   // 화면이 낮으면(가로 휴대폰) 부채꼴을 줄여서 오른쪽 위 미니맵과 겹치지 않게 한다
+  // 거리만 줄이면 버튼끼리 겹치니, 버튼 크기도 같은 비율(--mk)로 함께 줄인다
   const layout=()=>{const bb=box.getBoundingClientRect(),w=$('#where').getBoundingClientRect();
     const top=(w.height?w.bottom:0)+8,room=bb.top-top;let k=1;
-    for(let i=0;i<NSK;i++){const t=pos[i][1]*Math.PI/180,need=pos[i][0]*Math.sin(t)+(i>=4?24:27);if(need>room)k=Math.min(k,(room-(i>=4?24:27))/(pos[i][0]*Math.sin(t)));}
-    k=Math.max(.62,Math.min(1,k));mskEls.forEach((m,i)=>place(m.b,pos[i][0]*k,pos[i][1]));place($('#mJump'),96*Math.max(.8,k),212);};
+    for(let i=0;i<NSK;i++){const h=pos[i][0]*Math.sin(pos[i][1]*Math.PI/180)+(i>=4?24:27);if(h>room)k=Math.min(k,room/h);}
+    k=Math.max(.62,Math.min(1,k));box.style.setProperty('--mk',k.toFixed(3));mskEls.forEach((m,i)=>place(m.b,pos[i][0]*k,pos[i][1]));place($('#mJump'),96*Math.max(.8,k),212);};
   addEventListener('resize',()=>setTimeout(layout,50));setTimeout(layout,0);mskLayout=layout;
   for(let i=0;i<NSK;i++){const b=document.createElement('button');b.type='button';b.className='msk';b.hidden=true;
     const cdv=document.createElement('i'),t=document.createElement('b'),e=document.createElement('em');b.append(cdv,t,e);place(b,pos[i][0],pos[i][1]);box.appendChild(b);
@@ -18737,7 +18741,7 @@ function look(dx,dy){cam.yaw-=dx*SENS;cam.pitch=clamp(cam.pitch-dy*SENS,-1.45,1.
 // Esc로 창을 닫은 뒤 다시 고정되기 전까지도 마우스로 시점이 돌아가게 (커서는 숨긴다)
 document.addEventListener('mousemove',e=>{if(mode==='world'&&(isLocked()||(wantLock&&!coarse())))look(e.movementX,e.movementY);});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-let drag=null,touchUI=false,joyStart=()=>false;const autoCam={t:0,w:0};
+let drag=null,touchUI=false,joyStart=()=>false;
 canvas.addEventListener('pointerdown',e=>{
   // 시선 고정 상태로 NPC와 대화 중이면 클릭은 대사 넘기기
   if(mode==='dialog'&&isLocked()&&!$('#npc').hidden){if(e.button===0){if(typing)finishTyping();else nextNpcPage();}return;}
@@ -18851,14 +18855,6 @@ function updatePlayer(dt){
   if(P.seat!=null){if(Math.hypot(f,r)>.1||keys.Space||attackHeld||P.dash)seatLeave();else{f=0;r=0;sitting=true;}}
   if(CCAR.ride){f=0;r=0;sitting=true;keys.Space=false;}
   if(P.pushPrep||P.lotusT>tAll){f=0;r=0;}   /* 교란을 던지는 동안은 제자리 */
-  // 휴대폰: 이동 방향을 따라 시선도 저절로 돈다 (화면을 끌어 보고 있을 때는 그대로)
-  // 휴대폰: 시선이 이동 방향을 부드럽게 따라간다 (배그 모바일처럼)
-  //  - 옆으로 갈수록 빨리, 앞으로 갈 때는 거의 안 돌고, 뒤로 걸을 때는 돌지 않는다
-  //  - 움직이기 시작하면 천천히 붙고, 멈추면 천천히 풀린다 (갑자기 돌지 않게)
-  if(touchUI){const jm=Math.hypot(joy.x,joy.y),ja=Math.atan2(joy.x,-joy.y);
-    let want=0;if(!drag&&!P.dash&&!P.pushPrep&&jm>.18&&Math.abs(ja)<2.2){autoCam.t=Math.min(1,autoCam.t+dt/.35);want=-Math.sin(ja)*Math.min(1,(jm-.18)/.6)*2.4*autoCam.t;}
-    else autoCam.t=Math.max(0,autoCam.t-dt*3);
-    autoCam.w+=(want-autoCam.w)*Math.min(1,dt*(want?5:8));if(Math.abs(autoCam.w)>1e-4)cam.yaw+=autoCam.w*dt;}
   if(sitting&&(Math.hypot(f,r)>.1||keys.Space||attackHeld||P.dash))sitting=false;
   player.userData.sit=sitting||!!P.fly;
   if(P.drunk>0){P.drunk=Math.max(0,P.drunk-dt*.035);const k=Math.min(1,P.drunk/3);
