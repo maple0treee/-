@@ -9847,20 +9847,22 @@ function buildMarcus(H){
   /* 놓는 틀: (x,z)에 ry로 돌려 세우고 (+z가 앞), 바닥 높이는 언덕 높이. o.b: 'sh'|'ip', o.glow, o.mt */
   /* 겹친 상자들의 같은 면이 한 평면에 놓이면 움직일 때 깜빡인다(z-fighting): 조각마다 다르게 키워 면을 떼어 놓는다.
      예전에는 상자만 0~1.8cm(한 면 0~9mm, 이웃끼리 1.5mm)였는데, 1.5mm는 수십 m 밖이나 휴대폰에서 깊이 정밀도보다 작아 계속 깜빡였다.
-     이제 상자·지붕·기둥 같은 작은 단위 모양 모두 8단계(한 면 0.75~6mm)로 키운다. 0은 쓰지 않는다.
-     한 면 최대 6mm로 묶어 두는 건, 몇 mm~1cm 일부러 띄워 둔 조각(천장 판, 문틀 등)을 넘어서 새로 겹치지 않게 하려는 것.
-     차례대로 돌리면 같은 개수씩 만드는 반복(성벽 토막 등)에서 늘 같은 단계가 나와 그대로 겹쳤으므로, 순번을 섞어(해시) 고른다.
-     얇은 조각은 제 두께의 1/4 안에서만 키운다 */
-  let _zf=0,_zn=0;const _zr=new WeakMap();
-  const zfNext=()=>{let h=++_zn;h^=h>>>16;h=Math.imul(h,0x45d9f3b);h^=h>>>16;h=Math.imul(h,0x45d9f3b);h^=h>>>16;return 1+(h>>>0)%8;};
-  const zfOk=geo=>{let r=_zr.get(geo);if(r===undefined){if(!geo.boundingSphere)geo.computeBoundingSphere();r=geo!==QUAD&&geo.boundingSphere.radius+geo.boundingSphere.center.length()<=1.5;_zr.set(geo,r);}return r;};
-  const zg=s=>s+Math.sign(s)*_zf*Math.min(.0015,Math.abs(s)*.25/8);
+     이제 상자·지붕·기둥 같은 작은 단위 모양 모두 16단계(한 면 0.5~8mm)로 키운다. 0은 쓰지 않는다.
+     한 면 최대 8mm로 묶어 두는 건, 몇 mm~1cm 일부러 띄워 둔 조각(천장 판, 문틀 등)을 넘어서 새로 겹치지 않게 하려는 것.
+     단계는 '색'으로 정한다: 같은 색끼리 겹치면 깜빡여도 보이는 게 같고, 눈에 띄는 건 색이 다른 면끼리 겹칠 때뿐이다.
+     색마다 처음 나온 차례로 단계를 주므로, 한 건물에 함께 쓰는 색들(돌 세 가지, 벽과 문틀 등)은 서로 다른 단계가 된다.
+     (조각 순번으로 섞어 고르면 8개 중 1개꼴로 같은 단계가 나와 그대로 겹쳤다.) 얇은 조각은 제 두께의 1/4 안에서만 키운다 */
+  let _zf=0;const _zr=new WeakMap(),_zc=new Map();
+  const zfNext=col=>{const k=typeof col==='number'?col:(col&&col.getHex?col.getHex():0);let v=_zc.get(k);if(v===undefined){v=1+_zc.size%16;_zc.set(k,v);}return v;};
+  const zfOk=geo=>{let r=_zr.get(geo);if(r===undefined){if(!geo.boundingSphere)geo.computeBoundingSphere();if(!geo.boundingBox)geo.computeBoundingBox();r=geo!==QUAD&&geo.boundingSphere.radius+geo.boundingSphere.center.length()<=1.5?(Math.abs(geo.boundingBox.min.y)<1e-4?2:1):0;_zr.set(geo,r);}return r;};
+  /* 밑면이 원점에 붙은 모양(지붕·삼각 지붕·원뿔·둥근 지붕 등)은 키워도 밑면이 그대로라, 이웃 집 처마 밑면끼리 겹쳐 깜빡였다: 단계만큼 0.5mm씩 내린다 */
+  const zg=s=>s+Math.sign(s)*_zf*Math.min(.001,Math.abs(s)*.25/16);
   /* 땅에 깐 돌판(길·광장·회랑 바닥 등 돌길 재질)은 색마다 높이를 1.5mm씩 다르게: 다른 길끼리 만나는 곳에서 같은 높이의 윗면이 겹쳐
      걸을 때 바닥이 얼룩덜룩 깜빡였다. 같은 색끼리 겹치는 건 보여도 똑같으니 색으로 나눈다 */
   const _pv=new Map(),pvLv=c=>{let v=_pv.get(c);if(v===undefined){v=_pv.size%10;_pv.set(c,v);}return v;};
   const frame=(x,z,ry,y,bk)=>{const y0=y??hillAt(x,z),C=cell(x,z),Wm=TRS(x,y0,z,ry,1,1,1),cs=Math.cos(ry),sn=Math.sin(ry);
     const aoY=(typeof GFX!=='undefined'&&GFX.aoAt(x,z))?y0:null;
-    const F={C,x,z,ry,y:y0,P:(geo,lx,ly,lz,sx,sy,sz,col,o={})=>(zfOk(geo)&&(_zf=zfNext(),sx=zg(sx),sy=zg(sy),sz=zg(sz),sy<.15&&ly+sy/2<.25&&!o.rx&&!o.rz&&MT.get(col)===4&&(ly+=pvLv(col)*.0015)),push(o.glow?C.gl:C[o.b||bk||'op'],geo,_m.multiplyMatrices(Wm,TRS(lx,ly,lz,o.ry||0,sx,sy,sz,o.rx||0,o.rz||0)),col,o.mt,o.glow?null:aoY)),
+    const F={C,x,z,ry,y:y0,P:(geo,lx,ly,lz,sx,sy,sz,col,o={})=>(zfOk(geo)&&(_zf=zfNext(col),zfOk(geo)===2&&!o.rx&&!o.rz&&(ly-=_zf*.0005),sx=zg(sx),sy=zg(sy),sz=zg(sz),sy<.15&&ly+sy/2<.25&&!o.rx&&!o.rz&&MT.get(col)===4&&(ly+=pvLv(col)*.0015)),push(o.glow?C.gl:C[o.b||bk||'op'],geo,_m.multiplyMatrices(Wm,TRS(lx,ly,lz,o.ry||0,sx,sy,sz,o.rx||0,o.rz||0)),col,o.mt,o.glow?null:aoY)),
       W:(lx,lz)=>({x:x+cs*lx+sn*lz,z:z-sn*lx+cs*lz}),
       box:(lx,lz,w,d,h,o={})=>{const p=F.W(lx,lz);colliders.push({x:p.x,z:p.z,box:1,hw:w/2,hd:d/2,cs,sn,r:Math.hypot(w,d)/2,h,...o});},
       /* 비탈에 선 건물의 받침 (땅속까지) */
@@ -10086,7 +10088,7 @@ function buildMarcus(H){
         const fr=q===0?0:q===1?PI/2:q===2?PI:-PI/2,ca=Math.cos(fr),sa=Math.sin(fr),off=(q%2===0?d:w)/2+.05;
         for(const sg of [1,-1]){const lz=(off+.05)*sg,lx=D[1];F.P(ARCHRING,lx*ca+lz*sa,0,-lx*sa+lz*ca,D[2]/.8+.1,D[3]*1.12+.3,1,SERENA,{ry:fr+(sg<0?PI:0)});}}
       seg(a,L/2,0,h);}
-    F.P(BOX,0,.06,0,w-th*2+.1,.08,d-th*2+.1,o.floor??0x8a6a4a,{b:'ip'});
+    F.P(BOX,0,.08,0,w-th*2+.1,.08,d-th*2+.1,o.floor??0x8a6a4a,{b:'ip'});   /* 바닥 윗면 .12: 문 앞까지 깔린 길 돌판(.09~.11)과 같은 높이로 겹치지 않게 */
     F.P(BOX,0,ceil-.1,0,w,.2,d,o.ceilC??0x6a4a32,{b:'sh'});if(typeof ceilAdd==='function')ceilAdd(F.x,F.z,F.ry,w/2,d/2,F.y+ceil-.2);if(h>ceil+.3)F.P(BOX,0,(ceil+h)/2,0,w,h-ceil,d,wall,{b:'sh'});
     for(let k=1;k<Math.floor(w/3);k++)F.P(BOX,-w/2+k*w/Math.floor(w/3),ceil-.35,0,.3,.35,d-th*2,0x4a3220,{b:'ip'});F.plinth(w,d,bc);};
   const band=(F,w,d,y,hgt,c,o={})=>{const t=o.t||.3;F.P(BOX,0,y,d/2+t/2-.05,w+t*2,hgt,t,c,{b:'sh'});F.P(BOX,0,y,-d/2-t/2+.05,w+t*2,hgt,t,c,{b:'sh'});F.P(BOX,w/2+t/2-.05,y,0,t,hgt,d,c,{b:'sh'});F.P(BOX,-w/2-t/2+.05,y,0,t,hgt,d,c,{b:'sh'});};
