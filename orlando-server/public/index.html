@@ -10180,7 +10180,7 @@ function buildMarcus(H){
    2) 160m 안: 스프라이트(8방향 그림판) 한 번에 그리기 — 수천 명이어도 한 번의 그리기
    3) 집 안에 있는 사람들: 그리지 않는다 (수만 센다)
    자리는 시계로 정하므로 모든 플레이어가 같은 사람을 같은 곳에서 본다. */
-const CROWD={total:3500,list:[],near:[],mesh:null,tex:null,cap:1000,ready:false,FAR:130,NEAR:40,MAXM:22,lastT:0,acc:0};
+const CROWD={total:3500,list:[],near:[],held:new Set(),mesh:null,tex:null,cap:1000,ready:false,FAR:130,NEAR:40,MAXM:22,lastT:0,acc:0};
 const CIT_T0=1.7e9;
 function makeCitizens(cx,cz){
   const PL=marcusPlan(),PI=Math.PI,ids=CITM.ids,ti=id=>Math.max(0,ids.indexOf(id));
@@ -10335,6 +10335,11 @@ function makeCitizens(cx,cz){
   if(CIT_OLD()){const t0=performance.now();for(let t=0;t<CITM.ids.length;t++){const pool=CROWD.spool[t]||(CROWD.spool[t]=[]);while(pool.length<2)pool.push(citStickMake(t));}console.log('crowd prewarm',(performance.now()-t0|0)+'ms');}
 }
 /* 주민 한 명의 지금 자리: 시계로 정한다 */
+/* 말 거는 동안 붙잡힌 주민: 시계를 멈춰 그 자리에 서서 플레이어 쪽을 본다. 대화가 끝나면 멈췄던 자리에서 이어 간다 */
+function citQ(c,t){const q=citPose(c,t-(c.lag||0));if(!c.hold||!player)return q;const sit=(q.mode||c.mode)==='sit';
+  if(!sit){const dx=player.position.x-q.x,dz=player.position.z-q.z,l=Math.hypot(dx,dz);if(l>.05){q.vx=dx/l;q.vz=dz/l;}q.mode='talk';}q.walk=false;q.v=0;return q;}
+function crowdHoldTick(dt,t){const M=CROWD;if(!M.held.size)return;for(const c of M.held){if(c.lt!==undefined)c.lag=(c.lag||0)+(t-c.lt);c.lt=t;   /* 주민 시계는 실제 시각을 따르므로 멈춘 시간도 실제 시각으로 잰다 */
+    if(mode==='dialog')c.hold=1.2;else{c.hold-=dt;if(c.hold<=0){c.hold=0;c.lt=undefined;M.held.delete(c);}}}}
 function citPose(c,t){
   if(c.k==='st')return {x:c.x,z:c.z,vx:Math.sin(c.yaw),vz:Math.cos(c.yaw),walk:false,s:0};
   if(c.k==='rt'){const u=((t+c.off)%c.P+c.P)%c.P;const S=c.sch;let lo=0,hi=S.length-1;while(lo<hi){const m=(lo+hi+1)>>1;if(S[m].st<=u)lo=m;else hi=m-1;}const it=S[lo];
@@ -10523,7 +10528,7 @@ function crowdYield(c,G,dt){let ox=0,oz=0;if(typeof CCAR!=='undefined'&&CCAR.rea
   c.yx=(c.yx||0)+(ox-(c.yx||0))*Math.min(1,dt*6);c.yz=(c.yz||0)+(oz-(c.yz||0))*Math.min(1,dt*6);G.position.x+=c.yx;G.position.z+=c.yz;}
 /* 매 프레임: 가까운 사람은 모델, 중간은 스프라이트 */
 let _cwT=0;
-function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()/1000-CIT_T0;
+function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()/1000-CIT_T0;crowdHoldTick(dt,t);
   const OLD=CIT_OLD(),back=I=>{scene.remove(I.g);(I.stick?M.spool:CITM.pool)[I.id].push(I);};
   if(!inM){if(M.mesh.visible)M.mesh.visible=false;for(const c of M.list)if(c.I){back(c.I);c.I=null;}return;}
   M.mesh.visible=true;if(!OLD){const u=M.mesh.material.uniforms;u.uT.value=t;if(scene.fog){u.fogColor.value.copy(scene.fog.color);u.fogNear.value=scene.fog.near;u.fogFar.value=scene.fog.far;}}
@@ -10531,7 +10536,7 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
   if(refresh){
     if(!OLD&&!CITM.started){CITM.started=true;let k=0;const next=()=>{if(k>=CITM.ids.length)return;const id=CITM.ids[k++];citLoad(id).catch(()=>{}).then(()=>setTimeout(next,60));};next();next();}
     const near=[],FAR2=M.FAR*M.FAR;let n=0;const aP=M.aPos&&M.aPos.array,aI=M.aInf&&M.aInf.array,aF=M.aF&&M.aF.array;
-    for(const c of M.list){const q=citPose(c,t);c.q=q;const dx=q.x-p.x,dz=q.z-p.z,d2=dx*dx+dz*dz;c.d=Math.sqrt(d2);
+    for(const c of M.list){const q=citQ(c,t);c.q=q;const dx=q.x-p.x,dz=q.z-p.z,d2=dx*dx+dz*dz;c.d=Math.sqrt(d2);
       if(d2<M.NEAR*M.NEAR&&(OLD||CITM.tmpl[CITM.ids[c.type]]))near.push(c);}
     near.sort((a,b)=>a.d-b.d);const want=new Set(near.slice(0,M.MAXM));
     for(const c of M.list)if(c.I&&!want.has(c)&&(c.d>M.NEAR+8||near.indexOf(c)>M.MAXM+4)){back(c.I);c.I=null;}
@@ -10548,7 +10553,7 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
       const walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const idle=walking&&!q.walk;aF[n*3]=idle?0:fr[0];aF[n*3+1]=idle?0:fr[1];aF[n*3+2]=c.mode==='hoe'||c.mode==='hammer'?1.1:walking?c.sp*1.6:.6;n++;}
     M.aPos.needsUpdate=M.aInf.needsUpdate=M.aF.needsUpdate=true;M.mesh.geometry.instanceCount=n;M.drawn=n;}}
   if(OLD&&M.fU){M.fU.uT.value=t;M.fU.uDT.value=Math.min(.5,t-(M.fT||t));}
-  for(const c of M.list){if(!c.I)continue;const q=refresh?c.q:citPose(c,t);const G=c.I.g;G.position.set(q.x,heightAt(q.x,q.z)+(c.y||0),q.z);
+  for(const c of M.list){if(!c.I)continue;const q=refresh?c.q:citQ(c,t);const G=c.I.g;G.position.set(q.x,heightAt(q.x,q.z)+(c.y||0),q.z);
     const want=Math.atan2(q.vx,q.vz);let dr=Math.atan2(Math.sin(want-G.rotation.y),Math.cos(want-G.rotation.y));G.rotation.y+=Math.sign(dr)*Math.min(Math.abs(dr),Math.abs(dr)*dt*4.5+dt*1.2);   /* 사람처럼 천천히 돌아선다 */
     const mode=q.mode||c.mode,walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const vk=q.v??1;c.w=(c.w??0)+(((walking&&q.walk)?Math.max(.25,vk):0)-(c.w??0))*Math.min(1,dt*5);
     if(c.I.stick){crowdYield(c,G,dt);if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2*Math.max(.3,vk);stickWalkPose(G,c.ph,c.w,t);}else stickNpcPose(G,CIT_STICK_POSE[mode]||'idle',t+c.off);if(CIT_SMALL(c.type)&&G.scale.x>.8)G.scale.setScalar(c.sc*.7);continue;}
@@ -10781,12 +10786,18 @@ function lifeTick(dt,p,inM){if(!LIFE.ready)return;const G=LIFE.g;inM=inM&&Math.h
   /* 비둘기 */
   const BI=LIFE.bird;if(BI){let ch=false;
     for(const F of LIFE.flocks){const vis=!far(F.x,F.z,70);const dpl=Math.hypot(p.x-F.x,p.z-F.z);
-      if(F.st==='ground'){let scare=dpl<4.5;if(!scare)for(const D of LIFE.dogs)if(D.st==='walk'&&Math.abs(D.x-F.x)<4&&Math.abs(D.z-F.z)<4){scare=true;break;}if(scare){F.st='fly';F.stT=7+Math.random()*5;}}
-      else{F.stT-=dt;if(F.stT<=0&&dpl>7)F.st='ground';}
+      if(F.hx===undefined){F.hx=F.x;F.hz=F.z;}
+      if(F.st==='ground'){let scare=dpl<4.5?p:null;if(!scare)for(const D of LIFE.dogs)if(D.st==='walk'&&Math.abs(D.x-F.x)<4&&Math.abs(D.z-F.z)<4){scare=D;break;}
+        if(scare){/* 놀란 쪽에서 멀어지는 쪽으로 저마다 흩어진다 */F.st='fly';F.stT=2.4+Math.random()*1.6;const aw=Math.atan2(F.x-scare.x,F.z-scare.z);
+          for(const b of F.birds){const a=aw+(Math.random()-.5)*2.6,r=6+Math.random()*8;b.sx=b.x+Math.sin(a)*r;b.sz=b.z+Math.cos(a)*r;b.sy=heightAt(b.sx,b.sz)+3.5+Math.random()*4;b.sv=6+Math.random()*3;}}
+        else{/* 앉은 자리가 원래 모이던 곳이 아니면, 사람이 없을 때 걸어서 천천히 돌아간다 */const hd=Math.hypot(F.hx-F.x,F.hz-F.z);if(hd>.05&&Math.hypot(p.x-F.hx,p.z-F.hz)>9){const s=Math.min(hd,dt*.35);F.x+=(F.hx-F.x)/hd*s;F.z+=(F.hz-F.z)/hd*s;}}}
+      else{F.stT-=dt;if(F.stT<=0){/* 다시 모인다: 사람이 아직 가까우면 반대쪽 조금 떨어진 곳에 내려앉는다 */F.st='ground';F.x=F.hx;F.z=F.hz;
+          const dh=Math.hypot(p.x-F.hx,p.z-F.hz);if(dh<7){const ux=(F.hx-p.x)/(dh||1),uz=(F.hz-p.z)/(dh||1),m=Math.min(6,7-dh);F.x+=ux*m;F.z+=uz*m;}
+          for(const b of F.birds){const a=Math.random()*6.28,r=.5+Math.random()*3;b.ox=Math.cos(a)*r;b.oz=Math.sin(a)*r;b.hop=.5+Math.random()*2;}}}
       if(!vis){for(const b of F.birds){_lm.makeScale(0,0,0);BI.mb.setMatrixAt(b.i,_lm);BI.mwl.setMatrixAt(b.i,_lm);BI.mwr.setMatrixAt(b.i,_lm);}ch=true;continue;}
       for(const b of F.birds){const gy=heightAt(F.x+b.ox,F.z+b.oz);let flap=0;
-        if(F.st==='fly'){b.fa+=dt*(.8+b.fr*.05);const tx=F.x+Math.cos(b.fa)*b.fr,tz=F.z+Math.sin(b.fa)*b.fr,ty=gy+b.fh+Math.sin(t*1.3+b.ph)*.6;const k=Math.min(1,dt*1.8);
-          const nx=b.x+(tx-b.x)*k,nz=b.z+(tz-b.z)*k;b.yaw=Math.atan2(nx-b.x,nz-b.z)||b.yaw;b.x=nx;b.z=nz;b.y+=(ty-b.y)*k;flap=Math.sin(t*22+b.ph)*.9;}
+        if(F.st==='fly'){const dx=b.sx-b.x,dz=b.sz-b.z,dd=Math.hypot(dx,dz);if(dd>.02){const s=Math.min(dd,dt*b.sv*Math.min(1,.25+dd/3));b.x+=dx/dd*s;b.z+=dz/dd*s;if(dd>.3)b.yaw=Math.atan2(dx,dz);}
+          b.y+=(b.sy+Math.sin(t*1.7+b.ph)*.25-b.y)*Math.min(1,dt*2.4);flap=Math.sin(t*22+b.ph)*.9;}
         else{const tx=F.x+b.ox,tz=F.z+b.oz;const d=Math.hypot(tx-b.x,tz-b.z);
           if(d>.05||b.y>gy+.02){const k=Math.min(1,dt*1.6);b.yaw=d>.3?Math.atan2(tx-b.x,tz-b.z):b.yaw;b.x+=(tx-b.x)*k;b.z+=(tz-b.z)*k;b.y+=(gy-b.y)*k;flap=b.y>gy+.3?Math.sin(t*20+b.ph)*.8:0;}
           else{b.y=gy;b.hop-=dt;if(b.hop<=0){b.hop=1+Math.random()*3;b.ox+=(Math.random()-.5)*.6;b.oz+=(Math.random()-.5)*.6;const r=Math.hypot(b.ox,b.oz);if(r>3.8){b.ox*=3.8/r;b.oz*=3.8/r;}b.yaw+=(Math.random()-.5)*2;}}}
@@ -11913,7 +11924,7 @@ function chatterTalk(i){const c=CHATTER[i];if(!c||mode!=='world')return;const p=
     if(c.kind!=='guild'&&r===9)line=chatPick(c,CHAT_PERSONAL);else if(c.kind!=='common'&&r<6)line=chatPick(c,L);else line=chatPick(c,CHAT_LINES.common);
     if(!c.my)c.my=CHAT_PERSONAL[(Math.floor((c.seed||0)*2654435761)>>>0)%CHAT_PERSONAL.length]||CHAT_PERSONAL[0];if(r===8&&c.kind!=='guild')line=c.my;   /* 그 사람만의 사정 */
     people[0].lines=[line];openNpc(people[0]);}
-  for(const k of grp){const o=CHATTER[k];if(o.face)o.face(player.position);}}
+  for(const k of grp){const o=CHATTER[k];if(o.face)o.face(player.position);if(o.cit&&mode==='dialog'&&typeof CROWD!=='undefined'){o.cit.hold=1.2;CROWD.held.add(o.cit);}}}   /* 돌아다니던 주민은 멈춰 서서 플레이어를 본다 */
 /* 플레이어가 고르는 대화 */
 function chatAsk(D,people){const who=people[D.open[0]%people.length];npcCur=who;drawPortrait(who);
   renderNpc(D.open[1],box=>{box.dataset.noskip='1';for(const [label,pages] of D.ask){npcBtn(box,label,()=>{$('#npcChoices').hidden=true;chatPages(pages.map(([w,t])=>[people[w%people.length],t]),0);},'wide');}});
@@ -17562,7 +17573,8 @@ function updatePlayer(dt){
   if(CCAR.ride)ccarSeatPlayer();else if(P.seat!=null){const s=SEATS[P.seat];if(s){player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;}else P.seat=null;}
   const bobY=(moving&&jumpY===0?Math.sin(cam.bob)*.06:0)-(cam.land||0);
   camera.rotation.set(cam.pitch,cam.yaw,0);
-  if(P.drunk>0&&!cam.third){const k=Math.min(1,P.drunk/3);camera.rotation.z=Math.sin(tAll*1.1)*.07*k+Math.sin(tAll*2.3)*.03*k;camera.rotation.y+=Math.sin(tAll*.8)*.04*k;camera.rotation.x+=Math.sin(tAll*1.5+2)*.025*k;}   /* 취해서 시야가 흔들린다 */
+  cam.dw=(cam.dw??1)+(((sitting||P.seat!=null)?0:1)-(cam.dw??1))*Math.min(1,dt*2.5);   /* 앉아 있으면 취해도 시야가 흔들리지 않는다 (일어서면 서서히 다시) */
+  if(P.drunk>0&&!cam.third&&cam.dw>.01){const k=Math.min(1,P.drunk/3)*cam.dw;camera.rotation.z=Math.sin(tAll*1.1)*.07*k+Math.sin(tAll*2.3)*.03*k;camera.rotation.y+=Math.sin(tAll*.8)*.04*k;camera.rotation.x+=Math.sin(tAll*1.5+2)*.025*k;}   /* 취해서 시야가 흔들린다 */
   let rollA=0,rollCr=0;if(myMo&&myMo.v==='roll'&&swingT<1){const v=blendKeys(myMo.k3,swingT,{},M3);rollA=v[14]||0;rollCr=v[11]||0;}   // 1인칭 구르기: 시야도 같이 한 바퀴
   const rollPhi=myMo&&myMo.dir!=null?myMo.dir*Math.PI/4:0;
   /* 석궁병 구르기는 1인칭에서 시야가 한 바퀴 돌지 않는다: 몸을 낮추며 구르는 쪽으로 살짝 기울고 고개를 숙였다가 일어선다 */
