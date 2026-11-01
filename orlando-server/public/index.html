@@ -7317,8 +7317,9 @@ function npcVoice(ch,v,q,at){const X=SFX.ctx;if(!X||!SFX.voice||OPT.voice<=0||!c
 /* ---------- 배경 음악: 지역마다 테마 곡 (하레나·엑시즈) ----------
    긴 곡이라 미리 다 받지 않고 흘려 들으며 튼다. 지역이 바뀌면 천천히 바꾼다. 브라우저는 첫 클릭·키 입력 뒤에만 소리를 낸다 */
 const BGM={vol:.38,cur:null,want:null,els:{},fade:1.6,
-  files:{harena:'music/harena.mp3?v=1',exiz:'music/exiz.mp3?v=1',guildhall:'music/guildhall.mp3?v=1'},
-  zone:{town:'harena',forest:'harena',plains:'harena',swamp:'harena',ruins:'harena',wwest:'harena',wnorth:'harena',wsouth:'harena',weast:'harena',marcus:'exiz',mfield:'exiz',mhill:'exiz',mwood:'exiz',mvale:'exiz',mpass:'exiz',guildhall:'guildhall'}};   /* 길드홀 안: 따뜻한 술집 곡 */
+  files:{harena:'music/harena.mp3?v=1',exiz:'music/exiz.mp3?v=1',guildhall:'music/guildhall.mp3?v=1',market:'music/market.mp3?v=1'},
+  gain:{market:1.25},   /* 시장 소리(장꾼·손님 웅성거림)는 음악보다 조용하게 녹음돼 있어 조금 키운다 */
+  zone:{town:'harena',forest:'harena',plains:'harena',swamp:'harena',ruins:'harena',wwest:'harena',wnorth:'harena',wsouth:'harena',weast:'harena',marcus:'exiz',mfield:'exiz',mhill:'exiz',mwood:'exiz',mvale:'exiz',mpass:'exiz',guildhall:'guildhall',exmarket:'market'}};   /* 중앙 시장 안: 장터 웅성거림 (사람들 목소리·발소리·그릇 소리) */   /* 길드홀 안: 따뜻한 술집 곡 */
 for(const k of OR.MHUNT)BGM.zone[k]='exiz';   /* 하레나 둘레 사냥터(길 여덟 구역)도 하레나 테마 */
 function bgmEl(k){let a=BGM.els[k];if(!a){const src=BGM.files[k],c=typeof cdnURL==='function'?cdnURL(src):src;a=BGM.els[k]=new Audio(c);if(c!==src)a.addEventListener('error',()=>{if(!a._fb){a._fb=1;a.src=src;}});a.loop=true;a.preload='auto';a.volume=0;a._v=0;}return a;}
 function bgmZone(z){BGM.want=z&&BGM.zone[z]||null;if(BGM.want)bgmEl(BGM.want);}
@@ -7326,7 +7327,7 @@ function bgmTick(dt){const step=dt/BGM.fade,hid=document.hidden;
   /* NPC와 이야기하는 동안은 음악을 낮춰 목소리가 들리게 */
   const dk=document.body.classList.contains('talking')?.4:1;BGM.duck=BGM.duck==null?dk:BGM.duck+(dk-BGM.duck)*Math.min(1,dt*3);
   for(const k in BGM.els){const a=BGM.els[k],on=k===BGM.want&&!hid;
-    a._v=Math.max(0,Math.min(1,a._v+(on?step:-step)));const v=a._v*a._v*BGM.vol*OPT.bgm*BGM.duck;if(Math.abs(a.volume-v)>.002)a.volume=v;
+    a._v=Math.max(0,Math.min(1,a._v+(on?step:-step)));const v=Math.min(1,a._v*a._v*BGM.vol*OPT.bgm*BGM.duck*(BGM.gain[k]||1));if(Math.abs(a.volume-v)>.002)a.volume=v;
     if(on&&a.paused&&!a._try){a._try=1;a.play().then(()=>{a._try=0;}).catch(()=>{a._try=0;a._blocked=1;});}
     if(!on&&a._v<=0&&!a.paused){a.pause();}}}
 /* 자동 재생이 막혔으면 다음 클릭·키에서 다시 */
@@ -8764,6 +8765,12 @@ function animateDungeonLights(t){
    { id, x, z, ry, to:{x,z,yaw}, minLv, label, msg, color } */
 const PORTAL_FX=[];
 // 그림 무늬 (캔버스로 그려 반복)
+/* 중앙 시장 간판 글씨: 붉은 판 위 금빛 '중앙 시장' (글꼴이 늦게 오면 다시 그린다) */
+function marketSignTex(){if(marketSignTex.t)return marketSignTex.t;const c=document.createElement('canvas');c.width=512;c.height=112;const x=c.getContext('2d'),t=new THREE.CanvasTexture(c);
+  const draw=()=>{x.clearRect(0,0,512,112);x.textAlign='center';x.textBaseline='middle';x.font='700 70px "KMUSunggokSerif","KMUSunggokSemiSerif","Gowun Batang",serif';
+    x.lineWidth=6;x.strokeStyle='rgba(60,20,10,.9)';x.strokeText('중앙 시장',256,60);const g=x.createLinearGradient(0,20,0,100);g.addColorStop(0,'#fff0b0');g.addColorStop(.5,'#f0c850');g.addColorStop(1,'#c8902a');x.fillStyle=g;x.fillText('중앙 시장',256,60);
+    for(const sx of [40,472]){x.fillStyle='#f0c850';x.beginPath();x.arc(sx,56,9,0,7);x.fill();}t.needsUpdate=true;};
+  draw();if(document.fonts&&document.fonts.ready)document.fonts.ready.then(draw).catch(()=>{});setTimeout(draw,4000);return marketSignTex.t=t;}
 function royalTex(kind,rx=1,ry=1){
   const key=kind+rx+'_'+ry;royalTex.c=royalTex.c||{};if(royalTex.c[key])return royalTex.c[key];
   const S=256,cv=document.createElement('canvas');cv.width=cv.height=S;const c=cv.getContext('2d');
@@ -9048,7 +9055,7 @@ for(const p of PORTALS)p.fx=makePortal(p.x,p.z,p.ry,{color:p.color});
 function portalNear(){if(!player)return -1;for(let i=0;i<PORTALS.length;i++){const p=PORTALS[i];if(!p.edge&&portalSeen(p)&&Math.hypot(player.position.x-p.x,player.position.z-p.z)<3.2)return i;}return -1;}
 // 와이번을 잡은 뒤의 동쪽 황야 포탈: 둥지로 갈지 지하실로 갈지 고른다
 function openPortalChoice(p){mode='dialog';attackHeld=false;unlockPointer();syncLockTip();$('#portalWin').hidden=false;
-  const go=(t)=>{closePortalChoice();sfx('door');warpTo(t.x,t.z,t.yaw,null);arriveBanner(t.x,t.z);};
+  const go=(t)=>{closePortalChoice();sfx('door');warpTo(t.x,t.z,exitYaw(t,p),null);arriveBanner(t.x,t.z);};
   $('#pwNest').onclick=()=>go({x:OR.WLAIR.x,z:OR.WLAIR.z+OR.WLAIR.r-5,yaw:0});
   $('#pwHall').onclick=()=>go(p.to);$('#pwClose').onclick=closePortalChoice;}
 function closePortalChoice(){if($('#portalWin').hidden)return;$('#portalWin').hidden=true;mode='world';syncLockTip();focusGame();relock();}
@@ -9058,7 +9065,10 @@ function usePortal(i){const p=PORTALS[i];if(!p)return;
   if(p.id==='east'&&P&&P.lv>=p.minLv&&P.got&&P.got.wyvern){openPortalChoice(p);return;}
   if(P&&P.lv<p.minLv){toast(`Lv ${p.minLv}부터 들어갈 수 있다`);return;}
   if(p.lock){const why=p.lock();if(why){toast(why);return;}}
-  const alt=p.alt&&p.alt(),d=alt||p.to;sfx('door');warpTo(d.x,d.z,d.yaw,d.msg,d.y);arriveBanner(d.x,d.z);}
+  const alt=p.alt&&p.alt(),d=alt||p.to;sfx('door');warpTo(d.x,d.z,exitYaw(d,p),d.msg,d.y);arriveBanner(d.x,d.z);}
+/* 문·포탈을 지나 나오면 그 문을 등지고 선다: 도착 자리 가까이에 있는 문(포탈)에서 도착 자리 쪽을 바라본다. 가까운 문이 없으면 정해 둔 방향 그대로 */
+function exitYaw(d,from){let best=null,bd=7;for(const q of PORTALS){if(q===from||q.coach)continue;const dd=Math.hypot(q.x-d.x,q.z-d.z);if(dd<bd&&dd>.3){bd=dd;best=q;}}
+  if(!best)return d.yaw;return Math.atan2(-(d.x-best.x),-(d.z-best.z));}
 /* 포탈은 걸어 들어가면 바로 넘어간다 (마차 정류장만 상호작용). 넘어간 뒤에는 포탈 밖으로 한 번 나와야 다시 탈 수 있다 */
 let _portalIn=-1;
 function portalWalk(){if(!player||mode!=='world'||warping)return;let hit=-1;
@@ -9980,11 +9990,52 @@ function buildMarcus(H){
     if(kind===3)for(let k=0;k<7;k++)F.P(SPH,-1.1+k*.36,1,-.05+(k%2)*.2,.18,.11,.12,G[k%4]);
     if(kind===4)for(let k=0;k<4;k++)F.P(CYL(.25,.25,12),-1+k*.66,1.02,0,1,.2,1,G[k%4]);
     F.box(0,0,3,1.5,2.6);};
-  const AW=[0xb8402a,0x2f5a9a,0x3f7a3a,0xd8a030,0x8a3a6a];
+  const AW=[0xe0503a,0x3a78c8,0x4a9a44,0xf0b838,0xc0508a];   /* 시장 차양: 밝고 또렷한 빛깔 */
   const loggia=(x,z,W,D,Hh,roof)=>{const F=frame(x,z,0);const nx=Math.max(2,Math.round(W/6)),nz=Math.max(2,Math.round(D/6));
     for(let i=0;i<=nx;i++)for(let j=0;j<=nz;j++){if(i>0&&i<nx&&j>0&&j<nz)continue;const px=-W/2+i*W/nx,pz=-D/2+j*D/nz;F.P(CYL(.35,.4,10),px,Hh/2,pz,1,Hh,1,SERENA);F.P(BOX,px,Hh-.2,pz,.9,.4,.9,SERENA);F.P(BOX,px,.2,pz,.9,.4,.9,SERENA);const p=F.W(px,pz);colliders.push({x:p.x,z:p.z,r:.45});}
     for(const sd of [-1,1]){F.P(BOX,0,Hh+.2,sd*D/2,W+1,.8,.8,PIETRA);F.P(BOX,sd*W/2,Hh+.2,0,.8,.8,D+1,PIETRA);}
     F.P(BOX,0,Hh+.7,0,W+2.4,.25,D+2.4,0x6a4a32);F.P(HIP,0,Hh+.8,0,W+2.4,3,D+2.4,roof,{ry:W>=D?0:PI/2});F.P(BOX,0,.05,0,W,.08,D,PAVE);return F;};
+  /* 중앙 시장 큰 문: 시내 쪽 문과 시장 안 문을 같은 모양으로. 앞(-z)이 바깥, 뒤(+z)가 시장 안.
+     홍예(아치 테두리)와 이맛돌, 기둥 띠돌, 두 짝 나무문(널판·쇠띠·징·문고리), 문 위 반달 창살, 금빛 글씨 간판, 처마와 삼각 지붕, 등불, 깃발, 꽃 화분, 돌계단 */
+  const TORUS=geoC('to',()=>new THREE.TorusGeometry(.5,.08,5,12));
+  const marketGate=(x,z,ry,y0=0)=>{const G=frame(x,z,ry,y0),CRM=0xe8c88e,TRIM=0xd8c098;
+    G.P(BOX,0,.15,-.2,10.6,.3,3.4,PIETRA);G.P(BOX,0,.06,-2.1,7.4,.12,1.2,PIETRA2);G.P(BOX,0,.18,-1.75,7.4,.12,.8,PIETRA);   /* 받침돌과 낮은 돌계단 */
+    G.P(BOX,0,4.2,0,8.6,8.4,1.6,CRM);   /* 몸채: 밝은 회반죽 */
+    for(const sd of [-1,1]){   /* 양옆 띠돌 기둥 */
+      G.P(BOX,sd*4.9,4.4,-.05,1.5,8.8,2.2,TRIM);for(let k=0;k<8;k++)G.P(BOX,sd*4.9,.55+k*1.1,-.05,1.66,.22,2.36,PIETRA2);
+      G.P(BOX,sd*4.9,9.0,-.05,1.9,.4,2.6,PIETRA);G.P(CYL(.3,.42,10),sd*4.9,9.55,-.05,1,.7,1,TERRA[0]);G.P(SPH,sd*4.9,10.05,-.05,.32,.32,.32,GOLD);   /* 기둥머리와 항아리 장식 */
+      G.box(sd*4.9,-.05,1.5,2.2,9);
+      /* 벽 등불 (쇠 팔걸이에 매단 등) */
+      G.P(BOX,sd*3.75,4.6,-1.25,.08,.08,.7,IRON);G.P(BOX,sd*3.75,4.25,-1.55,.42,.06,.42,IRON);G.P(BOX,sd*3.75,3.95,-1.55,.32,.5,.32,LAMP,{glow:true});G.P(CONE(4),sd*3.75,4.38,-1.55,.3,.25,.3,IRON,{ry:PI/4});
+      /* 깃발: 금빛 막대에 긴 깃발, 아래는 제비꼬리 */
+      G.P(BOX,sd*4.9,8.3,-1.25,1.9,.08,.08,GOLD);G.P(QUAD,sd*4.9,6.6,-1.22,1.6,3.3,1,AW[sd>0?0:1],{b:'ip'});G.P(CONE(3),sd*4.9-.4,4.7,-1.22,.42,.7,.02,AW[sd>0?0:1],{rx:PI});G.P(CONE(3),sd*4.9+.4,4.7,-1.22,.42,.7,.02,AW[sd>0?0:1],{rx:PI});
+      G.P(QUAD,sd*4.9,6.9,-1.21,.9,.9,1,AW[3],{b:'ip',rz:PI/4});
+      /* 꽃 화분 (문 양옆 바닥) */
+      G.P(CYL(.55,.42,10),sd*6.4,.45,-1.6,1,.9,1,TERRA[2]);G.P(CYL(.6,.6,10),sd*6.4,.92,-1.6,1,.08,1,TERRA[0]);G.P(SPH,sd*6.4,1.25,-1.6,.6,.45,.6,0x4a8a3a);
+      for(let k=0;k<6;k++){const a=k/6*PI*2;G.P(SPH,sd*6.4+Math.cos(a)*.38,1.45+(k%2)*.12,-1.6+Math.sin(a)*.38,.13,.13,.13,[0xe04050,0xf0c040,0xf4f0f0,0xd060b0][k%4]);}
+      colliders.push({...G.W(sd*6.4,-1.6),r:.6});}
+    /* 홍예: 두 겹 아치 테두리와 이맛돌 */
+    for(const f of [-1,1]){const zf=f*.84,sg=f<0?-1:1;   /* 앞뒤 두 면 */
+      G.P(ARCHRING,0,0,zf+sg*.02,7.2,7.2,1,TRIM,f>0?{ry:PI}:{});G.P(ARCHRING,0,0,zf+sg*.04,6.75,6.75,1,PIETRA,f>0?{ry:PI}:{});G.P(BOX,0,6.85,zf+sg*.12,.8,.9,.24,MAR);G.P(BOX,0,6.85,zf+sg*.2,.36,.44,.1,GOLD);
+      for(const a of [.35,.7,1.05,1.4,1.75,2.1,2.45,2.8])G.P(BOX,Math.cos(a)*3.4,3.43+Math.sin(a)*3.4,zf+sg*.08,.1,.5,.06,PIETRA2,{rz:a-PI/2});}   /* 홍예와 이맛돌, 홍예석 줄눈 */
+    /* 문틀 안쪽 (어두운 통로) */
+    G.P(ARCH,0,0,-.81,6.4,6.4,1,0x2a2420);G.P(ARCH,0,0,.81,6.4,6.4,1,0x2a2420,{ry:PI});
+    /* 문 위 반달 창: 나무 틀에 부챗살 창살 */
+    G.P(ARCH,0,0,-.83,5.9,6.1,1,0x5a3a22);G.P(ARCH,0,.25,-.84,5.0,5.4,1,0x1e1814);for(let k=1;k<6;k++){const a=k/6*PI;G.P(BOX,Math.cos(a)*1.35,3.35+Math.sin(a)*1.35,-.87,.09,2.7,.05,GOLD,{rz:a-PI/2});}G.P(BOX,0,3.3,-.88,5.8,.22,.08,0x3e2a1a);
+    /* 두 짝 나무문: 세로 널판, 쇠띠 셋, 징, 고리 손잡이 */
+    for(const s2 of [-1,1]){const cx2=s2*1.45;for(let k=0;k<5;k++)G.P(BOX,cx2-1.16+k*.58,1.6,-.9,.56,3.2,.1,k%2?0x7a4a28:0x6a4024);
+      for(const y of [.5,1.6,2.7]){G.P(BOX,cx2,y,-.97,2.8,.16,.04,IRON);for(let k=0;k<5;k++)G.P(SPH,cx2-1.16+k*.58,y,-1.0,.05,.05,.03,0xb0a080);}
+      G.P(BOX,cx2-s2*1.38,1.6,-.97,.08,3.2,.06,0x3e2a1a);G.P(SPH,s2*.4,1.55,-1.02,.09,.09,.06,GOLD);G.P(TORUS,s2*.4,1.3,-1.03,.2,.2,.2,GOLD);}
+    /* 간판: 문 위 붉은 판, 금빛 테두리 (글씨는 따로 그림판) */
+    G.P(BOX,0,7.92,-.95,4.8,1.0,.16,0x8a2a22);for(const [lx,ly,w,h] of [[0,8.44,4.9,.08],[0,7.4,4.9,.08],[-2.42,7.92,.08,1.1],[2.42,7.92,.08,1.1]])G.P(BOX,lx,ly,-1.04,w,h,.06,GOLD);
+    {const sw=G.W(0,-1.08),sg=new THREE.Mesh(new THREE.PlaneGeometry(4.6,.92),new THREE.MeshBasicMaterial({map:marketSignTex(),transparent:true,depthWrite:false,fog:true}));sg.position.set(sw.x,y0+7.92,sw.z);sg.rotation.y=ry+PI;cell(x,z).g.add(sg);}
+    /* 처마돌림과 삼각 지붕(박공), 꼭대기 장식 */
+    G.P(BOX,0,8.65,0,11.6,.35,2.8,PIETRA);G.P(BOX,0,8.95,0,11.2,.3,2.5,TRIM);
+    G.P(PRISM,0,9.1,0,2.3,1.7,8.8,CRM,{ry:PI/2});G.P(PRISM,0,9.12,.15,2.0,1.95,9.6,TERRA[1],{ry:PI/2});
+    G.P(SPH,0,11.0,-.05,.32,.32,.32,GOLD);G.P(BOX,0,10.4,-1.2,.9,.9,.08,AW[3],{rz:PI/4});
+    /* 시장 안쪽 면에도 등과 화분 (안에서 봐도 문이 보이게) */
+    for(const sd of [-1,1]){G.P(BOX,sd*3.75,4.25,1.45,.42,.06,.42,IRON);G.P(BOX,sd*3.75,3.95,1.45,.32,.5,.32,LAMP,{glow:true});G.P(BOX,sd*3.75,4.6,1.15,.08,.08,.6,IRON);}
+    return G;};
   /* 시장 광장의 알맹이(회랑 둘, 좌판, 멧돼지 분수, 깃발 줄, 손수레): 따로 된 시장 맵에서 쓴다 */
   const marketSquare=(x,z,w,d,y0=0)=>{const F=frame(x,z,0,y0);F.P(BOX,0,.06,0,w,.05,d,PAVE);
     for(const sx of [-1,1]){const L=loggia(x+sx*w*.25,z,w*.36,d*.5,8,TERRA[sx>0?0:3]);for(let k=0;k<4;k++){const px=(k%2?1:-1)*w*.09,pz=(k<2?-1:1)*d*.12;const p=L.W(px,pz);stall(p.x,p.z,faceTo(p.x,p.z,x+sx*w*.25,z)+PI,AW[(k+1)%5],AW[(k+3)%5],(k+2*sx+5)%5);}}
@@ -10003,10 +10054,8 @@ function buildMarcus(H){
         const n=Math.floor(len/4.5);for(let q=0;q<n;q++){const t=-len/2+2.25+q*4.5;for(const sd of [-1,1])G.P(ARCH,sd*.52,.6,t,1.9,3.2,1,0x2a2420,{ry:sd*PI/2});}G.box(0,0,1,len,WH);}};
     const x0=x-w/2-1,x1=x+w/2+1,z0=z-d/2-1,z1=z+d/2+1;wallSeg(x0,z0,x1,z0,3.2);wallSeg(x0,z1,x1,z1,0);wallSeg(x0,z0,x0,z1,0);wallSeg(x1,z0,x1,z1,0);
     for(const [tx,tz] of [[x0,z0],[x1,z0],[x0,z1],[x1,z1]]){const G=frame(tx,tz,0,0);G.P(CYL(.5,.5,12),0,WH/2+.6,0,2.6,WH+1.2,2.6,PIETRA2);G.P(CONE(12),0,WH+2.4,0,3,2.4,3,TERRA[1]);colliders.push({x:tx,z:tz,r:1.4});}
-    /* 북쪽 문: 아치 문틀, 닫힌 나무 문, 양옆 깃발 */
-    {const G=frame(x,z0,0,0);G.P(BOX,0,3.6,0,8.4,7.2,1.6,PIETRA2);G.P(BOX,0,7.5,0,9,.6,2.2,PIETRA);G.P(ARCH,0,0,-.85,6.4,6.4,1,0x2a2420);G.P(ARCH,0,0,.85,6.4,6.4,1,0x2a2420,{ry:PI});
-      G.P(BOX,0,2.6,-.5,5.8,5.2,.14,0x4a3020);for(const s2 of [-1,1]){G.P(BOX,s2*1.45,2.5,-.6,2.7,5,.1,0x6a4428);G.P(SPH,s2*.5,2.4,-.7,.1,.1,.1,GOLD);G.P(QUAD,s2*4.9,5.2,-.9,1.4,3,1,AW[s2>0?0:1],{b:'ip'});}
-      G.P(BOX,0,6.2,-.95,4.2,.9,.1,0x7a2a22);G.P(BOX,0,6.2,-1.0,3.6,.5,.04,GOLD);segBox(x-4.2,z0,x+4.2,z0,1.6,0,{y0:-2,y1:9,h:undefined});
+    /* 북쪽 문: 정교한 큰 문 (marketGate) */
+    {marketGate(x,z0,0,0);segBox(x-4.2,z0,x+4.2,z0,1.6,0,{y0:-2,y1:9,h:undefined});
       MARCUS.marketFront={x,z:z0-.9};}}
   /* ===== 왕궁: 언덕 위, 성벽과 둥근 탑, 안뜰, 알현실(동쪽 날개) ===== */
   {const k=Z('palace'),W=k.w,D=k.h,x=cx+k.x,z=cz+k.y,y0=hillAt(x,z),HT=22,iw=W*.46,id=D*.42,x0=x-W/2,z0=z-D/2,ix0=x-iw/2,iz0=z-id/2,PW=5;
@@ -10231,7 +10280,7 @@ function buildMarcus(H){
     if(PL.waterDepth(mx,my)>0||inFarm(mx,my,2))continue;const x=cx+mx,z=cz+my;
     for(let k=0;k<3;k++){const t={x:x+(GFX.hs(i,k+3)-.5)*9,z:z+(GFX.hs(i,k+6)-.5)*9,s:.9+GFX.hs(i,k+9)*.5};((GFX.hs(i,k+12)<.55)?pines:cypress).push(t);if(d<Rb)colliders.push({x:t.x,z:t.z,r:.5,h:8});}}
   GFX.farHills(I,{color:0x8a9a72,n:64,h:.55});
-  if(typeof buildRealm==='function')buildRealm({H,frame,cell,marketSquare,loggia,BOX,QUAD,CYL,CONE,SPH,SPH2,PRISM,ARCH,ARCHRING,RING,HIP,PIETRA,PIETRA2,SERENA,STONE,STONE2,STONE3,WOOD,DARKW,IRON,GOLD,TERRA,STUCCO,PAVE,PAVE2,MAR,MAR2,WHITE,LAMP,hall,table,bed,shelf,crates,fireplace,weaponRack,candle,chandelier,carpet,sqTower,roundTower,lamp,bench,stall,statue,buildHouse,segBox,own,faceTo,cypress,pines,olives,gardenTrees,wheat,mcx:cx,mcz:cz});
+  if(typeof buildRealm==='function')buildRealm({H,frame,cell,marketSquare,marketGate,loggia,BOX,QUAD,CYL,CONE,SPH,SPH2,PRISM,ARCH,ARCHRING,RING,HIP,PIETRA,PIETRA2,SERENA,STONE,STONE2,STONE3,WOOD,DARKW,IRON,GOLD,TERRA,STUCCO,PAVE,PAVE2,MAR,MAR2,WHITE,LAMP,hall,table,bed,shelf,crates,fireplace,weaponRack,candle,chandelier,carpet,sqTower,roundTower,lamp,bench,stall,statue,buildHouse,segBox,own,faceTo,cypress,pines,olives,gardenTrees,wheat,mcx:cx,mcz:cz});
   const addInst=(geo,mtl,list,fn,colorFn)=>{const m=H.inst(geo,mtl,list,fn,colorFn);if(m){m.frustumCulled=false;MARCUS.inst.push(m);}return m;};
   const tk=(t,e,sv,v)=>{e.set(0,(t.x*7.3+t.z*3.1)%6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)-.1,t.z);};
   addInst(new THREE.CylinderGeometry(.13,.2,1.2,5).translate(0,.6,0),mat(0x4a3a2a),cypress,tk);
@@ -12416,8 +12465,37 @@ addEventListener('keydown',e=>{if(typeof codeOf!=='function')return;if(codeOf(e)
 /* ---------- 엑시즈 중앙 시장의 가게: 기본 직업별 장비점 네 곳, 대장장이(강화), 마구간지기(탈것) ----------
    멧돼지 분수 서쪽에 장비 좌판 네 개가 나란히, 동쪽에 대장간 모루와 마구간(말·당나귀·늑대가 매여 있다). */
 const EXM={ready:false,animals:[]};
+/* ===== 시장을 밝고 활기차게: 크림빛 줄눈 바닥과 분수 둘레 꽃무늬 원, 광장 위를 가로지르는 삼각 깃발 줄과 등불 줄,
+   담의 아치마다 줄무늬 차양과 꽃 화분, 회랑 기둥 둘레 화분 ===== */
+function buildMarketCheer(K,cx,cz,MW,MH){const {frame,BOX,CYL,SPH,CONE,WOOD,IRON,LAMP,TERRA,MAR}=K,PI=Math.PI;
+  const FL=[0xe8503a,0x3a7ad8,0x4aa84a,0xf0b830,0xd0508a,0xf4f0e8,0x40b0b0];let _s=777;const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647;
+  /* 바닥: 6m 간격 크림빛 줄눈, 분수 둘레 두 겹 원 */
+  {const F=frame(cx,cz,0,0);for(let x=-MW/2+6;x<MW/2;x+=6)F.P(BOX,x,.1,0,.32,.02,MH,0xe8e0d0);for(let z=-MH/2+6;z<MH/2;z+=6)F.P(BOX,0,.1,z,MW,.02,.32,0xe8e0d0);
+    F.P(CYL(1,1,28),0,.11,0,4.6,.02,4.6,0xb8643c);F.P(CYL(1,1,28),0,.12,0,4.0,.02,4.0,0xe8e0d0);F.P(CYL(1,1,28),0,.13,0,3.4,.02,3.4,0xc8bca4);
+    for(let k=0;k<12;k++){const a=k/12*PI*2;F.P(BOX,Math.cos(a)*4.3,.135,Math.sin(a)*4.3,.5,.02,.5,k%2?0xd8a030:0xb8643c,{ry:a+PI/4});}}
+  /* 깃발 줄: a→b 사이에 처진 줄을 걸고 삼각 깃발(여러 빛깔)과 작은 등불을 번갈아 단다 */
+  const line=(ax,ay,az,bx,by,bz,lit)=>{const L=Math.hypot(bx-ax,bz-az),F=frame((ax+bx)/2,(az+bz)/2,Math.atan2(bx-ax,bz-az),0),n=Math.max(3,Math.round(L/1.1)),sag=Math.min(1.4,L*.05);
+    const yAt=t=>ay+(by-ay)*t-Math.sin(t*PI)*sag;
+    for(let k=0;k<n;k++){const t0=k/n,t1=(k+1)/n,z0=-L/2+t0*L,z1=-L/2+t1*L,y0=yAt(t0),y1=yAt(t1);F.P(BOX,0,(y0+y1)/2,(z0+z1)/2,.03,.03,Math.hypot(z1-z0,y1-y0)+.02,0x5a4a3a,{rx:-Math.atan2(y1-y0,z1-z0)});
+      const tm=(t0+t1)/2,ym=yAt(tm)-.26,zm=-L/2+tm*L;if(lit&&k%3===1)F.P(SPH,0,ym+.12,zm,.11,.11,.11,LAMP,{glow:true});else F.P(CONE(3),0,ym,zm,.03,.48,.3,FL[(k+Math.floor(L))%FL.length],{rx:PI});}};
+  const lw=MW*.25-MW*.18,wz=MH/2+4,WT=4.6,LH=8.1;   /* 회랑 안쪽 가장자리 x, 담 z, 담 높이, 회랑 처마 높이 */
+  for(const sd of [-1,1]){   /* 남·북 띠: 담 꼭대기에서 회랑 처마로 지그재그 */
+    for(let i=0;i<9;i++){const xa=-MW/2+6+i*(MW-12)/8,xb=-MW/2+6+(i+.5)*(MW-12)/8;line(cx+xa,WT,cz+sd*(wz-.6),cx+xb,LH-1.2,cz+sd*(MH*.25+1.2),i%2===0);}
+    line(cx-MW/2+5,6.2,cz+sd*(MH*.25+5),cx+MW/2-5,6.2,cz+sd*(MH*.25+5),true);line(cx-MW/2+5,5.4,cz+sd*(MH*.25+10),cx+MW/2-5,5.4,cz+sd*(MH*.25+10),false);}
+  for(const z of [-12,-4,4,12])line(cx-lw-.4,LH-.6,cz+z,cx+lw+.4,LH-.6,cz+z,z%8===0);   /* 두 회랑 사이 */
+  line(cx,LH-.4,cz-MH*.25,cx,LH-.4,cz+MH*.25,true);
+  /* 담 안쪽 아치마다 줄무늬 차양 (몇 곳은 꽃 화분) */
+  {const x0=cx-MW/2-4,x1=cx+MW/2+4,z0=cz-MH/2-4,z1=cz+MH/2+4;let n=0;
+    const side=(ax,az,bx,bz)=>{const L=Math.hypot(bx-ax,bz-az),ux=(bx-ax)/L,uz=(bz-az)/L;let nx=-uz,nz=ux;if((cx-ax)*nx+(cz-az)*nz<0){nx=-nx;nz=-nz;}
+      const m=Math.floor(L/4.5);for(let q=0;q<m;q++){const t=2.25+q*4.5,px=ax+ux*t+nx*.9,pz=az+uz*t+nz*.9;if(Math.abs(px-cx)<7&&Math.abs(pz-z1)<3)continue;   /* 문 자리 */
+        const F=frame(px,pz,Math.atan2(nx,nz),0),c1=FL[(n++)%5];for(let k=0;k<5;k++)F.P(BOX,-.88+k*.44,3.95,.1,.44,.05,1.1,k%2?0xf4f0e8:c1,{rx:.42});F.P(BOX,0,3.72,.58,2.25,.24,.03,c1);
+        if(n%3===0){F.P(BOX,0,.3,.6,1.6,.6,.5,0x8a5a3a);F.P(BOX,0,.62,.6,1.5,.08,.42,0x4a6a3a);for(let k=0;k<6;k++)F.P(SPH,-.6+k*.24,.82,.6+(k%2-.5)*.14,.15,.15,.15,FL[(k+n)%5]);}}};
+    side(x0,z0,x1,z0);side(x0,z1,x1,z1);side(x0,z0,x0,z1);side(x1,z0,x1,z1);}
+  /* 큰 화분: 회랑 모서리 바깥 (잎 둥근 나무에 꽃) */
+  for(const sx of [-1,1])for(const sz of [-1,1]){const x=cx+sx*(MW*.25+MW*.18+1.8),z=cz+sz*(MH*.25+1.8),F=frame(x,z,0,0);F.P(CYL(.7,.55,12),0,.5,0,1,1,1,TERRA[0]);F.P(CYL(.75,.75,12),0,1.02,0,1,.08,1,TERRA[2]);
+    F.P(CYL(.08,.1,6),0,1.6,0,1,1.2,1,WOOD);F.P(SPH,0,2.5,0,1.0,.9,1.0,0x4f8f3a);for(let k=0;k<7;k++){const a=k/7*PI*2;F.P(SPH,Math.cos(a)*.75,2.4+(k%3)*.25,Math.sin(a)*.75,.13,.13,.13,k%2?0xf0a030:0xf4f0e8);}colliders.push({x,z,r:.8});}}
 function buildExMarket(K){
-  const {frame,BOX,QUAD,CYL,SPH,CONE,ARCH,WOOD,DARKW,IRON,STONE2,PIETRA,PIETRA2,PAVE,GOLD,stall,segBox,H}=K;if(EXM.ready)return;
+  const {frame,BOX,QUAD,CYL,SPH,CONE,ARCH,ARCHRING,WOOD,DARKW,IRON,STONE2,PIETRA,PIETRA2,PAVE,GOLD,LAMP,MAR,TERRA,stall,segBox,H}=K;if(EXM.ready)return;
   const PL=marcusPlan(),M=OR.ISLES.marcus,m=PL.zone('market'),PI=Math.PI;
   /* ===== 따로 된 시장 맵: 시내 시장 문으로 들어오면 나온다. 광장(회랑·좌판·분수)을 가운데 두고, 둘레는 시가지 집과 담, 남쪽에 나가는 문 ===== */
   const I=OR.ISLES.exmarket,cx=I.x,cz=I.z,MW=m.w,MH=m.h;
@@ -12426,17 +12504,17 @@ function buildExMarket(K){
   /* 광장 둘레 담 (낮은 아치 담) 과 남쪽 문 */
   {const WH=4.2,x0=cx-MW/2-4,x1=cx+MW/2+4,z0=cz-MH/2-4,z1=cz+MH/2+4;
     const wallSeg=(ax,az,bx,bz,gap)=>{const L=Math.hypot(bx-ax,bz-az),ux=(bx-ax)/L,uz=(bz-az)/L,ry=Math.atan2(ux,uz);const segs=gap?[[0,L/2-gap],[L/2+gap,L]]:[[0,L]];
-      for(const [a,b] of segs){const G=frame(ax+ux*(a+b)/2,az+uz*(a+b)/2,ry,0),len=b-a;G.P(BOX,0,WH/2,0,1,WH,len,PIETRA2);G.P(BOX,0,WH+.2,0,1.4,.4,len+.2,PIETRA);const n=Math.floor(len/4.5);for(let q=0;q<n;q++){const t=-len/2+2.25+q*4.5;G.P(ARCH,-.52,.6,t,1.9,3.2,1,0x2a2420,{ry:-PI/2});}G.box(0,0,1,len,WH);}};
+      for(const [a,b] of segs){const G=frame(ax+ux*(a+b)/2,az+uz*(a+b)/2,ry,0),len=b-a;G.P(BOX,0,WH/2,0,1,WH,len,0xe8c88e);G.P(BOX,0,.35,0,1.12,.7,len+.05,PIETRA2);G.P(BOX,0,WH+.2,0,1.4,.4,len+.2,0xd8c098);const n=Math.floor(len/4.5);for(let q=0;q<n;q++){const t=-len/2+2.25+q*4.5;G.P(ARCH,-.52,.6,t,1.9,3.2,1,0x4a3020,{ry:-PI/2});G.P(ARCHRING,-.53,.6,t,2.2,3.5,1,0xd8c098,{ry:-PI/2});}G.box(0,0,1,len,WH);}};   /* 밝은 회반죽 담, 아치마다 돌테 */
     wallSeg(x0,z0,x1,z0,0);wallSeg(x0,z1,x1,z1,3.2);wallSeg(x0,z0,x0,z1,0);wallSeg(x1,z0,x1,z1,0);
     for(const [tx,tz] of [[x0,z0],[x1,z0],[x0,z1],[x1,z1]]){const G=frame(tx,tz,0,0);G.P(CYL(.5,.5,12),0,WH/2+.6,0,2.6,WH+1.2,2.6,PIETRA2);G.P(CONE(12),0,WH+2.4,0,3,2.4,3,K.TERRA[1]);colliders.push({x:tx,z:tz,r:1.4});}
-    {const G=frame(cx,z1,PI,0);G.P(BOX,0,3.6,0,8.4,7.2,1.6,PIETRA2);G.P(BOX,0,7.5,0,9,.6,2.2,PIETRA);G.P(ARCH,0,0,-.85,6.4,6.4,1,0x2a2420);G.P(ARCH,0,0,.85,6.4,6.4,1,0x2a2420,{ry:PI});
-      G.P(BOX,0,2.6,-.5,5.8,5.2,.14,0x4a3020);for(const s2 of [-1,1]){G.P(BOX,s2*1.45,2.5,-.6,2.7,5,.1,0x6a4428);G.P(SPH,s2*.5,2.4,-.7,.1,.1,.1,GOLD);}segBox(cx-4.2,z1,cx+4.2,z1,1.6,0,{y0:-2,y1:9,h:undefined});}
+    if(K.marketGate)K.marketGate(cx,z1,0,0);segBox(cx-4.2,z1,cx+4.2,z1,1.6,0,{y0:-2,y1:9,h:undefined});   /* 시내 쪽 문과 같은 정교한 큰 문: 앞면(나무문·간판)이 시장 안을 본다 */
     /* 드나드는 문: 시장 안 남쪽 문 ↔ 시내 시장 문 */
     const MF=MARCUS.marketFront;const g1=new THREE.Group();g1.position.set(cx,0,z1-1.0);scene.add(g1);
     if(MF)PORTALS.push({id:'exmarket_city',x:cx,z:z1-1.0,ry:0,hw:3,minLv:0,label:'엑시즈 시내로 나가기',to:{x:MF.x,z:MF.z-2.6,yaw:Math.PI},msg:null,color:0xffd23a,door:1,fx:{g:g1,cols:[]}});
     if(MF){const g2=new THREE.Group();g2.position.set(MF.x,0,MF.z);scene.add(g2);PORTALS.push({id:'city_exmarket',x:MF.x,z:MF.z,ry:Math.PI,hw:3,minLv:0,label:'중앙 시장으로 들어가기',to:{x:cx,z:z1-3.6,yaw:Math.PI,y:0},msg:null,color:0xffd23a,door:1,fx:{g:g2,cols:[]}});}
     EXM.gate={x:cx,z:z1};}
-  const AW=[0xb8402a,0x2f5a9a,0x3f7a3a,0xd8a030];let _s=4242;const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647;
+  buildMarketCheer(K,cx,cz,MW,MH);   /* 밝고 활기차게: 바닥 무늬, 깃발 줄·등불 줄, 담 차양, 꽃 화분 */
+  const AW=[0xe0503a,0x3a78c8,0x4a9a44,0xf0b838];let _s=4242;const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647;
   /* 서쪽: 장비 좌판 네 개, 분수를 보고 선다 (상인은 좌판 뒤, 손님은 분수 쪽) */
   const SHOPN=[['ex_war','발터','전사 장비점','warrior',{robe:0x6a3a2a,robe2:0x9a7a5a,hat:'hair',hatC:0x2a1a10,beard:0x2a1a10,cloth:{apron:0x3a2a1a}},['전사라면 손에 익는 검부터. 가볍게 보지 말게.','방패도 같이 맞춰 가면 오래 산다네.']],
     ['ex_mag','이졸데','마법사 장비점','mage',{robe:0x3a2f6a,robe2:0x8a7ab8,hat:'wide',hatC:0x2a2050,long:1},['지팡이는 손이 아니라 마음에 맞아야 해요.','좋은 지팡이는 마력을 아껴 줘요.']],
@@ -12469,7 +12547,9 @@ function buildExMarket(K){
   /* ===== 시내 시장 둘레 시가지: 장터 네 변을 따라 3층 상가 주택을 세운다 (길·강·기존 건물 자리는 비운다) ===== */
   if(K.buildHouse){const hs=[];let n=0;
     /* 시장 문 앞은 비워 둔다: 문에서 북쪽(광장 쪽)으로 길게 트인 길 (전에는 문 바로 앞에 집이 줄지어 서 문이 안 보였다) */
-    const MG=MARCUS.marketFront,gx=MG?MG.x-M.x:1e9,gy=MG?MG.z-M.z:1e9,gateLane=(mx,my,r)=>Math.abs(mx-gx)<9+r&&my<gy+4&&my>gy-34-r;
+    const MG=MARCUS.marketFront,gx=MG?MG.x-M.x:1e9,gy=MG?MG.z-M.z:1e9,gateLane0=(mx,my,r)=>Math.abs(mx-gx)<9+r&&my<gy+4&&my>gy-34-r;
+    /* 중앙 광장과 시장 담 사이는 비운다 (전에는 집 일곱 채가 끼어 있어 광장에서 시장 문이 막혀 보였다) */
+    const PZ=PL.zone('plaza'),gateLane=(mx,my,r)=>gateLane0(mx,my,r)||(PZ&&my>PZ.y&&my<gy+4&&Math.hypot(mx-PZ.x,my-PZ.y)<PZ.r+16+r*.3);
     const free=(mx,my,r)=>{if(gateLane(mx,my,r))return false;if(PL.nearStreet(mx,my,3.5)||PL.waterDepth(mx,my)>0||PL.riverDist(mx,my)<MARCUS_RIVER_W/2+8||PL.wallDist(mx,my)>-10)return false;
       const wx=M.x+mx,wz=M.z+my;for(const c of colliders){if(c.r<1.5)continue;if(Math.hypot(c.x-wx,c.z-wz)<c.r+r)return false;}
       for(const h of hs)if(Math.hypot(h.mx-mx,h.my-my)<r*1.8)return false;return true;};
@@ -15315,9 +15395,9 @@ function drawShopIcon(c,kind){c.lineCap='round';c.lineJoin='round';
 function drawMarketLabels(c,X,Z,sc,I){c.save();c.textAlign='center';c.textBaseline='middle';c.lineJoin='round';
   const bw=c.canvas.getBoundingClientRect?c.canvas.getBoundingClientRect().width:0,k=bw>0?c.canvas.width/bw:1,fs=Math.round(11*k);
   /* 가게는 글자 대신 그림표: 칼(전사)·지팡이(마법사)·단검(도적)·활(궁수)·모루(대장간)·편자(마구간) */
-  const R=Math.max(9,10*k);
+  const R=Math.max(5,5.5*k);   /* 가게 그림표: 작게 (가게끼리 가까워 크면 서로 덮였다) */
   for(const n of NPCS){if(!/^ex_(war|mag|rog|arc|smith|stable)$/.test(n.id)||!n.mesh)continue;const x=X(n.mesh.position.x),y=Z(n.mesh.position.z);
-    c.save();c.translate(x,y);c.fillStyle='#2a2018';c.strokeStyle='#f3cf6a';c.lineWidth=1.6*k;c.beginPath();c.arc(0,0,R,0,7);c.fill();c.stroke();c.scale(R/10,R/10);drawShopIcon(c,n.id.slice(3));c.restore();}
+    c.save();c.translate(x,y);c.fillStyle='#2a2018';c.strokeStyle='#f3cf6a';c.lineWidth=1.1*k;c.beginPath();c.arc(0,0,R,0,7);c.fill();c.stroke();c.scale(R/10,R/10);drawShopIcon(c,n.id.slice(3));c.restore();}
   const PL=marcusPlan(),m=PL.zone('market');c.textAlign='center';c.font=`${fs}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*k;c.strokeStyle='rgba(20,16,12,.9)';c.fillStyle='#e8d8b0';
   c.strokeText('식료품·잡화 좌판',X(I.x),Z(I.z-m.h/2-7));c.fillText('식료품·잡화 좌판',X(I.x),Z(I.z-m.h/2-7));c.strokeText('시내로 나가는 문',X(I.x),Z(I.z+m.h/2+9));c.fillText('시내로 나가는 문',X(I.x),Z(I.z+m.h/2+9));c.restore();}
 // 마르쿠스 이름표 (설계도의 이름과 자리)
