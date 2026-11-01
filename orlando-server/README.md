@@ -1,52 +1,57 @@
-# 오를란도 3D 서버 올리기
+# 오를란도
 
-링크만 열면 로그인 없이 바로 같이 플레이할 수 있는 오를란도 서버입니다.
-GitHub에 파일을 올리고, Render(무료 호스팅)에 연결하는 순서로 진행합니다. 프로그램 설치나 명령어 입력은 필요 없어요.
+브라우저에서 링크만 열면 로그인 없이 바로 같이 플레이할 수 있는 3D 판타지 RPG입니다.
 
-## 들어 있는 파일
-
-| 파일 | 하는 일 |
-|---|---|
-| `server.js` | 게임 페이지를 보여 주고, 접속자끼리 위치·직업·레벨·스킬 효과를 주고받게 해 주는 서버 |
-| `package.json` | 서버를 실행하는 방법과 필요한 부품(ws) 목록 |
-| `public/index.html` | 게임 본체 |
-| `public/player.glb` | 캐릭터 모델 |
-
-## 1단계 · GitHub에 파일 올리기
-
-1. https://github.com 에 가입하고 로그인합니다.
-2. 오른쪽 위 **+** → **New repository**를 누릅니다.
-3. Repository name에 `orlando-server`를 넣고 **Public**을 고른 뒤 **Create repository**를 누릅니다.
-4. 새 저장소 화면에서 **uploading an existing file** 링크를 누릅니다.
-5. 압축을 푼 `orlando-server` 폴더 **안의** 파일과 폴더(`server.js`, `package.json`, `README.md`, `public` 폴더)를 한꺼번에 끌어다 놓습니다.
-   - `public` 폴더째로 끌어다 놓아야 `public/index.html` 모양으로 올라갑니다.
-6. 아래 **Commit changes**를 누릅니다.
-
-## 2단계 · Render에 연결하기
-
-1. https://render.com 에서 **GitHub 계정으로 가입**합니다.
-2. 대시보드에서 **New +** → **Web Service**를 누릅니다.
-3. GitHub 연결을 허용하고 `orlando-server` 저장소를 고릅니다.
-4. 설정을 이렇게 맞춥니다.
-   - **Language**: Node
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
-   - **Instance Type**: Free
-5. **Deploy Web Service**를 누르고 몇 분 기다립니다. 로그에 `오를란도 서버 실행 중`이 보이면 완료입니다.
-6. 화면 위쪽의 `https://orlando-server-xxxx.onrender.com` 같은 주소가 게임 링크입니다. 이 링크를 친구에게 보내면 됩니다.
+**지금 플레이하기: https://orlando.io.kr**
 
 ## 같이 하는 방법
 
 - 링크를 열고 캐릭터를 만들면 바로 같은 세계에 들어갑니다. 로그인은 필요 없습니다.
 - 오른쪽 아래 **현재 접속자**에 친구 이름이 보이면 연결된 것입니다.
+- 몬스터와 보스는 서버가 움직이므로, 같은 사냥터에 있는 사람끼리 같은 몬스터를 함께 잡습니다.
+
+## 들어 있는 파일
+
+| 파일 | 하는 일 |
+|---|---|
+| `server.js` | 게임 페이지와 파일을 보여 주고, `/ws`로 들어온 접속자끼리 위치·스킬 효과·채팅을 주고받게 해 주는 서버. `/health`는 서버 상태를 한 줄로 알려 줍니다. |
+| `sim.js` | 몬스터와 보스를 서버에서 움직이는 코드 (게임 안의 코드와 같음) |
+| `shared.js` | 지도·지역·몬스터 정보처럼 게임과 서버가 함께 쓰는 데이터 |
+| `colliders.json` | 서버가 쓰는 충돌(벽·건물) 정보 |
+| `package.json` | 서버를 실행하는 방법(`npm start`)과 필요한 부품(`ws`) 목록 |
+| `public/index.html` | 게임 본체 (three.js) |
+| `public/player.glb`, `public/pmodel/` | 캐릭터 모델 |
+| `public/models/*.glb.wasm` | 풍경·건물·몬스터 모델 (내용은 `.glb`, 이름 끝만 `.wasm`) |
+| `public/npcbake/`, `public/citbake/` | 미리 구워 둔 NPC·시민 데이터 |
+| `public/music/`, `public/sfx.json`, `public/fonts/`, `public/icon/` | 음악, 효과음, 글꼴, 아이콘 |
+| `public/robots.txt`, `sitemap.xml`, `manifest.webmanifest`, `og.jpg`, `ads.txt` | 검색·공유·앱 설치용 파일 |
+
+저장소 맨 위의 `.github/workflows/keepalive.yml`은 10분마다 `https://orlando.io.kr/health`를 불러 무료 서버가 잠들지 않게 합니다.
+
+## 배포 방식
+
+- 게임은 `orlando-server` 폴더를 실행하는 Node 서버(Render 웹 서비스)에서 돌아가고, `orlando.io.kr` 도메인이 그 서버에 연결되어 있습니다.
+- `main` 브랜치에 올리면 서버가 알아서 새 버전으로 바뀝니다. 설정은 **Build Command** `npm install`, **Start Command** `npm start`, Node 18 이상입니다.
+- 서버는 `RENDER_EXTERNAL_URL`이 있으면 10분마다 자기 자신의 `/health`를 부르고, 위의 GitHub Actions가 예비로 한 번 더 부릅니다.
+
+## 게임을 고친 뒤 올릴 때 알아 둘 점
+
+- **서버 버전 맞추기.** `server.js`의 `VERSION`과 `public/index.html`의 `SERVER_VER`는 같은 숫자여야 합니다. 서버 쪽 파일(`server.js`, `shared.js`, `sim.js`, `colliders.json`)을 바꿨다면 두 숫자를 함께 올리세요. 다르면 게임 화면에 "서버 파일이 게임과 맞지 않"는다는 안내가 뜹니다.
+- **게임 코드는 jsDelivr에서 받아요.** 서버 전송량을 아끼려고, 서버는 `index.html`의 화면 틀만 보내고 큰 게임 코드는 jsDelivr(무료 CDN)에 있는 **지금 배포된 커밋**의 `index.html`에서 받게 합니다. 배포된 커밋 번호는 Render가 알려 주므로(`RENDER_GIT_COMMIT`) 따로 손댈 것은 없습니다. 받은 코드는 지문(sha256)이 맞을 때만 쓰고, 안 되면 서버의 `/game-src.html`에서 받습니다. 그래서 이 저장소는 공개(Public)로 두어야 합니다.
+- **큰 파일은 고정된 커밋에서 받아요.** `models/`, `npcbake/`, `pmodel/`, `citbake/`, `music/`, `player.glb`는 `public/index.html`의 `ORLANDO_CDN` 주소(이 저장소의 특정 커밋을 가리키는 jsDelivr 주소)에서 받고, 실패하면 서버에서 받습니다. 이 폴더의 파일을 바꾸거나 새로 넣었다면 먼저 커밋해 올린 뒤, `ORLANDO_CDN`의 커밋 번호를 그 커밋으로 바꿔 다시 올리세요. 그대로 두면 예전 파일이 보입니다.
+- **새 종류의 파일은 서버 목록에 넣어야 해요.** `server.js`는 정해 둔 파일과 폴더(이름 규칙에 맞는 파일)만 보여 줍니다. 새 폴더나 새 확장자를 쓰려면 `server.js`의 목록에도 추가하세요.
+
+## 내 컴퓨터에서 실행하기
+
+```bash
+cd orlando-server
+npm install
+npm start
+```
+
+`http://localhost:3000`을 열면 됩니다. (`PORT` 환경 변수로 포트를 바꿀 수 있습니다.) 내 컴퓨터에서는 커밋 번호가 없으므로 게임 코드를 jsDelivr에서 나눠 받지 않고 `index.html`을 통째로 보냅니다.
 
 ## 알아 둘 점
 
-- **처음 접속이 느릴 수 있어요.** 무료 서버는 15분 동안 아무도 접속하지 않으면 잠들고, 다음 접속 때 깨어나는 데 1분쯤 걸립니다.
-- **무료 전송량에 한도가 있어요.** Render 무료 계정은 한 달 전송량이 정해져 있습니다. 처음 접속할 때 캐릭터 모델(약 5MB)을 받고, 다시 접속할 때는 브라우저에 저장된 것을 써서 거의 들지 않습니다. 넘으면 서비스가 멈출 수 있으니 Render 대시보드에서 사용량을 가끔 확인하세요.
 - **저장은 각자 브라우저에 됩니다.** 캐릭터는 접속한 브라우저에 저장되므로 다른 기기에서는 새로 만들어야 합니다.
-- **몬스터는 아직 각자 따로입니다.** 서로의 모습·이름·스킬 효과는 보이지만, 같은 몬스터를 함께 잡지는 않습니다.
-
-## 게임을 고친 뒤 다시 올리기
-
-새 `index.html`(또는 다른 파일)을 받으면 GitHub 저장소에서 **Add file → Upload files**로 같은 이름의 파일을 다시 올리고 **Commit changes**를 누르세요. Render가 알아서 새 버전으로 바꿉니다.
+- **처음 접속이 조금 느릴 수 있어요.** 처음에는 모델과 데이터를 받느라 시간이 걸리고, 다시 접속할 때는 브라우저에 저장된 것을 씁니다.
