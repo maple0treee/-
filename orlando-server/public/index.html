@@ -3405,6 +3405,157 @@ function buildStatue(){
   return g;
 }
 
+/* ---------- 조각 도구: 두 점 사이 팔다리(굴림 단면), 근육 덩이, 대리석 돌고래 ---------- */
+function sculptKit(g){
+  const PI=Math.PI,V=(x,y,z)=>new THREE.Vector3(x,y,z),UP=V(0,1,0);
+  const put=(geo,m,p,par=g)=>{const e=new THREE.Mesh(geo,m);e.position.copy(p);e.castShadow=true;e.receiveShadow=true;par.add(e);return e;};
+  const ball=(p,r,sx=1,sy=1,sz=1,m,par=g,seg=14)=>{const e=put(new THREE.SphereGeometry(r,seg,Math.max(6,Math.round(seg*.7))),m,p,par);e.scale.set(sx,sy,sz);return e;};
+  const aim=(e,d)=>{e.quaternion.setFromUnitVectors(UP,d.clone().normalize());return e;};
+  // 두 점 사이를 단면 반지름 표(prof: [비율, 반지름])대로 잇는다
+  const limb=(a,b,prof,m,par=g,seg=14)=>{const d=b.clone().sub(a),L=d.length();const geo=new THREE.LatheGeometry(prof.map(([t,r])=>new THREE.Vector2(r,t*L)),seg);geo.computeVertexNormals();return aim(put(geo,m,a,par),d);};
+  const bone=(a,b,r1,r2,m,par=g,seg=10)=>{const d=b.clone().sub(a);return aim(put(new THREE.CylinderGeometry(r2,r1,d.length(),seg,1),m,a.clone().lerp(b,.5),par),d);};
+  // 팔다리를 따라 놓는 근육 덩이: t=위치 비율, r=굵기, len=길이 비율, off=비켜 놓기, sq=앞뒤 납작함
+  const belly=(a,b,t,r,len,off,sq,m,par=g)=>{const d=b.clone().sub(a),L=d.length();const e=aim(put(new THREE.SphereGeometry(1,14,10),m,a.clone().lerp(b,t).add(off||V(0,0,0)),par),d);e.scale.set(r,len*L,r*(sq||1));return e;};
+  // 곡선(머리→꼬리)을 따라 몸을 휘는 돌고래. up = 등이 향하는 쪽
+  // 곡선을 따라 굵기(rf)가 바뀌는 매끈한 관
+  const sweep=(c,rf,m,par=g,seg=30,rs=12)=>{const geo=new THREE.TubeGeometry(c,seg,1,rs,false),P=geo.attributes.position,q=new THREE.Vector3();
+    for(let i=0;i<=seg;i++){const t=i/seg,p=c.getPointAt(t),r=rf(t);for(let j=0;j<=rs;j++){const k=i*(rs+1)+j;q.fromBufferAttribute(P,k).sub(p).multiplyScalar(r).add(p);P.setXYZ(k,q.x,q.y,q.z);}}
+    geo.computeVertexNormals();return put(geo,m,V(0,0,0),par);};
+  const dolphin=(c,s,m,up,par=g)=>{
+    sweep(c,t=>s*(t<.25?.55+.45*Math.sin(t/.25*PI/2):1-.84*Math.pow((t-.25)/.75,1.2)),m,par);
+    const h=c.getPointAt(0),tg=c.getTangentAt(0).normalize(),nose=h.clone().addScaledVector(tg,-s*1.05);
+    ball(h,s*.55,1,1,1,m,par,14);limb(h.clone().addScaledVector(tg,-s*.3),nose,[[0,s*.36],[.5,s*.25],[.85,s*.17],[1,0]],m,par,12);ball(h.clone().addScaledVector(tg,-s*.2).addScaledVector(up,s*.22),s*.42,1,.85,1,m,par,12);   /* 주둥이·이마 */
+    const basis=(t)=>{const T=c.getTangentAt(t).normalize(),N=up.clone().addScaledVector(T,-up.dot(T)).normalize(),S=new THREE.Vector3().crossVectors(N,T).normalize();return {T,N,S};};
+    const fin=(p,sx,sy,sz,B,rx,ry,rz)=>{const e=put(new THREE.SphereGeometry(1,10,8),m,p,par);const mm=new THREE.Matrix4().makeBasis(B.S,B.N,B.T);e.quaternion.setFromRotationMatrix(mm);e.rotateX(rx);e.rotateY(ry);e.rotateZ(rz);e.scale.set(sx,sy,sz);return e;};
+    {const B=basis(1),p=c.getPointAt(1);for(const sd of [-1,1])fin(p.clone().addScaledVector(B.S,sd*s*.45).addScaledVector(B.T,s*.15),s*.6,s*.07,s*.3,B,0,sd*.35,0);}   /* 꼬리지느러미 */
+    {const B=basis(.38),p=c.getPointAt(.38);const df=put(new THREE.ConeGeometry(s*.3,s*.8,8),m,p.clone().addScaledVector(B.N,s*.8),par);df.quaternion.setFromUnitVectors(UP,B.N.clone().addScaledVector(B.T,.7).normalize());df.scale.set(1,1,.3);}   /* 등지느러미 */
+    {const B=basis(.2),p=c.getPointAt(.2);for(const sd of [-1,1])fin(p.clone().addScaledVector(B.S,sd*s*.75).addScaledVector(B.N,-s*.35),s*.42,s*.06,s*.2,B,0,0,-sd*.5);}   /* 가슴지느러미 */
+    return nose;};
+  return {V,put,ball,bone,limb,belly,dolphin,aim,sweep};
+}
+
+/* ---------- 넵투누스 석상: 흰 대리석 바다의 신. 바위 물결 위에서 왼발을 바위에 올리고, 오른손은 높이 세운 금 삼지창을 쥐고,
+   왼손은 앞으로 내밀어 물결을 잠재운다. 곱슬 머리와 갈래진 수염, 금 왕관, 바람에 부푼 망토, 허리에 두른 주름 옷,
+   오른다리 뒤로 몸을 감아 내리는 돌고래(받침 기둥 노릇). 발바닥이 원점, +z가 얼굴이 보는 쪽 ---------- */
+function buildSeaGod(o){
+  const g=new THREE.Group(),PI=Math.PI,K=sculptKit(g),{V,put,ball,bone,limb,belly}=K;
+  const M=o.marble,D=o.drape,R=o.rock,ZERO=V(0,0,0),G=o.gold.clone(),MS=o.marble.clone();G.metalness=.5;G.roughness=.3;MS.color.setHex(0xbdb3a2);
+  /* 바위: 받침 위를 덮는 바위 더미 */
+  for(const [x,z,r,h] of [[0,0,.62,.16],[-.4,.3,.4,.2],[.35,-.35,.42,.18],[-.35,-.38,.38,.22],[.5,.15,.34,.15],[.05,.5,.32,.13]]){const rk=put(new THREE.IcosahedronGeometry(r,1),R,V(x,h*.25,z));rk.scale.set(1,h/r,1);rk.rotation.y=x*7+z*3;}
+  const ft=put(new THREE.DodecahedronGeometry(.26,1),R,V(.24,.16,.36));ft.scale.set(1.05,.8,1);   /* 왼발을 올린 바위 */
+  /* 다리: 오른다리(-x)는 곧게 몸무게를 싣고, 왼다리(+x)는 무릎을 굽혀 바위를 딛는다 */
+  const thigh=[[0,.125],[.15,.13],[.45,.118],[.8,.095],[1,.085]],calf=[[0,.08],[.12,.084],[.32,.092],[.6,.07],[.9,.052],[1,.05]];
+  const leg=(hip,knee,ank,foot,fdir)=>{
+    limb(hip,knee,thigh,M);belly(hip,knee,.42,.08,.32,V(0,0,.035),.7,M);belly(hip,knee,.66,.055,.2,V(fdir*.04,0,.03),.7,M);   /* 넙다리 앞 근육 */
+    ball(knee,.086,1,1,1,M);ball(knee.clone().add(V(0,.0,.055)),.04,1,1.1,.6,M);   /* 무릎과 무릎뼈 */
+    limb(knee,ank,calf,M);belly(knee,ank,.3,.065,.25,V(0,0,-.05),1,M);   /* 장딴지 */
+    ball(ank,.055,1,1,1,M);
+    const f=put(new THREE.SphereGeometry(1,14,10),M,foot);f.scale.set(.065,.045,.15);f.rotation.y=fdir*.12;
+    for(let k=0;k<5;k++){const x=(k-2)*.024*(fdir||1);ball(foot.clone().add(V(x-fdir*.004,-.012,.13-Math.abs(k-1)*.012)),.018-(k?0:-.004),1,.8,1.2,M,g,8);}};
+  leg(V(-.13,1.52,0),V(-.15,.86,.04),V(-.16,.13,-.02),V(-.16,.05,.06),-1);
+  leg(V(.13,1.52,0),V(.22,1.0,.34),V(.22,.46,.25),V(.23,.39,.34),1);
+  /* 몸통: 허리는 잘록하고 가슴은 두껍게. 앞뒤로 조금 납작 */
+  {const tb=put(new THREE.LatheGeometry([[0,1.44],[.2,1.46],[.235,1.6],[.215,1.74],[.205,1.84],[.235,1.98],[.272,2.14],[.29,2.28],[.272,2.4],[.2,2.47],[.1,2.52],[0,2.53]].map(p=>new THREE.Vector2(p[0],p[1])),20),M,ZERO);tb.geometry.computeVertexNormals();tb.scale.z=.66;tb.rotation.y=PI;}   /* 이음매는 등 뒤로 */
+  for(const sd of [-1,1]){
+    const pc=ball(V(sd*.112,2.25,.148),.15,1.25,.55,.32,M);pc.rotation.z=sd*.1;   /* 가슴 */
+    const ob=ball(V(sd*.15,1.88,.072),.09,.6,1.1,.5,M);ob.rotation.z=-sd*.15;   /* 옆구리 */
+    ball(V(sd*.15,2.12,-.11),.13,.85,1.3,.5,M);   /* 등 넓은 근육 */
+    ball(V(sd*.2,2.08,.085),.04,.6,1,.5,M,g,8);ball(V(sd*.205,2.0,.085),.035,.6,1,.5,M,g,8);   /* 톱니 근육 */
+  }
+  for(let r=0;r<3;r++)for(const sd of [-1,1])ball(V(sd*.047,1.87+r*.078,.128+r*.011),.056,.92,.74,.3,M,g,12);   /* 배 근육 여섯 */
+  ball(V(0,1.785,.128),.045,1.6,.55,.32,M,g,10);   /* 아랫배 */
+  ball(V(0,2.38,-.05),.15,1.9,.55,.9,M);   /* 등세모 근육 */
+  for(const sd of [-1,1])bone(V(sd*.05,2.36,.1),V(sd*.22,2.4,.06),.018,.022,M);   /* 빗장뼈 */
+  /* 목과 머리 */
+  limb(V(0,2.44,-.01),V(0,2.66,.02),[[0,.09],[.5,.08],[1,.075]],M);
+  for(const sd of [-1,1])bone(V(sd*.05,2.47,.08),V(sd*.04,2.62,.0),.022,.016,M);   /* 목 힘줄 */
+  const H=new THREE.Group();H.position.set(0,2.77,.02);H.rotation.set(.1,.32,0);g.add(H);
+  {ball(V(0,.02,-.01),.135,.92,1.04,1.08,M,H,18);   /* 머리통 */
+    ball(V(0,-.06,.04),.095,.88,.9,.9,M,H,16);   /* 턱 */
+    ball(V(0,.042,.106),.07,1.45,.3,.45,M,H);   /* 눈썹 뼈 */
+    bone(V(0,.036,.128),V(0,-.024,.151),.013,.022,M,H,8);ball(V(0,-.028,.147),.02,1.25,.8,.9,M,H,10);   /* 코 */
+    for(const sd of [-1,1]){
+      ball(V(sd*.043,.012,.11),.022,1.25,.7,.4,MS,H,10);ball(V(sd*.043,.01,.111),.014,1,.8,.6,M,H,10);   /* 깊은 눈두덩과 눈알 */
+      ball(V(sd*.06,-.014,.085),.03,1,.7,.7,M,H,10);ball(V(sd*.014,-.034,.142),.011,1,.8,1,M,H,8);   /* 광대·콧방울 */
+      ball(V(sd*.126,.0,0),.03,.5,1,.75,M,H,8);   /* 귀 */
+      K.sweep(new THREE.CatmullRomCurve3([V(sd*.004,-.046,.146),V(sd*.04,-.056,.14),V(sd*.068,-.075,.122),V(sd*.08,-.11,.1)]),t=>.017*(1-t*.75),M,H,10,7);   /* 콧수염 */
+      ball(V(sd*.098,-.06,.035),.05,.7,1.2,.9,M,H,10);}   /* 구레나룻 */
+    ball(V(0,-.074,.126),.022,1.4,.6,.7,M,H,10);   /* 아랫입술 */
+    /* 수염: 덩이 셋을 아래로 잇고, 겉에는 곱슬을, 끝은 여러 가닥이 두 갈래로 꼬여 내린다 */
+    const curl=(p,n,r,par=H)=>{const e=put(new THREE.TorusGeometry(r,r*.72,6,10),M,p,par);e.quaternion.setFromUnitVectors(V(0,0,1),n);return e;};
+    const coat=(c,rx,ry,rz,n0,r0,skip)=>{for(let k=0;k<n0;k++){const y=1-(k+.5)/n0*2,rr=Math.sqrt(1-y*y),ph=k*2.39996,n=V(Math.cos(ph)*rr,y,Math.sin(ph)*rr);if(skip(n))continue;
+      curl(c.clone().add(V(n.x*rx,n.y*ry,n.z*rz)),n,r0+(k%3)*.003);}};
+    ball(V(0,-.12,.07),.092,1.12,1,.72,M,H);ball(V(0,-.2,.062),.072,1.05,1.2,.72,M,H);ball(V(0,-.272,.05),.045,1.1,1,.7,M,H);
+    coat(V(0,-.12,.07),.103,.092,.066,60,.016,n=>n.z<-.1||n.y>.5);
+    coat(V(0,-.2,.062),.076,.086,.052,40,.015,n=>n.z<-.1||n.y>.6);
+    for(let k=0;k<6;k++){const sd=k%2?1:-1,o=Math.floor(k/2);
+      K.sweep(new THREE.CatmullRomCurve3([V(sd*(.02+o*.025),-.2,.085-o*.01),V(sd*(.03+o*.02),-.28,.07),V(sd*(.022+o*.008),-.34,.055),V(sd*(.04+o*.01),-.4-o*.012,.035)]),t=>.02*(1-t*.8),M,H,12,7);}
+    /* 머리카락: 뒤통수 덩이 위를 곱슬로 고르게 덮고, 이마 위엔 굵은 곱슬 한 줄, 뒤로는 어깨까지 흘러내리는 타래 */
+    ball(V(0,.012,-.045),.142,1,1.04,.92,M,H,16);
+    coat(V(0,.012,-.045),.142,.148,.131,120,.02,n=>(n.z>.32&&n.y<.5)||n.y<-.55);
+    for(let k=0;k<9;k++){const a=-.95+k*(1.9/8);curl(V(Math.sin(a)*.125,.112-Math.abs(a)*.03,.07+Math.cos(a)*.045),V(Math.sin(a)*.5,.7,Math.cos(a)).normalize(),.024);}
+    for(let k=0;k<9;k++){const a=PI*.42+k*(PI*1.16/8),dx=Math.cos(a),dz=Math.sin(a)*-1;
+      K.sweep(new THREE.CatmullRomCurve3([V(dx*.12,.0,-.04+dz*.11),V(dx*.15,-.12,-.05+dz*.13),V(dx*.16,-.22,-.05+dz*.12),V(dx*.2,-.32,-.04+dz*.13)]),t=>.046*(1-t*.55),M,H,12,8);}
+    /* 금 왕관: 띠 두 줄과 끝에 구슬을 단 살 아홉 */
+    const band=put(new THREE.CylinderGeometry(.15,.144,.045,32,1,true),G,V(0,.105,-.01),H);band.scale.z=1.08;band.material=G.clone();band.material.side=THREE.DoubleSide;
+    for(const y of [.083,.127]){const t=put(new THREE.TorusGeometry(.149,.007,5,32),G,V(0,y,-.01),H);t.rotation.x=PI/2;t.scale.set(1,1.08,1);}
+    for(let k=0;k<9;k++){const a=(k-4)*.34,dx=Math.sin(a),dz=Math.cos(a)*1.08;
+      const sp=put(new THREE.ConeGeometry(.017,.075,6),G,V(dx*.155,.163,-.01+dz*.155),H);sp.rotation.set(dz*.25,0,-dx*.25);
+      ball(V(dx*.164,.205,-.01+dz*.164),.01,1,1,1,G,H,8);}}
+  /* 팔: 어깨 덩이 + 위팔(알통) + 아래팔 */
+  const upper=[[0,.088],[.2,.094],[.45,.098],[.75,.08],[1,.068]],fore=[[0,.068],[.2,.074],[.4,.07],[.75,.052],[1,.044]];
+  const arm=(S,E,W,sd)=>{const dl=ball(S.clone().add(V(sd*.025,.015,0)),.11,1.05,.95,1.05,M);   /* 어깨 근육 */
+    limb(S,E,upper,M);belly(S,E,.5,.06,.3,V(0,0,.035),1,M);belly(S,E,.45,.055,.32,V(0,0,-.035),1,M);   /* 알통·팔 뒤 근육 */
+    ball(E,.066,1,1,1,M);limb(E,W,fore,M);belly(E,W,.25,.058,.25,V(sd*.015,0,.01),1,M);ball(W,.045,1.1,.8,1,M);};
+  /* 오른팔: 높이 들어 삼지창 자루를 쥔다 */
+  const RS=V(-.33,2.4,0),RE=V(-.58,2.56,-.02),RW=V(-.635,2.88,.06),TX=-.66,TZ=.1;
+  arm(RS,RE,RW,-1);
+  {const fist=ball(V(TX+.01,2.96,TZ-.005),.055,1,1.35,.95,M);
+    for(let k=0;k<4;k++){const r=put(new THREE.TorusGeometry(.04,.019,6,10,PI*1.15),M,V(TX,2.925+k*.03,TZ));r.rotation.set(PI/2,0,-.3);}   /* 자루를 감싼 손가락 */
+    bone(V(TX-.04,2.98,TZ+.01),V(TX-.03,3.04,TZ+.05),.02,.016,M);}   /* 엄지 */
+  /* 왼팔: 앞으로 뻗어 손바닥을 아래로 */
+  const LS=V(.33,2.4,0),LE=V(.53,2.2,.23),LW=V(.62,2.12,.5);
+  arm(LS,LE,LW,1);
+  {const hd=new THREE.Group();hd.position.copy(LW);const fw=LW.clone().sub(LE).normalize();hd.quaternion.setFromRotationMatrix(new THREE.Matrix4().lookAt(LW.clone().add(fw),LW,V(0,1,0)));hd.rotateZ(-.25);g.add(hd);
+    ball(V(0,0,.07),.075,.85,.32,1,M,hd);   /* 손바닥 */
+    for(let k=0;k<4;k++){const x=-.04+k*.027,sp=(k-1.5)*.1,len=[.07,.082,.078,.062][k];const a=V(x,.002,.13),b=a.clone().add(V(Math.sin(sp)*len,len*.25,Math.cos(sp)*len)),c2=b.clone().add(V(Math.sin(sp)*len*.7,len*.28,Math.cos(sp)*len*.7));
+      bone(a,b,.014,.012,M,hd,7);ball(b,.012,1,1,1,M,hd,7);bone(b,c2,.012,.009,M,hd,7);}
+    bone(V(-.05,-.005,.04),V(-.09,.0,.1),.017,.014,M,hd,7);bone(V(-.09,.0,.1),V(-.105,.012,.15),.014,.01,M,hd,7);}   /* 엄지 */
+  /* 금 삼지창: 바위에 세운 긴 자루, 감은 띠, 장식 목, 휜 양 날과 미늘 */
+  {const sh=bone(V(TX,.08,TZ),V(TX,3.62,TZ),.028,.026,G,g,10);
+    for(const y of [.4,1.2,2.2,2.7,3.25])put(new THREE.TorusGeometry(.034,.011,6,14),G,V(TX,y,TZ)).rotation.x=PI/2;
+    put(new THREE.LatheGeometry([[.025,0],[.05,.03],[.06,.08],[.045,.13],[.055,.17],[.03,.21]].map(p=>new THREE.Vector2(p[0],p[1])),12),G,V(TX,3.5,TZ));
+    ball(V(TX,3.72,TZ),.05,1.3,.7,1,G,g,10);
+    const cb=new THREE.QuadraticBezierCurve3(V(TX-.22,3.86,TZ),V(TX,3.66,TZ),V(TX+.22,3.86,TZ));put(new THREE.TubeGeometry(cb,16,.022,7,false),G,ZERO);   /* 휜 가로대 */
+    const prong=(c,tip,dir)=>{put(new THREE.TubeGeometry(c,14,.02,7,false),G,ZERO);const tp=put(new THREE.ConeGeometry(.04,.2,8),G,tip);tp.quaternion.setFromUnitVectors(V(0,1,0),dir);tp.position.addScaledVector(dir,.08);
+      const bb=put(new THREE.ConeGeometry(.022,.1,6),G,tip.clone().addScaledVector(dir,-.01));bb.quaternion.setFromUnitVectors(V(0,1,0),dir.clone().multiplyScalar(-1).add(V(dir.x>0?.9:dir.x<0?-.9:.9,0,0)).normalize());};   /* 날 끝과 거꾸로 난 미늘 */
+    prong(new THREE.LineCurve3(V(TX,3.7,TZ),V(TX,4.25,TZ)),V(TX,4.25,TZ),V(0,1,0));
+    for(const sd of [-1,1]){const c=new THREE.QuadraticBezierCurve3(V(TX+sd*.22,3.86,TZ),V(TX+sd*.25,4.0,TZ),V(TX+sd*.2,4.13,TZ));prong(c,V(TX+sd*.2,4.13,TZ),V(-sd*.25,1,0).normalize());}}
+  /* 허리에 두른 주름 옷: 오른다리 앞은 높이 걷혀 넓적다리가 드러나고, 왼쪽은 무릎 위까지 깊은 주름으로 흘러내린다.
+     매듭 끝자락은 왼다리 옆으로 늘어진다 */
+  const cloth=e=>{e.material=e.material.clone();e.material.side=THREE.DoubleSide;e.receiveShadow=false;return e;};
+  {const geo=new THREE.CylinderGeometry(.23,.3,1,48,12,true),P=geo.attributes.position;
+    for(let i=0;i<P.count;i++){const x=P.getX(i),y=P.getY(i)+.5,z=P.getZ(i),a=Math.atan2(z,x),r=Math.hypot(x,z);   /* y: 0(아래)~1(위) */
+      const lift=.5+.5*Math.cos(a-PI*.72),fold=1+(.1*Math.sin(a*11+y*1.5)+.05*Math.sin(a*5-1))*(1-y)*(1-y*.5),top=1.83+.05*Math.cos(a-.6),bot=1.12+.36*lift*lift+.04*Math.sin(a*11);
+      const rr=r*fold*(1+(1-y)*.12*(1-lift));P.setXYZ(i,Math.cos(a)*rr,bot+(top-bot)*y,Math.sin(a)*rr*.8);}
+    geo.computeVertexNormals();cloth(put(geo,D,ZERO));
+    const tw=put(new THREE.TorusGeometry(.212,.032,8,36),D,V(0,1.81,0));tw.rotation.x=PI/2+.06;tw.scale.y=.82;   /* 말아 올린 허리 단 */
+    ball(V(.19,1.76,.11),.05,1.2,1,.8,D);   /* 매듭 */
+    for(let k=0;k<3;k++){const c=new THREE.CatmullRomCurve3([V(.19+k*.02,1.74,.12-k*.03),V(.27+k*.02,1.45,.14-k*.03),V(.31+k*.03,1.15,.08-k*.03),V(.33+k*.02,.94,.04-k*.03)]);K.sweep(c,t=>.032-k*.006-t*.012,D,g,16,8).scale.z=.85;}}
+  /* 망토: 왼어깨 금 걸쇠에서 등을 감싸며 넘어가, 바람에 부풀어 깊은 주름으로 오른쪽 아래로 흘러내린다 */
+  {const geo=new THREE.PlaneGeometry(1,1,18,26),P=geo.attributes.position;
+    for(let i=0;i<P.count;i++){const u=P.getX(i)+.5,t=.5-P.getY(i),h=u-.5;   /* u: 0(오른쪽)~1(왼쪽), t: 0(어깨)~1(끝) */
+      const W=.66+t*.95,X=h*W-t*t*.3+Math.sin(t*3)*.04;
+      const Z=-.19-t*.14-t*t*.28+h*h*4*.2*(1-t)*(1-t)-(.5+.5*Math.sin(u*PI*5.5+t*2.5))*.16*Math.min(1,t*1.4)-Math.sin(u*PI)*.06*t;
+      P.setXYZ(i,X,2.45-t*2.2+Math.sin(u*PI*3+t*2)*.03*t+(u<.15?t*.05:0),Z);}
+    geo.computeVertexNormals();cloth(put(geo,D,ZERO));
+    const sc=new THREE.CatmullRomCurve3([V(.27,2.3,.14),V(.29,2.45,.05),V(.2,2.5,-.09),V(.04,2.46,-.17)]);K.sweep(sc,t=>.04-t*.01,D,g,12,8);   /* 어깨에 걸친 자락 */
+    ball(V(.25,2.31,.15),.042,1,1,.5,G,g,12);put(new THREE.TorusGeometry(.042,.01,6,14),G,V(.25,2.31,.168));}
+  /* 받침 기둥 노릇을 하는 돌고래: 오른다리 뒤에서 몸을 감고 머리를 바위로 처박는다 */
+  K.dolphin(new THREE.CatmullRomCurve3([V(-.14,.2,-.36),V(-.42,.5,-.32),V(-.34,.85,-.14),V(-.2,1.12,-.12)]),.13,M,V(-.7,.2,-.7).normalize());
+  return g;
+}
+
 /* ---------- 엑시즈 중앙 광장 큰 분수: 두 단 팔각 계단 위 넓은 팔각 못, 모서리 기둥(돌 공·청동 등), 못 안 청동 돌고래 넷,
    사자 머리 넷이 물을 뿜는 받침, 가리비 테두리의 큰 잔과 작은 잔(물이 장막처럼 넘쳐 흐른다), 맨 위에 삼지창을 든 흰 대리석 바다의 신 ---------- */
 function buildPlazaFountain(cx,y0,cz){
@@ -3475,22 +3626,16 @@ function buildPlazaFountain(cx,y0,cz){
   const fm1=flowMat(8,.5),fm2=flowMat(5,.55);
   add(new THREE.Mesh(new THREE.CylinderGeometry(3.47,3.78,2.04,48,1,true),fm1),0,1.98,0).castShadow=false;
   add(new THREE.Mesh(new THREE.CylinderGeometry(1.86,2.12,1.98,32,1,true),fm2),0,3.99,0).castShadow=false;
-  /* 맨 위: 받침 위에 선 바다의 신 (흰 대리석, 금 왕관과 금 삼지창) */
-  add(lathe([[.5,4.95],[.5,5.2],[.38,5.3],[.32,5.8],[.46,5.9],[.46,6],[0,6]],8,sA));
-  const N=new THREE.Group();N.position.set(0,6,0);N.rotation.y=PI*.15;g.add(N);
-  add(lathe([[.44,0],[.4,.35],[.31,.85],[.33,1.25],[.2,1.32],[0,1.32]],14,marble),0,0,0,N);   /* 허리 아래 옷자락 */
-  const tor=add(new THREE.Mesh(new THREE.SphereGeometry(1,14,10),marble),0,1.62,0,N);tor.scale.set(.36,.46,.24);
-  for(const sd of [-1,1])add(new THREE.Mesh(new THREE.SphereGeometry(.15,10,8),marble),sd*.34,1.92,0,N);
-  add(new THREE.Mesh(new THREE.CylinderGeometry(.08,.1,.16,8),marble),0,2.1,0,N);
-  add(new THREE.Mesh(new THREE.SphereGeometry(.19,12,10),marble),0,2.32,0,N);
-  const bd=add(new THREE.Mesh(new THREE.ConeGeometry(.15,.32,8),marble),0,2.14,.09,N);bd.rotation.x=PI;   /* 수염 */
-  add(new THREE.Mesh(new THREE.CylinderGeometry(.18,.2,.1,10),gold),0,2.5,0,N);for(let q=0;q<5;q++){const a=q/5*PI*2;add(new THREE.Mesh(new THREE.ConeGeometry(.04,.16,4),gold),Math.cos(a)*.17,2.62,Math.sin(a)*.17,N);}
-  const ua=add(new THREE.Mesh(new THREE.CylinderGeometry(.07,.08,.62,8),marble),.48,2.2,0,N);ua.rotation.z=-.35;   /* 들어 올린 오른팔 */
-  const la=add(new THREE.Mesh(new THREE.CylinderGeometry(.07,.08,.6,8),marble),-.42,1.7,.18,N);la.rotation.set(-.7,0,.35);   /* 앞으로 내민 왼팔 */
-  add(new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,3.2,8),gold),.6,1.9,0,N);
-  add(new THREE.Mesh(new THREE.BoxGeometry(.42,.05,.05),gold),.6,3.45,0,N);for(const o of [-.19,0,.19])add(new THREE.Mesh(new THREE.ConeGeometry(.035,.3,6),gold),.6+o,3.62,0,N);
-  const cape=add(new THREE.Mesh(new THREE.CylinderGeometry(.3,.5,1.3,10,1,true,PI*.6,PI*.8),marble),0,1.35,-.04,N);cape.material=cape.material.clone();cape.material.side=THREE.DoubleSide;   /* 등 뒤 망토 */
-  const rip=rippleSet(g,hits,.96,.9).concat(rippleSet(g,[[2.6,0],[-2.6,0],[0,2.6],[0,-2.6]],2.98,.5));
+  /* 맨 위: 꽃 모양 머리를 얹은 받침, 받침을 감고 작은 잔으로 물을 뿜는 대리석 돌고래 셋, 그 위에 선 넵투누스 석상 (buildSeaGod) */
+  add(lathe([[.66,4.95],[.66,5.08],[.54,5.16],[.42,5.26],[.36,5.5],[.4,5.6],[.36,5.66],[.5,5.74],[.8,5.8],[1.0,5.88],[1.0,5.97],[.94,6.02],[0,6.02]],24,sAs));
+  for(let k=0;k<12;k++){const a=k/12*PI*2;const lf=add(new THREE.Mesh(new THREE.SphereGeometry(.14,8,6),sAs),Math.cos(a)*.7,5.79,Math.sin(a)*.7);lf.scale.set(1,.45,1);}   /* 받침 머리의 잎 장식 */
+  add(new THREE.Mesh(new THREE.TorusGeometry(.37,.035,6,24),gold),0,5.6,0).rotation.x=PI/2;
+  const marbleW=mat(0xece4d4,{roughness:.55,flatShading:false}),SK=sculptKit(g),hitsTop=[];
+  for(let k=0;k<3;k++){const a=k/3*PI*2+PI/6,ux=Math.cos(a),uz=Math.sin(a),at=(r,y)=>new THREE.Vector3(ux*r,y,uz*r);
+    const nose=SK.dolphin(new THREE.CatmullRomCurve3([at(.82,5.14),at(1.12,5.36),at(1.0,5.62),at(.62,5.6)]),.11,marble,at(1,0).add(new THREE.Vector3(0,.4,0)).normalize());
+    const b0=at(1.55,4.95);const st=arcStream(nose,b0,.12,.03,fm);g.add(st);streams.push(st);hitsTop.push([b0.x,b0.z]);}
+  const N=buildSeaGod({marble,drape:marbleW,gold,rock:mat(0xd8d0c0,{roughness:.8})});N.position.set(0,6.02,0);N.rotation.y=Math.atan2(11,6);N.scale.setScalar(1.3);g.add(N);   /* 광장 가운데(분수에서 동남쪽)를 바라본다 */
+  const rip=rippleSet(g,hits,.96,.9).concat(rippleSet(g,[[2.6,0],[-2.6,0],[0,2.6],[0,-2.6]],2.98,.5),rippleSet(g,hitsTop,4.95,.35));
   scene.add(g);packAnim(g,lanterns);
   /* 움직임: 물줄기·물 장막 흐름, 물결, 물보라, 등불 깜빡임 */
   const tx=[fm.map,fm1.map,fm2.map];let t=0,spT=0;
@@ -9943,11 +10088,6 @@ function buildMarcus(H){
   const weaponRack=(F,lx,lz,ry)=>{const ca=Math.cos(ry),sa=Math.sin(ry),P=(px,py,pz,sx,sy,sz,c)=>F.P(BOX,lx+px*ca+pz*sa,py,lz-px*sa+pz*ca,sx,sy,sz,c,{b:'ip',ry});
     P(0,1,0,2.4,2,.3,WOOD);for(let k=0;k<5;k++){P(-1+k*.5,1.1,.2,.06,1.6,.06,0xc8ccd4);P(-1+k*.5,1.6,.2,.3,.06,.08,0xb08a3a);}for(let k=0;k<3;k++)P(-.8+k*.8,.35,.25,.5,.7,.1,[0x8a2a2a,0x2a4a8a,0x8a2a2a][k]);
     const p=F.W(lx,lz);colliders.push({x:p.x,z:p.z,box:1,hw:1.2,hd:.3,cs:Math.cos(F.ry+ry),sn:Math.sin(F.ry+ry),r:1.3,h:2});};
-  const statue=(x,z,ry,big=1)=>{const F=frame(x,z,ry);const st=0xe8e2d4;
-    F.P(BOX,0,.6*big,0,1.6*big,1.2*big,1.6*big,MAR2);F.P(BOX,0,1.25*big,0,1.8*big,.12,1.8*big,MAR);
-    F.P(CYL(.17,.2,8),-.15*big,1.75*big,0,big,1.1*big,big,st);F.P(CYL(.17,.2,8),.15*big,1.75*big,0,big,1.1*big,big,st);
-    F.P(CYL(.32,.26,10),0,2.75*big,0,big,1.1*big,big,st);F.P(BOX,0,3.3*big,0,.95*big,.22*big,.38*big,st);F.P(SPH,0,3.62*big,0,.2*big,.24*big,.2*big,st);
-    F.P(BOX,.42*big,2.9*big,.1,.1*big,.9*big,.12*big,st,{rz:.5});F.P(BOX,-.42*big,2.9*big,0,.1*big,.9*big,.12*big,st,{rz:-.2});colliders.push({x,z,r:1*big});};
   /* 관청(팔라초): 2층 돌집, 아치창, 안에 살림 (kind: 'archive'|'library'|'admin'|'chamber'|'treasury'|'clinic'|'trade') */
   const palazzo=(z,kind,ry=0)=>{const x=cx+z.x,zz=cz+z.y,w=z.w,d=z.h,HT=13,F=frame(x,zz,ry);const WC=kind==='trade'?0xe8d8b0:kind==='treasury'?PIETRA2:kind==='clinic'?0xf0e8d0:PIETRA;
     hall(F,w,d,HT,{wall:WC,floor:kind==='clinic'?0xc8bca4:0x8a6a4a,ceil:8.5,doors:[[0,0,3.2,4.6]],th:1,base:[3,PIETRA2]});
@@ -9967,7 +10107,7 @@ function buildMarcus(H){
     else{table(F,-w*.25,-d*.2,3,1.4);table(F,w*.25,-d*.2,3,1.4);table(F,0,d*.25,4,1.4);for(let k=0;k<Math.floor((w-4)/3.2);k++)shelf(F,-w/2+3+k*3.2,-d/2+1.4,0,2.8);}
     };
   /* ===== 중앙 광장: 피렌체 시뇨리아 광장을 본떠 — 북쪽에 성채 같은 시청(베키오 궁)과 높은 탑, 동쪽에 조각상을 세운 열린 회랑(란치 회랑),
-     한쪽으로 치우친 큰 분수(넵투누스), 궁 문 앞의 큰 입상. 시청 가운데는 큰 아치로 뚫려 왕궁 가는 길로 이어진다. 바닥은 네모난 돌판 ===== */
+     한쪽으로 치우친 큰 분수(넵투누스). 시청 가운데는 큰 아치로 뚫려 왕궁 가는 길로 이어진다. 바닥은 네모난 돌판 ===== */
   {const p=Z('plaza'),x=cx+p.x,z=cz+p.y,R=p.r,F=frame(x,z,0,0),ST=0xe8e2d4,PV=0xb8a888;
     F.P(CYL(1,1,64),0,.055,0,R,.05,R,PV);
     /* 돌판 줄눈: 가로·세로 */
@@ -9997,15 +10137,13 @@ function buildMarcus(H){
         G.P(BOX,tx,(T1+T2)/2+.5,tz,TW-2,T2-T1,TW-2,PIETRA2);for(const sd of [-1,1]){G.P(ARCH,tx,T2-3.6,tz+sd*(TW/2-1+.03),1.6,3,1,0x2a2420,{ry:sd>0?0:PI});G.P(ARCH,tx+sd*(TW/2-1+.03),T2-3.6,tz,1.6,3,1,0x2a2420,{ry:sd*PI/2});}
         G.P(BOX,tx,T2+.9,tz,TW,.6,TW,PIETRA2);G.P(CONE(4),tx,T2+2.6,tz,TW-1.2,3.2,TW-1.2,TERRA[2],{ry:PI/4});G.P(SPH,tx,T2+4.4,tz,.4,.4,.4,GOLD);
         for(const [ax,az] of [[-1,-1],[1,-1],[-1,1],[1,1]])G.P(CYL(.18,.18,6),tx+ax*(TW/2-.5),T1+1.2,tz+az*(TW/2-.5),1,2.4,1,IRON);}
-      /* 정문: 아치, 닫힌 문, 양옆 큰 입상 둘과 사자 */
+      /* 정문: 아치, 닫힌 문 (양옆 입상과 사자 석상은 지웠다) */
       G.P(BOX,0,15.2,PD/2+.3,2.6,2.8,.4,0x7a2a22);G.P(BOX,0,15.2,PD/2+.52,2.1,2.2,.1,0x9a3a2e);G.P(SPH,0,15.3,PD/2+.6,.5,.5,.14,GOLD);   /* 아치 위 문장 */
-      for(const sd of [-1,1]){const sx=x+sd*(AW/2+2.2),sz=z+pz+PD/2+2.4;statue(sx,sz,PI,1.5);}
-      for(const sd of [-1,1]){const L=frame(x+sd*9.6,z+pz+PD/2+1.6,0,0);L.P(BOX,0,.5,0,1.2,1,2.4,MAR2);L.P(SPH,0,1.55,0,.9,.9,1.9,MAR);L.P(SPH,0,2.2,.9,.6,.6,.6,MAR);L.P(BOX,0,1.2,1.1,.4,.5,.7,MAR);colliders.push({x:x+sd*9.6,z:z+pz+PD/2+1.6,r:1.1});}
       for(const sd of [-1,1])G.box(sd*BX,0,BW,PD,PH);
       /* 궁 앞 돋움 단과 계단 */
       G.P(BOX,0,.3,PD/2+2.2,PW*.6,.6,4.4,MAR2);G.P(BOX,0,.15,PD/2+4.9,PW*.6+.6,.3,1.2,MAR2);SURFACES.push({x0:x-PW*.3,x1:x+PW*.3,z0:z+pz+PD/2,z1:z+pz+PD/2+4.4,y:.6});
       for(const ox of [-12.15,-7.3,7.3,12.15]){const bx=x+ox;const bn=new THREE.Mesh(new THREE.PlaneGeometry(1.6,5),new THREE.MeshStandardMaterial({map:royalTex('banner'),roughness:.9,side:THREE.DoubleSide}));bn.position.set(bx,13,z+pz+PD/2+.3);bn.castShadow=true;cell(bx,z).g.add(bn);}}
-    /* --- 란치 회랑: 동쪽 가장자리, 큰 아치 셋이 광장을 향해 열려 있고 안에 조각상 --- */
+    /* --- 란치 회랑: 동쪽 가장자리, 큰 아치 셋이 광장을 향해 열려 있다 (안의 조각상과 계단 사자 석상은 지웠다) --- */
     {const LW=22,LD=9,LH=11,lx0=R-LD/2-1.5,G=frame(x+lx0,z,-PI/2,0);   /* 회랑의 +z(앞)가 광장 가운데(-x)를 본다 */
       G.P(BOX,0,.25,0,LW+2,.5,LD+2,MAR2);G.P(BOX,0,.5,.6,LW+1,.5,LD+.6,MAR2);SURFACES.push({x0:x+lx0-LD/2-1.3,x1:x+lx0+LD/2+1.3,z0:z-LW/2-1.3,z1:z+LW/2+1.3,y:.75});
       G.P(BOX,0,LH-.2,-LD/2+.3,LW,LH-.5,.6,PIETRA);   /* 뒷벽 */
@@ -10013,8 +10151,6 @@ function buildMarcus(H){
       for(const sd of [-1,1]){G.P(BOX,sd*(LW/2),LH/2+.5,0,1.4,LH-1,LD-1,PIETRA);}
       G.P(BOX,0,LH+.4,0,LW+1.6,.8,LD+1.6,PIETRA2);G.P(BOX,0,LH+1.3,0,LW+1.6,.3,LD+1.6,PIETRA);for(let q=0;q<Math.floor((LW+1)/.9);q++)G.P(BOX,-LW/2-.4+q*.9,LH+1.95,LD/2+.6,.1,1,.1,MAR2);G.P(BOX,0,LH+2.5,LD/2+.6,LW+1.6,.12,.16,MAR2);   /* 지붕 난간 */
       G.P(BOX,0,LH+.2,0,LW,.4,LD,0x7a6a52);
-      for(let q=0;q<3;q++){const px=-LW/2+LW/6+q*LW/3;const w=G.W(px,-LD/2+2.4);statue(w.x,w.z,-PI/2,1.3);}
-      for(const sd of [-1,1]){const w=G.W(sd*(LW/2-2),LD/2+1.6);const L=frame(w.x,w.z,-PI/2,0);L.P(BOX,0,.9,0,1.2,.6,2.2,MAR2);L.P(SPH,0,1.65,0,.9,.9,1.9,MAR);L.P(SPH,0,2.3,.9,.6,.6,.6,MAR);colliders.push({x:w.x,z:w.z,r:1.1});}   /* 계단 양옆 사자 */
       segBox(x+lx0-LD/2,z-LW/2,x+lx0-LD/2,z+LW/2,.8,0,{y0:-1,y1:LH,h:undefined});for(let q=0;q<4;q++){const w=G.W(-LW/2+q*LW/3,LD/2-.6);colliders.push({x:w.x,z:w.z,r:.9});}}
     /* --- 넵투누스 분수: 가운데에서 서북쪽으로 치우친 큰 팔각 못. 돌고래·사자 머리·두 단 잔·물 장막, 맨 위에 삼지창 든 바다의 신 (buildPlazaFountain) --- */
     {const fx=x-11,fz=z-6;buildPlazaFountain(fx,.06,fz);colliders.push({x:fx,z:fz,r:8.3});}
@@ -10134,7 +10270,7 @@ function buildMarcus(H){
       for(const sd of [-1,1]){F.P(ARCH,0,TH*.8,sd*(s/2+.06),1.4,3,1,0x2a2420,{ry:sd>0?0:PI});F.P(ARCH,sd*(s/2+.06),TH*.55,0,1.4,3,1,0x2a2420,{ry:sd*PI/2});}
       const cr=royalCrown(2.4,ROYAL.gold(),mat(0x2f4fa0,{metalness:.3,roughness:.3}));cr.position.set(x,y0+TH+14.5,z0+D*.2);cr.scale.setScalar(.8);cell(x,z).g.add(cr);F.box(0,0,s,s,TH);}
     {const qx=ix0+iw/2,qz=iz0+id/2;const fo=buildCityFountain(qx,y0,qz);own(fo,qx,qz);colliders.push({x:qx,z:qz,r:5.6});
-      const F=frame(qx,qz,0,y0);F.P(BOX,0,.04,0,iw,.06,id,PAVE);for(const sx of [-1,1]){const za=-(id-12)/2,zb=(id-12)/2;for(const [a2,b2] of [[za,-4],[4,zb]]){if(b2-a2<.5)continue;F.P(BOX,sx*(iw/2-6),.55,(a2+b2)/2,2,1.1,b2-a2,0x3f7a38);F.box(sx*(iw/2-6),(a2+b2)/2,2,b2-a2,1.1);}statue(qx+sx*12,qz,sx>0?-PI/2:PI/2);}}
+      const F=frame(qx,qz,0,y0);F.P(BOX,0,.04,0,iw,.06,id,PAVE);for(const sx of [-1,1]){const za=-(id-12)/2,zb=(id-12)/2;for(const [a2,b2] of [[za,-4],[4,zb]]){if(b2-a2<.5)continue;F.P(BOX,sx*(iw/2-6),.55,(a2+b2)/2,2,1.1,b2-a2,0x3f7a38);F.box(sx*(iw/2-6),(a2+b2)/2,2,b2-a2,1.1);}}}
     const Lc=(ax,az,bx,bz)=>segBox(ax,az,bx,bz,1.2,HT);
     Lc(x0,z0,x0+W,z0);Lc(x0+W,z0,x0+W,z0+D);Lc(x0+W,z0+D,nx+PW,z0+D);Lc(nx-PW,z0+D,x0,z0+D);Lc(x0,z0+D,x0,z0);
     Lc(ix0,iz0,ix0+iw,iz0);Lc(ix0,iz0+id,nx-PW,iz0+id);Lc(nx+PW,iz0+id,ix0+iw,iz0+id);Lc(ix0,iz0,ix0,iz0+id);Lc(nx-PW,iz0+id,nx-PW,z0+D);Lc(nx+PW,iz0+id,nx+PW,z0+D);
@@ -10147,8 +10283,7 @@ function buildMarcus(H){
       F.box(px,pz-hd,hw*2,.8,1.2);F.box(px,pz+hd,hw*2,.8,1.2);F.box(px-hw,pz,.8,hd*2,1.2);F.box(px+hw,pz,.8,hd*2,1.2);
       const fc=[0xd84a5a,0xf0d050,0xf0f0f0,0xd880c0][(i+j)%4];for(let q=0;q<5;q++)for(let r=0;r<3;r++)F.P(SPH,px-hw+2+q*(hw*2-4)/4,.35,pz-hd+1.5+r*(hd*2-3)/2,.4,.3,.4,(q+r)%2?fc:0x5a8a3a);}
     const fo=buildCityFountain(x,0,z);fo.scale.setScalar(1.2);own(fo,x,z);colliders.push({x,z,r:6.8});
-    for(const [px,pz] of [[-w/2+6,-d/2+6],[w/2-6,d/2-6]]){const G=frame(x+px,z+pz,0);for(let q=0;q<6;q++){const a=q/6*PI*2;G.P(CYL(.18,.2,8),Math.cos(a)*2.4,1.6,Math.sin(a)*2.4,1,3.2,1,WHITE);}G.P(CYL(1,1,12),0,3.4,0,3,.3,3,WHITE);G.P(CONE(12),0,4.4,0,3.1,1.8,3.1,0x5a8a5a);colliders.push({x:x+px,z:z+pz,r:2.6,h:3.4});}
-    for(let k=0;k<4;k++)statue(x-w/2+8+k*(w-16)/3,z+d/2-2.5,PI,.9);}
+    for(const [px,pz] of [[-w/2+6,-d/2+6],[w/2-6,d/2-6]]){const G=frame(x+px,z+pz,0);for(let q=0;q<6;q++){const a=q/6*PI*2;G.P(CYL(.18,.2,8),Math.cos(a)*2.4,1.6,Math.sin(a)*2.4,1,3.2,1,WHITE);}G.P(CYL(1,1,12),0,3.4,0,3,.3,3,WHITE);G.P(CONE(12),0,4.4,0,3.1,1.8,3.1,0x5a8a5a);colliders.push({x:x+px,z:z+pz,r:2.6,h:3.4});}}
   /* ===== 관청들 ===== */
   /* 무역 공회는 항구 물 위에 서 있다: 돌로 쌓은 부두 단을 밑에 깔아 뭍(동쪽)과 잇는다 */
   {const t=Z('trade'),x0=cx+t.x-t.w/2-3,x1=cx+t.x+t.w/2+12,z0=cz+t.y-t.h/2-3,z1=cz+t.y+t.h/2+3,F=frame((x0+x1)/2,(z0+z1)/2,0,0),W=x1-x0,D=z1-z0;
@@ -10328,7 +10463,7 @@ function buildMarcus(H){
     if(PL.waterDepth(mx,my)>0||inFarm(mx,my,2))continue;const x=cx+mx,z=cz+my;
     for(let k=0;k<3;k++){const t={x:x+(GFX.hs(i,k+3)-.5)*9,z:z+(GFX.hs(i,k+6)-.5)*9,s:.9+GFX.hs(i,k+9)*.5};((GFX.hs(i,k+12)<.55)?pines:cypress).push(t);if(d<Rb)colliders.push({x:t.x,z:t.z,r:.5,h:8});}}
   GFX.farHills(I,{color:0x8a9a72,n:64,h:.55});
-  if(typeof buildRealm==='function')buildRealm({H,frame,cell,marketSquare,marketGate,loggia,BOX,QUAD,CYL,CONE,SPH,SPH2,PRISM,ARCH,ARCHRING,RING,HIP,PIETRA,PIETRA2,SERENA,STONE,STONE2,STONE3,WOOD,DARKW,IRON,GOLD,TERRA,STUCCO,PAVE,PAVE2,MAR,MAR2,WHITE,LAMP,hall,table,bed,shelf,crates,fireplace,weaponRack,candle,chandelier,carpet,sqTower,roundTower,lamp,bench,stall,statue,buildHouse,segBox,own,faceTo,cypress,pines,olives,gardenTrees,wheat,mcx:cx,mcz:cz});
+  if(typeof buildRealm==='function')buildRealm({H,frame,cell,marketSquare,marketGate,loggia,BOX,QUAD,CYL,CONE,SPH,SPH2,PRISM,ARCH,ARCHRING,RING,HIP,PIETRA,PIETRA2,SERENA,STONE,STONE2,STONE3,WOOD,DARKW,IRON,GOLD,TERRA,STUCCO,PAVE,PAVE2,MAR,MAR2,WHITE,LAMP,hall,table,bed,shelf,crates,fireplace,weaponRack,candle,chandelier,carpet,sqTower,roundTower,lamp,bench,stall,buildHouse,segBox,own,faceTo,cypress,pines,olives,gardenTrees,wheat,mcx:cx,mcz:cz});
   const addInst=(geo,mtl,list,fn,colorFn)=>{const m=H.inst(geo,mtl,list,fn,colorFn);if(m){m.frustumCulled=false;MARCUS.inst.push(m);}return m;};
   const tk=(t,e,sv,v)=>{e.set(0,(t.x*7.3+t.z*3.1)%6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)-.1,t.z);};
   addInst(new THREE.CylinderGeometry(.13,.2,1.2,5).translate(0,.6,0),mat(0x4a3a2a),cypress,tk);
@@ -11050,7 +11185,7 @@ function realmTerrain(I,mx,my){
   if(I.id==='fort'){const ax=Math.abs(mx),ridge=smooth(64,125,ax)*24+Math.max(0,ax-80)*.08;return ridge+Math.sin(mx*.09)*Math.cos(my*.08)*.25*(1+ridge*.25)+Math.abs(Math.sin(mx*.21)*Math.cos(my*.17))*1.6*smooth(70,100,ax);}
   return 0;}
 function buildRealm(K){
-  const {H,frame,cell,BOX,QUAD,CYL,CONE,SPH,SPH2,PRISM,ARCH,ARCHRING,RING,HIP,PIETRA,PIETRA2,SERENA,STONE,STONE2,STONE3,WOOD,DARKW,IRON,GOLD,TERRA,STUCCO,PAVE,PAVE2,MAR,MAR2,WHITE,LAMP,hall,table,bed,shelf,crates,fireplace,weaponRack,candle,chandelier,carpet,sqTower,roundTower,lamp,bench,stall,statue,buildHouse,segBox,own,faceTo,cypress,pines,olives,gardenTrees,wheat,mcx,mcz}=K;
+  const {H,frame,cell,BOX,QUAD,CYL,CONE,SPH,SPH2,PRISM,ARCH,ARCHRING,RING,HIP,PIETRA,PIETRA2,SERENA,STONE,STONE2,STONE3,WOOD,DARKW,IRON,GOLD,TERRA,STUCCO,PAVE,PAVE2,MAR,MAR2,WHITE,LAMP,hall,table,bed,shelf,crates,fireplace,weaponRack,candle,chandelier,carpet,sqTower,roundTower,lamp,bench,stall,buildHouse,segBox,own,faceTo,cypress,pines,olives,gardenTrees,wheat,mcx,mcz}=K;
   const PI=Math.PI;let _s=9191;const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647,rr=(a,b)=>a+rnd()*(b-a),pick=a=>a[Math.floor(rnd()*a.length)];
   const hAt=(x,z)=>heightAt(x,z);
   const fence=(x0,z0,x1,z1,gap)=>{const L=Math.hypot(x1-x0,z1-z0);if(L<1)return;const ux=(x1-x0)/L,uz=(z1-z0)/L,n=Math.max(1,Math.round(L/3));
@@ -11361,7 +11496,7 @@ function castleTerrain(I,mx,my){
   return h+hill*smooth(0,16,pd);
 }
 function buildCastle(K){
-  const {H,frame,cell,BOX,QUAD,CYL,CONE,SPH,PRISM,ARCH,ARCHRING,HIP,PIETRA,PIETRA2,SERENA,STONE,STONE2,STONE3,WOOD,DARKW,IRON,GOLD,TERRA,PAVE,PAVE2,MAR,MAR2,LAMP,hall,bed,table,crates,fireplace,weaponRack,candle,chandelier,carpet,sqTower,roundTower,lamp,bench,statue,segBox,own,faceTo,cypress,pines,olives,gardenTrees,road,Hd,well,fence,haystack}=K;
+  const {H,frame,cell,BOX,QUAD,CYL,CONE,SPH,PRISM,ARCH,ARCHRING,HIP,PIETRA,PIETRA2,SERENA,STONE,STONE2,STONE3,WOOD,DARKW,IRON,GOLD,TERRA,PAVE,PAVE2,MAR,MAR2,LAMP,hall,bed,table,crates,fireplace,weaponRack,candle,chandelier,carpet,sqTower,roundTower,lamp,bench,segBox,own,faceTo,cypress,pines,olives,gardenTrees,road,Hd,well,fence,haystack}=K;
   const I=OR.ISLES.castle,cx=I.x,cz=I.z,PI=Math.PI,R=Hd('castle',I),PL=R.plan;
   let _s=4242;const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647,rr=(a,b)=>a+rnd()*(b-a);
   const W=(lx,ly)=>[cx+lx,cz+ly];
@@ -11474,12 +11609,11 @@ function buildCastle(K){
     const cr=royalCrown(2.4,ROYAL.gold(),mat(0x2f4fa0,{metalness:.3,roughness:.3}));cr.position.set(cx,y0+TH+17.5,cz+KP.y0+9);cr.scale.setScalar(.8);cell(cx,cz+KP.y0+9).g.add(cr);}
   PL.zones.push({id:'keep',name:'본성',kind:'palace',shape:'rect',x:0,y:ky,w:HW+WW*2,h:KD});
 
-  /* ===== 안뜰: 분수, 화단과 사이프러스, 조각상, 등불, 벤치 ===== */
+  /* ===== 안뜰: 분수, 화단과 사이프러스, 등불, 벤치 ===== */
   {const qy=6;const fo=buildCityFountain(cx,0,cz+qy);own(fo,cx,cz+qy);colliders.push({x:cx,z:cz+qy,r:5.6});
     const F=F0(0,qy,0);
     for(const sx of [-1,1])for(const sy of [-1,1]){const bx=sx*22,by=sy*9;F.P(BOX,bx,.4,by,18,.8,8,0x3f7a38);F.P(BOX,bx,.82,by,17,.06,7,0x5a8a3e);F.box(bx,by,18,8,.8);
       for(let k=0;k<3;k++)gardenTrees.push({x:cx+bx-6+k*6,z:cz+qy+by,s:rr(.7,.9)});}
-    for(const sx of [-1,1])statue(cx+sx*36,cz+qy,sx>0?-PI/2:PI/2);
     for(const sx of [-1,1])for(let yy=IW.y0+8;yy<=IW.y1-6;yy+=12){if(yy>KP.y0-4&&yy<KP.y1+6)continue;const x=cx+sx*(IW.x-7),z=cz+yy;cypress.push({x,z,s:rr(.95,1.1)});colliders.push({x,z,r:.5,h:7});}
     for(const sx of [-1,1])for(const yy of [-12,0,14,24]){lamp(cx+sx*6,cz+yy,sx>0?-PI/2:PI/2);}
     for(const sx of [-1,1])for(const yy of [-4,18])bench(cx+sx*12,cz+yy,sx>0?-PI/2:PI/2);
