@@ -15415,6 +15415,13 @@ function wmvClamp(W,H){const mx=W/2*Math.max(0,WMV.zoom-1),my=H/2*Math.max(0,WMV
 (()=>{const cv=$('#wmapC');if(!cv)return;const toPx=e=>{const b=cv.getBoundingClientRect();return [(e.clientX-b.left)*cv.width/b.width,(e.clientY-b.top)*cv.height/b.height];};
   cv.addEventListener('wheel',e=>{e.preventDefault();const [mx,my]=toPx(e),W=cv.width,H=cv.height,z0=WMV.zoom,zin=e.deltaY<0;
     if(wmvKingdomOK()){   /* 단계 바꾸기 */
+      /* 지도가 처음 크기일 때 휠을 더 내리면 바로 넘어가지 않고, 세 칸쯤 더 내려야 다음 단계로 (그동안 지도 아래에 안내) */
+      if(WMV.level==='local'&&!zin&&z0<=1.001){const now=performance.now();if(now-(WMV.outT||0)>2500)WMV.outA=0;WMV.outT=now;WMV.outA=(WMV.outA||0)+Math.min(120,Math.abs(e.deltaY));
+        if(WMV.outA<300){drawWorldMap();clearTimeout(WMV.hintT);WMV.hintT=setTimeout(()=>{if(wmapOpen)drawWorldMap();},2600);return;}
+        WMV.outA=0;}else WMV.outA=0;
+      if(WMV.level==='local'&&zin&&z0>=1.72&&WMV.focus==='marcus'&&wmvSubPlace()){const M=OR.ISLES.marcus,s2=Math.min(W,H)/2/(M.R+16),wx=M.x+(mx-W/2-WMV.px)/z0/s2,wz=M.z+(my-H/2-WMV.py)/z0/s2,e=wmvEntrance()||player.position;
+        if(Math.hypot(wx-e.x,wz-e.z)<45){WMV.focus=null;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}}   /* 엑시즈 지도에서 내가 있는 곳 쪽으로 크게 확대하면 다시 그곳 지도로 */
+      if(WMV.level==='local'&&!zin&&z0<=1.001&&!WMV.focus&&wmvSubPlace()){WMV.focus='marcus';WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}   /* 길드홀·시장·광장 → 엑시즈 전체 → 왕국 */
       if(WMV.level==='local'&&!zin&&z0<=1.001){WMV.level='kingdom';WMV.fromK=false;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}
       if(WMV.level==='kingdom'&&zin&&z0>=1.72){const hit=wmvHit(mx,my,W,H);if(hit){wmvEnter(hit);return;}}}
     const z1=Math.max(1,Math.min(6,z0*(zin?1.2:1/1.2)));if(z1===z0)return;   /* 어느 지도든 처음 크기보다 작게 줄이지 않는다 (빈 곳이 보이지 않게) */
@@ -15429,22 +15436,32 @@ function wmvClamp(W,H){const mx=W/2*Math.max(0,WMV.zoom-1),my=H/2*Math.max(0,WMV
     if(WMV.level==='local'&&WMV.fromK&&wmvKingdomOK()){WMV.level='kingdom';WMV.focus=null;WMV.fromK=false;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}
     if(WMV.level==='kingdom'&&wmvKingdomOK()){const h=wmvHit(mx,my,W,H);if(h){wmvEnter(h);WMV.fromK=true;drawWorldMap();return;}}
     const z1=Math.min(6,z0*2);if(z1===z0)return;const wx=(mx-W/2-WMV.px)/z0,wy=(my-H/2-WMV.py)/z0;WMV.zoom=z1;WMV.px=-wx*z1;WMV.py=-wy*z1;wmvClamp(W,H);drawWorldMap();});})();
+/* 엑시즈 시내 안의 따로 된 곳(길드홀·중앙 시장·엑시즈 성)이나 중앙 광장에 있으면, 지도를 줄일 때 먼저 엑시즈 전체를 보여 준다 */
+function wmvSubPlace(){if(!player)return false;const id=OR.isleAt(player.position.x,player.position.z).id;return ['guildhall','exmarket','castle'].includes(id)||(id==='marcus'&&!!(curPlace&&curPlace.map));}
+function wmvEntrance(){if(!player)return null;const I=OR.isleAt(player.position.x,player.position.z),M=OR.ISLES.marcus;if(!I||I===M)return null;
+  for(const p of PORTALS){if(!p.to||Math.hypot(p.x-M.x,p.z-M.z)>M.R)continue;if(Math.abs(p.to.x-I.x)<I.R&&Math.abs(p.to.z-I.z)<I.R)return p;}return null;}
 function wmvHit(mx,my,W,H){const z0=WMV.zoom,Lo=movLayout(W,H,false),lx=(mx-W/2-WMV.px)/z0+W/2,ly=(my-H/2-WMV.py)/z0+H/2;let hit=null,bd=1e9;
   for(const id in Lo.zones){const Z=Lo.zones[id],d=Math.hypot(lx-Z.x,ly-Z.y);if(d<Z.r*1.5&&d<bd){bd=d;hit=id;}}
   if(!hit&&Math.hypot(lx-Lo.cx,ly-Lo.cy)<Lo.rc*1.3)hit='marcus';return hit;}
-function wmvEnter(hit){const pid=OR.isleAt(player.position.x,player.position.z).id;WMV.level='local';WMV.focus=hit===pid||(hit==='marcus'&&MARCUS_PLACES.has(pid))?null:hit;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();}
+function wmvEnter(hit){const pid=OR.isleAt(player.position.x,player.position.z).id;WMV.level='local';WMV.focus=hit===pid||(hit==='marcus'&&MARCUS_PLACES.has(pid)&&!wmvSubPlace())?null:hit;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();}
 function toggleWorldMap(v){wmapOpen=v??!wmapOpen;$('#wmap').hidden=!wmapOpen;if(wmapOpen){wantLock=false;unlockPointer();wmvReset();drawWorldMap();}else relock();}   /* 지도를 여는 동안은 마우스를 풀어 끌어 옮기고 누를 수 있게 */
-function drawWorldMap(){
+function drawWorldMap(){drawWorldMap0();
+  /* 휠을 더 내리는 중이면 지도 아래에 다음 단계 안내와 얼마나 남았는지 */
+  if(WMV.level==='local'&&WMV.outA>0&&performance.now()-(WMV.outT||0)<2500&&wmvKingdomOK()){const cv=$('#wmapC'),c=cv.getContext('2d'),W=cv.width,H=cv.height;c.setTransform(1,0,0,1,0,0);const k=Math.max(1,H/520),t=!WMV.focus&&wmvSubPlace()?'휠을 더 내리면 엑시즈 전체 지도':'휠을 더 내리면 마르쿠스 왕국 지도';
+    c.font=`700 ${Math.round(14*k)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.textAlign='center';c.textBaseline='middle';const tw=c.measureText(t).width+24*k,y=H-24*k;c.fillStyle='rgba(20,16,12,.8)';c.fillRect(W/2-tw/2,y-14*k,tw,28*k);
+    c.fillStyle='#d8a030';c.fillRect(W/2-tw/2,y+12*k,tw*Math.min(1,WMV.outA/300),2*k);c.fillStyle='#f0e2c0';c.fillText(t,W/2,y);}}
+function drawWorldMap0(){
   const cv=$('#wmapC'),box=cv.getBoundingClientRect();if(!box.width)return;
   const dpr=Math.min(2,devicePixelRatio||1),W=Math.round(box.width*dpr),H=Math.round(box.height*dpr);if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}
   const c=cv.getContext('2d');c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,W,H);
   if(WMV.zoom!==1||WMV.px||WMV.py){c.translate(W/2+WMV.px,H/2+WMV.py);c.scale(WMV.zoom,WMV.zoom);c.translate(-W/2,-H/2);}   /* 확대·이동 */
   if(WMV.level==null)wmvReset();
   if(WMV.level==='kingdom'&&wmvKingdomOK()){drawMarcusOverview(c,W,H);return;}   /* 마르쿠스 왕국 전체 지도 */
-  if(player&&player.position.x>=800){const FI=WMV.focus&&OR.ISLES[WMV.focus],I=FI||OR.isleAt(player.position.x,player.position.z),PM=!FI&&curPlace&&curPlace.map?curPlace.map():null,C=PM||I,s2=Math.min(W,H)/2/(C.R+16),X=v=>W/2+(v-C.x)*s2,Z=v=>H/2+(v-C.z)*s2,f2=Math.min(2.4,Math.max(1,s2*.13));
-    drawIslePlan(c,X,Z,s2,I,PM?curPlace.name:null);c.textAlign='center';c.textBaseline='middle';c.font=`bold ${Math.round(16*f2)}px "KMUSunggokSerif","Gowun Batang",serif`;c.lineWidth=4*f2;c.strokeStyle='rgba(20,16,12,.9)';c.fillStyle='#f0e2c0';
-    const ty=PM?18*f2+12:Z(I.z-I.R)-18*f2,L=OR.ZONE_LEVELS[I.id],lvT=PM?ZONES[I.id].name:L&&L[0]?`Lv ${L[0]}–${L[1]}`:'안전 지대',ttl=PM?curPlace.name:ZONES[I.id].name;c.strokeText(ttl,W/2,ty);c.fillText(ttl,W/2,ty);
+  if(player&&player.position.x>=800){const FI=WMV.focus&&OR.ISLES[WMV.focus],I=FI||OR.isleAt(player.position.x,player.position.z),PM=!FI&&curPlace&&curPlace.map?curPlace.map():null,GH=!FI&&I.id==='guildhall',C=PM||(GH?{x:I.x,z:I.z-11,R:15}:I),s2=Math.min(W,H)/2/(C.R+16),X=v=>W/2+(v-C.x)*s2,Z=v=>H/2+(v-C.z)*s2,f2=Math.min(2.4,Math.max(1,s2*.13));
+    drawIslePlan(c,X,Z,s2,I,null);   /* 중앙 광장 지도: 광장 이름은 광장 위에 (맨 위 제목은 엑시즈) */c.textAlign='center';c.textBaseline='middle';c.font=`bold ${Math.round(16*f2)}px "KMUSunggokSerif","Gowun Batang",serif`;c.lineWidth=4*f2;c.strokeStyle='rgba(20,16,12,.9)';c.fillStyle='#f0e2c0';
+    const ty=PM||GH?18*f2+12:Math.max(18*f2+12,Z(I.z-I.R)-18*f2),L=OR.ZONE_LEVELS[I.id],lvT=GH?`엑시즈 · ${ghFloor()}층`:L&&L[0]?`Lv ${L[0]}–${L[1]}`:'안전 지대',ttl=ZONES[I.id].name;c.strokeText(ttl,W/2,ty);c.fillText(ttl,W/2,ty);
     c.font=`${Math.round(10*f2)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.fillStyle='#d4ae63';c.strokeText(lvT,W/2,ty+17*f2);c.fillText(lvT,W/2,ty+17*f2);
+    {const ent=wmvEntrance();if(ent&&FI===OR.ISLES.marcus){c.save();c.translate(X(ent.x),Z(ent.z));c.scale(f2,f2);c.fillStyle='#fff';c.strokeStyle='#c4493b';c.lineWidth=2.5;c.beginPath();c.arc(0,0,8,0,7);c.stroke();c.beginPath();c.arc(0,0,3.5,0,7);c.fill();c.restore();}}   /* 길드홀·시장 안에서 엑시즈 지도를 보면: 들어간 문 자리에 표시 */
     if(!FI||OR.isleAt(player.position.x,player.position.z)===FI){c.save();c.translate(X(player.position.x),Z(player.position.z));c.rotate(-player.rotation.y);c.scale(f2*1.2,f2*1.2);c.fillStyle='#fff';c.strokeStyle='#c4493b';c.lineWidth=2;
     c.beginPath();c.moveTo(0,10);c.lineTo(-7,-7);c.lineTo(0,-3);c.lineTo(7,-7);c.closePath();c.stroke();c.fill();c.restore();}return;}
   if(player&&OR.inTHouse(player.position.x,player.position.z)){const T=OR.THOUSE,s2=Math.min(W,H)/2/(T.hw+3),X=v=>W/2+(v-T.x)*s2,Z=v=>H/2+(v-T.z)*s2,f2=Math.min(2.4,Math.max(1,s2*.13));
@@ -15579,12 +15596,13 @@ function drawIslePlan(c,X,Z,sc,I,skipName){const Zd=ZONES[I.id];
       c.fillStyle='#fff0c0';for(const car of CCAR.cars){if(car.x==null)continue;c.save();c.translate(X(car.x),Z(car.z));c.rotate(-car.ry);const w=Math.max(3,1.1*sc),h=Math.max(5,2.2*sc);c.fillRect(-w/2,-h/2,w,h);c.strokeRect(-w/2,-h/2,w,h);c.restore();}c.restore();}}
   else if(typeof REALM!=='undefined'&&REALM[I.id])drawRealmPlan(c,X,Z,sc,I);
   else if(I.id==='exmarket')drawMarketPlan(c,X,Z,sc,I);
+  else if(I.id==='guildhall')drawGuildPlan(c,X,Z,sc,I,ghFloor());
   else{c.strokeStyle=I.id==='kaolis'?'#2a6a8a':'#4a433b';c.lineWidth=Math.max(3,1.6*sc);c.beginPath();c.arc(X(I.x),Z(I.z),(I.R+1.5)*sc,0,7);c.stroke();}
   c.fillStyle='#8a6a4a';for(const h of MAP_HOUSES)if(Math.hypot(h.x-I.x,h.z-I.z)<I.R){c.fillRect(X(h.x)-h.r*sc,Z(h.z)-h.r*sc,h.r*2*sc,h.r*2*sc);}
   for(const p of PORTALS)if(Math.hypot(p.x-I.x,p.z-I.z)<I.R&&!p.door&&portalSeen(p))drawPortalIcon(c,X(p.x),Z(p.z),Math.max(5,1.4*sc));
   for(const m of monsters)if(m.dying===null&&Math.hypot(m.mesh.position.x-I.x,m.mesh.position.z-I.z)<I.R+5){const gap=m.lv-(P?P.lv:1);c.fillStyle=gap>=6?'#ff2a2a':gap>2?'#ff8a5a':'#e0533f';c.beginPath();c.arc(X(m.mesh.position.x),Z(m.mesh.position.z),Math.max(3.6,.9*sc),0,7);c.fill();}
-  c.fillStyle='#9fd3e6';for(const o of others.values())if(Math.hypot(o.mesh.position.x-I.x,o.mesh.position.z-I.z)<I.R+5){c.beginPath();c.arc(X(o.mesh.position.x),Z(o.mesh.position.z),5,0,7);c.fill();}
-  if(I.id==='marcus')drawMarcusLabels(c,X,Z,sc,I,skipName);else if(typeof REALM!=='undefined'&&REALM[I.id])drawRealmLabels(c,X,Z,sc,I);else if(I.id==='exmarket')drawMarketLabels(c,X,Z,sc,I);}
+  c.fillStyle='#9fd3e6';for(const o of others.values())if(I.id!=='guildhall'&&Math.hypot(o.mesh.position.x-I.x,o.mesh.position.z-I.z)<I.R+5){c.beginPath();c.arc(X(o.mesh.position.x),Z(o.mesh.position.z),5,0,7);c.fill();}
+  if(I.id==='marcus')drawMarcusLabels(c,X,Z,sc,I,skipName);else if(typeof REALM!=='undefined'&&REALM[I.id])drawRealmLabels(c,X,Z,sc,I);else if(I.id==='exmarket')drawMarketLabels(c,X,Z,sc,I);else if(I.id==='guildhall')drawGuildLabels(c,X,Z,sc,I,ghFloor(),c===mctx);}
 /* 중앙 시장 평면도: 광장·회랑·분수·좌판·문, 그리고 가게마다 이름표 */
 function drawMarketPlan(c,X,Z,sc,I){const PL=marcusPlan(),m=PL.zone('market'),W=m.w,D=m.h,cx=I.x,cz=I.z;
   c.fillStyle='#8a9a62';c.fillRect(X(cx-W/2-24),Z(cz-D/2-24),(W+48)*sc,(D+48)*sc);
@@ -15611,6 +15629,79 @@ function drawMarketLabels(c,X,Z,sc,I){c.save();c.textAlign='center';c.textBaseli
     c.save();c.translate(x,y);c.fillStyle='#2a2018';c.strokeStyle='#f3cf6a';c.lineWidth=1.1*k;c.beginPath();c.arc(0,0,R,0,7);c.fill();c.stroke();c.scale(R/10,R/10);drawShopIcon(c,n.id.slice(3));c.restore();}
   const PL=marcusPlan(),m=PL.zone('market');c.textAlign='center';c.font=`${fs}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*k;c.strokeStyle='rgba(20,16,12,.9)';c.fillStyle='#e8d8b0';
   c.strokeText('식료품·잡화 좌판',X(I.x),Z(I.z-m.h/2-7));c.fillText('식료품·잡화 좌판',X(I.x),Z(I.z-m.h/2-7));c.strokeText('시내로 나가는 문',X(I.x),Z(I.z+m.h/2+9));c.fillText('시내로 나가는 문',X(I.x),Z(I.z+m.h/2+9));c.restore();}
+/* 길드홀 평면도 (큰 지도·미니맵 공용): 지금 서 있는 층을 그린다. 1층 홀·접수대·게시판·술집·벽난로, 2층 회랑·서가·진열대, 3층 방들, 뒤뜰 훈련장 */
+function ghFloor(){if(!player)return 1;const I=OR.ISLES.guildhall,p=player.position;if(Math.abs(p.x-I.x)>I.R||Math.abs(p.z-I.z)>I.R)return 1;const y=p.y;return y<GHALL.Y2-1.2?1:y<GHALL.Y3-1.2?2:3;}
+function drawGuildPlan(c,X,Z,sc,I,fl){const cx=I.x,cz=I.z,{HW,HD}=GHALL,T=.6,IN=HW-T/2,ID=HD-T/2,AX=11,AZ=9,S1={x0:-19.4,x1:-16.4,z0:-3,z1:11},S2={x0:16.4,x1:19.4,z0:-11,z1:3},Y0=-HD-22;
+  const x=v=>X(cx+v),z=v=>Z(cz+v),lw=v=>Math.max(1,v*sc);
+  const R=(x0,z0,x1,z1,col)=>{c.fillStyle=col;c.fillRect(x(Math.min(x0,x1)),z(Math.min(z0,z1)),Math.abs(x1-x0)*sc,Math.abs(z1-z0)*sc);};
+  const O=(px,pz,r,col)=>{c.fillStyle=col;c.beginPath();c.arc(x(px),z(pz),Math.max(1.2,r*sc),0,7);c.fill();};
+  const L=(x0,z0,x1,z1,col,w)=>{c.strokeStyle=col;c.lineWidth=lw(w);c.beginPath();c.moveTo(x(x0),z(z0));c.lineTo(x(x1),z(z1));c.stroke();};
+  /* 바깥: 풀밭, 건물 앞 마당 */
+  c.fillStyle='#8aa452';c.fillRect(-9999,-9999,99999,99999);
+  R(-26,-44,26,24,'#b3a48a');
+  /* 뒤뜰 훈련장: 돌바닥, 높은 담, 허수아비·과녁·술통 */
+  R(-HW,Y0,HW,-HD,'#a49a86');
+  c.lineCap='square';for(const [a,b,d,e] of [[-HW-.5,Y0,HW+.5,Y0],[-HW-.5,Y0,-HW-.5,-HD],[HW+.5,Y0,HW+.5,-HD]])L(a,b,d,e,'#6e6458',1.2);c.lineCap='butt';
+  for(let k=0;k<5;k++){const px=-14+k*7,pz=Y0+7;L(px-.7,pz,px+.7,pz,'#6a4a2a',.25);L(px,pz-.5,px,pz+.5,'#6a4a2a',.25);O(px,pz,.35,'#d8c896');}
+  for(let k=0;k<3;k++){const px=-10+k*10,pz=Y0+1.5;O(px,pz,.8,'#f0e8d8');O(px,pz,.55,'#c83a3a');O(px,pz,.25,'#f0d040');}
+  for(const s of [-17,17])for(let k=0;k<3;k++)O(s,Y0+12+k*1.4,.45,'#7a5232');
+  /* 건물 바닥 */
+  R(-HW,-HD,HW,HD,fl===1?'#8a6a4a':fl===2?'#7e6044':'#8a6e4e');
+  if(fl===1){
+    for(let k=-HW+2;k<HW;k+=4)L(k,-HD+.3,k,HD-.3,'rgba(60,40,24,.35)',.08);   /* 마룻널 */
+    R(-3,-8,3,8,'#8a2a24');R(-2.6,-7.6,2.6,7.6,'#a8483a');   /* 깔개 */
+    for(const [a,b] of [[-7,-4.5],[0,-5.5],[7,-4.5],[-7.5,2.5],[7.5,2.5],[-4,7.5],[4,7.5]])O(a,b,1,'#5a3d24');   /* 술집 탁자 */
+    for(const b of [-6,0,5])O(-13.6,b,.75,'#5a3d24');
+    R(-8.2,-13.1,8.2,-12,'#c8a050');for(const a of [-5.4,0,5.4])R(a-.25,-12.9,a+.25,-12.2,'#f0e8d8');   /* 접수대와 창구 */
+    for(const s of [-1,1])R(s*5-2,-ID,s*5+2,-ID+.6,'#5a3d24');   /* 서류 선반 */
+    O(-9.6,-11.4,.45,'#f0e8d8');   /* 길드 명부 */
+    {const bx=-11.2,BW=13.2,cw=BW/5,TC=['#6a9a4a','#4a7ab8','#b8782a','#8a2a3a','#4a2a5a'];for(let t=0;t<5;t++)R(bx-BW/2+cw*t+.1,ID-.7,bx-BW/2+cw*(t+1)-.1,ID-.2,TC[t]);}   /* 의뢰 게시판 (칸마다 색) */
+    R(13.6,-5.7,14.85,5.7,'#c8a050');for(let k=0;k<6;k++)O(13,-4.5+k*1.8,.3,'#3a2a1a');   /* 술집 카운터와 의자 */
+    for(let k=0;k<4;k++)O(IN-.55,-5.2+k*1.2,.45,'#7a5232');R(IN-.45,.8,IN,6.6,'#5a3d24');   /* 술통·병 선반 */
+    R(-IN,-13.3,-IN+1.1,-9.7,'#6a6460');R(-IN+.15,-12.4,-IN+1,-10.6,'#ff9a30');   /* 벽난로 */
+    R(-IN+1.4,-13.7,-IN+5.8,-9.3,'#3a4a6a');for(const s of [-1,1])R(-IN+2.5,-11.5+s*1.7-.4,-IN+4.7,-11.5+s*1.7+.4,'#7a2a22');O(-IN+3.6,-11.5,.6,'#5a3d24');   /* 난롯가 소파 */
+    for(const s of [-1,1])O(s*3.4,ID-.8,.5,'#4a7a3a');O(IN-1,ID-.8,.5,'#4a7a3a');}
+  else if(fl===2){
+    R(-AX,-AZ,AX,AZ,'#2a2018');R(-3,-8,3,8,'rgba(138,42,36,.45)');   /* 트인 홀 (1층이 내려다보인다) */
+    c.setLineDash([lw(.5),lw(.35)]);c.strokeStyle='#c8a050';c.lineWidth=lw(.18);c.strokeRect(x(-AX),z(-AZ),AX*2*sc,AZ*2*sc);c.setLineDash([]);   /* 난간 */
+    R(-11,-14.75,11,-10.25,'#2a4a6a');for(const a of [-14,-6,2,10])O(a,-12.5,.8,'#5a3d24');for(const a of [-8,0,8])O(a,12.6,.8,'#5a3d24');   /* 라운지·탁자 */
+    for(const b of [-13.5,-9.5])R(-IN,b-1.8,-IN+.6,b+1.8,'#5a3d24');   /* 서가 */
+    for(const b of [6,9.5,13])R(IN-.7,b-1.3,IN-.1,b+1.3,'#9a9aa2');}   /* 무구 진열대 */
+  else{
+    const CZ0=3,CZ1=7.5;R(-IN,CZ0,IN,CZ1,'#6a4e36');R(-17,4.4,17,6.1,'#8a2a24');   /* 복도와 긴 깔개 */
+    R(-IN,-ID,-1,CZ0,'#7e5c40');R(-14.5,-12.5,-5.5,-5.5,'#8a2a24');R(-11.7,-12.8,-8.3,-11.2,'#5a3d24');O(-10,-13.7,.5,'#7a2a22');R(-18.4,-ID,-1.6,-ID+.6,'#5a3d24');   /* 길드장실: 깔개·책상·의자·책장 */
+    R(-1,-ID,13.2,CZ0,'#866448');R(6,-11,9,-2,'#5a3d24');for(let k=0;k<5;k++)for(const s of [-1,1])R(7.5+s*2.1-.3,-10+k*1.8-.3,7.5+s*2.1+.3,-10+k*1.8+.3,'#a8885a');   /* 회의실: 긴 탁자와 의자 */
+    for(const [x0,x1] of [[-IN,-6.5],[-6.5,6.5],[6.5,IN]]){const mx=(x0+x1)/2;for(const s of [-1,1]){const bx=mx+s*(x1-x0)*.27;R(bx-.7,11.3,bx+.7,13.6,'#f0e8d8');R(bx-.7,12.3,bx+.7,13.6,'#7a2a22');}R(mx-1.5,9.8,mx+1.5,12.2,'rgba(58,74,106,.6)');R(x1-2.6,CZ1+.3,x1-.3,CZ1+2.6,'#c8b088');}   /* 숙소: 침대 둘·깔개·씻는 방 */
+    R(13.2,-11,IN,-ID,'#5a4632');}
+  /* 계단 */
+  const stair=(S,col)=>{R(S.x0,S.z0,S.x1,S.z1,col);for(let q=S.z0+.55;q<S.z1;q+=.55)L(S.x0,q,S.x1,q,'rgba(30,20,12,.55)',.06);};
+  if(fl===1)stair(S1,'#a8885a');else if(fl===2){stair(S1,'#5a4632');stair(S2,'#a8885a');}else stair(S2,'#5a4632');
+  /* 기둥 (1·2층) */
+  if(fl<3){c.fillStyle='#4a3420';const pst=[];for(const b of [-AZ,-3,3,AZ])for(const s of [-1,1])pst.push([s*AX,b]);for(const a of [-5.5,0,5.5])for(const s of [-1,1])pst.push([a,s*AZ]);for(const [a,b] of pst)if(fl===1||Math.abs(a)===AX&&Math.abs(b)===AZ||Math.abs(a)===5.5)c.fillRect(x(a)-lw(.35),z(b)-lw(.35),lw(.7),lw(.7));}
+  /* 3층 안벽 (문 자리 비움) */
+  if(fl===3){const wl=(x0,z0,x1,z1,doors=[])=>{const ax=Math.abs(x1-x0)>Math.abs(z1-z0),a=ax?Math.min(x0,x1):Math.min(z0,z1),b=ax?Math.max(x0,x1):Math.max(z0,z1);let cur=a;const seg=(p,q)=>ax?L(p,z0,q,z0,'#e8d4a8',.3):L(x0,p,x0,q,'#e8d4a8',.3);for(const [m,w] of [...doors].sort((p,q)=>p[0]-q[0])){if(m-w/2>cur)seg(cur,m-w/2);cur=m+w/2;}if(b>cur)seg(cur,b);};
+    wl(-IN,3,16.2,3,[[-10,1.8],[7,1.8]]);wl(-1,-ID,-1,3);wl(-IN,7.5,IN,7.5,[[-13,1.6],[0,1.6],[13,1.6]]);wl(-6.5,7.5,-6.5,ID);wl(6.5,7.5,6.5,ID);wl(13.2,-ID,13.2,3);wl(13.2,-11,IN,-11);}
+  /* 바깥벽과 문 */
+  c.strokeStyle='#4a3420';c.lineWidth=lw(.7);c.strokeRect(x(-HW),z(-HD),HW*2*sc,HD*2*sc);
+  if(fl===1){R(-1.5,HD-.8,1.5,HD+.2,'#d8a030');R(-12.5,-HD-.2,-9.5,-HD+.8,'#d8a030');R(9.9,-HD-.2,12.1,-HD+.8,'#6a6460');}   /* 정문(시내)·뒷문(훈련장)·지하 창고 문 */
+  /* 같은 층 사람: 손님(흐린 노랑)·말 거는 사람(노랑)·다른 모험가(하늘색) */
+  const flOf=y=>y<GHALL.Y2-1.2?1:y<GHALL.Y3-1.2?2:3,inI=(px,pz)=>Math.abs(px-cx)<I.R&&Math.abs(pz-cz)<I.R;
+  for(const n of GHALL.npcs){const q=n.g.position;if(flOf(q.y)===fl)O(q.x-cx,q.z-cz,.42,'rgba(243,207,106,.6)');}
+  for(const n of NPCS){const q=n.mesh?n.mesh.position:{x:n.x,y:n.y||0,z:n.z};if(inI(q.x,q.z)&&flOf(q.y)===fl&&!(n.hideIf&&n.hideIf()))O(q.x-cx,q.z-cz,.55,'#f3cf6a');}
+  for(const o of others.values()){const q=o.mesh.position;if(inI(q.x,q.z)&&flOf(q.y)===fl)O(q.x-cx,q.z-cz,.6,'#9fd3e6');}}
+function drawGuildLabels(c,X,Z,sc,I,fl,mini){c.save();c.textAlign='center';c.textBaseline='middle';c.lineJoin='round';
+  const bw=c.canvas.getBoundingClientRect?c.canvas.getBoundingClientRect().width:0,k=bw>0?c.canvas.width/bw:1,fs=Math.round((mini?8.5:11)*k),cx=I.x,cz=I.z,HD=GHALL.HD;
+  const T=(t,a,b,col)=>{const px=X(cx+a),py=Z(cz+b);c.font=`700 ${fs}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*k;c.strokeStyle='rgba(28,20,12,.9)';c.strokeText(t,px,py);c.fillStyle=col||'#fff3dc';c.fillText(t,px,py);};
+  const S=[];
+  if(fl===1)S.push(['접수대',0,-10.6],['의뢰 게시판',-11.2,HD-2],['술집',14.2,-7.2],['벽난로',-15.5,-7.6],['큰 홀',0,0],['계단 (2층으로)',-17.9,-4.4],['정문 (시내로)',0,HD+2.6,'#ffe08a'],['뒷문 (훈련장)',-11,-HD-2.4,'#ffe08a'],['지하 창고 문',11,-HD+2]);
+  else if(fl===2)S.push(['라운지',0,-12.5],['서가',-15.5,-11.5],['무구 진열대',14.6,9.5],['트인 홀',0,0],['계단 (1층으로)',-17.9,-4.4],['계단 (3층으로)',17.9,-13]);
+  else S.push(['길드장실',-10,-3],['회의실',4,-2],['복도',-4,5.25],['숙소 1',-13.2,10.4],['숙소 2',0,10.4],['숙소 3',13.2,10.4],['계단 (2층으로)',16.3,4.6]);
+  if(!mini||fl!==3)S.push(['뒤뜰 훈련장',0,-HD-12]);
+  const MINI_SKIP=/큰 홀|트인 홀|복도|지하 창고|뒷문|서가/;for(const [t,a,b,col] of S)if(!mini||!MINI_SKIP.test(t))T(t,a,b,col);
+  /* 층 표시: 오른쪽 위 */
+  if(!mini){const px=X(cx+GHALL.HW)+6*k,py=Z(cz-HD)+4*k;c.textAlign='left';c.font=`700 ${Math.round(12*k)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;
+    for(let f=3;f>=1;f--){const yy=py+(3-f)*16*k,on=f===fl;c.fillStyle=on?'#d8a030':'rgba(40,30,20,.75)';c.fillRect(px,yy-7*k,34*k,14*k);c.fillStyle=on?'#1b1712':'#d8c8a8';c.fillText(f+'층',px+6*k,yy+.5*k);}}
+  c.restore();}
 // 마르쿠스 이름표 (설계도의 이름과 자리)
 function drawMarcusLabels(c,X,Z,sc,I,skipName){   /* skipName: 지도 맨 위 제목으로 이미 쓴 장소 이름은 다시 쓰지 않는다 */
   const PL=marcusPlan();c.save();c.textAlign='center';c.textBaseline='middle';c.lineJoin='round';
@@ -15650,7 +15741,7 @@ function drawHuntMini(I){const S=264,VR=I.R+40,sc=S/(2*VR),X=v=>S/2+(v-I.x)*sc,Z
 function drawIsleMini(){
   {const I0=OR.isleAt(player.position.x,player.position.z);if(OPT.mini!=='all'&&OR.MHUNT.includes(I0.id)){drawHuntMini(I0);return;}}
   if(OPT.mini==='all'&&OR.MHUNT.includes(OR.isleAt(player.position.x,player.position.z).id)){const S=264;mctx.save();mctx.clearRect(0,0,S,S);mctx.beginPath();mctx.arc(S/2,S/2,S/2,0,7);mctx.clip();drawMarcusOverview(mctx,S,S,{mini:true});mctx.restore();return;}
-  const I=OR.isleAt(player.position.x,player.position.z),S=264,VR=70,sc=S/(2*VR),px=player.position.x,pz=player.position.z,X=v=>S/2+(v-px)*sc,Z=v=>S/2+(v-pz)*sc;
+  const I=OR.isleAt(player.position.x,player.position.z),S=264,VR=I.id==='guildhall'?24:70,sc=S/(2*VR),px=player.position.x,pz=player.position.z,X=v=>S/2+(v-px)*sc,Z=v=>S/2+(v-pz)*sc;
   mctx.save();mctx.clearRect(0,0,S,S);mctx.beginPath();mctx.arc(S/2,S/2,S/2,0,7);mctx.clip();
   drawIslePlan(mctx,X,Z,sc,I);
   mctx.translate(S/2,S/2);mctx.rotate(-player.rotation.y);mctx.fillStyle='#fff';mctx.strokeStyle='#1b1712';mctx.lineWidth=2;
