@@ -3211,6 +3211,32 @@ const InstChunks={list:[],
     for(const q of this.list){const d=q.s.center.distanceTo(p)-q.s.radius;if(inHa&&Math.hypot(q.s.center.x-OR.C2.x,q.s.center.z-OR.C2.z)-q.s.radius>OR.R2+70){q.m.visible=false;continue;}const fz=q.m.material.fog===false?camera.far:far;q.m.visible=q.maxD?(d<q.maxD&&d<fz&&(d<20||this.fr.intersectsSphere(q.s))):(d<40||(d<fz&&this.fr.intersectsSphere(q.s)));}
   }
 };
+/* 먼 땅의 건물이 시선을 돌리거나 조금만 움직여도 떨리고 깜빡이던 문제:
+   엑시즈(x 2600)·성(6400)·길드홀(7100)·시장(7700)의 건물은 꼭짓점을 세상 좌표 그대로 구워 둔다. 그래픽 카드는 32비트로
+   '세상 좌표(수천 m) − 카메라 자리(수천 m)'를 계산하므로, 카메라가 조금만 움직여도 꼭짓점이 1mm 안팎으로 흔들리고
+   몇 mm 떨어진 면끼리 앞뒤가 바뀌며 깜빡인다. 메시마다 가운데를 빼서 작은 좌표로 바꾸고 그만큼 mesh.position으로 옮겨 둔다
+   (보이는 자리는 그대로, 빼기는 자바스크립트의 64비트 계산에서 끝난다). 움직이는 메시와 여럿이 함께 쓰는 모양은 건드리지 않는다 */
+const Rebase={done:new WeakSet(),watch:[],t:0,_I:new THREE.Matrix4(),_M:new THREE.Matrix4(),
+  run(){
+    const use=new Map();scene.traverse(o=>{if(o.isMesh&&o.geometry)use.set(o.geometry,(use.get(o.geometry)||0)+1);});
+    scene.updateMatrixWorld();const c=new THREE.Vector3(),I=this._I,M=this._M;
+    scene.traverse(o=>{
+      if(!o.isMesh||o.isSkinnedMesh||this.done.has(o))return;this.done.add(o);
+      const g=o.geometry,P=g&&g.attributes&&g.attributes.position;if(!P||P.usage!==THREE.StaticDrawUsage||(g.morphAttributes&&g.morphAttributes.position)||!o.matrixWorld.equals(I))return;
+      if(o.isInstancedMesh){const im=o.instanceMatrix;if(!o.count||im.usage!==THREE.StaticDrawUsage)return;c.set(0,0,0);
+        for(let i=0;i<o.count;i++){o.getMatrixAt(i,M);c.x+=M.elements[12];c.y+=M.elements[13];c.z+=M.elements[14];}c.divideScalar(o.count);
+        if(Math.hypot(c.x,c.z)<300)return;c.set(Math.round(c.x),Math.round(c.y),Math.round(c.z));
+        for(let i=0;i<o.count;i++){o.getMatrixAt(i,M);M.elements[12]-=c.x;M.elements[13]-=c.y;M.elements[14]-=c.z;o.setMatrixAt(i,M);}im.needsUpdate=true;
+        this.watch.push({o,a:im,v:im.version,c:c.clone()});}
+      else{if(use.get(g)!==1)return;if(!g.boundingBox)g.computeBoundingBox();g.boundingBox.getCenter(c);if(Math.hypot(c.x,c.z)<300)return;c.set(Math.round(c.x),Math.round(c.y),Math.round(c.z));
+        g.translate(-c.x,-c.y,-c.z);g.computeBoundingSphere();this.watch.push({o,a:P,v:P.version,c:c.clone()});}
+      o.position.copy(c);o.updateMatrix();o.updateMatrixWorld(true);});
+  },
+  /* 나중에 생긴 메시도 챙기고, 옮긴 뒤 누가 꼭짓점을 세상 좌표로 다시 쓰면(움직이는 것) 되돌린다 */
+  tick(dt){if((this.t+=dt)<3)return;this.t=0;
+    for(let i=this.watch.length-1;i>=0;i--){const w=this.watch[i];if(w.a.version!==w.v){w.o.position.set(0,0,0);w.o.updateMatrix();this.watch.splice(i,1);}}
+    this.run();}
+};
 // 멀리 있는 몬스터는 그리지 않는다 (visible은 죽음·숨김에 쓰이니 건드리지 않고 '층'으로 끈다)
 function setFarHidden(obj,far){if(obj.userData._far===far)return;obj.userData._far=far;obj.traverse(o=>{if(far)o.layers.set(31);else o.layers.set(0);});}
 /* 화면 품질 자동 조절
@@ -9652,11 +9678,18 @@ function buildMarcus(H){
   const _q=new THREE.Quaternion(),_e=new THREE.Euler(),_v=new THREE.Vector3(),_s3=new THREE.Vector3(),_m=new THREE.Matrix4();
   const TRS=(x,y,z,ry,sx,sy,sz,rx=0,rz=0)=>new THREE.Matrix4().compose(_v.set(x,y,z),_q.setFromEuler(_e.set(rx,ry,rz,'YXZ')),_s3.set(sx,sy,sz));
   /* 놓는 틀: (x,z)에 ry로 돌려 세우고 (+z가 앞), 바닥 높이는 언덕 높이. o.b: 'sh'|'ip', o.glow, o.mt */
-  /* 겹친 상자들의 같은 면이 한 평면에 놓이면 움직일 때 깜빡인다(z-fighting): 상자마다 몇 mm씩 다르게 키워 면을 떼어 놓는다 */
-  let _zf=0;
+  /* 겹친 상자들의 같은 면이 한 평면에 놓이면 움직일 때 깜빡인다(z-fighting): 조각마다 다르게 키워 면을 떼어 놓는다.
+     예전에는 상자만 0~1.8cm(한 면 0~9mm, 이웃끼리 1.5mm)였는데, 1.5mm는 수십 m 밖이나 휴대폰에서 깊이 정밀도보다 작아 계속 깜빡였다.
+     이제 상자·지붕·기둥 같은 작은 단위 모양 모두 8단계(0.25~2cm, 한 면 최대 1cm: 벽 2cm 앞에 붙인 창·문 그림을 덮지 않게)로 키운다. 0은 쓰지 않는다.
+     차례대로 돌리면 같은 개수씩 만드는 반복(성벽 토막 등)에서 늘 같은 단계가 나와 그대로 겹쳤으므로, 순번을 섞어(해시) 고른다.
+     얇은 조각은 제 두께의 1/4 안에서만 키우고, 땅에 깐 얇은 판(길 돌판 등)은 단계마다 1.5mm씩 위로 띄워 윗면끼리 떨어뜨린다 */
+  let _zf=0,_zn=0;const _zr=new WeakMap();
+  const zfNext=()=>{let h=++_zn;h^=h>>>16;h=Math.imul(h,0x45d9f3b);h^=h>>>16;h=Math.imul(h,0x45d9f3b);h^=h>>>16;return 1+(h>>>0)%8;};
+  const zfOk=geo=>{let r=_zr.get(geo);if(r===undefined){if(!geo.boundingSphere)geo.computeBoundingSphere();r=geo!==QUAD&&geo.boundingSphere.radius+geo.boundingSphere.center.length()<=1.5;_zr.set(geo,r);}return r;};
+  const zg=s=>s+Math.sign(s)*_zf*Math.min(.0025,Math.abs(s)*.25/8);
   const frame=(x,z,ry,y,bk)=>{const y0=y??hillAt(x,z),C=cell(x,z),Wm=TRS(x,y0,z,ry,1,1,1),cs=Math.cos(ry),sn=Math.sin(ry);
     const aoY=(typeof GFX!=='undefined'&&GFX.aoAt(x,z))?y0:null;
-    const F={C,x,z,ry,y:y0,P:(geo,lx,ly,lz,sx,sy,sz,col,o={})=>(geo===BOX&&(_zf=(_zf+1)%7)&&(sx+=_zf*.003,sy+=_zf*.003,sz+=_zf*.003),push(o.glow?C.gl:C[o.b||bk||'op'],geo,_m.multiplyMatrices(Wm,TRS(lx,ly,lz,o.ry||0,sx,sy,sz,o.rx||0,o.rz||0)),col,o.mt,o.glow?null:aoY)),
+    const F={C,x,z,ry,y:y0,P:(geo,lx,ly,lz,sx,sy,sz,col,o={})=>(zfOk(geo)&&(_zf=zfNext(),geo===BOX&&sy<.3&&sy<sx&&sy<sz&&!o.rx&&!o.rz&&(ly+=_zf*.0015),sx=zg(sx),sy=zg(sy),sz=zg(sz)),push(o.glow?C.gl:C[o.b||bk||'op'],geo,_m.multiplyMatrices(Wm,TRS(lx,ly,lz,o.ry||0,sx,sy,sz,o.rx||0,o.rz||0)),col,o.mt,o.glow?null:aoY)),
       W:(lx,lz)=>({x:x+cs*lx+sn*lz,z:z-sn*lx+cs*lz}),
       box:(lx,lz,w,d,h,o={})=>{const p=F.W(lx,lz);colliders.push({x:p.x,z:p.z,box:1,hw:w/2,hd:d/2,cs,sn,r:Math.hypot(w,d)/2,h,...o});},
       /* 비탈에 선 건물의 받침 (땅속까지) */
@@ -10775,8 +10808,13 @@ function _marcusLife(cx,cz){
   /* ===== 빨랫줄: 주거·장인 지구 골목, 양쪽에 집이 있는 곳만 ===== */
   {const parts=[];const CL=[0xf0ece0,0xd8e0f0,0xe8c0b0,0xb8d0a8,0xf0d8a0,0xc0a8d8,0x9ab8d8,0xe0e0e0];let n=0;
     for(const R of routes){if(R.w>11)continue;for(let s=8;s<R.T-6;s+=rr(9,15)){const a=along(R,s,-(R.w/2+3.2)),b=along(R,s,R.w/2+3.2);
-        if(!inCity(a.x,a.z)||!blocked(a.x,a.z,1.2)||!blocked(b.x,b.z,1.2))continue;const edge=sg=>{for(let d=R.w/2+.3;d<R.w/2+4.5;d+=.25){const q=along(R,s,sg*d);if(blocked(q.x,q.z,.05))return Math.max(R.w/2+.3,d-.1);}return 0;};const da=edge(-1),db=edge(1);if(!da||!db)continue;const A=along(R,s,-da),B=along(R,s,db);
-        const h=heightAt(A.x,A.z)+rr(5.2,6.2),dx=B.x-A.x,dz=B.z-A.z,L=Math.hypot(dx,dz),ry=Math.atan2(dx,dz);
+        if(!inCity(a.x,a.z)||!blocked(a.x,a.z,1.2)||!blocked(b.x,b.z,1.2))continue;
+        /* 줄 끝은 집 벽에만 맨다: 낮은 담·우물·수레·등불 기둥이나 줄보다 낮은 집에 걸리면 줄이 허공에 떠 보였다.
+           그래서 부딪힌 것이 높이가 있는 네모 건물일 때만 받고, 그 처마(벽 꼭대기)보다 아래에 건다 */
+        const wallTop=(x,z)=>{const a=grid.get(key(Math.floor(x/CS),Math.floor(z/CS)));if(!a)return 0;let t=0;for(const c of a)if(c.box&&c.h!==undefined&&c.y0===undefined&&hitC(c,x,z,.05))t=Math.max(t,heightAt(c.x,c.z)+c.h-1.5);return t;};
+        const edge=sg=>{for(let d=R.w/2+.3;d<R.w/2+4.5;d+=.25){const q=along(R,s,sg*d);if(blocked(q.x,q.z,.05)){const t=wallTop(q.x,q.z);return t?{d:Math.max(R.w/2+.3,d-.1),t}:null;}}return null;};const ea=edge(-1),eb=edge(1);if(!ea||!eb)continue;const A=along(R,s,-ea.d),B=along(R,s,eb.d);
+        const g0=Math.max(heightAt(A.x,A.z),heightAt(B.x,B.z)),h=Math.min(g0+rr(5.2,6.2),Math.min(ea.t,eb.t)-.5);if(h<g0+3.0)continue;
+        const dx=B.x-A.x,dz=B.z-A.z,L=Math.hypot(dx,dz),ry=Math.atan2(dx,dz);
         parts.push([BOX,(A.x+B.x)/2,h,(A.z+B.z)/2,.025,.025,L,0x6a5a48,0,ry,0]);
         for(let c=0,m=Math.floor(L/1.1);c<m;c++){if(rnd()<.3)continue;const k=(c+.5)/m,px=A.x+dx*k,pz=A.z+dz*k,cw=rr(.45,.85),ch=rr(.5,.95),sag=Math.sin(k*PI)*.25;
           parts.push([BOX,px,h-sag-ch/2,pz,.02,ch,cw,pick(CL),rr(-.06,.06),ry,0]);}
@@ -17816,7 +17854,7 @@ canvas.addEventListener('wheel',e=>{
 
 /* ---------- 루프 ---------- */
 function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
-Perf.init();mergeStaticGroups(3);LightPool.init();InstChunks.init();
+Perf.init();mergeStaticGroups(3);LightPool.init();InstChunks.init();Rebase.run();
 addEventListener('resize',resize);resize();
 const clock=new THREE.Clock();let tAll=0;
 /* ---------- 오를란도의 하루: 이 세계만의 시간이 따로 흐른다. 하루(24시)가 실제 2시간 — 1시가 실제 5분. 모든 사람이 같은 시각을 본다(실제 시각에서 계산).
@@ -19071,7 +19109,7 @@ function loopBody(){
     if(P&&P.bowDraw)bowCancel();if(P&&P.ray)rayEnd();if(P&&P.flame){P.flame=null;sfxStop('mg_fire');if(myMoId==='flame'){swingT=1;myMo=null;myMoId='';}}updateViewModel(dt,0);updateNetMonsters(dt);for(const m of monsters)m.tag.hidden=true;}
   updateFx(dt);VFX.update(dt);updateAmbient(dt);if(typeof questMarkTick==='function')questMarkTick(dt);zoneMotes(dt);updateOthers(dt);animateDungeonLights(tAll);updatePortals(tAll);
   if(mode!=='title'){const pp=player?player.position:camera.position;LightPool.update(dt,pp);InstChunks.update(camera.position);mapSplitTick(dt);for(const m of monsters)if(m.mesh)setFarHidden(m.mesh,m.mesh.position.distanceToSquared(camera.position)>95*95);}
-  Perf.tick();fpsTick();
+  Perf.tick();fpsTick();Rebase.tick(dt);
   updateHazards(dt);updateTeles(dt);for(const f of lairFlames)f.scale.set(1+Math.sin(tAll*11+f.position.z)*.12,1+Math.sin(tAll*7+f.position.z)*.2,1);renderMirror(dt);
   if(mode==='world'){updateBossBar();
     if(shakeT>0){shakeT-=dt;const a=shakeT*.12;camera.position.x+=rnd(-a,a);camera.position.y+=rnd(-a,a);}}
