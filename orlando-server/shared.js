@@ -73,11 +73,11 @@
     mvale:  { x: 4050, z: 900, R: 150 },   // 계곡
     mpass:  { x: 4500, z: 900, R: 150 },   // 고개
   };
-  // 엑시즈 문 밖 사냥터 줄: 숫자=줄(1 동문 · 2 북문 · 3 서문 · 4 남문), 글자=그 줄의 몇 번째 땅. 땅 생김새(kind)는 들판·구릉·숲·계곡·고개
+  // 엑시즈 문 밖 사냥터 줄: 숫자=줄(1 서문 · 2 북문 · 3 동문 · 4 남문 — 1줄과 3줄의 문을 서로 바꿨다), 글자=그 줄의 몇 번째 땅. 땅 생김새(kind)는 들판·구릉·숲·계곡·고개
   const MLINES = [
-    { n: 1, gate: '동문', end: 'milgol', zones: [['mfield', 'field'], ['mhill', 'hill'], ['mwood', 'wood'], ['mvale', 'vale'], ['mpass', 'pass']] },
+    { n: 1, gate: '서문', end: 'milgol', zones: [['mfield', 'field'], ['mhill', 'hill'], ['mwood', 'wood'], ['mvale', 'vale'], ['mpass', 'pass']] },
     { n: 2, gate: '북문', zones: [['m2a', 'wood'], ['m2b', 'hill'], ['m2c', 'wood'], ['m2d', 'vale'], ['m2e', 'pass']] },
-    { n: 3, gate: '서문', zones: [['m3a', 'field'], ['m3b', 'hill'], ['m3c', 'field'], ['m3d', 'wood'], ['m3e', 'hill']] },
+    { n: 3, gate: '동문', zones: [['m3a', 'field'], ['m3b', 'hill'], ['m3c', 'field'], ['m3d', 'wood'], ['m3e', 'hill']] },
     { n: 4, gate: '남문', zones: [['m4a', 'wood'], ['m4b', 'vale'], ['m4c', 'wood'], ['m4d', 'vale'], ['m4e', 'pass']] },
   ];
   for (const L of MLINES) L.zones.forEach(([id, kind], i) => { const I = ISLES[id] || (ISLES[id] = { x: 2700 + i * 450, z: 900 + (L.n - 1) * 450, R: 150 }); I.kind = kind; I.line = L.n; I.seq = i; });
