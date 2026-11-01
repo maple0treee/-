@@ -174,7 +174,7 @@ wss.on('connection', (ws) => {
 
   const peers = {};
   for (const [k, c] of clients) if (k !== id) peers[k] = c.pres;
-  send(ws, { t: 'hello', id, peers, v: VERSION });
+  send(ws, { t: 'hello', id, peers, v: VERSION, b: files['/'] && files['/'].etag });   // b: 지금 게임 페이지의 지문 (바뀌면 접속한 사람들이 알아서 새 버전으로 바꾼다)
   sim.join(id, (msg) => send(ws, msg));
   broadcast({ t: 'join', id }, ws);
 

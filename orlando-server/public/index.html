@@ -1376,7 +1376,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@98e74b853edadc4d197cd683c3c9c32aa1a4bc8b/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@2f5c9a371a3a7a43de36c6b5786e436cd1919498/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -16906,6 +16906,7 @@ $('#mnInv').onclick=()=>{$('#menu').hidden=true;mode='world';openInv();};
 
 function damagePlayer(d,src,mon){
   if(invuln>0||(mode!=='world'&&mode!=='dialog')||!P||P.hp<=0||!$('#dead').hidden)return;   /* 메뉴·소지품 창을 열어도 몬스터에게 맞는다 */
+  P.hurtAt=tAll;
   if(P.fly&&Math.random()<.35)P.flyFall=true;   /* 비행 중 맞으면 떨어질 수 있다 */
   // 방패를 든 나를 친 몬스터는 되레 다친다
   if(P.guardT>0&&mon&&mon.dying===null){damageMonster(mon,P.guardRef||1,{color:0xbfd4ff});const q=player.position;VFX.burst(new THREE.Vector3(q.x,q.y+1.2,q.z),0xbfd4ff,16,3.5,.4,{mix:0xffffff});sfx('block');}
@@ -17056,7 +17057,7 @@ function makeWsRoom(){
     try{ws=new WebSocket(url);}catch(e){setTimeout(open,retry);return;}
     ws.onopen=()=>{retry=1000;setConn(true);send({t:'p',d:mine});};
     ws.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch(err){return;}
-      if(m.t==='hello'){myId=m.id;srvVer=m.v||0;peers.clear();for(const k in (m.peers||{}))peers.set(k,m.peers[k]||{});firePeers();
+      if(m.t==='hello'){myId=m.id;srvVer=m.v||0;if(m.b){if(window.__build&&window.__build!==m.b)autoUpdate();window.__build=window.__build||m.b;}peers.clear();for(const k in (m.peers||{}))peers.set(k,m.peers[k]||{});firePeers();
         if(srvVer!==SERVER_VER)setTimeout(()=>log(`서버 파일이 게임과 맞지 않아요 (서버 v${srvVer||'옛날'}, 게임 v${SERVER_VER}). GitHub에 server.js, shared.js, sim.js, colliders.json을 다시 올려 주세요.`,'bad'),1500);}
       else if(m.t==='p'&&m.id){peers.set(m.id,m.d||{});firePeers();}
       else if(m.t==='join'&&m.id){if(!peers.has(m.id))peers.set(m.id,{});firePeers();}
@@ -18728,6 +18729,15 @@ const hot=window.claude&&window.claude.hot;
 if(hot&&typeof hot.snapshot==='function')hot.snapshot(()=>{const s=snapshotP();return s?{P:s}:{};});
 const boot=data=>{if(data&&data.P&&data.P.job&&JOBS[data.P.job])startGame(data.P);};
 if(hot&&typeof hot.ready==='function')hot.ready(boot);else boot(hot&&hot.data);
+/* 새 버전이 배포되면 (서버가 다시 켜지며 페이지 지문이 바뀐다): 싸우거나 대화 중이 아닐 때 저장하고 새로 불러온 뒤, 하던 캐릭터로 그 자리에서 바로 이어 한다 */
+function autoUpdate(){if(autoUpdate.on)return;autoUpdate.on=true;log('새 버전이 나와 곧 업데이트합니다.','sys');
+  const safe=()=>!P||mode==='title'||(mode==='world'&&!DUEL&&!CCAR.ride&&!P.dash&&!P.leap&&swingT>=1&&tAll-(P.hurtAt||-99)>6&&!alive().some(m=>m.aggro===P.id||Math.hypot(m.mesh.position.x-player.position.x,m.mesh.position.z-player.position.z)<8));
+  const go=()=>{if(!safe()){setTimeout(go,1000);return;}
+    try{if(P&&player&&mode!=='title'){save();sessionStorage.setItem('orlando3d.resume',JSON.stringify({id:P.id,yaw:cam.yaw,t:Date.now()}));}}catch(e){}
+    location.reload();};
+  setTimeout(go,1500);}
+try{const r=JSON.parse(sessionStorage.getItem('orlando3d.resume')||'null');sessionStorage.removeItem('orlando3d.resume');
+  if(r&&Date.now()-r.t<120000){const c=loadChars().find(c=>c.id===r.id);if(c){const tryGo=()=>{if(mode!=='title'){return;}startGame(c);const fix=()=>{if(player&&mode==='world'){cam.yaw=r.yaw||0;}else setTimeout(fix,300);};fix();};setTimeout(tryGo,600);}}}catch(e){}
 })();
 </script>
 
