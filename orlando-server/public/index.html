@@ -7353,7 +7353,7 @@ function npcVoice(ch,v,q,at){const X=SFX.ctx;if(!X||!SFX.voice||OPT.voice<=0||!c
    긴 곡이라 미리 다 받지 않고 흘려 들으며 튼다. 지역이 바뀌면 천천히 바꾼다. 브라우저는 첫 클릭·키 입력 뒤에만 소리를 낸다 */
 const BGM={vol:.38,cur:null,want:null,els:{},fade:1.6,
   files:{harena:'music/harena.mp3?v=1',exiz:'music/exiz.mp3?v=1',guildhall:'music/guildhall.mp3?v=1',market:'music/market.mp3?v=1'},
-  gain:{market:1.25},   /* 시장 소리(장꾼·손님 웅성거림)는 음악보다 조용하게 녹음돼 있어 조금 키운다 */
+  gain:{market:.5},   /* 시장 웅성거림은 은은하게 (크면 상인들 외치는 소리가 묻힌다) */
   zone:{town:'harena',forest:'harena',plains:'harena',swamp:'harena',ruins:'harena',wwest:'harena',wnorth:'harena',wsouth:'harena',weast:'harena',marcus:'exiz',mfield:'exiz',mhill:'exiz',mwood:'exiz',mvale:'exiz',mpass:'exiz',guildhall:'guildhall',exmarket:'market'}};   /* 중앙 시장 안: 장터 웅성거림 (사람들 목소리·발소리·그릇 소리) */   /* 길드홀 안: 따뜻한 술집 곡 */
 for(const k of OR.MHUNT)BGM.zone[k]='exiz';   /* 하레나 둘레 사냥터(길 여덟 구역)도 하레나 테마 */
 function bgmEl(k){let a=BGM.els[k];if(!a){const src=BGM.files[k],c=typeof cdnURL==='function'?cdnURL(src):src;a=BGM.els[k]=new Audio(c);if(c!==src)a.addEventListener('error',()=>{if(!a._fb){a._fb=1;a.src=src;}});a.loop=true;a.preload='auto';a.volume=0;a._v=0;}return a;}
@@ -12354,7 +12354,35 @@ function chatPages(seq,i){const who=seq[i][0],text=chatTx(seq[i][1]);npcCur=who;
   if(i>=seq.length-1){renderNpc(text);return;}
   $('#npcName').textContent=who.name;$('#npcRole').hidden=true;$('#npcBody').innerHTML='';$('#npcActs').innerHTML='';$('#npcChoices').hidden=true;npcPageNext=null;
   typeText($('#npcSay'),text,()=>{npcPageNext=()=>chatPages(seq,i+1);$('#npcNext').hidden=false;$('#npcNext').classList.add('pg');});}
-function chatterTick(dt){if(!BUBBLES.length)return;for(let i=BUBBLES.length-1;i>=0;i--){const b=BUBBLES[i];if(tAll>=b.t1){b.el.remove();BUBBLES.splice(i,1);continue;}if(tAll<b.t0){b.el.style.opacity='0';continue;}
+/* ---------- 중앙 시장 상인들의 외침: 시장 안에 있으면 몇 초마다 가까운 좌판 상인·장비점 주인이 손님을 부른다.
+   머리 위에 말풍선이 뜨고, 그 사람 목소리로 웅얼거린다 (멀수록 작게) ---------- */
+const HAWK={next:0,el:null,line:{
+  vendor:['골라 골라! 하나에 동전 한 닢!','싱싱한 사과 사세요, 사과!','오늘 들어온 물건이에요, 구경하고 가세요!','떨이요, 떨이! 다 가져가요!','두 개 사면 하나 더 드려요!','이 값엔 어디서도 못 사요!'],
+  merchant:['하레나 비단이 들어왔소!','향신료 있소, 향신료! 사막 건너온 거요!','카올리스 배로 온 물건이오, 보고 가시오!','값은 흥정하기 나름이오!'],
+  baker:['갓 구운 빵이요! 따끈따끈해요!','꿀빵 나왔어요, 꿀빵!','호밀빵 마지막 판이에요!'],
+  flower:['꽃 사세요, 꽃! 오늘 꺾은 거예요!','장미 한 송이에 동전 두 닢!','향 좋은 라벤더 있어요!'],
+  butcher:['좋은 고기 들어왔어요! 오늘 잡은 거!','양갈비 있어요, 양갈비!'],
+  fishwife:['아침에 잡은 생선이요! 펄떡펄떡해요!','장어 사세요, 장어!'],
+  cook:['따끈한 수프 한 그릇! 몸이 녹아요!','꼬치구이 있어요, 꼬치!'],
+  milkmaid:['갓 짠 우유요! 치즈도 있어요!'],herbalist:['약초 사세요! 상처에 바르는 풀이요!'],
+  ex_war:['검 보고 가게! 전사라면 손에 맞는 게 있을 거야!'],ex_mag:['지팡이 있어요! 마력이 잘 통하는 걸로!'],ex_rog:['단검 두 자루, 싸게 줄게.'],ex_arc:['활 당겨 보고 가세요!'],
+  ex_smith:['장비 강화! 망치질 한 번에 운이 반!'],ex_stable:['말 있소, 당나귀 있소, 늑대도 있소!']}};
+function hawkTick(dt){if(!player||mode!=='world'||!P)return;const I=OR.ISLES.exmarket;if(!I)return;const q=player.position;if(Math.hypot(q.x-I.x,q.z-I.z)>I.R)return;
+  if(tAll<HAWK.next)return;HAWK.next=tAll+3.5+Math.random()*4;
+  /* 말할 사람: 플레이어 가까이(28m 안)에 서 있는 상인 */
+  const C=[];for(const c of CHATTER){if(!HAWK.line[c.kind]||(c.visible&&!c.visible())||(c.cit&&c.cit.k!=='st'))continue;const p=c.pos();if(!p)continue;const d=Math.hypot(p.x-q.x,p.z-q.z);if(d<28&&d>1.5)C.push({c,p,d,lines:HAWK.line[c.kind],fem:c.cit&&CITM.skirt[CITM.ids[c.cit.type]],id:'hawk'+c.seed});}
+  for(const n of NPCS){if(!HAWK.line[n.id]||!n.mesh)continue;const p=n.mesh.position,d=Math.hypot(p.x-q.x,p.z-q.z);if(d<28&&d>1.5)C.push({c:{pos:()=>p,h:2.2},p,d,lines:HAWK.line[n.id],npc:n});}
+  if(!C.length)return;const w=C.map(o=>1/(4+o.d));let r=Math.random()*w.reduce((a,b)=>a+b,0),pick=C[0];for(let i=0;i<C.length;i++){r-=w[i];if(r<=0){pick=C[i];break;}}
+  const text=pick.lines[Math.floor(Math.random()*pick.lines.length)];
+  /* 말풍선 */
+  if(HAWK.el)HAWK.el.remove();const el=document.createElement('div');el.textContent=text;
+  el.style.cssText='position:fixed;transform:translate(-50%,-100%);pointer-events:none;z-index:25;max-width:240px;padding:5px 10px;border-radius:12px;background:rgba(255,248,232,.93);color:#3a2616;font:600 13px "KMUSunggokSemiSerif","Gowun Batang",serif;box-shadow:0 2px 6px rgba(0,0,0,.35);opacity:0;white-space:nowrap';
+  document.body.appendChild(el);HAWK.el=el;BUBBLES.push({el,c:pick.c,t0:tAll,t1:tAll+3.2});
+  /* 목소리: 외치는 소리라 조금 높고 빠르게, 멀수록 작게 */
+  const X=SFX&&SFX.ctx;if(!X||typeof npcVoice!=='function')return;const base=pick.npc?voiceOf(pick.npc):voiceOf({id:pick.id}),att=Math.max(.12,Math.min(1,6/(pick.d+2)));
+  const v={...base,p:(pick.fem?Math.max(base.p,205+(pick.c.seed||0)%40):base.p)*1.12,vol:(base.vol||1.5)*att*.9};let t=X.currentTime+.05;
+  for(const ch of text){if(ch===' '){t+=.05;continue;}if(/[!,.?]/.test(ch)){t+=.14;continue;}npcVoice(ch,v,false,t);t+=.055;}}
+function chatterTick(dt){if(typeof hawkTick==='function')hawkTick(dt);if(!BUBBLES.length)return;for(let i=BUBBLES.length-1;i>=0;i--){const b=BUBBLES[i];if(tAll>=b.t1){b.el.remove();BUBBLES.splice(i,1);continue;}if(tAll<b.t0){b.el.style.opacity='0';continue;}
     const p=b.c.pos();if(!p||typeof screenOf!=='function'){b.el.style.opacity='0';continue;}const s=screenOf(new THREE.Vector3(p.x,p.y+(b.c.h||2.15),p.z));
     if(!s.ok){b.el.style.opacity='0';continue;}const k=Math.min(1,(tAll-b.t0)*5,(b.t1-tAll)*3);b.el.style.opacity=String(Math.max(0,k));b.el.style.left=Math.round(s.x)+'px';b.el.style.top=Math.round(s.y)+'px';}}
 /* ---------- 말 모델 (밖에서 가져온 모델) ----------
