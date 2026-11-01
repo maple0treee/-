@@ -13456,11 +13456,24 @@ function renderTrade(){
 const GUILD_MAX=30;
 const GUILD_COLS=['b8342a','2a5a9a','3a7a3a','8a5a1a','6a3a8a','2a2a2a'];
 const guildNameOk=s=>typeof s==='string'&&/^[가-힣A-Za-z0-9 ]{2,12}$/.test(s)&&s.trim()===s;
+/* 길드원은 이름이 아니라 캐릭터마다 다른 '길드 열쇠'(P.gk)로 구분한다. 기본 이름 '떠돌이'처럼 이름이 같은 사람이 많아서,
+   예전에는 이름이 같으면 가입해도 명단에 안 들어가고, 같은 이름 한 명이 나가면 다른 사람까지 명단에서 빠져 길드가 사라지기도 했다.
+   열쇠가 없는 옛 명단 칸은 이름으로 맞추고, 길드장이 그 사람을 만나면 열쇠를 채워 넣는다. */
+const gkOk=v=>typeof v==='string'&&/^[a-z0-9]{6,16}$/.test(v);
+const gkNew=()=>(Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8)).padEnd(12,'0').slice(0,12);
+const gKey=m=>m.k||('n:'+m.n);
 function guildLoad(g){if(!g||typeof g!=='object'||typeof g.id!=='string'||!guildNameOk(g.name))return null;
-  const roster=(Array.isArray(g.roster)?g.roster:[]).slice(0,GUILD_MAX).filter(m=>m&&typeof m.n==='string').map(m=>({n:safeName(m.n),r:m.r==='m'?'m':'n'}));
+  const roster=[],seenK=new Set();
+  for(const m of (Array.isArray(g.roster)?g.roster:[])){if(!m||typeof m.n!=='string')continue;
+    const q={n:safeName(m.n),r:m.r==='m'?'m':'n'};if(gkOk(m.k)){if(seenK.has(m.k))continue;seenK.add(m.k);q.k=m.k;}
+    roster.push(q);if(roster.length>=GUILD_MAX)break;}
   return {id:g.id.slice(0,10),name:g.name,c:GUILD_COLS.includes(g.c)?g.c:GUILD_COLS[0],rv:Math.max(0,Math.floor(num(g.rv,0))),roster};}
 const gMine=()=>P&&P.guild;
-const gRank=()=>{const g=gMine();if(!g)return null;const m=g.roster.find(q=>q.n===P.name);return m?m.r:'n';};
+const gMeIn=g=>g?g.roster.find(m=>m.k===P.gk)||g.roster.find(m=>!m.k&&m.n===P.name)||null:null;
+const gMe=()=>gMeIn(gMine());
+const gRank=()=>{const g=gMine();if(!g)return null;const m=gMe();return m?m.r:'n';};
+/* 불러올 때: 길드장인데 내 칸에 열쇠가 없으면(옛 기록) 채워 둔다 */
+function guildMigrate(){const g=gMine(),m=gMe();if(!g||!m||m.k)return;m.k=P.gk;if(m.r==='m')g.rv++;}
 function guildPres(){const g=gMine();return g?`${g.id}|${g.name}|${gRank()}|${g.rv}|${g.c}`:null;}
 function guildParse(s){if(typeof s!=='string')return null;const a=s.split('|');if(a.length!==5||!guildNameOk(a[1]))return null;return {id:a[0],name:a[1],r:a[2]==='m'?'m':'n',rv:parseInt(a[3],10)||0,c:GUILD_COLS.includes(a[4])?a[4]:GUILD_COLS[0]};}
 /* 다른 사람 머리 위 이름표에 길드 이름 */
@@ -13468,7 +13481,13 @@ function guildTag(o,pr,peer){o.gd=guildParse(pr.gd);let t=o.tag.querySelector('.
   if(!o.gd){if(t)t.remove();return;}
   if(!t){t=document.createElement('i');t.className='gtag';o.tag.insertBefore(t,o.b);}
   t.textContent=`<${o.gd.name}>`;t.style.setProperty('--gc','#'+o.gd.c);t.classList.toggle('mine',!!(gMine()&&gMine().id===o.gd.id));
-  const g=gMine();if(g&&o.gd.id===g.id&&o.gd.rv>g.rv&&!o._gAsk){o._gAsk=1;dm(peer,{k:'gsync'});setTimeout(()=>{o._gAsk=0;},4000);}}
+  const g=gMine();if(g&&o.gd.id===g.id&&o.gd.rv>g.rv&&!o._gAsk){o._gAsk=1;dm(peer,{k:'gsync'});setTimeout(()=>{o._gAsk=0;},4000);}
+  if(g&&o.gd.id===g.id&&!o.gk&&!o._gWho){o._gWho=1;dm(peer,{k:'gwho',gid:g.id,mk:P.gk});}}
+/* 길드장: 만난 길드원의 옛 명단 칸(열쇠 없음)에 열쇠를 채운다. 같은 이름 칸이 하나뿐일 때만 */
+function guildFix(o){const g=gMine();if(!g||!o||!gkOk(o.gk))return;
+  if(gRank()==='m'&&!g.roster.some(m=>m.k===o.gk)){const c=g.roster.filter(m=>!m.k&&m.n===o.name);
+    if(c.length===1){c[0].k=o.gk;g.rv++;guildPush();guildChanged();return;}}
+  if(!$('#gwin').hidden)renderGuild();}
 function guildOnline(){const out=[];for(const [id,o] of others)if(o.gd)out.push([id,o]);return out;}
 function guildPush(g){g=g||gMine();if(!g)return;for(const [id,o] of guildOnline())if(o.gd.id===g.id)dm(id,{k:'gset',g});}
 function guildChanged(){save();publishPresence(true);if(!$('#gwin').hidden)renderGuild();}
@@ -13477,7 +13496,7 @@ function guildCreate(name,c){
   if(gMine()){toast('이미 길드에 있어요');return;}
   name=(name||'').trim();if(!guildNameOk(name)){toast('길드 이름은 2~12자 (한글·영문·숫자)');return;}
   if(guildOnline().some(([,o])=>o.gd.name===name)){toast('같은 이름의 길드가 있어요');return;}
-  P.guild={id:Math.random().toString(36).slice(2,10).padEnd(8,'0'),name,c:GUILD_COLS.includes(c)?c:GUILD_COLS[0],rv:1,roster:[{n:P.name,r:'m'}]};
+  P.guild={id:Math.random().toString(36).slice(2,10).padEnd(8,'0'),name,c:GUILD_COLS.includes(c)?c:GUILD_COLS[0],rv:1,roster:[{n:P.name,r:'m',k:P.gk}]};
   log(`길드 「${name}」을(를) 만들었다`,'good');sfx('door');guildChanged();}
 function guildInvite(peer){const g=gMine(),o=others.get(peer);if(!g||!o)return;
   if(gRank()!=='m'){toast('길드장만 초대할 수 있어요');return;}
@@ -13485,17 +13504,20 @@ function guildInvite(peer){const g=gMine(),o=others.get(peer);if(!g||!o)return;
   if(g.roster.length>=GUILD_MAX){toast(`길드가 가득 찼어요 (최대 ${GUILD_MAX}명)`);return;}
   dm(peer,{k:'ginv',gid:g.id,gn:g.name,n:P.name});log(`${o.name}님에게 길드 초대를 보냈다`,'sys');}
 function guildRequest(peer){const o=others.get(peer);if(!o||!o.gd)return;if(gMine()){toast('이미 길드에 있어요');return;}
-  dm(peer,{k:'greq',gid:o.gd.id,n:P.name});log(`「${o.gd.name}」에 가입 신청을 보냈다`,'sys');}
-function guildAdd(name){const g=gMine();if(!g||gRank()!=='m')return false;if(g.roster.some(m=>m.n===name))return true;
-  if(g.roster.length>=GUILD_MAX)return false;g.roster.push({n:name,r:'n'});g.rv++;guildPush();guildChanged();log(`${name}님이 길드에 들어왔다`,'good');return true;}
-function guildKick(name){const g=gMine();if(!g||gRank()!=='m'||name===P.name)return;  g.roster=g.roster.filter(m=>m.n!==name);g.rv++;guildPush();
-  log(`${name}님을 길드에서 내보냈다`,'sys');guildChanged();}
-function guildGive(name){const g=gMine();if(!g||gRank()!=='m'||!g.roster.some(m=>m.n===name))return;
-  for(const m of g.roster)m.r=m.n===name?'m':'n';g.rv++;guildPush();log(`${name}님에게 길드장을 넘겼다`,'sys');guildChanged();}
-function guildLeave(){const g=gMine();if(!g)return;
-  if(gRank()==='m'){const rest=g.roster.filter(m=>m.n!==P.name);
+  dm(peer,{k:'greq',gid:o.gd.id,n:P.name,mk:P.gk});log(`「${o.gd.name}」에 가입 신청을 보냈다`,'sys');}
+function guildAdd(name,k){const g=gMine();if(!g||gRank()!=='m')return false;k=gkOk(k)?k:null;
+  if(k?g.roster.some(m=>m.k===k):g.roster.some(m=>!m.k&&m.n===name))return true;   /* 이미 들어 있는 바로 그 사람 */
+  if(g.roster.length>=GUILD_MAX)return false;const e={n:name,r:'n'};if(k)e.k=k;g.roster.push(e);g.rv++;guildPush();guildChanged();log(`${name}님이 길드에 들어왔다`,'good');return true;}
+/* 내보내기·길드장 넘기기는 이름이 아니라 명단 칸(열쇠)으로 고른다 */
+function guildKick(key){const g=gMine(),me=gMe();if(!g||gRank()!=='m')return;const t=g.roster.find(m=>gKey(m)===key);if(!t||t===me)return;
+  g.roster=g.roster.filter(m=>m!==t);g.rv++;guildPush();
+  log(`${t.n}님을 길드에서 내보냈다`,'sys');guildChanged();}
+function guildGive(key){const g=gMine(),me=gMe();if(!g||gRank()!=='m')return;const t=g.roster.find(m=>gKey(m)===key);if(!t||t===me)return;
+  for(const m of g.roster)m.r=m===t?'m':'n';g.rv++;guildPush();log(`${t.n}님에게 길드장을 넘겼다`,'sys');guildChanged();}
+function guildLeave(){const g=gMine();if(!g)return;const me=gMe();
+  if(gRank()==='m'){const rest=g.roster.filter(m=>m!==me);
     if(rest.length){toast('길드장은 먼저 길드장을 넘기거나 길드를 해산해야 해요');return;}}
-  for(const [id,o] of guildOnline())if(o.gd.id===g.id)dm(id,{k:'gleave',gid:g.id,n:P.name});
+  for(const [id,o] of guildOnline())if(o.gd.id===g.id)dm(id,{k:'gleave',gid:g.id,n:P.name,mk:P.gk});
   P.guild=null;log(`길드 「${g.name}」에서 나왔다`,'sys');guildChanged();}
 function guildDisband(){const g=gMine();if(!g||gRank()!=='m')return;const gone={...g,roster:[],rv:g.rv+1,dis:1};
   for(const [id,o] of guildOnline())if(o.gd.id===g.id)dm(id,{k:'gset',g:gone});P.guild=null;log(`길드 「${g.name}」을(를) 해산했다`,'sys');guildChanged();}
@@ -13506,23 +13528,29 @@ function onGuildDm(from,name,d){const o=others.get(from),g=gMine();
   switch(d.k){
     case 'ginv':if(g){dm(from,{k:'gno',why:'이미 다른 길드에 있어요'});return;}
       if(!o||!o.gd||o.gd.id!==d.gid)return;
-      askPrompt(`${name}님이 길드 「${o.gd.name}」에 초대했어요.`,'수락','거절',ok=>{if(ok&&!gMine())dm(from,{k:'gacc',gid:d.gid,n:P.name});else dm(from,{k:'gno',why:'길드 초대를 거절했어요'});});return;
+      askPrompt(`${name}님이 길드 「${o.gd.name}」에 초대했어요.`,'수락','거절',ok=>{if(ok&&!gMine())dm(from,{k:'gacc',gid:d.gid,n:P.name,mk:P.gk});else dm(from,{k:'gno',why:'길드 초대를 거절했어요'});});return;
     case 'greq':if(!g||g.id!==d.gid)return;
-      if(gRank()!=='m'){const ms=guildOnline().find(([,q])=>q.gd.id===g.id&&q.gd.r==='m');if(ms)dm(ms[0],{k:'greq',gid:g.id,n:d.n,via:from});else dm(from,{k:'gno',why:'길드장이 접속해 있지 않아요'});return;}
+      if(gRank()!=='m'){const ms=guildOnline().find(([,q])=>q.gd.id===g.id&&q.gd.r==='m');if(ms)dm(ms[0],{k:'greq',gid:g.id,n:d.n,mk:d.mk,via:from});else dm(from,{k:'gno',why:'길드장이 접속해 있지 않아요'});return;}
       {const who=typeof d.via==='string'?d.via:from,wo=others.get(who);if(!wo||wo.gd)return;
         askPrompt(`${wo.name}님이 길드에 들어오고 싶어 해요.`,'받기','거절',ok=>{if(!ok){dm(who,{k:'gno',why:'가입 신청을 거절했어요'});return;}
-          if(!guildAdd(wo.name)){dm(who,{k:'gno',why:'길드가 가득 찼어요'});return;}dm(who,{k:'gset',g:gMine()});});}return;
+          if(gMine()!==g)return;if(gkOk(d.mk))wo.gk=d.mk;
+          if(!guildAdd(wo.name,d.mk)){dm(who,{k:'gno',why:'길드가 가득 찼어요'});return;}dm(who,{k:'gset',g:gMine()});});}return;
     case 'gacc':if(!g||g.id!==d.gid||gRank()!=='m'||!o||o.gd)return;
-      if(!guildAdd(o.name)){dm(from,{k:'gno',why:'길드가 가득 찼어요'});return;}dm(from,{k:'gset',g:gMine()});return;
+      if(gkOk(d.mk))o.gk=d.mk;
+      if(!guildAdd(o.name,d.mk)){dm(from,{k:'gno',why:'길드가 가득 찼어요'});return;}dm(from,{k:'gset',g:gMine()});return;
     case 'gno':toast(`${name}: ${typeof d.why==='string'?d.why.slice(0,40):'거절'}`);return;
     case 'gset':{const ng=d.g&&guildLoad(d.g);if(!ng)return;
       if(g&&g.id!==ng.id)return;
       if(g&&ng.rv<=g.rv)return;
-      if(d.g.dis||!ng.roster.some(m=>m.n===P.name)){if(g){P.guild=null;log(d.g.dis?`길드 「${g.name}」이(가) 해산되었다`:`길드 「${g.name}」에서 나가게 되었다`,'sys');guildChanged();}return;}
+      if(d.g.dis||!gMeIn(ng)){if(g){P.guild=null;log(d.g.dis?`길드 「${g.name}」이(가) 해산되었다`:`길드 「${g.name}」에서 나가게 되었다`,'sys');guildChanged();}return;}
       const was=!!g;P.guild=ng;if(!was)log(`길드 「${ng.name}」에 들어갔다`,'good');guildChanged();return;}
     case 'gsync':if(g&&o&&o.gd&&o.gd.id===g.id)dm(from,{k:'gset',g});return;
     case 'gleave':if(!g||g.id!==d.gid||gRank()!=='m')return;
-      if(typeof d.n==='string'){g.roster=g.roster.filter(m=>m.n!==safeName(d.n));g.rv++;guildPush();log(`${safeName(d.n)}님이 길드를 떠났다`,'sys');guildChanged();}return;
+      {/* 떠난 그 사람 칸 하나만 지운다 (예전엔 같은 이름을 모두 지워서, 남은 사람의 길드가 사라졌다) */
+        const t=(gkOk(d.mk)&&g.roster.find(m=>m.k===d.mk))||(typeof d.n==='string'&&g.roster.find(m=>!m.k&&m.n===safeName(d.n)));
+        if(!t||t===gMe())return;g.roster=g.roster.filter(m=>m!==t);g.rv++;guildPush();log(`${t.n}님이 길드를 떠났다`,'sys');guildChanged();}return;
+    case 'gwho':if(!g||!o||d.gid!==g.id)return;if(gkOk(d.mk))o.gk=d.mk;dm(from,{k:'gme',gid:g.id,mk:P.gk});guildFix(o);return;
+    case 'gme':if(!g||!o||d.gid!==g.id||!gkOk(d.mk))return;o.gk=d.mk;guildFix(o);return;
     case 'gchat':if(!g||!o||!o.gd||o.gd.id!==g.id)return;{const t=cleanChat(d.m);if(t){logChat(`[길드] ${name}`,t,false);o.chat={text:t,t:6};}}return;
   }}
 
@@ -13535,11 +13563,12 @@ function renderGuild(){const box=$('#gBody');box.innerHTML='';const g=gMine();
   const btn=(t,f,cls)=>{const b=el('button',cls||'ghost',t);b.type='button';b.onclick=f;return b;};
   if(g){const me=gRank();
     const h=el('div','gHead');const cr=el('span','gCrest');cr.style.background='#'+g.c;h.append(cr,el('b','gName',g.name),el('small','',`${g.roster.length}/${GUILD_MAX}명`));box.appendChild(h);
-    const on=new Map();for(const [id,o] of guildOnline())if(o.gd.id===g.id)on.set(o.name,id);on.set(P.name,'me');
+    const meE=gMe(),onK=new Set(),onN=new Set();for(const [,o] of guildOnline())if(o.gd.id===g.id){if(o.gk)onK.add(o.gk);onN.add(o.name);}
+    const isOn=m=>m===meE||(m.k?onK.has(m.k):onN.has(m.n));
     const list=el('div','gList');
-    for(const m of g.roster.slice().sort((a,b)=>(b.r==='m')-(a.r==='m')||(on.has(b.n)-on.has(a.n)))){
-      const row=el('div','gRow'+(on.has(m.n)?' on':''));row.append(el('span','gDot'),el('span','gN',(m.r==='m'?'♛ ':'')+m.n),el('small','',m.r==='m'?'길드장':'길드원'));
-      if(me==='m'&&m.n!==P.name){row.append(btn('길드장 넘기기',()=>{askPrompt(`${m.n}님에게 길드장을 넘길까요?`,'넘기기','취소',ok=>{if(ok)guildGive(m.n);});},'mini'),btn('내보내기',()=>{askPrompt(`${m.n}님을 길드에서 내보낼까요?`,'내보내기','취소',ok=>{if(ok)guildKick(m.n);});},'mini'));}
+    for(const m of g.roster.slice().sort((a,b)=>(b.r==='m')-(a.r==='m')||(isOn(b)-isOn(a)))){
+      const row=el('div','gRow'+(isOn(m)?' on':''));row.append(el('span','gDot'),el('span','gN',(m.r==='m'?'♛ ':'')+m.n),el('small','',m.r==='m'?'길드장':'길드원'));
+      if(me==='m'&&m!==meE){const key=gKey(m);row.append(btn('길드장 넘기기',()=>{askPrompt(`${m.n}님에게 길드장을 넘길까요?`,'넘기기','취소',ok=>{if(ok)guildGive(key);});},'mini'),btn('내보내기',()=>{askPrompt(`${m.n}님을 길드에서 내보낼까요?`,'내보내기','취소',ok=>{if(ok)guildKick(key);});},'mini'));}
       list.appendChild(row);}
     box.appendChild(list);
     const acts=el('div','chest-btns');
@@ -15130,7 +15159,7 @@ function renderChars(){
     row.append(b,d);box.appendChild(row);
   }
 }
-function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:spAll(),skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mentorReady:P.mentorReady,faith:P.faith|0||undefined,needBook:P.needBook||undefined,mq:P.mq||undefined,mqDone:P.mqDone||undefined,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap),guild:P.guild||undefined}:null;}
+function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:spAll(),skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mentorReady:P.mentorReady,faith:P.faith|0||undefined,needBook:P.needBook||undefined,mq:P.mq||undefined,mqDone:P.mqDone||undefined,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap),gk:P.gk,guild:P.guild||undefined}:null;}
 function save(){const s=snapshotP();if(!s)return;const list=loadChars();const i=list.findIndex(c=>c.id===s.id);if(i>=0)list[i]=s;else list.push(s);storeChars(list);}
 
 /* ---------- 메뉴 ---------- */
@@ -15205,7 +15234,7 @@ function startGameNow(data){
   // 바뀐 스킬: 지금 직업에 없는 스킬은 SP를 돌려주고 칸에서 뺀다
   if(data.skv!==SKILL_VER){fixSkills('스킬이 새로 바뀌어');}P.skv=SKILL_VER;grantTraits();
   {let back=0;for(const id in P.skills){const mx=skMax(SK[id]);if(P.skills[id]>mx){back+=P.skills[id]-mx;P.skills[id]=mx;}}if(back){setTimeout(()=>log(`최대 단계가 바뀐 스킬이 있어 SP ${back}을(를) 돌려받았다.`,'sys'),500);}}
-  P.advSp={...(data.advSp||{})};P.pastSkills={...(data.pastSkills||{})};P.guild=guildLoad(data.guild);
+  P.advSp={...(data.advSp||{})};P.pastSkills={...(data.pastSkills||{})};P.gk=gkOk(data.gk)?data.gk:gkNew();P.guild=guildLoad(data.guild);guildMigrate();
   // 직업에 맞지 않는 장비는 가방으로
   for(const s of ['weapon','sub']){const id=P.equip[s];if(id&&!canWear(id,P.job)){P.bag.push(bagGear(id,P.enh[s]));P.equip[s]=null;P.enh[s]=0;}}
   // 직업 전용 장비 지급 (처음 한 번)
