@@ -43,11 +43,42 @@ try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'fonts'))) if (/^[A-Za-z
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'music'))) if (/^[a-z0-9_]+\.mp3$/.test(fn)) files['/music/' + fn] = { file: 'music/' + fn, type: 'audio/mpeg', cache: 'public, max-age=86400', raw: true }; } catch (e) {}
 // 지금 배포된 커밋: 효과음(sfx.json)처럼 자주 바뀌지 않는 작은 파일을 CDN의 이 커밋에서 받게 한다
 const GIT_SHA = process.env.RENDER_GIT_COMMIT || process.env.RAILWAY_GIT_COMMIT_SHA || '';
+// 게임 코드(index.html 안의 큰 <script> 세 개, 약 1.8MB)는 jsDelivr(무료 CDN)의 같은 커밋 index.html에서 받게 한다
+// 서버는 화면 틀(약 25KB 압축)만 보내서 서버 데이터 사용량이 크게 준다. CDN이 안 되면 이 서버의 /game-src.html 에서 받는다
+const GAME_SRC = '/game-src.html';
+const SHELL = /^[0-9a-f]{7,40}$/.test(GIT_SHA) && process.env.ORLANDO_SHELL !== '0';
+if (SHELL) files[GAME_SRC] = { file: 'index.html', type: 'text/plain; charset=utf-8', cache: 'no-cache', src: true };
+const BIG_SCRIPT = /<script>([\s\S]*?)<\/script>/g;
+function makeShell(html, raw) {
+  const parts = [];
+  for (const m of raw.matchAll(BIG_SCRIPT)) if (m[1].length > 5000) {
+    const start = m.index + '<script>'.length;
+    parts.push([start, m[1].length, require('crypto').createHash('sha256').update(m[1], 'utf8').digest('base64')]);
+  }
+  if (!parts.length) return html;
+  let k = 0;
+  html = html.replace(BIG_SCRIPT, (all, code) => (code.length > 5000 ? `<script type="text/x-orlando-game" data-g="${k++}"></script>` : all));
+  const cdn = /window\.ORLANDO_CDN="(https:\/\/cdn\.jsdelivr\.net\/gh\/[^@"]+@)[0-9a-f]+(\/[^"]*)"/.exec(raw);
+  const src = cdn ? cdn[1] + GIT_SHA + cdn[2] + 'index.html' : null;
+  const loader = `<script>(function(){var G=${JSON.stringify({ src, alt: GAME_SRC + '?v=' + GIT_SHA.slice(0, 12), parts })};
+function get(u,ms){return new Promise(function(ok,no){var t=setTimeout(function(){no('시간 초과')},ms);fetch(u,{cache:'force-cache'}).then(function(r){if(!r.ok)throw r.status;return r.text()}).then(function(x){clearTimeout(t);ok(x)},function(e){clearTimeout(t);no(e)})})}
+function b64(buf){var s='',a=new Uint8Array(buf);for(var i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);return btoa(s)}
+function check(t){if(!t)return Promise.resolve(false);var c=window.crypto&&crypto.subtle;if(!c)return Promise.resolve(true);
+  return Promise.all(G.parts.map(function(p){return c.digest('SHA-256',new TextEncoder().encode(t.substr(p[0],p[1]))).then(function(h){return b64(h)===p[2]})})).then(function(r){return r.every(Boolean)})}
+function run(t){G.parts.forEach(function(p,i){var o=document.querySelector('script[data-g="'+i+'"]'),s=document.createElement('script');s.textContent=t.substr(p[0],p[1]);o.parentNode.replaceChild(s,o)})}
+function fail(){var d=document.createElement('div');d.style.cssText='position:fixed;inset:auto 0 40% 0;text-align:center;color:#ffd9a0;font:16px sans-serif;z-index:99999';d.textContent='게임을 불러오지 못했어요. 새로고침해 주세요.';document.body.appendChild(d)}
+(G.src?get(G.src,12000):Promise.reject()).then(function(t){return check(t).then(function(ok){if(!ok)throw 0;return t})})
+  .catch(function(){return get(G.alt,60000).then(function(t){return check(t).then(function(ok){if(!ok)throw 0;return t})})})
+  .then(run,fail);})();</script>`;
+  const end = html.lastIndexOf('</body>');
+  return end < 0 ? html + loader : html.slice(0, end) + loader + html.slice(end);
+}
 for (const f of Object.values(files)) {
   f.body = fs.readFileSync(path.join(PUBLIC, f.file));
-  if (f.file === 'index.html' && /^[0-9a-f]{7,40}$/.test(GIT_SHA)) {
+  if (f.file === 'index.html' && !f.src && /^[0-9a-f]{7,40}$/.test(GIT_SHA)) {
     const html = f.body.toString('utf8'), m = /window\.ORLANDO_CDN="(https:\/\/cdn\.jsdelivr\.net\/gh\/[^@"]+@)[0-9a-f]+(\/[^"]*)"/.exec(html);
     if (m) f.body = Buffer.from(html.replace('<script>window.ORLANDO_WS=', `<script>window.ORLANDO_CDN_HEAD="${m[1]}${GIT_SHA}${m[2]}";</script><script>window.ORLANDO_WS=`), 'utf8');
+    if (SHELL) f.body = Buffer.from(makeShell(f.body.toString('utf8'), html), 'utf8');
   }
   if (!f.raw) f.gz = zlib.gzipSync(f.body, { level: 9 });
   if (f.file === 'index.html') f.br = zlib.brotliCompressSync(f.body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: f.body.length } });   // 브라우저가 받으면 gzip보다 더 작게

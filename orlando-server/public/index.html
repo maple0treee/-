@@ -1750,7 +1750,8 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     const { MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, zoneAt, SAFE, worldClamp, roomClamp, keepOutOfSafe, DUN, BOSS_HOME, C2, R2, ROAD, PIT, TOWN_R, LAIR, WLAIR } = OR;
     const TICK = 0.1;
     const NEAR_R2 = 125 * 125;   // 이만큼 안쪽의 몬스터만 그 사람에게 보낸다 (안개가 140m에서 끝난다)
-    const muRow = (m) => [m.i, r2(m.x), r2(m.z), r2(m.ry), Math.max(0, Math.round(m.hp)), (m.windup > 0 || (m.sk && !m.sk.done) || (m.sks && m.sks.length) ? 1 : 0) | (m.stun > 0 ? 2 : 0) | (m.dot ? 4 : 0) | (m.vuln > 0 ? 8 : 0) | (m.air > 0 ? 16 : 0)];
+    // 몬스터 위치 소식은 0.1m 단위, 방향은 -3.14~3.14 로 줄여서 보낸다 (글자 수가 줄어 전송량이 준다)
+    const muRow = (m) => [m.i, Math.round(m.x * 10) / 10, Math.round(m.z * 10) / 10, r2(Math.atan2(Math.sin(m.ry), Math.cos(m.ry))), Math.max(0, Math.round(m.hp)), (m.windup > 0 || (m.sk && !m.sk.done) || (m.sks && m.sks.length) ? 1 : 0) | (m.stun > 0 ? 2 : 0) | (m.dot ? 4 : 0) | (m.vuln > 0 ? 8 : 0) | (m.air > 0 ? 16 : 0)];
     const rnd = (a, b) => a + Math.random() * (b - a);
     const pick = (a) => a[Math.floor(Math.random() * a.length)];
     const r2 = (v) => Math.round(v * 100) / 100;
@@ -1791,6 +1792,10 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
 
     // ---------- 몬스터 ----------
     const monsters = new Map();
+    // 몬스터 움직임은 0.1초마다 계산하지만, 접속자에게는 0.2초에 한 번 모아서 보낸다 (게임이 그 사이를 부드럽게 이어 준다)
+    const SEND_EVERY = 2;
+    let sendTick = 0;
+    const changed = new Set();
     let seq = 0;
     function randPointIn(zone) {
       for (let i = 0; i < 400; i++) {
@@ -2148,7 +2153,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
       // 도발당해 그 쉴더를 노리던 몬스터만 옮겨 간다 (그냥 박아 둔 스쿠툼은 아무도 끌지 않는다)
       { const dcs = new Set(ts.filter((t) => t.dc).map((t) => t.id)); if (dcs.size) for (const m of monsters.values()) if (m.aggroOn && m.taunt > 0 && dcs.has('dc:' + m.aggroOn)) m.aggroOn = 'dc:' + m.aggroOn; }
       const players = [...clients.values()].filter((c) => c.pres.on);
-      const active = [], updates = [];
+      const active = [];
       const boss = [...monsters.values()].find((q) => q.boss);
       for (const m of [...monsters.values()]) {
         if (!players.some((c) => Math.hypot(c.pres.x - m.x, c.pres.z - m.z) < 75)) continue;
@@ -2257,9 +2262,14 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
         const after = [m.x, m.z, m.ry, Math.round(m.hp), m.windup > 0 || !!(m.sk && !m.sk.done) || !!(m.sks && m.sks.length), m.stun > 0, !!m.dot, m.vuln > 0, m.air > 0];
         if (m.dirty || after.some((v, k) => v !== m.before[k])) {
           m.dirty = false;
-          updates.push(muRow(m));
+          changed.add(m.i);
         }
       }
+      if (++sendTick < SEND_EVERY) return;
+      sendTick = 0;
+      const updates = [];
+      for (const i of changed) { const m = monsters.get(i); if (m) updates.push(muRow(m)); }
+      changed.clear();
       // 접속자마다 가까운(안개 안쪽) 몬스터만 보낸다: 멀리 있는 몬스터 소식까지 모두에게 보내던 것이 서버 전송량의 대부분이었다
       // 처음 가까워진 몬스터는 바뀐 게 없어도 지금 상태를 한 번 보내서, 멀리 있던 동안 움직인 자리를 맞춘다
       const byId = new Map(updates.map((u) => [u[0], u]));
@@ -17220,7 +17230,8 @@ function makeWsRoom(){
   const firePeers=()=>{const ps=snap();peerFns.forEach(f=>{try{f({peers:ps,joined:[],left:[],updated:[]});}catch(e){}});};
   const setConn=v=>{ok=v;connFns.forEach(f=>{try{f(v);}catch(e){}});};
   const send=o=>{if(ok&&ws&&ws.readyState===1)ws.send(JSON.stringify(o));};
-  function open(){if(window.__wsOff)return;
+  let away=false;   // 자리 비움: 창을 내려 두었거나 오래 손대지 않으면 연결을 잠시 끊는다 (서버 데이터 사용량 줄이기)
+  function open(){if(window.__wsOff||away||(ws&&ws.readyState<=1))return;
     try{ws=new WebSocket(url);}catch(e){setTimeout(open,retry);return;}
     ws.onopen=()=>{retry=1000;setConn(true);send({t:'p',d:mine});};
     ws.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch(err){return;}
@@ -17231,10 +17242,16 @@ function makeWsRoom(){
       else if(m.t==='leave'&&m.id){peers.delete(m.id);firePeers();}
       else if(m.t==='fx'){(topicFns.fx||[]).forEach(f=>{try{f({topic:'fx',data:m.d,peer:m.id,by:null,isMe:false,sameTab:false,kind:'viewer',guest:false});}catch(err){}});}
       else if(topicFns[m.t]){topicFns[m.t].forEach(f=>{try{f(m);}catch(err){}});}};
-    ws.onclose=()=>{if(!ok)window.__wsFails=(window.__wsFails||0)+1;setConn(false);peers.clear();firePeers();setTimeout(open,retry);retry=Math.min(retry*2,15000);};
+    ws.onclose=()=>{if(away){setConn(false);peers.clear();firePeers();setRoomStatus('자리 비움 · 돌아오면 다시 연결돼요');return;}if(!ok)window.__wsFails=(window.__wsFails||0)+1;setConn(false);peers.clear();firePeers();setTimeout(open,retry);retry=Math.min(retry*2,15000);};
     ws.onerror=()=>{};
   }
   open();
+  {let lastAct=Date.now(),hidAt=document.hidden?Date.now():0;
+    const sleep=()=>{if(away)return;away=true;if(ws&&ws.readyState<=1){try{ws.close();}catch(e){}}else setRoomStatus('자리 비움 · 돌아오면 다시 연결돼요');};
+    const wake=()=>{lastAct=Date.now();if(!away)return;away=false;retry=1000;if(!ws||ws.readyState>=2)open();};
+    for(const ev of ['pointerdown','keydown','touchstart','wheel','mousemove'])addEventListener(ev,()=>{if(!document.hidden)wake();},{capture:true,passive:true});
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)hidAt=Date.now();else{hidAt=0;wake();}});
+    setInterval(()=>{const now=Date.now();if(document.hidden?now-hidAt>120000:now-lastAct>600000)sleep();},5000);}   // 창을 내려 두고 2분, 또는 아무 입력 없이 10분
   return{
     presence(p){for(const k in p){if(p[k]===null)delete mine[k];else mine[k]=p[k];}send({t:'p',d:mine});return Promise.resolve();},
     emit(topic,data){send({t:topic,d:data});return Promise.resolve();},
@@ -18191,10 +18208,10 @@ function updateNetMonsters(dt){if(player&&tAll-_myMapT>.3){_myMapT=tAll;_myMap=m
   }
 }
 // 몬스터 위치는 받은 기록을 조금(0.12초) 늦게 이어서 그린다: 소식이 고르지 않게 와도 떨리지 않는다
-const SNAP_DELAY=.12;
+const SNAP_DELAY=.26;   /* 서버가 몬스터 위치를 0.2초마다 보내므로 그보다 조금 늦게 따라가며 사이를 이어 준다 */
 function pushSnap(m,x,z){const t=performance.now()/1000;const S=m.snaps||(m.snaps=[]);
   if(S.length&&t-S[S.length-1][0]<.01){S[S.length-1]=[t,x,z];return;}
-  if(S.length&&t-S[S.length-1][0]>.25){const L=S[S.length-1];S.push([t-.1,L[1],L[2]]);}
+  if(S.length&&t-S[S.length-1][0]>.45){const L=S[S.length-1];S.push([t-.2,L[1],L[2]]);}
   S.push([t,x,z]);if(S.length>8)S.shift();}
 function snapAt(m){const S=m.snaps;if(!S||!S.length)return null;const rt=performance.now()/1000-SNAP_DELAY;
   if(rt<=S[0][0])return[S[0][1],S[0][2]];

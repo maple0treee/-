@@ -7,7 +7,8 @@
     const { MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, zoneAt, SAFE, worldClamp, roomClamp, keepOutOfSafe, DUN, BOSS_HOME, C2, R2, ROAD, PIT, TOWN_R, LAIR, WLAIR } = OR;
     const TICK = 0.1;
     const NEAR_R2 = 125 * 125;   // 이만큼 안쪽의 몬스터만 그 사람에게 보낸다 (안개가 140m에서 끝난다)
-    const muRow = (m) => [m.i, r2(m.x), r2(m.z), r2(m.ry), Math.max(0, Math.round(m.hp)), (m.windup > 0 || (m.sk && !m.sk.done) || (m.sks && m.sks.length) ? 1 : 0) | (m.stun > 0 ? 2 : 0) | (m.dot ? 4 : 0) | (m.vuln > 0 ? 8 : 0) | (m.air > 0 ? 16 : 0)];
+    // 몬스터 위치 소식은 0.1m 단위, 방향은 -3.14~3.14 로 줄여서 보낸다 (글자 수가 줄어 전송량이 준다)
+    const muRow = (m) => [m.i, Math.round(m.x * 10) / 10, Math.round(m.z * 10) / 10, r2(Math.atan2(Math.sin(m.ry), Math.cos(m.ry))), Math.max(0, Math.round(m.hp)), (m.windup > 0 || (m.sk && !m.sk.done) || (m.sks && m.sks.length) ? 1 : 0) | (m.stun > 0 ? 2 : 0) | (m.dot ? 4 : 0) | (m.vuln > 0 ? 8 : 0) | (m.air > 0 ? 16 : 0)];
     const rnd = (a, b) => a + Math.random() * (b - a);
     const pick = (a) => a[Math.floor(Math.random() * a.length)];
     const r2 = (v) => Math.round(v * 100) / 100;
@@ -48,6 +49,10 @@
 
     // ---------- 몬스터 ----------
     const monsters = new Map();
+    // 몬스터 움직임은 0.1초마다 계산하지만, 접속자에게는 0.2초에 한 번 모아서 보낸다 (게임이 그 사이를 부드럽게 이어 준다)
+    const SEND_EVERY = 2;
+    let sendTick = 0;
+    const changed = new Set();
     let seq = 0;
     function randPointIn(zone) {
       for (let i = 0; i < 400; i++) {
@@ -405,7 +410,7 @@
       // 도발당해 그 쉴더를 노리던 몬스터만 옮겨 간다 (그냥 박아 둔 스쿠툼은 아무도 끌지 않는다)
       { const dcs = new Set(ts.filter((t) => t.dc).map((t) => t.id)); if (dcs.size) for (const m of monsters.values()) if (m.aggroOn && m.taunt > 0 && dcs.has('dc:' + m.aggroOn)) m.aggroOn = 'dc:' + m.aggroOn; }
       const players = [...clients.values()].filter((c) => c.pres.on);
-      const active = [], updates = [];
+      const active = [];
       const boss = [...monsters.values()].find((q) => q.boss);
       for (const m of [...monsters.values()]) {
         if (!players.some((c) => Math.hypot(c.pres.x - m.x, c.pres.z - m.z) < 75)) continue;
@@ -514,9 +519,14 @@
         const after = [m.x, m.z, m.ry, Math.round(m.hp), m.windup > 0 || !!(m.sk && !m.sk.done) || !!(m.sks && m.sks.length), m.stun > 0, !!m.dot, m.vuln > 0, m.air > 0];
         if (m.dirty || after.some((v, k) => v !== m.before[k])) {
           m.dirty = false;
-          updates.push(muRow(m));
+          changed.add(m.i);
         }
       }
+      if (++sendTick < SEND_EVERY) return;
+      sendTick = 0;
+      const updates = [];
+      for (const i of changed) { const m = monsters.get(i); if (m) updates.push(muRow(m)); }
+      changed.clear();
       // 접속자마다 가까운(안개 안쪽) 몬스터만 보낸다: 멀리 있는 몬스터 소식까지 모두에게 보내던 것이 서버 전송량의 대부분이었다
       // 처음 가까워진 몬스터는 바뀐 게 없어도 지금 상태를 한 번 보내서, 멀리 있던 동안 움직인 자리를 맞춘다
       const byId = new Map(updates.map((u) => [u[0], u]));
