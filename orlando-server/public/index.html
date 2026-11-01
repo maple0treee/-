@@ -2801,10 +2801,31 @@ const mat=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughn
 const colliders=[];
 /* 앉을 자리: 벤치·걸상·소파. {x,z,y:앉는 높이(세계), ry:앉아서 보는 방향} — F로 앉고, 움직이면 일어난다 */
 const SEATS=[];
+const MIRRORS=[];   /* 진짜로 비치는 거울들 (mirrorAdd) */
 function seatAdd(x,z,y,ry){SEATS.push({x,z,y,ry});}
 function seatNear(){if(!player||!P||P.seat!=null)return -1;const q=player.position;let b=-1,bd=1.7;for(let i=0;i<SEATS.length;i++){const s=SEATS[i];if(Math.abs(s.y-q.y)>2.5)continue;const d=Math.hypot(s.x-q.x,s.z-q.z);if(d<bd){bd=d;b=i;}}return b;}
-function seatSit(i){const s=SEATS[i];if(!s||!P)return;if(P.ride&&typeof rideOff==='function')rideOff(true);P.seat=i;sitting=true;player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;cam.yaw=s.ry+Math.PI;interactTarget=null;sfx('ui');if(typeof publishPresence==='function')publishPresence(true);}
-function seatLeave(){if(!P||P.seat==null)return;const s=SEATS[P.seat];P.seat=null;sitting=false;if(s){player.position.set(s.x+Math.sin(s.ry)*.7,heightAt(s.x,s.z),s.z+Math.cos(s.ry)*.7);player.position.y=floorAt(player.position.x,player.position.z,s.y+1);}}
+function seatSit(i){const s=SEATS[i];if(!s||!P)return;standUp=null;if(P.ride&&typeof rideOff==='function')rideOff(true);P.seat=i;sitting=true;player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;cam.yaw=s.ry+Math.PI;interactTarget=null;sfx('ui');if(typeof publishPresence==='function')publishPresence(true);}
+/* 일어나기: 앉은 자리에서 0.7m 앞 바닥으로 한 번에 옮기면 몸과 눈높이가 툭 떨어졌다가 다시 솟아 튕기는 느낌이 났다.
+   이제 0.42초 동안 자리에서 일어선 곳까지 부드럽게 옮기고, 앉은 자세·눈높이도 같은 빠르기로 함께 푼다 (그동안은 움직이지 않는다) */
+let standUp=null;
+const sitEase=k=>k*k*(3-2*k);
+function seatLeave(){if(!P||P.seat==null)return;const s=SEATS[P.seat];P.seat=null;sitting=false;if(s){const tx=s.x+Math.sin(s.ry)*.7,tz=s.z+Math.cos(s.ry)*.7;
+  const q=standSpot(s,tx,tz);
+  standUp={t:0,T:.42,fx:player.position.x,fy:player.position.y,fz:player.position.z,tx:q.x,ty:q.y,tz:q.z,ry:s.ry,u:0};}}
+function seatLift(){return P&&P.seat!=null?1:standUp?1-sitEase(standUp.u):0;}
+/* 일어설 자리 고르기: 길드홀 둥근 탁자 걸상처럼 바로 앞에 탁자가 붙어 있으면 0.7m 앞이 탁자와 걸상 사이에 끼어,
+   다 일어선 뒤 몸이 옆으로 확 밀려나며 튕겼다. 앞쪽부터 양옆·뒤로 돌려 보며 아무것에도 겹치지 않는 자리를 찾는다 */
+/* 이 자리에 반지름 r 몸이 무엇과든 겹치는지 (pushOut과 같은 거르기. 밀어내기를 차례로 하면 탁자와 걸상이 서로 되밀어 겹친 줄 모를 때가 있다) */
+function colHits(p,r){for(const c of colNear(p.x,p.z,r+.5)){const _r=c.r+r,_x=p.x-c.x,_z=p.z-c.z;if(_x>_r||_x<-_r||_z>_r||_z<-_r)continue;if(c.y0!==undefined&&(p.y<c.y0||p.y>c.y1))continue;if(c.h!==undefined&&p.y>heightAt(c.x,c.z)+c.h-.7)continue;
+  if(c.box){const q={x:p.x,z:p.z,y:p.y};_boxPush(q,c,r);if(Math.hypot(q.x-p.x,q.z-p.z)>.02)return true;continue;}if(Math.hypot(_x,_z)<_r-.02)return true;}return false;}
+function standSpot(s,tx,tz){const free=(x,z)=>{const y=floorAt(x,z,s.y+1);if(Math.abs(y-(s.y-.5))>1.2)return null;const q={x,z,y};return colHits(q,.5)?null:q;};
+  let q=free(tx,tz);if(q)return q;
+  for(const d of [.8,1.0,1.25,1.5])for(const a of [0,.5,-.5,1,-1,1.57,-1.57,2.2,-2.2,3.14]){const x=s.x+Math.sin(s.ry+a)*d,z=s.z+Math.cos(s.ry+a)*d;q=free(x,z);if(q)return q;}
+  q={x:tx,z:tz,y:floorAt(tx,tz,s.y+1)};return q;}
+function standUpTick(dt){const S=standUp;if(!S)return;S.t+=dt;S.u=Math.min(1,S.t/S.T);const e=sitEase(S.u);
+  player.position.set(S.fx+(S.tx-S.fx)*e,S.fy+(S.ty-S.fy)*e,S.fz+(S.tz-S.fz)*e);vy=0;jumpY=0;pvel.x=pvel.z=0;if(S.u>=1)standUp=null;}
+/* 앉은 정도(sitK)를 몸·눈높이에 쓸 때: 일어나는 중이면 일어나기와 같은 박자로, 아니면 앉을 때 0.25초·일어설 때 0.36초 */
+function sitKStep(u,on,dt){if(u===player.userData&&standUp){u.sitK=1-standUp.u;return;}u.sitK=Math.max(0,Math.min(1,(u.sitK||0)+(on?dt*4:-dt*2.8)));}
 /* 부딪힘 칸 나누기: 1만 개가 넘는 충돌체를 매번 다 훑지 않고, 10m 칸에 나눠 두고 가까운 칸만 본다.
    목록 길이가 바뀌면(새로 넣거나 빼면) 다시 나눈다. 아주 큰 충돌체(반지름 40m 넘는 것)는 늘 본다 */
 const COLG={cs:10,map:new Map(),n:-1,big:[],out:[],stamp:0};
@@ -6261,7 +6282,7 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   if(S.shield){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.shield.rotation.set(-lx,-twL+(atk&&mo&&mo.v==='pedge'?pedgeTwist(swing):0),-S.AL.sh.rotation.z);}
   if(S.style==='staff'){const rx=S.AR.sh.rotation.x+S.AR.el.rotation.x;S.w.rotation.set(-rx*.82,0,-S.AR.sh.rotation.z*.8);}
   // 앉기: 바닥에 엉덩이를 대고 무릎을 세워 앉는다 (공격하면 일어난다)
-  const sk=mesh.userData.sitK||0;
+  const sk=sitEase(mesh.userData.sitK||0);
   if(sk>0){const L=(a,b)=>a+(b-a)*sk;
     for(const [Lg,sx] of [[S.L,-1],[S.R,1]]){Lg.hip.rotation.x=L(Lg.hip.rotation.x,-1.25);Lg.hip.rotation.z=L(0,sx*.28);Lg.knee.rotation.x=L(Lg.knee.rotation.x,1.85);}
     S.body.position.y=L(S.body.position.y,-.86);
@@ -16605,7 +16626,7 @@ function fpsTick(){if(!OPT.fps)return;FPSD.n++;const now=performance.now();if(!F
 $('#mnSkills').onclick=()=>{$('#menu').hidden=true;mode='world';openSkills();};
 $('#mnChars').onclick=()=>{$('#menu').hidden=true;toTitle();};
 $('#mMenu').onclick=()=>openMenu();
-function toTitle(){if(CCAR.ride){CCAR.ride=null;sitting=false;}document.querySelectorAll('.mqnew,.lvup').forEach(e=>e.remove());$('#banner').classList.remove('on');
+function toTitle(){standUp=null;if(CCAR.ride){CCAR.ride=null;sitting=false;}document.querySelectorAll('.mqnew,.lvup').forEach(e=>e.remove());$('#banner').classList.remove('on');
   save();
   for(const p of projs.splice(0))scene.remove(p.m);zonesPending.length=0;
   if(player){scene.remove(player);player=null;}
@@ -16738,7 +16759,7 @@ function drunkBlackout(){if(!P||!player||warping)return;const f=$('#fade');f.cla
   setTimeout(()=>{P.blackout=false;const q=player.position;let bx=q.x,bz=q.z;for(let k=0;k<12;k++){const a=Math.random()*Math.PI*2,d=4+Math.random()*9,x=q.x+Math.cos(a)*d,z=q.z+Math.sin(a)*d;const p={x,z};if(typeof OR.worldClamp==='function')OR.worldClamp(p,.5);if(Math.hypot(p.x-q.x,p.z-q.z)>3){bx=p.x;bz=p.z;break;}}
     player.position.set(bx,floorAt(bx,bz,q.y+1),bz);pvel.x=pvel.z=0;vy=0;P.drunk=Math.max(0,P.drunk-2.5);if(P.seat!=null){P.seat=null;sitting=false;}
     log('…정신을 차려 보니 엉뚱한 곳에 있다. 중간 기억이 없다','sys');publishPresence(true);setTimeout(()=>f.classList.remove('on'),300);},2600);}
-function warpTo(x,z,yaw,msg,fy){if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.seat!=null){P.seat=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
+function warpTo(x,z,yaw,msg,fy){standUp=null;if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.seat!=null){P.seat=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
   if(warping)return;warping=true;
   const f=$('#fade');f.classList.add('on');
   setTimeout(()=>{const gy=heightAt(x,z);player.position.set(x,Math.max(gy,floorAt(x,z,fy!=null?fy:gy+20)),z);   /* fy: 여러 층 건물 안에서는 도착할 층 높이 */pvel.x=pvel.z=0;vy=0;cam.yaw=yaw;cam.pitch=0;
@@ -18536,7 +18557,7 @@ function reviveSpot(){const q=player?player.position:{x:OR.C2.x,z:OR.C2.z},z=zon
   if(['marcus','castle','guildhall','exmarket','arena','coachway'].includes(z))return ex();
   if(z==='hall'||['silva','arbus','kaolis','subcus'].includes(z))return {name:'지하실',x:OR.HALL.x,z:OR.HALL.z+8,yaw:0};
   return H;}
-function die(src){if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.seat!=null){P.seat=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
+function die(src){standUp=null;if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.seat!=null){P.seat=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
   P.hp=0;P.barbLast=null;P.pushPrep=null;P.empShield=false;P.guardT=0;P.guardId=null;P.leap=null;P.lblast=null;P.charge=null;P.reLeap=null;if(P.blk)blkEnd();sfxStop('mg_fire');if(P.fly)toggleFly(false);rayEnd();if(P.angel)angelEnd();const lost=Math.floor(P.exp*.3);P.exp-=lost;
   mode='dialog';unlockPointer();syncLockTip();attackHeld=false;
   $('#deadMsg').textContent=`${src}에게 쓰러졌다. EXP ${lost}을(를) 잃었다.`;
@@ -18641,7 +18662,7 @@ function updateOthers(dt){
     m.userData.xl=o.pr&&o.pr.xl!=null?o.pr.xl:-1;   // 석궁병이 홈에 얹어 둔 화살
     {const rd=!!(o.pr&&o.pr.mo==='ride');if(rd!==!!m.userData.ride)setRide(m,rd);if(rd){fitRide(m);rideTrail(m,dt);}}
     if(o.swT<1)o.swT=Math.min(o.pr&&(o.pr.mo==='bdraw'&&o.moObj&&o.moObj.v==='bowdraw'||o.pr.mo==='ride')?.99:1,o.swT+dt*(o.moObj?1/o.moObj.dur:swingSpd(o.job)));
-    {const u=m.userData;u.sitK=Math.max(0,Math.min(1,(u.sitK||0)+(u.sit?dt:-dt)*4));}
+    sitKStep(m.userData,!!m.userData.sit,dt);
     animPlayer(m,sp/6,tAll,o.swT,m.position.y-heightAt(m.position.x,m.position.z)>.35,o.sw%2===1,o.moObj);
     const s=screenOf(m.position.clone().add(new THREE.Vector3(0,2.3,0)));
     const d=m.position.distanceTo(camera.position);
@@ -18891,6 +18912,7 @@ function updatePlayer(dt){
   if(keys.KeyW||keys.ArrowUp)f+=1;if(keys.KeyS||keys.ArrowDown)f-=1;if(keys.KeyD||keys.ArrowRight)r+=1;if(keys.KeyA||keys.ArrowLeft)r-=1;
   f-=joy.y;r+=joy.x;
   if(P.seat!=null){if(Math.hypot(f,r)>.1||keys.Space||attackHeld||P.dash)seatLeave();else{f=0;r=0;sitting=true;}}
+  if(standUp){f=0;r=0;keys.Space=false;}
   if(CCAR.ride){f=0;r=0;sitting=true;keys.Space=false;}
   if(P.pushPrep||P.lotusT>tAll){f=0;r=0;}   /* 교란을 던지는 동안은 제자리 */
   if(sitting&&(Math.hypot(f,r)>.1||keys.Space||attackHeld||P.dash))sitting=false;
@@ -18971,7 +18993,7 @@ function updatePlayer(dt){
     if(touchUI&&cam.third&&swingT>=1&&!P.guardT&&!P.pushPrep&&!P.dash&&Math.hypot(pvel.x,pvel.z)>1.2)by=Math.atan2(-pvel.x,-pvel.z)+Math.PI;
     const cur=player.rotation.y,d=Math.atan2(Math.sin(by-cur),Math.cos(by-cur));player.rotation.y=cur+d*Math.min(1,dt*(touchUI?12:60));}
   if(moving&&jumpY===0){const st0=Math.floor(cam.bob/Math.PI);cam.bob+=dt*moving*9;if(Math.floor(cam.bob/Math.PI)!==st0&&!(P.dash||P.leap))sfx('step',null,1,.9+Math.random()*.2);}
-  if(CCAR.ride)ccarSeatPlayer();else if(P.seat!=null){const s=SEATS[P.seat];if(s){player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;}else P.seat=null;}
+  if(CCAR.ride)ccarSeatPlayer();else if(standUp)standUpTick(dt);else if(P.seat!=null){const s=SEATS[P.seat];if(s){player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;}else P.seat=null;}
   const bobY=(moving&&jumpY===0?Math.sin(cam.bob)*.06:0)-(cam.land||0);
   camera.rotation.set(cam.pitch,cam.yaw,0);
   cam.dw=(cam.dw??1)+(((sitting||P.seat!=null)?0:1)-(cam.dw??1))*Math.min(1,dt*2.5);   /* 앉아 있으면 취해도 시야가 흔들리지 않는다 (일어서면 서서히 다시) */
@@ -18984,10 +19006,10 @@ function updatePlayer(dt){
   else if(rollA&&!cam.third){camera.quaternion.multiply(_bq1.setFromAxisAngle(_rv.set(-Math.cos(rollPhi),0,Math.sin(rollPhi)),rollA));if(rollA>.2&&rollA<6)camera.quaternion.multiply(_bq2.setFromAxisAngle(_rv.set(1,0,0),-.5));}
   if(cam.third){
     player.visible=true;if(viewModel)viewModel.visible=false;
-    {const u=player.userData;u.sitK=Math.max(0,Math.min(1,(u.sitK||0)+(sitting||P.fly?dt:-dt)*4));}
+    sitKStep(player.userData,sitting||!!P.fly,dt);
     animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);
     const back=new THREE.Vector3(0,0,1).applyQuaternion(camera.quaternion);
-    const eye=new THREE.Vector3(player.position.x,player.position.y+1.65-(player.userData.sitK||0)*.7+(P.seat!=null?.25:0),player.position.z);
+    const eye=new THREE.Vector3(player.position.x,player.position.y+1.65-sitEase(player.userData.sitK||0)*.7+seatLift()*.25,player.position.z);
     let dist=4.2;const cp=eye.clone().addScaledVector(back,dist);
     if(CCAR.ride)cp.y+=1.3;
     const gh=heightAt(cp.x,cp.z)+.4;if(cp.y<gh)cp.y=gh;
@@ -18998,12 +19020,13 @@ function updatePlayer(dt){
     swingT=Math.min(swingCap(),swingT+dt*(myMo?1/myMo.dur:swingSpd(P.job)));
   }else{
     player.visible=false;if(viewModel)viewModel.visible=true;
-    camera.position.set(player.position.x,player.position.y+1.62+bobY-(player.userData.sitK||0)*.95+(player.userData.rideY||0),player.position.z);
+    camera.position.set(player.position.x,player.position.y+1.62+bobY-sitEase(player.userData.sitK||0)*.95+(player.userData.rideY||0),player.position.z);
     if(softRoll){const k=Math.sin(Math.min(1,Math.max(0,swingT))*Math.PI);camera.position.y-=.75*k;}   /* 구르는 동안 눈높이만 낮춘다 */
     else if(rollA){const f=flatFwd(),RH=.78-rollCr*.3-rollCr*.32,HR=.84-rollCr*.42,lx=HR*Math.sin(rollPhi)*Math.sin(rollA),lz=HR*Math.cos(rollPhi)*Math.sin(rollA),rx=Math.cos(cam.yaw),rz=-Math.sin(cam.yaw);
       camera.position.set(player.position.x-lx*rx+lz*f.x,player.position.y+RH+HR*Math.cos(rollA),player.position.z-lx*rz+lz*f.z);}
-    {const u=player.userData;u.sitK=Math.max(0,Math.min(1,(u.sitK||0)+(sitting||P.fly?dt:-dt)*4));}
-    if(CCAR.ride)camera.position.y+=.6;else if(P.seat!=null)camera.position.y+=.28;
+    sitKStep(player.userData,sitting||!!P.fly,dt);
+    if(mirrorNear()){player.visible=true;animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);player.visible=false;}   /* 거울에 지금 하는 동작이 비치게 */
+    if(CCAR.ride)camera.position.y+=.6;else camera.position.y+=seatLift()*.28;
     updateViewModel(dt,moving&&jumpY===0);
   }
   camNearFit();
@@ -19011,6 +19034,9 @@ function updatePlayer(dt){
 }
 /* 진짜 거울: 거울 면에 비친 쪽으로 카메라를 하나 더 두어 그 그림을 거울에 붙인다 (three.js Reflector와 같은 방법, 비스듬한 자르기 면 포함).
    가까이(7m 안) 거울 앞쪽에 있을 때만 그린다. 1인칭에서도 거울에는 내 모습이 비치도록 그리는 동안만 몸을 보이게 한다 */
+/* 1인칭에서는 몸이 안 보여서 몸 자세(공격·스킬·앉기·걷기)를 움직이지 않았다. 그래서 거울에는 늘 가만히 선 모습만 비쳤다.
+   거울이 가까이(8m 안) 있으면 1인칭에서도 몸 자세를 3인칭과 똑같이 움직인다 */
+function mirrorNear(){if(!MIRRORS.length||!player)return false;const p=player.position;for(const m of MIRRORS){if(Math.abs(m.position.x-p.x)+Math.abs(m.position.z-p.z)<11&&Math.abs(m.position.y-p.y)<4)return true;}return false;}
 function mirrorAdd(x,y,z,w,h,ry){
   const rt=new THREE.WebGLRenderTarget(256,Math.round(256*h/w),{type:THREE.HalfFloatType});
   const tm=new THREE.Matrix4(),mat=new THREE.ShaderMaterial({uniforms:{tDiffuse:{value:rt.texture},textureMatrix:{value:tm}},
@@ -19018,6 +19044,7 @@ function mirrorAdd(x,y,z,w,h,ry){
     fragmentShader:'uniform sampler2D tDiffuse;varying vec4 vUv;void main(){vec3 c=texture2DProj(tDiffuse,vUv).rgb*vec3(.93,.96,1.0);gl_FragColor=vec4(c,1.0);\n#include <tonemapping_fragment>\n#include <encodings_fragment>\n}'});
   const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat);m.position.set(x,y,z);m.rotation.y=ry||0;scene.add(m);
   const vc=new THREE.PerspectiveCamera(),N=new THREE.Vector3(),RP=new THREE.Vector3(),CP=new THREE.Vector3(),V=new THREE.Vector3(),LA=new THREE.Vector3(),TG=new THREE.Vector3(),R=new THREE.Matrix4(),PL=new THREE.Plane(),CL=new THREE.Vector4(),Q=new THREE.Vector4();
+  MIRRORS.push(m);
   m.onBeforeRender=(renderer,sc,cam)=>{if(cam!==camera)return;RP.setFromMatrixPosition(m.matrixWorld);CP.setFromMatrixPosition(cam.matrixWorld);if(RP.distanceTo(CP)>7)return;
     R.extractRotation(m.matrixWorld);N.set(0,0,1).applyMatrix4(R);V.subVectors(RP,CP);if(V.dot(N)>0)return;V.reflect(N).negate().add(RP);
     R.extractRotation(cam.matrixWorld);LA.set(0,0,-1).applyMatrix4(R).add(CP);TG.subVectors(RP,LA).reflect(N).negate().add(RP);
