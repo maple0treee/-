@@ -8131,10 +8131,19 @@ function stickNpcPose(g,pose,t){const S=g.userData.stick;if(!S)return;const AR=S
     default:arm(AR,.05,0,.1,-.15);arm(AL,.05,0,-.1,-.15);look();}
   if(g.userData.cloth)clothSit(g,S.body.position.y<-.3);}
 /* 걷는 막대 인형 (주민): ph 걸음 위상, w 걷는 정도 */
-function stickWalkPose(g,ph,w,t){const S=g.userData.stick;if(!S)return;const s=Math.sin(ph)*w;
-  S.L.hip.rotation.set(s*.6,0,0);S.R.hip.rotation.set(-s*.6,0,0);S.L.knee.rotation.x=Math.max(0,-Math.sin(ph))*w*.9+.05;S.R.knee.rotation.x=Math.max(0,Math.sin(ph))*w*.9+.05;
-  S.AR.sh.rotation.set(s*.5,0,.08);S.AR.el.rotation.x=-.2;S.AL.sh.rotation.set(-s*.5,0,-.08);S.AL.el.rotation.x=-.2;S.AR.hand.rotation.set(0,0,0);S.AL.hand.rotation.set(0,0,0);
-  S.body.position.set(0,Math.abs(Math.cos(ph))*.03*w,0);S.body.rotation.set(0,0,0);S.upper.rotation.set(.04*w,0,0);S.head.rotation.set(0,0,0);if(g.userData.cloth)clothSit(g,false);}
+function stickWalkPose(g,ph,w,t,pp){const S=g.userData.stick;if(!S)return;const st=pp?pp.st:1,ar=pp?pp.arm:1,s=Math.sin(ph)*w;
+  S.L.hip.rotation.set(s*.6*st,0,0);S.R.hip.rotation.set(-s*.6*st,0,0);S.L.knee.rotation.x=Math.max(0,-Math.sin(ph))*w*.9*Math.min(1.25,st)+.05;S.R.knee.rotation.x=Math.max(0,Math.sin(ph))*w*.9*Math.min(1.25,st)+.05;
+  if(pp&&pp.hb){S.AR.sh.rotation.set(.45,-.6,-.15);S.AR.el.rotation.x=-1.5;S.AL.sh.rotation.set(.45,.6,.15);S.AL.el.rotation.x=-1.5;}   /* 뒷짐 */
+  else{S.AR.sh.rotation.set(s*.5*ar,0,.08);S.AR.el.rotation.x=-.2-(ar>1.2?Math.max(0,s)*.4:0);S.AL.sh.rotation.set(-s*.5*ar,0,-.08);S.AL.el.rotation.x=-.2-(ar>1.2?Math.max(0,-s)*.4:0);}
+  S.AR.hand.rotation.set(0,0,0);S.AL.hand.rotation.set(0,0,0);
+  S.body.position.set(0,Math.abs(Math.cos(ph))*.03*w*(pp?pp.bob:1),0);S.body.rotation.set(0,0,0);S.upper.rotation.set(.04*w+(pp?pp.lean*w:0),0,0);S.head.rotation.set(pp?pp.head*w:0,0,0);
+  if(pp){/* 성격 걸음: 두리번·흔들흔들·휘청·꾸벅 */
+    if(pp.look>1.3){const gq=_sn(t*.5*pp.look,3);S.head.rotation.y=(Math.abs(gq)>.35?Math.sign(gq)*(Math.abs(gq)-.35)*1.3:0)*w;}
+    if(pp.sway){S.body.rotation.z=Math.sin(ph)*.05*pp.sway*w;S.upper.rotation.y=Math.sin(ph)*.06*pp.sway*w;}
+    if(pp.stumble&&_sn(t*.2,5)>.72){S.body.rotation.z+=Math.sin(t*13)*.09*w;S.upper.rotation.x+=.1*w;}
+    if(pp.fid==='nod')S.head.rotation.x+=Math.max(0,_sn(t*.2,2)-.2)*.8*w;
+    if(pp.fid==='tilt')S.head.rotation.z=_sn(t*.3,6)*.18*w;}
+  if(g.userData.cloth)clothSit(g,false);}
 /* 장비를 갖춘 NPC: 플레이어가 끼는 것과 같은 투구·갑옷·신발 모습 + 무기는 허리·등에 찬다 (o.gear={helm,armor,boots,weapon,wjob}) */
 function npcGearOn(g,o){const S=g.userData.stick,G=o.gear;if(!S||!G||(G.weapon??-1)<0||!G.wjob)return;const kind=JOBS[G.wjob].weapon;
   const w=stickWeapon(kind==='shield'?'sword':kind,G.wjob,G.weapon),h=new THREE.Group();h.add(w);
@@ -10547,7 +10556,10 @@ function makeCitizens(cx,cz){
   const free=(mx,my,allow)=>PL.wallDist(mx,my)<-6&&PL.waterDepth(mx,my)<=0&&PL.riverDist(mx,my)>MARCUS_RIVER_W/2+2&&!nearHouse(mx,my,1.2)&&!big(mx,my,1,allow)&&PL.hillH(mx,my)<.3;
   /* 한 명 추가. k: 'pl'(길 왕복) 'circ'(원) 'st'(제자리) */
   const add=o=>{o.type=ti(o.id);delete o.id;o.ph=rnd()*6.28;o.off=rnd()*1000;o.sc=rr(.94,1.08);o.pause=o.pause??(1.5+rnd()*3);o.mode=o.mode||'walk';if(o.mode==='stand'&&rnd()<.7)o.mode=pick(['cross','hips','think','drink','read','point','stretch','pray','shrug','crouch','talk','wave']);o.sp=o.sp??(1.05+rnd()*.5);o.I=null;o.d=1e9;L.push(o);
-    if(typeof chatterAdd==='function'){const tp=CITM.ids[o.type]||'';o.chat=chatterAdd({kind:chatKind(tp),seed:L.length,pos:()=>{const q=o.k==='st'?o:o.q;return q?{x:q.x,y:citGround(q.x,q.z)+(o.y||0),z:q.z}:null;},visible:()=>!!o.I,look:(typeof citStickLook==='function'?citStickLook(tp):{}),pose:'idle',cit:o});}   /* 말 걸 수 있는 사람으로 */
+    if(typeof chatterAdd==='function'){const tp=CITM.ids[o.type]||'';o.chat=chatterAdd({kind:chatKind(tp),seed:L.length,pos:()=>{const q=o.k==='st'?o:o.q;return q?{x:q.x,y:citGround(q.x,q.z)+(o.y||0),z:q.z}:null;},visible:()=>!!o.I,look:(typeof citStickLook==='function'?citStickLook(tp):{}),pose:'idle',cit:o});
+      /* 성격에 따라 걸음 빠르기·쉬는 시간이 다르다 (길 위 일정도 그에 맞춰 다시 잰다) */
+      const pp=o.pp=CHATTER[o.chat].pp;if(pp){o.sp*=pp.sp;o.pause*=pp.pause;
+        if(o.k==='rt'){let P=0;for(const it of o.sch){if(it.t==='w')it.dur=it.L/o.sp;else it.dur*=pp.pause;it.st=P;P+=it.dur;}o.P=P;}}}   /* 말 걸 수 있는 사람으로 */
     return o;};
   /* 길 그물: 길들이 만나는 자리를 마디로 삼아, 사람마다 제멋대로 길을 고르며 다니게 한다 */
   const GR=(()=>{const segs=[];PL.streets.forEach((st,si)=>{for(let i=0;i<st.p.length-1;i++)segs.push({si,a:st.p[i],b:st.p[i+1],w:st.w});});
@@ -10623,7 +10635,7 @@ function makeCitizens(cx,cz){
     const blockedA=a=>{const d1=Math.abs(((a+PI/2)%(PI*2)+PI*2)%(PI*2)),dn=Math.min(d1,PI*2-d1),d2=Math.abs(((a)%(PI*2)+PI*2)%(PI*2)),de=Math.min(d2,PI*2-d2);return dn<.62||de<.42;};
     for(let k=0;k<12;k++){const a=k/12*6.28+PI/12;if(blockedA(a))continue;for(const s2 of [-.8,.8]){const bx=p.x+Math.cos(a)*27,bz=p.y+Math.sin(a)*27,ry=Math.atan2(p.x-bx,p.y-bz);if(rnd()<.7)standAt(bx+Math.cos(ry)*s2,bz-Math.sin(ry)*s2,COMMON,'stand',ry,{y:.04,force:1,mode:'sit'});}}
     for(let q=0;q<3;q++){const a=q/3*6.28+.5,r=26,bx=p.x+Math.cos(a)*r,by=p.y+Math.sin(a)*r,ry=rnd()*6.28;if(!standAt(bx,by,['c_bard'],'talk',ry))continue;
-      for(let k=0;k<6;k++){const aa=ry+(k-2.5)*.42,rr2=2.4+rnd()*.6,lx=bx+Math.sin(aa)*rr2,ly=by+Math.cos(aa)*rr2;standAt(lx,ly,COMMON.concat(RICH),rnd()<.2?'wave':'stand',Math.atan2(bx-lx,by-ly));}}   /* 노래를 듣는 사람들 */
+      for(let k=0;k<6;k++){const aa=ry+(k-2.5)*.42,rr2=2.4+rnd()*.6,lx=bx+Math.sin(aa)*rr2,ly=by+Math.cos(aa)*rr2;const w=standAt(lx,ly,COMMON.concat(RICH),rnd()<.2?'wave':'stand',Math.atan2(bx-lx,by-ly));if(w){w.watch='bard';CHATTER[w.chat].watch='bard';}}}   /* 노래를 듣는 사람들 */
     for(let i=0;i<6;i++){const a=rnd()*6.28,r=10+rnd()*20;const n=circ(p.x+Math.cos(a)*r,p.y+Math.sin(a)*r,2.2+rnd()*1.5,['c_boy','c_girl','c_boy2','c_noble_girl'],'walk');if(n)n.sp=2.4;}   /* 뛰노는 아이들 */
     for(let i=0;i<8;i++){const a=i/8*6.28;standAt(p.x+Math.cos(a)*(p.r-3),p.y+Math.sin(a)*(p.r-3),['c_guard','c_knight'],'guard',Math.atan2(-Math.cos(a),-Math.sin(a)));}}
   /* 3. 시장: 좌판 뒤 상인, 구경꾼 */
@@ -10682,7 +10694,7 @@ function makeCitizens(cx,cz){
 /* 주민 한 명의 지금 자리: 시계로 정한다 */
 /* 말 거는 동안 붙잡힌 주민: 시계를 멈춰 그 자리에 서서 플레이어 쪽을 본다. 대화가 끝나면 멈췄던 자리에서 이어 간다 */
 function citQ(c,t){const q=citPose(c,t-(c.lag||0));if(!c.hold||!player)return q;const sit=(q.mode||c.mode)==='sit';
-  if(!sit){const dx=player.position.x-q.x,dz=player.position.z-q.z,l=Math.hypot(dx,dz);if(l>.05){q.vx=dx/l;q.vz=dz/l;}q.mode='talk';}q.walk=false;q.v=0;return q;}
+  if(!sit){const dx=player.position.x-q.x,dz=player.position.z-q.z,l=Math.hypot(dx,dz);if(l>.05){q.vx=dx/l;q.vz=dz/l;}q.mode=(c.pp&&c.pp.talk)||'talk';}   /* 말 걸면 성격대로 선다: 수줍은 사람은 손을 뒤로, 투덜이는 팔짱 */q.walk=false;q.v=0;return q;}
 function crowdHoldTick(dt,t){const M=CROWD;if(!M.held.size)return;for(const c of M.held){if(c.lt!==undefined)c.lag=(c.lag||0)+(t-c.lt);c.lt=t;   /* 주민 시계는 실제 시각을 따르므로 멈춘 시간도 실제 시각으로 잰다 */
     if(mode==='dialog')c.hold=1.2;else{c.hold-=dt;if(c.hold<=0){c.hold=0;c.lt=undefined;M.held.delete(c);}}}}
 function citPose(c,t){
@@ -10809,7 +10821,7 @@ function citStickInst(type){const pool=CROWD.spool[type]||(CROWD.spool[type]=[])
 function citStickMake(type){
   const g=makeNpcStick(citStickLook(CITM.ids[type]||'c'+type));if(g.userData.marker){g.remove(g.userData.marker);g.userData.marker=null;}stickSkin(g,'cit:'+type);
   g.traverse(o=>{if(o.isMesh)o.castShadow=false;});return {g,stick:true,id:type,sh:false};}
-const CIT_STICK_POSE={stand:'idle',walk:'idle',talk:'talk',lean:'cross',sit:'sitb',guard:'guard',hammer:'hammer',hoe:'hoe',reap:'hoe',sweep:'sweep',carry:'carry',shoulder:'carry',wave:'wave',cross:'cross',hips:'hips',think:'think',drink:'drink',read:'read',point:'point',stretch:'stretch',pray:'pray',shrug:'shrug',crouch:'crouch'};
+const CIT_STICK_POSE={stand:'idle',walk:'idle',talk:'talk',lean:'cross',sit:'sitb',guard:'guard',hammer:'hammer',hoe:'hoe',reap:'hoe',sweep:'sweep',carry:'carry',shoulder:'carry',wave:'wave',cross:'cross',hips:'hips',think:'think',drink:'drink',read:'read',point:'point',stretch:'stretch',pray:'pray',shrug:'shrug',crouch:'crouch',behind:'behind',clap:'clap',play:'play'};
 /* 먼 사람: 막대 인형 하나를 통째로 합친 모양을 수천 개 한 번에 그린다 (옷 색만 사람마다) */
 function crowdInitSticks(){const cap=CROWD.cap,G=new THREE.Group();
   /* 팔다리 번호(aLimb): 1·-1 다리, 2·-2 팔. 셰이더에서 걸음에 맞춰 흔든다 */
@@ -10889,7 +10901,7 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
     near.forEach((c,k)=>{if(!c.I)return;if(c.I.stick){const sh=k<6;if(c.I.sh!==sh){c.I.sh=sh;c.I.g.traverse(o=>{if(o.isMesh)o.castShadow=sh;});}return;}const sh=k<10;if(c.I.sh!==sh){c.I.sh=sh;c.I.g.traverse(o=>{if(o.isSkinnedMesh&&o.material!==_citOl)o.castShadow=sh&&!o.material.transparent;});}});
     if(OLD){const [mb,mr,mh]=M.ims,m4=_cM4,qq=_cQ,v=_cV,sc=_cS;for(const c of M.list){if(c.I||c.d>M.FAR||n>=M.cap)continue;const q=c.q;
         v.set(q.x,citGround(q.x,q.z)+(c.y||0)+((q.mode||c.mode)==='sit'?-.45:0),q.z);qq.setFromAxisAngle(_cY,Math.atan2(q.vx,q.vz));const k=c.sc*(CIT_SMALL(c.type)?.7:1);sc.set(k,k,k);m4.compose(v,qq,sc);mb.setMatrixAt(n,m4);mr.setMatrixAt(n,m4);mh.setMatrixAt(n,m4);
-        const wk=!q.mode&&q.walk,spd=wk?c.sp*(q.v??1):0;M.aVel.array[n*2]=q.vx*spd;M.aVel.array[n*2+1]=q.vz*spd;M.aWalk.array[n*3]=c.ph;M.aWalk.array[n*3+1]=wk?c.sp*4.2:0;M.aWalk.array[n*3+2]=wk?.55:0;
+        const wk=!q.mode&&q.walk,spd=wk?c.sp*(q.v??1):0;M.aVel.array[n*2]=q.vx*spd;M.aVel.array[n*2+1]=q.vz*spd;M.aWalk.array[n*3]=c.ph;M.aWalk.array[n*3+1]=wk?c.sp*4.2:0;M.aWalk.array[n*3+2]=wk?.55*(c.pp?c.pp.st:1):0;
         const L=c._lk||(c._lk=citStickLook(CITM.ids[c.type]||'c'+c.type));_cC.setHex(L.robe);mb.setColorAt(n,_cC);_cC.setHex(L.hat==='helm'?0x7a8a9a:L.hat==='hood'?L.robe:L.hatC||0x4a3322);mh.setColorAt(n,_cC);n++;}
       M.fT=t;M.aVel.needsUpdate=M.aWalk.needsUpdate=true;mb.count=mr.count=mh.count=n;mb.instanceMatrix.needsUpdate=mr.instanceMatrix.needsUpdate=mh.instanceMatrix.needsUpdate=true;mb.instanceColor.needsUpdate=mh.instanceColor.needsUpdate=true;M.drawn=n;}
     else{
@@ -10901,7 +10913,7 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
   for(const c of M.list){if(!c.I)continue;const q=refresh?c.q:citQ(c,t);const G=c.I.g;G.position.set(q.x,citGround(q.x,q.z)+(c.y||0)+((q.mode||c.mode)==='sit'?-.53:0),q.z);   /* 앉은 막대 주민: 엉덩이가 벤치 앉는 면(0.6m)에 닿게 */
     const want=Math.atan2(q.vx,q.vz);let dr=Math.atan2(Math.sin(want-G.rotation.y),Math.cos(want-G.rotation.y));G.rotation.y+=Math.sign(dr)*Math.min(Math.abs(dr),Math.abs(dr)*dt*4.5+dt*1.2);   /* 사람처럼 천천히 돌아선다 */
     const mode=q.mode||c.mode,walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const vk=q.v??1;c.w=(c.w??0)+(((walking&&q.walk)?Math.max(.25,vk):0)-(c.w??0))*Math.min(1,dt*5);
-    if(c.I.stick){crowdYield(c,G,dt);if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2*Math.max(.3,vk);stickWalkPose(G,c.ph,c.w,t);}else stickNpcPose(G,CIT_STICK_POSE[mode]||'idle',t+c.off);if(CIT_SMALL(c.type)&&G.scale.x>.8)G.scale.setScalar(c.sc*.7);continue;}
+    if(c.I.stick){crowdYield(c,G,dt);if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2*Math.max(.3,vk);stickWalkPose(G,c.ph,c.w,t+c.off,c.pp);}else{const pm=c.hold?mode:citPersonaMode(c,mode,q),sp2=CIT_STICK_POSE[pm]||'idle';stickNpcPose(G,sp2,t+c.off);citPersonaIdle(G,c.pp,t+c.off,sp2);}if(CIT_SMALL(c.type)&&G.scale.x>.8)G.scale.setScalar(c.sc*.7);continue;}
     if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2*Math.max(.3,vk);citPoseBones(c.I,c.ph,c.w,t+c.off,c.mode==='walk'||c.w<.05&&c.mode!=='carry'?'walk':c.mode);}
     else{c.ph+=dt*(mode==='hoe'?3.2:mode==='hammer'?4.5:mode==='reap'?2:1.5)*(c.v?c.v.tempo:1);citPoseBones(c.I,c.ph,0,t+c.off,mode);}}}
 let _mcT=0;
@@ -11042,7 +11054,10 @@ function _marcusLife(cx,cz){
     let idx=0;for(const [x,z,n] of spots){const F={x,z,birds:[],st:'ground',stT:0};for(let k=0;k<n;k++){const a=rnd()*6.28,r=rr(.5,3.5);F.birds.push({i:idx++,ox:Math.cos(a)*r,oz:Math.sin(a)*r,yaw:rnd()*6.28,ph:rnd()*9,hop:0,x:x+Math.cos(a)*r,y:heightAt(x,z),z:z+Math.sin(a)*r,fa:rnd()*6.28,fr:rr(5,9),fh:rr(9,15)});}LIFE.flocks.push(F);}}
 
   /* ===== 거리 예술가 ===== */
-  const npc=(look,pose,x,z,face)=>{const g=makeNpcStick(look);const u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}if(typeof stickSlim==='function')stickSlim(g);g.position.set(x,heightAt(x,z),z);g.rotation.y=face;g.traverse(o=>{if(o.isMesh)o.castShadow=true;});G.add(g);if(typeof chatterAdd==='function')chatterAdd({kind:typeof poseKind==='function'?poseKind(pose):'common',seed:x*3+z,pos:()=>{const p=new THREE.Vector3();g.getWorldPosition(p);return p;},visible:()=>G.visible&&g.visible,look,pose:'idle'});return g;};
+  const npc=(look,pose,x,z,face)=>{const g=makeNpcStick(look);const u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}if(typeof stickSlim==='function')stickSlim(g);g.position.set(x,heightAt(x,z),z);g.rotation.y=face;g.traverse(o=>{if(o.isMesh)o.castShadow=true;});G.add(g);if(typeof chatterAdd==='function'){const pk=typeof poseKind==='function'?poseKind(pose):'common',kid=look.small&&pk==='common';   /* 작은 아이는 아이 말투로 */
+      const ci=chatterAdd({kind:kid?'kid':pk,seed:x*3+z,pos:()=>{const p=new THREE.Vector3();g.getWorldPosition(p);return p;},visible:()=>G.visible&&g.visible,look,pose:'idle',act:kid&&pose==='idle'?'play':pose});
+      u.pp=CHATTER[ci].pp;if(pose==='clap'&&u.pp)u.wp=u.pp.wp;}   /* 구경꾼은 성격대로 구경한다: 쾌활한 사람은 손뼉, 투덜이는 팔짱 */
+    return g;};
   const faceTo=(x,z,tx,tz)=>Math.atan2(tx-x,tz-z);
   const fw=(x,z,a,d,sd=0)=>[x+Math.sin(a)*d+Math.cos(a)*sd,z+Math.cos(a)*d-Math.sin(a)*sd];
   const prop=(geo,mat,x,y,z,ry=0)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.y=ry;m.castShadow=true;G.add(m);return m;};
@@ -11179,9 +11194,9 @@ function lifeTick(dt,p,inM){if(!LIFE.ready)return;const G=LIFE.g;inM=inM&&Math.h
         _lq.setFromEuler(_le.set(0,b.yaw+Math.PI,wf?flap:-1.35));_lv.set(b.x-Math.cos(b.yaw)*.05,b.y+.15,b.z+Math.sin(b.yaw)*.05);_lm.compose(_lv,_lq,_ls);BI.mwl.setMatrixAt(b.i,_lm);}ch=true;}
     if(ch){BI.mb.instanceMatrix.needsUpdate=BI.mwl.instanceMatrix.needsUpdate=BI.mwr.instanceMatrix.needsUpdate=true;}}
   /* 예술가 */
-  for(const A of LIFE.acts){if(A.kids){const vis=!far(A.x0,A.z0,55);for(const K of A.kids){if(K.g.visible!==vis)K.g.visible=vis;if(!vis)continue;K.a+=dt*1.15;const x=A.x0+Math.cos(K.a)*A.R,z=A.z0+Math.sin(K.a)*A.R;K.g.position.set(x,heightAt(x,z),z);K.g.rotation.y=Math.atan2(-Math.sin(K.a),Math.cos(K.a));stickWalkPose(K.g,K.a*6.5+K.ph,1,t);}continue;}
+  for(const A of LIFE.acts){if(A.kids){const vis=!far(A.x0,A.z0,55);for(const K of A.kids){if(K.g.visible!==vis)K.g.visible=vis;if(!vis)continue;K.a+=dt*1.15;const x=A.x0+Math.cos(K.a)*A.R,z=A.z0+Math.sin(K.a)*A.R;K.g.position.set(x,heightAt(x,z),z);K.g.rotation.y=Math.atan2(-Math.sin(K.a),Math.cos(K.a));stickWalkPose(K.g,K.a*6.5+K.ph,1,t+K.ph,K.g.userData.pp);}continue;}
     const g=A.g,vis=!far(g.position.x,g.position.z,55);if(g.visible!==vis)g.visible=vis;if(A.balls)for(const b of A.balls)b.visible=vis;if(!vis)continue;
-    stickNpcPose(g,A.pose,t+A.ph);
+    {const pz=(A.pose==='clap'&&g.userData.wp)||A.pose;stickNpcPose(g,CIT_STICK_POSE[pz]&&pz!==A.pose?CIT_STICK_POSE[pz]:pz,t+A.ph);if(typeof citPersonaIdle==='function')citPersonaIdle(g,g.userData.pp,t+A.ph,pz);}
     if(A.balls){const ry=g.rotation.y,cs=Math.cos(ry),sn=Math.sin(ry),P=1.25;A.balls.forEach((b,i)=>{const u=((t/P+i/3)%1+1)%1,half=u<.5,k=half?u*2:(u-.5)*2,x0=half?.27:-.27,x1=half?-.27:.27;
         const lx=x0+(x1-x0)*k,ly=1.2+(half?1.0:.25)*4*k*(1-k),lz=.5;b.position.set(g.position.x+lx*cs+lz*sn,g.position.y+ly,g.position.z-lx*sn+lz*cs);});}}}
 function _lifeAlong(R,s,side){s=Math.max(0,Math.min(R.T,s));let j=1;while(j<R.cum.length-1&&R.cum[j]<s)j++;const A=R.pts[j-1],B=R.pts[j],L=R.cum[j]-R.cum[j-1]||1,k=(s-R.cum[j-1])/L,ux=(B[0]-A[0])/L,uz=(B[1]-A[1])/L;return {x:A[0]+(B[0]-A[0])*k-uz*side,z:A[1]+(B[1]-A[1])*k+ux*side,ux,uz};}
@@ -12275,7 +12290,310 @@ function arenaSpot(host){const I=OR.ISLES.arena;return host?{x:I.x-5.5,z:I.z,yaw
 /* ---------- 말 걸기: 기능 없는 사람들(길드홀 손님, 거리 사람들, 일하는 사람들)에게 F를 누르면 바로 머리 위 말풍선으로 대답한다.
    둘 이상 모여 있으면 서로 주고받으며 이야기한다 ---------- */
 const CHATTER=[],BUBBLES=[];
-function chatterAdd(o){o.seed=Math.abs(Math.floor(o.seed||CHATTER.length))%100003;CHATTER.push(o);return CHATTER.length-1;}   /* seed는 정수로 (소수면 말 고르기 번호가 어긋나 undefined가 떴다) */
+function chatterAdd(o){o.seed=Math.abs(Math.floor(o.seed||CHATTER.length))%100003;if(!o.persona)o.persona=citPersonaPick(o);o.pp=CIT_PERSONA[o.persona];CHATTER.push(o);return CHATTER.length-1;}   /* seed는 정수로 (소수면 말 고르기 번호가 어긋나 undefined가 떴다) */
+/* ---------- 주민 성격: 사람마다 하나씩, 바뀌지 않는다 ----------
+   성격은 그 사람의 번호(seed)와 종류로 정해지므로 언제 다시 와도, 누가 봐도 같은 사람은 같은 성격이다.
+   성격은 세 가지로 드러난다.
+   1) 걸음: 빠르기(sp)·멈춰 쉬는 시간(pause)·보폭(st)·팔 흔들기(arm)·들썩임(bob)·몸 기울기(lean, +는 앞으로 숙임)·고개(head, +는 숙임)·두리번거림(look)·흔들흔들(sway)·뒷짐(hb)
+   2) 서 있을 때: 즐겨 하는 자세(idle)·버릇(fid: tap 발 구르기, nod 꾸벅꾸벅, sigh 한숨, glance 흘끔, hum 흥얼, tilt 갸웃)·말 걸었을 때 자세(talk)·구경할 때 자세(wp)
+   3) 말: 성격 말(L: a 어른·젊은이 해요체 · r 반말 쓰는 일꾼 · k 아이 · e 노인 · n 귀족 · m 무장한 사람), 말머리(pre), 구경하며 하는 말(W: {act}에 구경거리 이름)
+   v: 이 성격을 가질 수 있는 말투 무리 */
+const CIT_PERSONA={
+  cheerful:{n:'쾌활한',v:'kid youth adult elder armed',sp:1.15,pause:.8,st:1.15,arm:1.4,bob:2,lean:-.02,head:-.08,look:1,sway:.8,idle:['wave','talk'],fid:'hum',talk:'wave',wp:'clap',walkD:'통통 튀듯 빠르게 걷고 팔을 크게 흔든다',idleD:'손을 흔들거나 흥얼거리며 몸을 들썩인다',
+    pre:['하하! '],
+    L:{a:['오늘은 왠지 좋은 일이 생길 것 같아요!','웃으면 복이 와요. 제가 산증인이에요.','걷기만 해도 신나는 날이 있잖아요. 오늘이 그래요!','모험가님 만나서 오늘 운이 두 배예요!'],
+      r:['하하, 오늘 날씨 끝내주지 않아?','일이 고돼도 웃으면 반은 끝난 거야!','콧노래가 절로 나와. 너도 불러 봐!'],
+      k:['{아저씨}! 오늘 진짜 재밌는 날이에요!','저 오늘 깡충깡충 백 번 뛰었어요!','헤헤, 그냥 웃음이 나요!'],
+      e:['허허, 늙어도 웃을 일은 많다네.','오늘 같은 날은 젊을 때 생각이 나서 좋아.','자네 얼굴 보니 나까지 기분이 좋군!'],
+      m:['하하! 근무 중이지만 기분은 좋소!','오늘은 도둑도 쉬는 날인가 보오. 평화롭군!','웃는 경비병이 덜 무섭다더군. 하하!']},
+    W:{a:['{act} 구경, 정말 신나지 않아요? 손뼉 쳐요, 손뼉!','{act} 구경 오길 잘했어요! 오늘 최고예요!'],k:['{act} 구경 최고예요! 나도 해 볼래요!','우와아! {act} 구경 너무 재밌어요!']}},
+  shy:{n:'수줍은',v:'kid youth adult',sp:.9,pause:1.2,st:.75,arm:.4,bob:.6,lean:.08,head:.3,look:.5,idle:['behind'],talk:'behind',wp:'behind',walkD:'작은 보폭으로 고개를 숙이고 팔을 몸에 붙여 걷는다',idleD:'손을 뒤로 모으고 시선을 땅에 둔다. 말 걸면 눈을 피한다',
+    pre:['저, 저기… '],
+    L:{a:['아, 저, 저한테 말 거신 거예요…?','사람 많은 데는 아직 좀 어려워요.','…말 걸어 주셔서 고마워요. 진짜로요.','얼굴 빨개졌죠? 원래 그래요.'],
+      r:['어, 어… 나? 왜?','…그냥 일하는 중이야. 신경 쓰지 마.','말주변이 없어서 미안해.'],
+      k:['…(엄마 뒤에 숨고 싶은 얼굴이다)','저, 저기… 안녕하세요…','부끄러워요… 저리 보세요…']},
+    W:{a:['…{act} 구경은 뒤에서 몰래 보는 게 좋아요.','{act} 구경은 좋은데… 앞줄은 무서워요.'],k:['…{act} 구경 좋아해요. 조용히요.']}},
+  grumpy:{n:'투덜이',v:'kid youth adult elder armed',sp:.95,pause:1,st:.9,arm:.5,bob:.5,lean:.1,head:.15,look:.6,idle:['cross'],fid:'sigh',talk:'cross',wp:'cross',walkD:'쿵쿵 무거운 걸음, 고개를 숙이고 팔을 거의 안 흔든다',idleD:'늘 팔짱을 끼고 가끔 한숨을 쉰다',
+    pre:['흥. ','쯧. '],
+    L:{a:['뭐요. 바쁜 거 안 보여요?','되는 일이 하나도 없네요, 오늘은.','다들 왜 이렇게 시끄러운지 몰라.','말 걸 거면 짧게 해요.'],
+      r:['뭐. 할 말 있으면 빨리 해.','에잇, 오늘 일진 참 사납네.','세상에 마음에 드는 게 하나도 없어.'],
+      k:['흥! 나 지금 기분 나빠요.','오늘은 아무랑도 안 놀 거예요. 흥.','{아저씨}도 저리 가요!'],
+      e:['쯧, 요즘은 다 마음에 안 들어.','늙은이 귀찮게 하지 말고 가던 길 가게.','허리도 아프고 날씨도 궂고, 좋은 게 없어.'],
+      m:['근무 중이오. 용건만 말하시오.','교대 시간은 멀었고 다리는 아프고. 됐소?','시끄러운 모험가는 딱 질색이오.']},
+    W:{a:['{act} 구경? 저 정도는 나도 하겠네요.','{act} 구경하느라 길이 막혔잖아요. 참.'],k:['흥, {act} 구경 하나도 안 재밌어요. …조금만 더 볼 거예요.']}},
+  arrogant:{n:'거만한',v:'youth adult noble armed',sp:.85,pause:1.2,st:1.1,arm:0,hb:1,bob:.4,lean:-.1,head:-.2,look:.5,idle:['behind','hips'],talk:'hips',wp:'behind',walkD:'느릿느릿 큰 걸음, 가슴을 펴고 턱을 든 채 뒷짐을 진다',idleD:'뒷짐을 지거나 허리에 손을 얹고 내려다본다',
+    pre:['흠. '],
+    L:{a:['내가 누군지 모르나 보군요. 뭐, 그럴 수도 있죠.','이 동네에서 제일 잘나가는 게 저예요.','말 걸 자격은 있는지 모르겠네요.'],
+      n:['평민이 말을 거는군. 오늘은 너그럽게 봐주지.','내 옷 한 벌이 자네 장비보다 비쌀 걸세.','모험가라… 결국 돈 받고 싸우는 사람 아닌가.','고개를 너무 빳빳이 들지 말게. 여긴 내 거리야.'],
+      m:['나만큼 창을 쓰는 자는 이 성에 없소.','자네 같은 풋내기는 많이 봤소.','내 앞에선 좀 더 공손하게 서시오.']},
+    W:{a:['{act} 구경이라. 수준이 좀 떨어지는군요.'],n:['{act} 구경도 가끔은 나쁘지 않군. 서민들 취향이지만.']}},
+  lazy:{n:'게으른',v:'kid youth adult armed',sp:.7,pause:1.8,st:.7,arm:.6,bob:.3,lean:.06,head:.05,look:.7,idle:['stretch','lean'],fid:'nod',talk:'lean',wp:'stand',walkD:'발을 질질 끌며 느리게 걷고, 자주 멈춰 오래 쉰다',idleD:'벽에 기대거나 기지개를 켜고 하품한다',
+    pre:['하암… '],
+    L:{a:['하암… 오늘은 아무것도 안 하고 싶어요.','일은 내일의 제가 할 거예요.','서 있는 것도 일이에요. 진짜로요.','느긋하게 사는 게 오래 사는 비결이래요.'],
+      r:['하암… 쉬는 중이야. 방해하지 마.','일? 이따가. 이따가 할 거야.','누워 있을 데 어디 없나.'],
+      k:['걷기 싫어요. 업어 주세요.','숙제는 내일 할래요. 내일의 나는 부지런하거든요.'],
+      m:['서 있는 것만으로도 경비는 하는 거요. 하암.','순찰은 천천히 해야 꼼꼼히 보오. 핑계 아니오.','앉아서 지키면 안 되나, 이거.']},
+    W:{a:['{act} 구경은 서서 하기 힘드네요. 의자 없나.'],k:['{act} 구경하다 다리 아파요. 앉아서 볼래요.']}},
+  impatient:{n:'성급한',v:'kid youth adult noble armed',sp:1.35,pause:.5,st:.9,arm:1.2,bob:1,lean:.1,head:0,look:1.5,idle:['hips'],fid:'tap',talk:'hips',wp:'hips',walkD:'종종걸음으로 서두르고 쉬는 시간이 짧다',idleD:'허리에 손을 얹고 발을 동동 구르며 두리번거린다',
+    pre:['아이참, '],
+    L:{a:['빨리, 빨리요! 할 말 있으면 어서요.','줄이 왜 이렇게 안 줄어요?','기다리는 건 질색이에요. 벌써 늦었어요!'],
+      r:['빨리 말해, 갈 데 있어!','아 진짜, 다들 왜 이렇게 느려?','시간은 돈이야. 내 돈 아깝다고!'],
+      k:['빨리요! 늦으면 엄마한테 혼나요!','저 지금 바빠요! 달려야 돼요!'],
+      n:['어서 말하게. 내 시간은 비싸네.','마부가 또 늦는군. 참을 수가 없어.'],
+      m:['용건만 빨리 말하시오. 교대가 코앞이오.','느린 건 적보다 더 싫소.']},
+    W:{a:['{act} 구경도 좋은데, 언제 끝나요? 다음 거 보고 싶어요.'],k:['{act} 구경 언제 끝나요? 다음은 뭐 해요?']}},
+  curious:{n:'호기심 많은',v:'kid youth adult elder noble',sp:1,pause:1.1,st:1,arm:1,bob:1,lean:.02,head:-.04,look:2.2,idle:['think','point'],fid:'tilt',talk:'talk',wp:'think',walkD:'두리번거리며 걷고 자꾸 고개를 갸웃한다',idleD:'턱을 괴고 생각하거나 무언가를 가리킨다',
+    pre:['오? '],
+    L:{a:['그 장비 어디서 났어요? 이건 뭐에 써요?','포탈 안은 어떻게 생겼어요? 궁금해 죽겠어요.','처음 보는 얼굴이네요! 어디서 왔어요?','저 탑 꼭대기엔 뭐가 있을까요?'],
+      k:['{아저씨}, 그 칼로 뭐 베 봤어요? 용도 베 봤어요?','이건 뭐예요? 저건요? 저건요?','하늘은 왜 파래요? 아세요?'],
+      e:['이 나이에도 모르는 게 많아. 자네 얘기 좀 해 보게.','사냥터 너머엔 뭐가 있나? 늘 궁금했지.'],
+      n:['모험가의 삶이란 어떤 건가? 궁금하군.','하레나 사막엔 정말 모래 괴물이 사나?']},
+    W:{a:['{act} 구경하다 보니 어떻게 하는 건지 궁금해요. 배울 수 있을까요?'],k:['{act} 구경하는데요, 어떻게 하는 거예요? 비밀이래요!']}},
+  timid:{n:'겁 많은',v:'kid youth adult elder',sp:1.1,pause:1,st:.8,arm:.5,bob:.6,lean:.12,head:.1,look:2.5,idle:['behind'],fid:'glance',talk:'behind',wp:'behind',walkD:'어깨를 움츠리고 빠르게 걸으며 자꾸 뒤를 돌아본다',idleD:'손을 모으고 흘끔흘끔 주위를 살핀다',
+    pre:['히익, '],
+    L:{a:['깜짝이야! 뒤에서 오시면 놀라요.','요즘 밤에 이상한 소리 들리지 않아요? 무서워요.','칼은 좀 집어넣어 주시면 안 될까요…?','저 골목은 지나가지 마세요. 어두워요.'],
+      r:['으, 깜짝이야! 놀랐잖아.','늑대 소리 들었어? 난 들었어…','무기 든 사람은 좀 무서워.'],
+      k:['모, 몬스터 여기 안 와요? 진짜죠?','밤에는 혼자 못 자요… 비밀이에요.'],
+      e:['아이고, 놀래라. 심장 떨어질 뻔했네.','성문은 꼭 닫아야 해. 요즘 세상이 험해.']},
+    W:{a:['{act} 구경은 좋은데, 사람이 너무 많아서 좀 무서워요.'],k:['{act} 구경… 공이 저한테 날아오면 어떡해요?']}},
+  chatty:{n:'수다쟁이',v:'kid youth adult elder noble',sp:1,pause:1.3,st:1,arm:1.25,bob:1,lean:.04,head:0,look:1.5,idle:['talk'],talk:'talk',wp:'talk',walkD:'걸으면서도 손짓이 크고 고개를 이리저리 돌린다',idleD:'혼자서도 손짓하며 떠든다',
+    pre:['아 맞다, '],
+    L:{a:['아 그거 알아요? 빵집 딸이 글쎄… 아, 이건 비밀인데. 아무튼요!','제가 말이 좀 많죠? 다들 그래요. 근데 들어 봐요, 어제…','말 상대 생겨서 좋다! 오늘 무슨 일이 있었냐면요…'],
+      r:['야, 들어 봐. 어제 부두에서 말이야… 아니, 처음부터 얘기할게.','내 얘기 좀 들어 봐. 금방 끝나. 아마도.'],
+      k:['{아저씨}, 제 얘기 들어 볼래요? 우리 고양이가요, 아니 옆집 고양이가요…','저 오늘 백 가지 일 있었어요! 첫 번째는요…'],
+      e:['내 얘기 좀 들어 보게. 내가 젊었을 때 말이야… 어디까지 했지?','허허, 말동무가 생겼군! 오늘 해 지기 전엔 못 보내네.'],
+      n:['들으셨나요? 백작 부인이 글쎄… 어머, 제가 이런 말을 하면 안 되는데.','연회 이야기 들려드릴까요? 한 시간이면 돼요.']},
+    W:{a:['{act} 구경하다 들은 얘긴데요, 저 사람 원래 귀족 집 하인이었대요!'],k:['{act} 구경하면서 친구한테 다 얘기해 줄 거예요! 처음부터 끝까지요!']}},
+  taciturn:{n:'과묵한',v:'youth adult elder armed',sp:1,pause:1,st:1,arm:.8,bob:.5,lean:0,head:.03,look:.2,idle:['stand','cross'],talk:'stand',wp:'stand',walkD:'고개를 고정하고 반듯하게, 늘 같은 빠르기로 걷는다',idleD:'움직임 없이 가만히 서 있다',
+    pre:['… '],
+    L:{a:['…네.','…볼일 있어요?','말은 적게, 일은 많이. 그게 제 방식이에요.'],
+      r:['…응.','…할 말 없어.','말보다 손이 먼저야.'],
+      e:['…그렇지.','말이 많으면 실수도 많은 법이네.'],
+      m:['…이상 없소.','…지나가시오.','말할 시간에 주위를 보시오.']},
+    W:{a:['…{act} 구경. 괜찮네요.']}},
+  dreamy:{n:'몽상가',v:'kid youth adult',sp:.85,pause:1.4,st:.95,arm:.8,bob:.8,lean:-.04,head:-.28,look:.8,sway:.8,idle:['think'],fid:'hum',talk:'think',wp:'think',walkD:'하늘을 올려다보며 천천히, 몸을 살랑살랑 흔들며 걷는다',idleD:'멍하니 하늘을 보며 생각에 잠긴다',
+    pre:['아… '],
+    L:{a:['구름 모양 좀 보세요. 저건 꼭 고래 같아요.','언젠가 배를 타고 바다 끝까지 가 볼 거예요.','가끔 하늘을 보면 내가 어디 있는지 잊어버려요.','어젯밤 꿈에 날개가 생겼어요. 진짜 같았어요.'],
+      k:['저 구름 타면 하레나까지 갈 수 있을까요?','커서 별을 따러 갈 거예요.']},
+    W:{a:['{act} 구경하다 보면 다른 세상에 온 것 같아요.'],k:['{act} 구경하다 보면 꿈꾸는 것 같아요.']}},
+  suspicious:{n:'의심 많은',v:'youth adult elder noble armed',sp:.95,pause:1.1,st:.9,arm:.6,bob:.5,lean:.05,head:.05,look:2,idle:['cross'],fid:'glance',talk:'cross',wp:'cross',walkD:'좌우를 살피며 걷고 지나가는 사람을 흘끔 본다',idleD:'팔짱을 끼고 곁눈질로 주위를 살핀다',
+    pre:['흐음… '],
+    L:{a:['왜 저한테 말 거는 거예요? 뭘 원해요?','요즘 친절한 사람이 제일 수상하더라고요.','지갑은 앞주머니에 넣으세요. 다들 노려요.'],
+      r:['너 뭐야? 왜 말 걸어?','수상한데… 아니야, 됐어. 가.','다들 뭔가 숨기고 있어. 너도.'],
+      e:['자네 같은 친절한 얼굴이 제일 위험하지.','요즘 장사꾼들은 저울을 속여. 다 알아.'],
+      n:['내 집 근처를 기웃거린 게 자네인가?','모험가는 믿을 수가 없지. 오늘은 이 편, 내일은 저 편.'],
+      m:['수상한 행동은 하지 마시오. 지켜보고 있소.','그 짐 안엔 뭐가 들었소?']},
+    W:{a:['{act} 구경하는 척하면서 소매치기하는 사람 많아요. 지켜보는 중이에요.']}},
+  kind:{n:'다정한',v:'kid youth adult elder noble',sp:.95,pause:1.1,st:.95,arm:.9,bob:.8,lean:0,head:.04,look:1,idle:['wave','stand'],fid:'tilt',talk:'talk',wp:'clap',walkD:'부드럽고 차분하게 걸으며 마주치는 사람에게 고개를 돌린다',idleD:'고개를 살짝 기울이고 웃으며 손을 흔든다',
+    pre:['어머, '],
+    L:{a:['먼 길 오셨죠? 쉬었다 가세요.','다친 데는 없어요? 몸 조심하세요.','길 모르면 언제든 물어보세요. 다 알려 드릴게요.'],
+      r:['배고프면 말해. 내 빵 나눠 줄게.','힘든 일 있으면 쉬었다 가. 괜찮아.'],
+      k:['{아저씨}, 이거 제 사탕인데 하나 드릴게요.','다치지 마세요. 약속해요!'],
+      e:['밥은 먹고 다니나? 몸이 재산이야.','젊은이, 서두르지 말게. 천천히 가도 늦지 않아.'],
+      n:['모험가님, 고생이 많으시군요. 이 거리에선 편히 쉬세요.','도움이 필요하면 우리 집 문을 두드리세요.']},
+    W:{a:['{act} 구경은 같이 보면 더 좋아요. 옆에 서세요.'],k:['{act} 구경 같이 해요! 여기 자리 있어요!']}},
+  boastful:{n:'허풍쟁이',v:'kid youth adult elder armed',sp:1.05,pause:1,st:1.15,arm:1.5,bob:1.2,lean:-.08,head:-.1,look:1,idle:['hips','point'],talk:'hips',wp:'hips',walkD:'가슴을 펴고 팔을 크게 휘저으며 큰 걸음으로 걷는다',idleD:'허리에 손을 얹고 으스대거나 먼 곳을 가리킨다',
+    pre:['에헴, '],
+    L:{a:['제가 젊을 때 오우거를 맨손으로… 뭐, 거의 그랬어요.','이 도시에서 제일 빠른 게 저예요. 마차보다 빨라요.','제가 마음만 먹으면 길드 일등이에요. 마음을 안 먹을 뿐.'],
+      r:['나? 이 동네에서 제일 센 놈이 나야. 진짜로.','짐 열 상자는 한 번에 들어. 오늘은 허리가 좀 그렇지만.'],
+      k:['저는요, 용도 봤어요! 진짜예요! …그림으로요.','우리 아빠는 세상에서 제일 세요! 기사보다 세요!'],
+      e:['내가 왕년엔 늑대 열 마리를 혼자 쫓았지. 아니, 스무 마리였나.','이 도시 성벽, 반은 내가 쌓은 거야. 허허.'],
+      m:['내 창에 쓰러진 몬스터가 천 마리는 되오.','훈련장 허수아비들이 날 보면 떤다더군.']},
+    W:{a:['{act} 구경? 저도 저 정도는 눈 감고 해요.'],k:['저도 {act} 구경만 하는 거 아니에요. 저도 할 수 있어요! …아마요.']}},
+  worrier:{n:'걱정 많은',v:'youth adult elder noble',sp:.95,pause:1,st:.85,arm:.6,bob:.6,lean:.08,head:.12,look:1.5,idle:['think','pray'],fid:'glance',talk:'think',wp:'think',walkD:'고개를 숙이고 손을 모은 채 걷다가 자꾸 뒤를 돌아본다',idleD:'손을 모으고 안절부절 생각에 잠긴다',
+    pre:['아이고… '],
+    L:{a:['비 오면 어떡하죠? 빨래 널고 왔는데.','혹시 우리 집 불 끄고 나왔나…? 기억이 안 나요.','요즘 물가가 계속 오르면 겨울은 어떻게 나죠?'],
+      r:['이번 달 품삯이 안 나오면 어쩌지.','일감이 끊기면 큰일인데… 걱정이야.'],
+      e:['손주 녀석이 길드에 들어갔다는데, 밤잠이 안 와.','이 다리가 언제까지 버텨 줄지 모르겠네.'],
+      n:['세금이 또 오르면 우리 집안은 어쩌나.','하인들이 은그릇을 제대로 닦았을지 걱정이군.']},
+    W:{a:['{act} 구경 재밌는데, 저러다 다치면 어쩌죠?']}},
+  strict:{n:'엄격한',v:'adult elder noble armed',sp:1,pause:1,st:1,arm:.6,bob:.3,lean:-.05,head:0,look:.6,idle:['behind','guard'],talk:'behind',wp:'behind',walkD:'허리를 꼿꼿이 펴고 절도 있게, 팔은 짧게 흔든다',idleD:'뒷짐을 지고 반듯하게 서서 주위를 살핀다',
+    pre:['어흠. '],
+    L:{a:['줄은 똑바로 서야죠. 기본이에요.','약속 시간은 지켜야 해요. 일 분이라도요.','규칙은 이유가 있어서 있는 거예요.'],
+      e:['젊은이, 허리 펴고 다니게. 자세가 그게 뭔가.','예절은 공짜야. 그런데도 안 지키는 사람이 많아.'],
+      n:['이 거리에선 품위를 지키게. 뛰어다니지 말고.','하인이 일 분 늦으면 그날 일당은 없네.'],
+      m:['규정대로 하시오. 예외는 없소.','무기는 칼집에. 성안 규칙이오.','자세가 흐트러졌소. 모험가라도 기본은 지키시오.']},
+    W:{a:['{act} 구경은 좋지만, 길은 막지 말아야죠.']}},
+  mischievous:{n:'장난꾸러기',v:'kid youth',sp:1.2,pause:.8,st:1.05,arm:1.3,bob:3,lean:.04,head:-.05,look:1.6,idle:['crouch','wave'],fid:'glance',talk:'wave',wp:'play',walkD:'깡충깡충 뛰듯 걷고 주위를 두리번거린다',idleD:'쪼그려 앉아 무언가를 꾸미거나 손을 흔들며 약 올린다',
+    pre:['히히, '],
+    L:{a:['쉿, 저기 경비병 투구에 깃털 꽂아 놨어요. 비밀이에요!','제 주머니에 개구리 있어요. 보여 드릴까요? 히히.','방금 그 사람 신발 끈 묶어 놨어요. 넘어지면 웃기겠다.'],
+      k:['히히, {아저씨} 등에 낙서 붙어 있어요! …거짓말이에요!','술래잡기 할래요? {아저씨}가 술래!','빵집 아저씨 몰래 빵 하나 먹었어요. 쉿!']},
+    W:{a:['{act} 구경하는 사람들 뒤에서 놀래 줄까요? 히히.'],k:['{act} 구경하는 척하면서 공 하나 몰래 가져갈 거예요. 히히.']}},
+  melancholy:{n:'우울한',v:'youth adult elder noble',sp:.75,pause:1.4,st:.7,arm:.3,bob:.3,lean:.15,head:.35,look:.4,idle:['cross','think'],fid:'sigh',talk:'stand',wp:'stand',walkD:'어깨를 축 늘어뜨리고 고개를 푹 숙인 채 느리게 걷는다',idleD:'고개를 떨구고 가끔 깊은 한숨을 쉰다',
+    pre:['하아… '],
+    L:{a:['…오늘도 그냥 그런 하루네요.','비가 오면 좋겠어요. 마음이 편해지거든요.','다들 즐거워 보이네요. 저만 빼고요.'],
+      r:['…그냥 사는 거지, 뭐.','일하고, 자고, 또 일하고. 그게 다야.'],
+      e:['먼저 간 사람들이 그리워. 이 거리에 다들 있었는데.','세월은 참 빨라. 아무것도 남지 않아.'],
+      n:['화려한 연회도 끝나면 쓸쓸할 뿐이지.','돈이 많아도 마음은 늘 춥군.']},
+    W:{a:['{act} 구경… 즐거운 건 금방 끝나서 슬퍼요.']}},
+  diligent:{n:'부지런한',v:'youth adult elder armed',sp:1.2,pause:.5,st:1,arm:1,bob:.7,lean:.04,head:.02,look:.8,idle:['point','hips'],talk:'talk',wp:'stand',walkD:'곧고 빠르게 걷고 멈춰 쉬는 일이 드물다',idleD:'쉬는 틈에도 다음 할 일을 가리키며 챙긴다',
+    pre:['아, 네! '],
+    L:{a:['쉴 틈이 없어요. 할 일이 산더미예요.','해 뜨기 전에 일어나서 벌써 반은 끝냈어요.','부지런하면 굶진 않아요. 제 신조예요.'],
+      r:['손 놀릴 시간 없어. 일해야 돼.','오늘 몫은 다 끝냈어. 내일 몫을 하는 중이야.'],
+      e:['평생 하루도 늦잠 잔 적이 없다네.','손이 놀면 마음이 늙어. 그래서 일하지.'],
+      m:['순찰 한 바퀴 더 돌아야 하오. 실례하오.','오늘 장비 손질은 벌써 세 번 했소.']},
+    W:{a:['{act} 구경은 잠깐만요. 일하러 가야 해서요.']}},
+  clumsy:{n:'덜렁이',v:'kid youth adult',sp:1.05,pause:1,st:1.05,arm:1.1,bob:1.2,lean:.03,head:.02,look:1.2,stumble:1,idle:['shrug'],talk:'shrug',wp:'stand',walkD:'걸음이 들쭉날쭉하고 가끔 휘청거린다',idleD:'어깨를 으쓱하며 머쓱해한다',
+    pre:['어이쿠! '],
+    L:{a:['아까 분수에 빠질 뻔했어요. 아니, 빠졌어요.','장 본 걸 어디 두고 왔더라…?','오늘만 세 번 넘어졌어요. 신기록이에요!'],
+      r:['아이쿠, 또 뭘 떨어뜨렸네.','망치로 내 손가락 친 게 이번 주만 두 번이야.'],
+      k:['또 넘어졌어요. 무릎이 다 까졌어요. 헤헤.','신발을 짝짝이로 신고 나왔어요!']},
+    W:{a:['{act} 구경하다 앞사람 발을 밟았어요. 벌써 두 번째예요.'],k:['{act} 구경하다 넘어졌어요. 그래도 재밌어요!']}},
+  pious:{n:'독실한',v:'kid adult elder noble',sp:.9,pause:1.2,st:.9,arm:.6,bob:.4,lean:.04,head:.15,look:.5,idle:['pray'],talk:'pray',wp:'stand',walkD:'고개를 조금 숙이고 차분하게 걷는다',idleD:'자주 손을 모아 기도한다',
+    pre:[],
+    L:{a:['오늘도 무사하길 기도했어요. 당신을 위해서도 할게요.','빛은 늘 우리를 지켜보세요.','감사할 일을 세다 보면 하루가 짧아요.'],
+      k:['밥 먹기 전에 꼭 감사 기도 해요. 엄마가 그랬어요.'],
+      e:['아침마다 기도를 올리지. 그래서 이 나이까지 살았네.','신께서 다 보고 계셔. 착하게 살게.'],
+      n:['신전에 바칠 촛대를 새로 맞췄지.','기도는 귀족이든 평민이든 똑같이 들어주신다네.']},
+    W:{a:['{act} 구경도 신이 주신 즐거움이에요.']}},
+  stingy:{n:'짠돌이',v:'adult elder noble',sp:1.05,pause:.9,st:.8,arm:.4,bob:.5,lean:.06,head:.05,look:1.4,idle:['cross'],fid:'glance',talk:'cross',wp:'cross',walkD:'주머니를 감싸듯 팔을 붙이고 작은 걸음으로 종종 걷는다',idleD:'팔짱을 끼고 주머니를 지키듯 두리번거린다',
+    pre:[],
+    L:{a:['공짜예요? 공짜면 좋아요.','동전 한 닢도 아껴야죠. 모이면 금화예요.','흥정은 기본이에요. 정가 주고 사는 사람은 바보예요.'],
+      r:['돈 빌려 달라는 거면 안 돼.','공짜 아니면 관심 없어.'],
+      e:['젊을 때 아껴 둔 돈이 지금 날 먹여 살리지. 한 푼도 안 쓰고.','요즘 애들은 돈 귀한 줄 몰라.'],
+      n:['부자가 된 비결? 쓰지 않는 거지.','연회비가 아까워서 오늘은 아프다고 했지.']},
+    W:{a:['{act} 구경은 좋은데 모자 돌릴 때쯤 빠질 거예요.']}},
+  gossip:{n:'참견쟁이',v:'adult elder noble',sp:.95,pause:1.3,st:.9,arm:.9,bob:.7,lean:.1,head:0,look:1.8,idle:['talk'],talk:'talk',wp:'talk',walkD:'몸을 앞으로 내밀고 남의 집 안을 기웃거리며 걷는다',idleD:'옆 사람 쪽으로 몸을 기울이고 귀를 쫑긋 세운다',
+    pre:[],
+    L:{a:['저기 저 집 말이에요, 어제 부부 싸움 났대요. 아이고.','당신 처음 보는데, 어디 사람이에요? 혼자예요?','이 동네 일은 제가 다 알아요. 물어보세요.'],
+      e:['저 집 아들이 길드에 들어갔다지? 내가 진작 알았지.','자네, 결혼은 했나? 안 했으면 내가 소개해 주지.'],
+      n:['후작 댁 셋째가 평민 처녀랑… 어머, 못 들은 걸로 하세요.','소문은 날개가 있다지요. 나는 그 날개고요.']},
+    W:{a:['{act} 구경 온 저 사람 보세요. 어제 옆집이랑 싸웠대요.']}},
+  romantic:{n:'낭만파',v:'youth adult noble',sp:.9,pause:1.2,st:1,arm:.9,bob:1,lean:-.03,head:-.1,look:1,sway:1.4,idle:['think','wave'],fid:'hum',talk:'talk',wp:'clap',walkD:'콧노래를 부르듯 몸을 살랑살랑 흔들며 걷는다',idleD:'먼 곳을 보며 흥얼거리고 가끔 손을 흔든다',
+    pre:['후후, '],
+    L:{a:['분수 앞에서 고백하면 이뤄진대요. 저도 언젠가…','저녁노을이 지는 광장은 정말 아름다워요.','사랑 노래를 들으면 가슴이 두근거려요.'],
+      n:['오늘 밤 달이 밝으면 정원에서 시를 읊어야지.','진정한 사랑은 신분을 넘는다네. 소설에서는 말이지.']},
+    W:{a:['{act} 구경은 좋아하는 사람이랑 같이 봐야 하는데.']}},
+  brave:{n:'씩씩한',v:'kid youth adult armed',sp:1.1,pause:.9,st:1.2,arm:1.3,bob:1.1,lean:-.05,head:-.05,look:.9,idle:['hips'],talk:'hips',wp:'clap',walkD:'가슴을 펴고 큰 보폭으로 힘차게 걷는다',idleD:'허리에 손을 얹고 당당하게 선다',
+    pre:['좋아! '],
+    L:{a:['무서운 거요? 그런 거 없어요!','몬스터가 오면 제가 먼저 막을 거예요.','넘어지면 다시 일어나면 되죠!'],
+      r:['겁나는 거? 그런 거 없어. 덤벼 보라 그래!','성벽 밖 늑대? 몽둥이 하나면 돼.'],
+      k:['저도 크면 몬스터 잡을 거예요! 지금도 할 수 있어요!','안 울어요! 씩씩하니까요!'],
+      m:['언제든 싸울 준비가 돼 있소!','물러서는 법은 배운 적이 없소.']},
+    W:{a:['{act} 구경하니까 저도 뭔가 해 보고 싶어지네요!'],k:['{act} 구경하니까 저도 해 보고 싶어요! 하나도 안 무서워요!']}},
+  sleepy:{n:'졸린',v:'kid youth adult elder armed',sp:.75,pause:1.5,st:.8,arm:.5,bob:.4,lean:.06,head:.2,look:.4,idle:['stretch','stand'],fid:'nod',talk:'stand',wp:'stand',walkD:'느릿느릿 걸으며 고개가 자꾸 꾸벅 떨어진다',idleD:'꾸벅꾸벅 졸다가 기지개를 켠다',
+    pre:['하아암… '],
+    L:{a:['하아암… 어젯밤에 한숨도 못 잤어요.','서서 졸 뻔했어요. 아니, 졸았어요.','눈꺼풀이 천근만근이에요…'],
+      r:['하암… 졸려 죽겠어.','밤새 일하고 이제 좀 자려고.'],
+      k:['졸려요… 낮잠 시간이에요…','엄마가 일찍 자라 했는데 별 세다가…'],
+      e:['이 나이엔 앉기만 하면 잠이 와.','꾸벅… 어, 내가 졸았나?'],
+      m:['야간 근무 끝나고 또 낮 근무요… 하암.','눈은 뜨고 있소. 아마도.']},
+    W:{a:['{act} 구경하다 졸았어요. 박수 소리에 깼네요.'],k:['{act} 구경하다 잠들 뻔했어요… 하암.']}},
+  polite:{n:'예의 바른',v:'kid youth adult noble armed',sp:.95,pause:1,st:.95,arm:.7,bob:.5,lean:.02,head:.08,look:.7,idle:['behind'],talk:'behind',wp:'clap',walkD:'단정하게 걷고 마주치는 사람에게 살짝 고개를 숙인다',idleD:'손을 모으고 반듯하게 서 있다',
+    pre:[],
+    L:{a:['안녕하십니까. 좋은 하루 보내고 계신지요.','실례가 안 된다면 길을 비켜 드릴게요.','도움이 필요하시면 말씀만 하세요.'],
+      n:['처음 뵙겠습니다. 엑시즈에 잘 오셨습니다.','무례를 용서하십시오. 바빠서 인사가 늦었군요.'],
+      m:['좋은 하루 되십시오, 모험가님.','실례지만 무기는 칼집에 넣어 주십시오.'],
+      k:['안녕하세요! 저는 인사를 제일 잘해요.','{아저씨}, 좋은 하루 되세요!']},
+    W:{a:['{act} 구경, 실례가 안 된다면 함께 보시겠어요?']}},
+  forgetful:{n:'깜빡깜빡하는',v:'adult elder',sp:.85,pause:1.5,st:.9,arm:.7,bob:.5,lean:.04,head:.05,look:1.6,idle:['think'],fid:'tilt',talk:'think',wp:'think',walkD:'걷다가 멈칫하고 두리번거리며 길을 되짚는다',idleD:'고개를 갸웃하며 뭔가를 떠올리려 애쓴다',
+    pre:['어… '],
+    L:{a:['어, 제가 어디 가던 중이었죠?','당신 이름이… 아니, 처음 만났던가요?','열쇠를 또 어디 뒀더라.'],
+      e:['내가 방금 무슨 말 하려 했더라…','자네, 지난번에 본 그 사람 맞지? 아닌가?','안경을 찾고 있는데… 아, 머리에 있군.']},
+    W:{a:['{act} 구경을 하러 왔던가… 장 보러 왔던가.']}},
+  stubborn:{n:'고집 센',v:'adult elder armed',sp:.9,pause:1.1,st:1,arm:.6,bob:.5,lean:-.03,head:.05,look:.5,idle:['cross','hips'],talk:'cross',wp:'cross',walkD:'묵직하게 한 걸음씩, 남이 비켜 주길 기다리며 곧장 걷는다',idleD:'팔짱을 끼고 꿈쩍도 하지 않는다',
+    pre:['아니, '],
+    L:{a:['제 말이 맞아요. 틀린 적이 없어요.','남들이 뭐라든 저는 제 방식대로 해요.','한번 정한 건 안 바꿔요.'],
+      r:['내가 맞다니까. 두고 봐.','남 말 들을 거면 처음부터 안 했어.'],
+      e:['내가 육십 년을 이렇게 살았어. 이제 와서 안 바꿔.','옛날 방식이 제일이야. 두말하면 잔소리지.'],
+      m:['명령은 들어도 내 생각은 안 바꾸오.','이 자리에서 한 발짝도 안 움직이오.']},
+    W:{a:['{act} 구경은 원래 저쪽 자리가 명당이에요. 제 말이 맞아요.']}},
+  vain:{n:'멋쟁이',v:'youth adult noble',sp:.95,pause:1.2,st:1.05,arm:.9,bob:.8,lean:-.06,head:-.1,look:1.1,sway:1.2,idle:['hips'],fid:'tilt',talk:'hips',wp:'hips',walkD:'허리를 살랑이며 맵시 있게 걷고 자꾸 자기 옷을 본다',idleD:'허리에 손을 얹고 자세를 잡는다',
+    pre:['흠흠, '],
+    L:{a:['오늘 옷 어때요? 새로 맞췄어요.','머리 모양 흐트러지지 않았죠? 바람이 불어서요.','이 거리에서 제일 멋쟁이는 저예요.'],
+      n:['이 비단은 하레나에서 들여왔지. 자네는 못 알아보겠지만.','거울을 보는 게 하루의 낙이라네.']},
+    W:{a:['{act} 구경보다 다들 제 옷을 보는 것 같은데요?']}},
+  rebellious:{n:'반항적인',v:'kid youth',sp:.9,pause:1.2,st:1,arm:.7,bob:.8,lean:-.02,head:-.05,look:1,sway:1.3,idle:['lean','shrug'],talk:'shrug',wp:'cross',walkD:'어깨를 건들건들 흔들며 느긋하게 걷는다',idleD:'벽에 기대거나 어깨를 으쓱한다',
+    pre:['칫, '],
+    L:{a:['어른들 말은 다 잔소리예요.','규칙? 그거 누가 정했는데요.','언젠가 이 도시를 떠날 거예요. 두고 봐요.'],
+      k:['싫어요! 안 할 거예요!','엄마 말 안 들을 거예요. …오늘만요.']},
+    W:{a:['{act} 구경? 뭐, 나쁘진 않네요.'],k:['{act} 구경 하나도 안 신나요. …진짜예요.']}},
+  wise:{n:'지혜로운',v:'elder noble',sp:.8,pause:1.3,st:.9,arm:0,hb:1,bob:.3,lean:.03,head:.05,look:.8,idle:['behind','think'],talk:'behind',wp:'behind',walkD:'뒷짐을 지고 천천히, 주위를 둘러보며 걷는다',idleD:'뒷짐을 지고 지긋이 사람들을 바라본다',
+    pre:['허허, '],
+    L:{e:['급할수록 돌아가라는 말, 사냥터에서도 맞는 말이네.','강한 자보다 오래 사는 자가 이기는 법이지.','모르는 길은 물어서 가게. 부끄러운 게 아니야.'],
+      n:['돈보다 사람을 모으게. 그게 진짜 재산이지.','권력은 빌린 옷 같은 거라네. 언젠가 벗어야 해.']}}
+};
+/* 말투 무리 → 성격 말 칸 */
+const CIT_P_SLOT={kid:'k',youth:'a',adult:'a',elder:'e',noble:'n',armed:'m'};
+/* 성격 고르기: 그 사람의 번호와 종류로 정한다 (바뀌지 않는다). 직업마다 조금 더 잘 어울리는 성격이 있다 */
+const CIT_P_LEAN={noble:['arrogant','vain','polite','gossip'],lady:['vain','gossip','polite','romantic'],rich:['stingy','arrogant','worrier'],guard:['strict','sleepy','lazy','taciturn'],knight:['strict','brave','polite'],merc:['boastful','grumpy','lazy'],
+  oldknight:['boastful','wise','stubborn'],elder:['wise','grumpy','forgetful','chatty'],beggar:['melancholy','chatty','cheerful'],bard:['romantic','cheerful','dreamy'],scholar:['curious','forgetful','strict'],scribe:['forgetful','strict'],clerk:['impatient','worrier'],
+  smith:['taciturn','stubborn','diligent'],baker:['diligent','cheerful'],innkeeper:['chatty','cheerful'],fishwife:['chatty','grumpy'],maid:['diligent','gossip','shy'],kid:['mischievous','curious','cheerful'],youth:['dreamy','rebellious','romantic'],
+  nurse:['kind','worrier'],apothecary:['curious','worrier'],farmer:['diligent','stubborn'],sailor:['boastful','cheerful'],dock:['grumpy','lazy'],porter:['diligent','grumpy'],juggler:['cheerful','boastful'],musician:['romantic','dreamy'],painter:['dreamy','curious'],chess:['stubborn','wise','grumpy'],chalk:['dreamy','cheerful']};
+function citHash(n,k){let h=(Math.imul((n|0)^0x9e3779b9,2654435761)^Math.imul(k|0,40503))>>>0;h=Math.imul(h^(h>>>15),2246822519)>>>0;h=Math.imul(h^(h>>>13),3266489917)>>>0;return (h^(h>>>16))>>>0;}
+function citPersonaPick(o){const v=CHAT_VOICE[o.kind]||'adult',ok=Object.keys(CIT_PERSONA).filter(k=>CIT_PERSONA[k].v.split(' ').includes(v)),kk=String(o.kind||'').split('').reduce((a,c)=>a*31+c.charCodeAt(0)|0,7);
+  const h=citHash(o.seed,kk),fav=(CIT_P_LEAN[o.kind]||[]).filter(k=>ok.includes(k));
+  if(fav.length&&h%10<4)return fav[(h>>>8)%fav.length];   /* 열에 넷은 직업에 어울리는 성격 */
+  return ok[(h>>>4)%ok.length];}
+/* 서 있을 때 그 사람이 즐겨 하는 자세 (쉬는 자세만 바꾸고, 일하는 자세·앉기·이야기는 그대로) */
+const CIT_P_FREE={stand:1,lean:1,cross:1,hips:1,think:1,point:1,shrug:1,wave:1,stretch:1,drink:0,read:0,behind:1};
+function citPersonaMode(c,mode,q){const pp=c.pp;if(!pp||!CIT_P_FREE[mode])return mode;if(c.watch)return pp.wp||'stand';const h=citHash((c.off*100)|0,((q&&(q.x*3+q.z*7))|0));return h%3===0?mode:pp.idle[h%pp.idle.length];}
+/* 서 있는 막대 인형에 성격 버릇 덧입히기 (stickNpcPose 다음에 부른다) */
+const CIT_P_WORK={hammer:1,hoe:1,sweep:1,carry:1,juggle:1,lute:1,flute:1,paint:1,chalk:1,chess:1,chin:1,sitb:1,crouch:1,counter:1,play:1};
+function citPersonaIdle(g,pp,t,pose){const S=g.userData.stick;if(!S||!pp||CIT_P_WORK[pose])return;
+  S.upper.rotation.x+=pp.lean*.8;S.head.rotation.x+=pp.head;
+  if(pp.look>1.3){const gq=_sn(t*.45*pp.look,8);S.head.rotation.y+=(Math.abs(gq)>.3?Math.sign(gq)*(Math.abs(gq)-.3)*1.2:0);}
+  else if(pp.look<.5)S.head.rotation.y*=pp.look*2;
+  switch(pp.fid){
+    case 'tap':{if(_sn(t*.3,4)>-.1){S.R.hip.rotation.x=-.12;S.R.knee.rotation.x=.2+Math.max(0,Math.sin(t*10))*.3;}break;}   /* 발 동동 */
+    case 'nod':{const d=Math.max(0,_sn(t*.18,2)-.1);S.head.rotation.x+=Math.min(.7,d*1.6);S.upper.rotation.x+=d*.15;break;}   /* 꾸벅꾸벅 */
+    case 'sigh':{const s=Math.pow(Math.max(0,Math.sin(t*.55)),12);S.upper.rotation.x+=s*.12-.02;S.body.position.y+=s*.03;break;}   /* 한숨 */
+    case 'glance':{const s=_sn(t*.6,11);if(Math.abs(s)>.45)S.head.rotation.y=Math.sign(s)*.75;break;}   /* 흘끔 */
+    case 'hum':{S.head.rotation.z=Math.sin(t*3.2)*.08;S.body.position.y+=Math.abs(Math.sin(t*3.2))*.015;break;}   /* 흥얼 */
+    case 'tilt':{S.head.rotation.z=_sn(t*.25,6)*.22;break;}}   /* 갸웃 */
+  if(pp.sway)S.body.rotation.z+=Math.sin(t*1.5)*.035*pp.sway;}
+/* 성격 말 칸 고르기 (반말 쓰는 일꾼은 r 칸, 없으면 성격 말은 쓰지 않는다) */
+function citPersonaLines(c,set){const P=CIT_PERSONA[c.persona];if(!P)return [];const v=chatVoice(c),sl=CIT_P_SLOT[v]||'a',S=P[set]||{};
+  if(sl==='a'&&v==='adult'&&CHAT_ROUGH[c.kind])return S.r||[];return S[sl]||[];}
+/* ---------- 지금 하는 일 ---------- */
+/* 구경거리: 곡예사·악사·화가·분필 화가·조각가·체스 두는 노인·노래하는 음유시인 */
+const CHAT_SHOW={juggler:'곡예',musician:'연주',bard:'노래',painter:'그림 그리기',chalk:'분필 그림',sculptor:'조각',chess:'체스'};
+function chatShowNear(c,p){if(CHAT_SHOW[c.kind])return null;let b=null,bd=7;for(const o of CHATTER){if(o===c||!CHAT_SHOW[o.kind])continue;if(o.kind==='bard'&&!(o.cit&&o.cit.k==='st'))continue;if(o.visible&&!o.visible())continue;const q=o.pos();if(!q)continue;const d=Math.hypot(q.x-p.x,q.z-p.z);if(d<bd&&Math.abs(q.y-p.y)<2){bd=d;b=o;}}return b?b.kind:null;}
+/* 그 사람이 지금 하는 일: {k: 일 이름, show: 구경하는 것} */
+function chatDoing(c){const p=c.pos&&c.pos();let k='stand';
+  if(c.cit){const C=c.cit,t=Date.now()/1000-CIT_T0,q=citPose(C,t-(C.lag||0)),m=q.mode||C.mode;
+    if(!q.mode&&q.walk)k=C.k==='circ'?(C.sp>2?'play':'stroll'):(C.mode==='carry'||C.mode==='shoulder')?'carry':'walk';
+    else k=m==='shoulder'?'carry':m==='reap'?'reap':m;}
+  else if(c.act)k=c.act;
+  if(k==='hammer'&&chatVoice(c)==='armed')k='train';
+  if(k==='walk'&&chatArea(p||{x:0,z:0})==='market')k='shop';
+  if(!p||/^(walk|stroll|play|carry|hoe|reap|hammer|train|sweep|juggle|lute|flute|paint|chalk|chess|chin)$/.test(k))return {k};
+  const show=c.watch||chatShowNear(c,p);return show?{k:'watch',show}:{k};}
+const CHAT_DOING_NAME={stand:'서 있기',walk:'볼일 보러 걷는 중',stroll:'광장 산책',play:'뛰어놀기',carry:'짐 나르기',hoe:'괭이질',reap:'밀 베기',hammer:'망치질',train:'허수아비 훈련',sweep:'문 앞 쓸기',sit:'벤치에 앉아 쉬기',drink:'물 마시기',read:'책 읽기',pray:'기도',guard:'경비 서기',crouch:'쪼그려 앉아 들여다보기',stretch:'기지개',think:'생각에 잠기기',point:'무언가 가리키기',talk:'이웃과 이야기',wave:'손 흔들기',lean:'기대어 쉬기',cross:'팔짱 끼고 서 있기',hips:'허리에 손 얹고 서 있기',shrug:'어깨 으쓱',shop:'장 보기',juggle:'공 던지기 곡예',lute:'류트 연주',flute:'피리 연주',paint:'그림 그리기',chalk:'바닥에 분필 그림',chess:'체스 두기',chin:'체스 수 고민',counter:'꽃수레 지키기',clap:'구경하며 손뼉',behind:'뒷짐 지고 서 있기'};
+/* 하는 일에 따른 말 (a 어른·젊은이 · r 반말 일꾼 · k 아이 · e 노인 · n 귀족 · m 무장한 사람) */
+const CHAT_DOING={
+  sweep:{a:['문 앞은 제가 매일 쓸어요. 안 쓸면 먼지가 집 안까지 들어와요.','빗자루질 하는 중이에요. 발 조심하세요.'],r:['쓸어도 쓸어도 또 쌓여.','먼지 날린다, 저리 비켜.'],e:['이 나이에도 문 앞은 내가 쓸어야 마음이 놓여.'],k:['엄마 대신 쓸고 있어요. 용돈 받기로 했어요!']},
+  hoe:{a:['흙을 고르는 중이에요. 이랑이 반듯해야 밀이 잘 커요.'],r:['괭이질 한 번에 땀 한 바가지야.','허리 좀 펴고 하자… 아이고.'],k:['저도 괭이질 도와요! 조금만요.'],e:['땅은 정직해. 판 만큼 돌려주지.']},
+  reap:{a:['익은 밀만 골라 베는 중이에요.'],r:['낫질은 손목으로 하는 거야.','다 베면 단으로 묶어야 해. 끝이 없어.']},
+  hammer:{a:['손 다칠라, 조금만 떨어져 계세요.','이것만 다 박으면 오늘 일은 끝이에요.'],r:['쇠는 달궜을 때 쳐야 해. 말 시키지 마.','망치 소리가 내 노래야.'],e:['젊은 놈들보다 내가 더 세게 친다네.']},
+  train:{m:['허수아비가 오늘따라 단단하오.','하루 천 번 휘두르는 게 목표요. 지금 사백 번째요.','훈련 중이오. 잠깐 쉬는 김에 말하는 거요.']},
+  carry:{a:['이거 무거워요. 길 좀 비켜 주세요!','창고까지 날라야 해요. 세 번은 더 왔다 갔다 해야 돼요.'],r:['짐 나르는 중이야. 부딪히면 네가 책임져.','어깨가 빠질 것 같아. 이게 마지막 상자야… 아마.'],m:['보급품을 나르는 중이오. 비켜 주시오.']},
+  sit:{a:['앉아서 사람 구경하는 게 제일 좋아요.','다리 좀 쉬는 중이에요. 오래 걸었거든요.'],r:['잠깐 앉았다 갈 거야.'],e:['벤치에 앉아 볕 쬐는 게 늙은이 낙이지.'],k:['다리 아파서 쉬는 중이에요.'],n:['벤치가 딱딱하군. 방석이라도 가져올걸.'],m:['잠깐 앉았소. 대장한텐 비밀이오.']},
+  drink:{a:['목이 말라서요. 물 한 모금 하는 중이에요.'],r:['일 끝나고 마시는 한 잔이 최고지.'],m:['근무 중엔 물만 마시오. 진짜요.'],e:['따뜻한 차 한 잔이면 세상이 다 내 거야.']},
+  read:{a:['책 읽는 중이에요. 마지막 장이 궁금해서 못 참겠어요.'],n:['시집이라네. 자네는 시를 좋아하나?'],e:['눈이 침침해서 한 줄 읽는 데 한참 걸려.'],k:['그림책 보는 중이에요! 용이 나와요!']},
+  pray:{a:['잠깐 기도하던 중이었어요.'],e:['오늘도 무사하게 해 달라고 빌었지.'],k:['소원 빌고 있었어요. 비밀이에요.'],n:['집안의 평안을 빌던 참이었네.']},
+  guard:{m:['이 자리를 지키는 게 내 임무요.','근무 중엔 한눈팔지 않소. 자네 얘기도 짧게 듣겠소.','이상 없소. 지나가도 좋소.']},
+  crouch:{a:['뭘 떨어뜨렸는데 안 보이네요.'],k:['개미 구경해요! 줄 서서 가요!'],r:['바닥에 동전 떨어진 줄 알았는데 병뚜껑이네.']},
+  stretch:{a:['기지개 좀 켜는 중이에요. 하루 종일 서 있었더니.'],r:['아이고 허리야.'],m:['서 있기만 하니 몸이 굳소.'],k:['쭈욱— 키 크는 체조예요!']},
+  think:{a:['생각할 게 좀 있어서요. 잠깐만요.'],e:['음, 오늘 저녁 반찬을 고민 중이야.'],n:['다음 연회에 무엇을 입을지 고민 중이라네.']},
+  point:{a:['저기 저 지붕 보이세요? 저기가 우리 집이에요.'],k:['저기요! 저기 고양이가 지붕 위에 있어요!'],m:['저쪽 골목은 오늘 순찰 구역이오.']},
+  talk:{a:['이웃이랑 이야기하던 중이었어요. 끼실래요?','얘기하다 보니 시간 가는 줄 몰랐네요.'],r:['잠깐 쉬면서 떠들던 중이야.'],e:['말벗이랑 옛날 얘기 하던 참이야.'],m:['동료와 근무 얘기를 하던 중이오.'],k:['친구랑 비밀 얘기 하고 있었어요!'],n:['사교 모임 얘기를 하던 중이었소.']},
+  walk:{a:['볼일 보러 가는 길이에요.','시장 들렀다가 집에 가는 중이에요.'],r:['일하러 가는 길이야. 늦었어.'],e:['천천히 걸어야 오래 걷지.'],k:['심부름 가는 중이에요!'],m:['순찰 중이오. 오늘 이 길만 세 번째요.'],n:['산책 중이라네. 귀족도 다리는 써야 하니까.']},
+  stroll:{a:['광장을 한 바퀴 도는 게 제 운동이에요.','빙빙 돌다 보면 생각이 정리돼요.'],e:['하루에 세 바퀴. 의사가 시킨 거야.'],n:['정원 산책은 귀족의 일과라네.'],m:['돌면서 지키는 거요. 노는 거 아니오.']},
+  play:{k:['술래잡기 하는 중이에요! 잡히면 안 돼요!','저 지금 엄청 빨라요! 봤죠?','{아저씨}도 같이 뛰어요!']},
+  shop:{a:['장 보는 중이에요. 오늘은 사과가 싸네요.','이것저것 보다 보니 바구니가 꽉 찼어요.'],k:['엄마 장 보는 거 따라왔어요.'],n:['하인을 보내도 되지만, 직접 고르는 재미가 있지.'],e:['시장은 눈으로만 봐도 배가 불러.']},
+  wave:{a:['친구가 저기 있어서 손 흔드는 중이에요!'],k:['저기 우리 엄마예요! 엄마아!']},
+  lean:{a:['벽에 기대 있으면 세상 편해요.'],r:['잠깐 기대서 쉬는 중이야.'],m:['기대도 눈은 뜨고 있소.']},
+  clap:{a:['박수 치는 중이에요. 잘하면 쳐 줘야죠!'],k:['짝짝짝! 박수 쳐요!']}};
+/* 구경하며 하는 말 (구경거리마다) */
+const CHAT_WATCH={
+  juggler:{a:['공 세 개가 하나도 안 떨어져요. 어떻게 저래요?','곡예사가 아까 칼로도 했어요. 진짜 칼로요!'],k:['공이 하늘까지 올라가요! 나도 저거 배울래요!','하나, 둘, 셋… 우와, 안 떨어졌어요!'],e:['허허, 나도 젊을 땐 사과 세 개는 돌렸지.'],n:['재주가 좋군. 우리 연회에 불러 볼까.'],m:['곡예 구경 중이오. 근무 중이지만 잠깐은 괜찮소.'],r:['저 손놀림 봐. 짐도 저렇게 던지면 좋겠다.']},
+  musician:{a:['이 곡 들으면 마음이 편해져요.','저 악사, 매일 같은 자리에서 연주해요. 오늘이 제일 좋네요.'],k:['노래가 좋아서 발이 저절로 움직여요!','저도 커서 악기 배울 거예요!'],e:['이 노래, 내 젊을 때 유행하던 거야.'],n:['궁정 악사만은 못하지만 들을 만하군.'],m:['음악이 있으니 근무 시간이 빨리 가오.'],r:['일 끝나고 노래 들으니 살 것 같네.']},
+  bard:{a:['저 음유시인 노래는 매번 가사가 달라요.','모험가 노래를 부르는데, 혹시 당신 얘기 아니에요?'],k:['용 잡는 노래예요! 제일 좋아하는 노래!'],e:['옛날이야기를 노래로 들으니 새롭군.'],n:['가사는 엉터리지만 목소리는 좋군.'],m:['기사단 노래도 불러 줬으면 좋겠소.'],r:['저 노래 따라 부를 줄 알아. 들어 볼래?']},
+  painter:{a:['붓질 하나하나가 신기해요. 분수가 진짜처럼 보여요.','다 그리면 사고 싶은데 비싸겠죠?'],k:['저 그림에 저도 그려 달라고 할 거예요!'],e:['그림 속 분수가 진짜보다 낫군.'],n:['우리 집 초상화를 맡겨 볼까.'],m:['그림 구경 중이오. 나는 그려 줄 리가 없지만.']},
+  chalk:{a:['바닥에 무지개를 그렸어요. 밟기 아까워요.'],k:['저도 분필 하나만 빌려 달래야지!','해님이 웃고 있어요! 귀여워요!'],e:['비 오면 다 지워질 텐데, 그래서 더 예쁘구먼.']},
+  sculptor:{a:['돌에서 사람이 나오는 것 같아요.','망치질 한 번 한 번이 조마조마해요.'],k:['돌 부스러기 하나 주워 갈래요!'],e:['광장 석상도 저렇게 만들었겠지.']},
+  chess:{a:['훈수 두면 혼나요. 그래서 조용히 보는 중이에요.','저 할아버지들 삼십 년째 둔대요.'],k:['말이 왜 그렇게 움직여요? 모르겠어요.'],e:['나라면 저기서 기사를 옮기겠는데… 쉿.'],n:['평민들 체스치곤 수가 깊군.'],m:['체스도 전쟁이오. 배울 게 있소.']}};
 /* 한 마디 (종류별) */
 const CHAT_LINES={
   guild:['의뢰 보고하러 왔나? 접수대는 저쪽이야.','오늘 스튜는 양고기래. 한 그릇 해.','어제 특급 의뢰 받아 간 친구, 아직 안 돌아왔어.','브람네 맥주는 거품이 반이야. 그래도 마시지.','게시판에 새 의뢰가 붙었다더군.','탈것 샀어? 늑대는 값이 좀 세더라.','투기장에서 결투 구경 가 봤어? 볼만하더군.','나도 한때는 사냥터를 누볐지.','2층 서가에 지도책이 있어. 사냥터 가기 전에 봐 둬.','지하 창고 문으로 내려가면 하레나까지 이어진다더라.','마리엘한테 잘 보여. 좋은 의뢰를 먼저 알려 주거든.','허수아비 때리는 소리에 잠을 못 자겠어.','특급 의뢰는 넷이 같이 가는 게 좋아. 혼자 가면 관짝 값이 더 들어.','저 벽난로 앞자리는 내 자리야. 삼 년째.','의뢰 보수로 장비를 받았는데 내 직업 게 아니더군. 팔아야지.','강화는 세 번까지만. 그 뒤는 눈물이야.'],
@@ -12556,12 +12874,25 @@ function chatLineFor(c,ppl,area){const v=chatVoice(c),r=Math.floor((c.seed||0)*1
   const pers=v==='adult'?fit(CHAT_ROUGH[c.kind]?CHAT_PERSONAL_V.rough:CHAT_PERSONAL):fit(CHAT_PERSONAL_V[v]);
   if(!c.my&&pers.length)c.my=pers[(Math.floor((c.seed||0)*2654435761)>>>0)%pers.length];
   const noPers=c.kind==='guild';
-  if(r===9&&!noPers&&c.my)return c.my;   /* 그 사람만의 사정 */
-  if(r===8&&!noPers&&pers.length)return chatPick(c,pers);
-  if(r===7&&sit.length)return chatPick(c,sit);
-  if((r===5||r===6)&&areaL.length)return chatPick(c,areaL);
-  if(job.length)return chatPick(c,job);
-  return chatPick(c,areaL.length?areaL:sit.length?sit:fit(CHAT_LINES.common).length?fit(CHAT_LINES.common):['안녕하세요.']);}
+  /* 성격·하는 일·구경거리에 맞춘 말 */
+  const sl=v==='adult'&&CHAT_ROUGH[c.kind]?'r':(CIT_P_SLOT[v]||'a'),D=chatDoing(c),P=c.pp;
+  const watch=D.show?fit(citPersonaLines(c,'W').map(s=>s.replace(/\{act\}/g,CHAT_SHOW[D.show]))).concat(fit((CHAT_WATCH[D.show]||{})[sl])):[];
+  const doing=fit((CHAT_DOING[D.k]||{})[sl]),mine=fit(citPersonaLines(c,'L'));
+  let line,src='';
+  if(watch.length&&r<5)line=chatPick(c,watch);   /* 구경하는 사람은 구경 이야기를 많이 한다 */
+  else if(r===9&&!noPers&&c.my){line=c.my;src='p';}   /* 그 사람만의 사정 */
+  else if(r===8&&!noPers&&pers.length)line=chatPick(c,pers);
+  else if((r===6||r===7)&&mine.length){line=chatPick(c,mine);src='p';}   /* 성격 말 */
+  else if((r===4||r===5)&&doing.length)line=chatPick(c,doing);   /* 지금 하는 일 */
+  else if(r===3&&sit.length)line=chatPick(c,sit);
+  else if(r===2&&areaL.length)line=chatPick(c,areaL);
+  else if(job.length)line=chatPick(c,job);
+  else if(mine.length){line=chatPick(c,mine);src='p';}
+  else if(doing.length)line=chatPick(c,doing);
+  else line=chatPick(c,areaL.length?areaL:sit.length?sit:fit(CHAT_LINES.common).length?fit(CHAT_LINES.common):['안녕하세요.']);
+  /* 말머리: 성격이 말투에 묻어난다 (네 번에 한 번쯤) */
+  if(src!=='p'&&P&&P.pre&&P.pre.length&&line&&!/^[…(]/.test(line)&&citHash(c.seed,c.n||0)%4===0)line=P.pre[citHash(c.seed,7)%P.pre.length]+line;
+  return line;}
 /* 대화를 끝내고 곧 다시 말을 걸면 한동안은 아까 한 말을 그대로 되풀이한다 */
 const CHAT_KEEP=150000;
 function chatterTalk(i){const c=CHATTER[i];if(!c||mode!=='world')return;const p=c.pos();if(!p)return;
@@ -12592,7 +12923,7 @@ function poseKind(pose){const P=String(pose||'');const T=[['hammer','smith'],['c
 function chatterNear(){if(!player)return -1;const q=player.position;let b=-1,bd=2.6;for(let i=0;i<CHATTER.length;i++){const c=CHATTER[i];if(c.visible&&!c.visible())continue;const p=c.pos();if(!p||Math.abs(p.y-q.y)>2.5)continue;const d=Math.hypot(p.x-q.x,p.z-q.z);if(d<bd){bd=d;b=i;}}return b;}
 const CHAT_ROLE={guild:'길드 손님',merchant:'상인',vendor:'장사꾼',baker:'빵집 주인',flower:'꽃 파는 이',weaver:'직조공',apothecary:'약사',herbalist:'약초꾼',innkeeper:'여관 주인',cook:'요리사',butcher:'정육점 주인',guard:'경비병',knight:'기사',merc:'용병',archer:'궁수',squire:'종자',hunter:'사냥꾼',noble:'귀족',lady:'귀부인',rich:'부자',clerk:'서기',scribe:'필경사',scholar:'학자',nurse:'간호사',maid:'하녀',laundress:'세탁부',wife:'아낙',fishwife:'생선 장수',milkmaid:'우유 짜는 처녀',seamstress:'재봉사',tailor:'재단사',cooper:'통장이',mason:'석공',carpenter:'목수',smith:'대장장이',stablehand:'마부',farmer:'농부',shepherd:'양치기',sailor:'뱃사람',fisher:'어부',dock:'부두 일꾼',porter:'짐꾼',courier:'전령',lamplighter:'등불지기',worker:'일꾼',bard:'음유시인',beggar:'거지',elder:'노인',oldknight:'늙은 기사',kid:'아이',youth:'젊은이',common:'주민',chess:'체스 두는 노인',painter:'화가',musician:'악사',juggler:'곡예사',sculptor:'조각가',chalk:'분필 화가'};
 /* 대화창에 쓸 임시 인물: 이름은 역할, 초상화는 그 사람의 막대 인형 */
-function chatPerson(c,k){const p=c.pos();return {id:'chat'+k,name:c.name||CHAT_ROLE[c.kind]||'주민',role:'',x:p.x,z:p.z,look:c.look||{},lines:[],acts:[],noTalk:true,stickPortrait:true,pose:c.pose};}
+function chatPerson(c,k){const p=c.pos();return {id:'chat'+k,name:c.name||CHAT_ROLE[c.kind]||'주민',role:c.pp?c.pp.n+' 성격':'',x:p.x,z:p.z,look:c.look||{},lines:[],acts:[],noTalk:true,stickPortrait:true,pose:c.pose};}
 function chatPick(c,pool){const n=pool.length;c.n=(c.n||0)+1;const seed=Math.floor((c.seed||0)*7919+c.n*104729);return pool[((seed%n)+n)%n]||pool[0];}
 /* 플레이어가 고르는 대화 */
 function chatAsk(D,people){const who=people[D.open[0]%people.length];npcCur=who;drawPortrait(who);
