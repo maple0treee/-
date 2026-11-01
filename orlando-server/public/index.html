@@ -8512,6 +8512,10 @@ function addPalm(x,y,z,h,seed){
 
 /* ---------- 도시 기록관: 들어갈 수 있는 3층 건물 (옥상까지) ----------
    발 디딜 곳(바닥·계단)과 층마다 다른 벽 충돌을 따로 갖는다. */
+/* CIT_SLABS: 주민이 밟는 돋운 바닥 {x0,x1,z0,z1,y,f}. 주민은 땅 높이(heightAt)로 걷는데, 광장 시청 아치 길처럼 돌판을 0.6m 돋운 곳에서는
+   발이 돌판 속에 묻혀 보였다. 여기 넣은 바닥 위에서는 그 높이를 밟고, 앞뒤 계단 폭(f) 안에서는 천천히 오르내린다 */
+const CIT_SLABS=[];
+function citGround(x,z){let h=heightAt(x,z);for(const s of CIT_SLABS){if(x<s.x0||x>s.x1)continue;const dz=Math.max(s.z0-z,z-s.z1,0);if(dz>=s.f)continue;const y=s.y*(1-dz/s.f);if(y>h)h=y;}return h;}
 const SURFACES=[];const CEILS=[];const HDOORS=[];const HEARTHS=[];   /* CEILS: 건물 천장 아랫면 (ceilAdd로 넣는다, 3인칭 카메라가 뚫고 나가지 않게) */ // {x0,x1,z0,z1,y} 평평한 바닥, {..., ramp:'x', ya, yb} x0→x1로 높아지는 계단
 const SWAMP_WY=-1.25;
 function floorAt(x,z,y){
@@ -9998,6 +10002,15 @@ function buildMarcus(H){
       const w=S-1-r2()*2.5,h=S-1.5-r2()*3,rot=(r2()-.5)*2,roof=TERRA[Math.floor(r2()*TERRA.length)];r2();
       houses.push({mx:x,my:y,w,d:h,rot:-rot*PI/180,roof,dk});}}
   const dirs=[[0,1],[1,0],[0,-1],[-1,0]];
+  /* 집이 이미 선 건물이나 자리 잡아 둔 관청과 파고들면 짓지 않는다: 전에는 집 벽이 옆집·길드홀·도서관 벽을 뚫고 나와 건물이 군데군데 뚫려 보였다 */
+  const PALAZZO_AT=[['archive',PI],['chamber',PI],['admin',0],['treasury',0],['library',PI/2],['clinic',0],['trade',-PI/2]];   /* 관청 자리와 돌린 각도 (아래에서 이대로 짓는다) */
+  const HOUSE_RESERVE=PALAZZO_AT.map(([id,ry])=>{const q=Z(id);return q&&{x:cx+q.x,z:cz+q.y,hw:q.w/2+.8,hd:q.h/2+.8,cs:Math.cos(ry),sn:Math.sin(ry)};}).filter(Boolean);   /* 지붕 처마(+0.8)까지 */
+  const obbHit=(a,b,m)=>{const ax=[[a.cs,-a.sn],[a.sn,a.cs]],bx=[[b.cs,-b.sn],[b.sn,b.cs]],dx=a.x-b.x,dz=a.z-b.z;
+    for(const n of [ax[0],ax[1],bx[0],bx[1]]){const pa=Math.abs(ax[0][0]*n[0]+ax[0][1]*n[1])*a.hw+Math.abs(ax[1][0]*n[0]+ax[1][1]*n[1])*a.hd,pb=Math.abs(bx[0][0]*n[0]+bx[0][1]*n[1])*b.hw+Math.abs(bx[1][0]*n[0]+bx[1][1]*n[1])*b.hd;if(pa+pb-m<=Math.abs(dx*n[0]+dz*n[1]))return false;}return true;};
+  const houseRoom=(x,z,ry,w,d)=>{const me={x,z,hw:w/2,hd:d/2,cs:Math.cos(ry),sn:Math.sin(ry)},r=Math.hypot(w,d)/2;
+    for(const c of HOUSE_RESERVE)if(obbHit(me,c,.1))return false;
+    for(const c of colliders){if(!c.box||!(c.h>=4)||Math.abs(c.x-x)>c.r+r||Math.abs(c.z-z)>c.r+r)continue;if(obbHit(me,{x:c.x,z:c.z,hw:c.hw,hd:c.hd,cs:c.cs??1,sn:c.sn||0},.1))return false;}
+    return true;};
   const streetDist=(mx,my,wx,wz)=>{for(let t=3;t<=13;t+=2)if(PL.nearStreet(mx+wx*t,my+wz*t,0))return t;return 99;};
   const buildHouse=(hs,n)=>{const hh=k=>{const v=Math.sin((n+3)*12.9898+k*78.233)*43758.5453;return v-Math.floor(v);};
     const near=hs.near||((mx,my,m)=>PL.nearStreet(mx,my,m)),streetDist=(mx,my,wx,wz)=>{for(let t=3;t<=13;t+=2)if(near(mx+wx*t,my+wz*t,0))return t;return 99;};
@@ -10009,7 +10022,7 @@ function buildMarcus(H){
     if(noble){w*=1.7;d*=1.5;}
     const fl=hs.fl||(tower?5:inn?4:noble?3:hh(1)<.15?2:hh(1)<.7?3:4),FH=noble?4.4:3.8,FU=noble?3.6:3.2,Ht=FH+FU*(fl-1),wall=noble?WALL_NOBLE[Math.floor(hh(2)*WALL_NOBLE.length)]:shopy&&dk==='commerce'?[0xe0a850,0xe8b860,0xd88a70,0xc87850,0xe6c27a,0xd49a68][Math.floor(hh(2)*6)]:(dk==='artisans'||inn)?WALL_TIMBER[Math.floor(hh(2)*WALL_TIMBER.length)]:WALL_RES[Math.floor(hh(2)*WALL_RES.length)],sh=SHUT2[Math.floor(hh(3)*SHUT2.length)];
     const timber=(dk==='artisans'||inn)&&!tower,ROOFC=noble?[0x4a5260,0x56606e,0x3e4652][Math.floor(hh(11)*3)]:timber?[0x7a4a32,0x6a4a3a,0x845238][Math.floor(hh(11)*3)]:dk==='commerce'?[0xc0663e,0xd0703e,0xb85a34][Math.floor(hh(11)*3)]:hs.roof;
-    const x=cx+hs.mx,z=cz+hs.my,F=frame(x,z,ry);
+    const x=cx+hs.mx,z=cz+hs.my;if(!houseRoom(x,z,ry,w,d))return;const F=frame(x,z,ry);
     const TW=tower?Math.min(w,d)*.62:w,TD=tower?Math.min(w,d)*.62:d;
     F.plinth(w,d);
     if(tower){F.P(BOX,0,FH/2,0,w,FH,d,PIETRA);F.P(BOX,0,FH+FU/2,0,w-.02,FU,d-.02,wall);F.P(BOX,0,FH+FU+.1,0,w+1.2,.22,d+1.2,0x6a4a32);F.P(HIP,0,FH+FU+.2,0,w+1.2,1.2,d+1.2,hs.roof);
@@ -10122,7 +10135,7 @@ function buildMarcus(H){
       const VTOR=geoC('plzVaultTor',()=>new THREE.TorusGeometry(AW/2+.45,.45,6,24,PI));
       for(const fz of [-1,1]){const zz=fz*(PD/2+.12);G.P(VTOR,0,AS,zz,1,1,1,SERENA);G.P(BOX,0,AS+AW/2+.7,zz+fz*.1,1.2,1.7,.5,SERENA);   /* 아치 테두리와 쐐기돌 */
         for(const sd of [-1,1]){G.P(BOX,sd*(AW/2+.45),AS/2,zz,.9,AS,.4,SERENA);G.P(BOX,sd*(AW/2+.45),AS+.15,zz+fz*.1,1.4,.3,.6,SERENA);}}   /* 기둥 띠와 받침 */
-      G.P(BOX,0,.3,0,AW,.6,PD,MAR2);G.P(BOX,0,.15,-PD/2-.6,AW+.6,.3,1.2,MAR2);SURFACES.push({x0:x-AW/2,x1:x+AW/2,z0:z+pz-PD/2,z1:z+pz+PD/2,y:.6});   /* 길 바닥과 뒤쪽 계단 */
+      G.P(BOX,0,.3,0,AW,.6,PD,MAR2);G.P(BOX,0,.15,-PD/2-.6,AW+.6,.3,1.2,MAR2);SURFACES.push({x0:x-AW/2,x1:x+AW/2,z0:z+pz-PD/2,z1:z+pz+PD/2,y:.6});CIT_SLABS.push({x0:x-AW/2,x1:x+AW/2,z0:z+pz-PD/2,z1:z+pz+PD/2,y:.6,f:1.2});   /* 길 바닥과 뒤쪽 계단 (주민도 이 바닥을 밟는다) */
       for(const sd of [-1,1])for(const lz of [-PD/4,PD/4]){G.P(BOX,sd*(AW/2-.12),4.3,lz,.24,.24,.7,IRON);G.P(BOX,sd*(AW/2-.45),4,lz,.4,.6,.4,LAMP,{glow:true});}   /* 안쪽 벽등 */
       for(const y of [8,14]){const n=7;for(let q=0;q<n;q++){const lx=-PW/2+PW/(n*2)+q*PW/n;if(Math.abs(lx)<(y<10?AW/2+2.5:3))continue;G.P(ARCH,lx,y-1.5,PD/2+.03,2.2,3.4,1,SERENA);G.P(ARCH,lx,y-1.4,PD/2+.09,1.6,3,1,0x2a2420);G.P(BOX,lx,y-1.4+1.5,PD/2+.12,.14,3,.1,SERENA);}   /* 앞면 쌍아치창 */
         for(const sd of [-1,1])for(let q=0;q<3;q++){const lz=-PD/2+PD/6+q*PD/3;G.P(ARCH,sd*(PW/2+.03),y-1.5,lz,2.2,3.4,1,SERENA,{ry:sd*PI/2});G.P(ARCH,sd*(PW/2+.09),y-1.4,lz,1.6,3,1,0x2a2420,{ry:sd*PI/2});}}
@@ -10141,7 +10154,7 @@ function buildMarcus(H){
       G.P(BOX,0,15.2,PD/2+.3,2.6,2.8,.4,0x7a2a22);G.P(BOX,0,15.2,PD/2+.52,2.1,2.2,.1,0x9a3a2e);G.P(SPH,0,15.3,PD/2+.6,.5,.5,.14,GOLD);   /* 아치 위 문장 */
       for(const sd of [-1,1])G.box(sd*BX,0,BW,PD,PH);
       /* 궁 앞 돋움 단과 계단 */
-      G.P(BOX,0,.3,PD/2+2.2,PW*.6,.6,4.4,MAR2);G.P(BOX,0,.15,PD/2+4.9,PW*.6+.6,.3,1.2,MAR2);SURFACES.push({x0:x-PW*.3,x1:x+PW*.3,z0:z+pz+PD/2,z1:z+pz+PD/2+4.4,y:.6});
+      G.P(BOX,0,.3,PD/2+2.2,PW*.6,.6,4.4,MAR2);G.P(BOX,0,.15,PD/2+4.9,PW*.6+.6,.3,1.2,MAR2);SURFACES.push({x0:x-PW*.3,x1:x+PW*.3,z0:z+pz+PD/2,z1:z+pz+PD/2+4.4,y:.6});CIT_SLABS.push({x0:x-PW*.3,x1:x+PW*.3,z0:z+pz+PD/2,z1:z+pz+PD/2+4.4,y:.6,f:1.2});
       for(const ox of [-12.15,-7.3,7.3,12.15]){const bx=x+ox;const bn=new THREE.Mesh(new THREE.PlaneGeometry(1.6,5),new THREE.MeshStandardMaterial({map:royalTex('banner'),roughness:.9,side:THREE.DoubleSide}));bn.position.set(bx,13,z+pz+PD/2+.3);bn.castShadow=true;cell(bx,z).g.add(bn);}}
     /* --- 란치 회랑: 동쪽 가장자리, 큰 아치 셋이 광장을 향해 열려 있다 (안의 조각상과 계단 사자 석상은 지웠다) --- */
     {const LW=22,LD=9,LH=11,lx0=R-LD/2-1.5,G=frame(x+lx0,z,-PI/2,0);   /* 회랑의 +z(앞)가 광장 가운데(-x)를 본다 */
@@ -10291,7 +10304,7 @@ function buildMarcus(H){
     for(const sd of [-1,1]){F.P(BOX,0,.5,sd*(D/2-.2),W,1,.5,PIETRA);F.P(BOX,0,1.05,sd*(D/2-.2),W+.05,.12,.65,SERENA);}F.P(BOX,-W/2+.2,.5,0,.5,1,D,PIETRA);F.P(BOX,-W/2+.2,1.05,0,.65,.12,D+.05,SERENA);   /* 난간 (뭍 쪽 동쪽은 트임) */
     for(let k=0;k<Math.floor(W/6);k++)for(const sd of [-1,1])F.P(CYL(.35,.4,8),-W/2+3+k*6,-1.4,sd*(D/2+.25),1,2.8,1,STONE[2]);   /* 물에 잠긴 받침 기둥 */
     SURFACES.push({x0,x1,z0,z1,y:.1});segBox(x0,z0,x1,z0,.5,0,{y0:-1,y1:1.6,h:undefined});segBox(x0,z1,x1,z1,.5,0,{y0:-1,y1:1.6,h:undefined});segBox(x0,z0,x0,z1,.5,0,{y0:-1,y1:1.6,h:undefined});}
-  palazzo(Z('archive'),'archive',PI);palazzo(Z('chamber'),'chamber',PI);palazzo(Z('admin'),'admin',0);palazzo(Z('treasury'),'treasury',0);palazzo(Z('library'),'library',PI/2);palazzo(Z('clinic'),'clinic',0);palazzo(Z('trade'),'trade',-PI/2);
+  for(const [id,ry] of PALAZZO_AT)palazzo(Z(id),id,ry);
   /* ===== 의회장 ===== */
   {const c=Z('council'),x=cx+c.x,z=cz+c.y,F=frame(x,z,0,0),w=c.w,d=c.h,HB=15,PINK=0xd8a8a0;
     hall(F,w,d,HB,{wall:MAR,floor:0xa89c88,ceil:13,ceilC:0x2a3a6a,doors:[[3,0,3.6,6],[0,0,3.6,6]],th:1,base:[1.2,0xd8d0c0]});
@@ -10534,7 +10547,7 @@ function makeCitizens(cx,cz){
   const free=(mx,my,allow)=>PL.wallDist(mx,my)<-6&&PL.waterDepth(mx,my)<=0&&PL.riverDist(mx,my)>MARCUS_RIVER_W/2+2&&!nearHouse(mx,my,1.2)&&!big(mx,my,1,allow)&&PL.hillH(mx,my)<.3;
   /* 한 명 추가. k: 'pl'(길 왕복) 'circ'(원) 'st'(제자리) */
   const add=o=>{o.type=ti(o.id);delete o.id;o.ph=rnd()*6.28;o.off=rnd()*1000;o.sc=rr(.94,1.08);o.pause=o.pause??(1.5+rnd()*3);o.mode=o.mode||'walk';if(o.mode==='stand'&&rnd()<.7)o.mode=pick(['cross','hips','think','drink','read','point','stretch','pray','shrug','crouch','talk','wave']);o.sp=o.sp??(1.05+rnd()*.5);o.I=null;o.d=1e9;L.push(o);
-    if(typeof chatterAdd==='function'){const tp=CITM.ids[o.type]||'';o.chat=chatterAdd({kind:chatKind(tp),seed:L.length,pos:()=>{const q=o.k==='st'?o:o.q;return q?{x:q.x,y:heightAt(q.x,q.z)+(o.y||0),z:q.z}:null;},visible:()=>!!o.I,look:(typeof citStickLook==='function'?citStickLook(tp):{}),pose:'idle',cit:o});}   /* 말 걸 수 있는 사람으로 */
+    if(typeof chatterAdd==='function'){const tp=CITM.ids[o.type]||'';o.chat=chatterAdd({kind:chatKind(tp),seed:L.length,pos:()=>{const q=o.k==='st'?o:o.q;return q?{x:q.x,y:citGround(q.x,q.z)+(o.y||0),z:q.z}:null;},visible:()=>!!o.I,look:(typeof citStickLook==='function'?citStickLook(tp):{}),pose:'idle',cit:o});}   /* 말 걸 수 있는 사람으로 */
     return o;};
   /* 길 그물: 길들이 만나는 자리를 마디로 삼아, 사람마다 제멋대로 길을 고르며 다니게 한다 */
   const GR=(()=>{const segs=[];PL.streets.forEach((st,si)=>{for(let i=0;i<st.p.length-1;i++)segs.push({si,a:st.p[i],b:st.p[i+1],w:st.w});});
@@ -10568,7 +10581,7 @@ function makeCitizens(cx,cz){
     const span=Math.min(T,40+rnd()*90),s0=rnd()*(T-span),side=(rnd()<.5?-1:1)*Math.max(.3,st.w/2-1.6-rnd()*1.2);
     const off=pts.map((p,i)=>{const q=pts[Math.min(pts.length-1,Math.max(1,i))],o=pts[Math.min(pts.length-1,Math.max(1,i))-1],l=Math.hypot(q[0]-o[0],q[1]-o[1])||1,ux=(q[0]-o[0])/l,uz=(q[1]-o[1])/l;return [p[0]-uz*side,p[1]+ux*side];});
     if(hitLoop(off))return null;return add({k:'pl',l:{pts,cum,T},s0,span,side,id:pick(ids),mode});};
-  const standAt=(mx,my,ids,mode,yaw,o={})=>{if(mode==='sit')mode='stand';/* 앉는 건 벤치에서만 */if(!o.force&&hit(cx+mx,cz+my,.35))return null;const wx=cx+mx,wz=cz+my;let yo=0;if(typeof floorAt==='function'){const g=heightAt(wx,wz),f=floorAt(wx,wz,g+2.5);if(f>g+.05&&f<g+2)yo=f-g;}   /* 발판·단 위에 서 있으면 그 높이로 (바닥에 묻히지 않게) */
+  const standAt=(mx,my,ids,mode,yaw,o={})=>{if(mode==='sit')mode='stand';/* 앉는 건 벤치에서만 */if(!o.force&&hit(cx+mx,cz+my,.35))return null;const wx=cx+mx,wz=cz+my;let yo=0;if(typeof floorAt==='function'){const g=citGround(wx,wz),f=floorAt(wx,wz,g+2.5);if(f>g+.05&&f<g+2)yo=f-g;}   /* 발판·단 위에 서 있으면 그 높이로 (바닥에 묻히지 않게). CIT_SLABS 바닥은 citGround가 이미 올려 준다 */
     return add({k:'st',x:wx,z:wz,yaw:yaw??rnd()*6.28,id:pick(ids),mode,...o,y:(o.y||0)+yo});};
   const circ=(mx,my,r,ids,mode)=>{if(mode==='carry')mode='walk';const n=Math.max(8,Math.ceil(2*Math.PI*r/.8));for(let i=0;i<n;i++){const a=i/n*6.28;if(hit(cx+mx+Math.cos(a)*r,cz+my+Math.sin(a)*r))return null;}return add({k:'circ',x:cx+mx,z:cz+my,r,a0:rnd()*6.28,dir:rnd()<.5?-1:1,id:pick(ids),mode,sp:.7+rnd()*.4});};
   /* 구역 안 빈자리 찾기 */
@@ -10875,17 +10888,17 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
     let made=0;for(const c of near){if(!want.has(c)||c.I)continue;if(made>=(OLD?3:2))break;c.I=OLD?citStickInst(c.type):citInstance(CITM.tmpl[CITM.ids[c.type]]);c.I.v=c.v||(c.v=citVar(Math.floor(c.off*13)+c.type*31));c.I.g.rotation.y=Math.atan2(c.q.vx,c.q.vz);c.I.g.scale.setScalar(c.sc);scene.add(c.I.g);made++;}
     near.forEach((c,k)=>{if(!c.I)return;if(c.I.stick){const sh=k<6;if(c.I.sh!==sh){c.I.sh=sh;c.I.g.traverse(o=>{if(o.isMesh)o.castShadow=sh;});}return;}const sh=k<10;if(c.I.sh!==sh){c.I.sh=sh;c.I.g.traverse(o=>{if(o.isSkinnedMesh&&o.material!==_citOl)o.castShadow=sh&&!o.material.transparent;});}});
     if(OLD){const [mb,mr,mh]=M.ims,m4=_cM4,qq=_cQ,v=_cV,sc=_cS;for(const c of M.list){if(c.I||c.d>M.FAR||n>=M.cap)continue;const q=c.q;
-        v.set(q.x,heightAt(q.x,q.z)+(c.y||0)+((q.mode||c.mode)==='sit'?-.45:0),q.z);qq.setFromAxisAngle(_cY,Math.atan2(q.vx,q.vz));const k=c.sc*(CIT_SMALL(c.type)?.7:1);sc.set(k,k,k);m4.compose(v,qq,sc);mb.setMatrixAt(n,m4);mr.setMatrixAt(n,m4);mh.setMatrixAt(n,m4);
+        v.set(q.x,citGround(q.x,q.z)+(c.y||0)+((q.mode||c.mode)==='sit'?-.45:0),q.z);qq.setFromAxisAngle(_cY,Math.atan2(q.vx,q.vz));const k=c.sc*(CIT_SMALL(c.type)?.7:1);sc.set(k,k,k);m4.compose(v,qq,sc);mb.setMatrixAt(n,m4);mr.setMatrixAt(n,m4);mh.setMatrixAt(n,m4);
         const wk=!q.mode&&q.walk,spd=wk?c.sp*(q.v??1):0;M.aVel.array[n*2]=q.vx*spd;M.aVel.array[n*2+1]=q.vz*spd;M.aWalk.array[n*3]=c.ph;M.aWalk.array[n*3+1]=wk?c.sp*4.2:0;M.aWalk.array[n*3+2]=wk?.55:0;
         const L=c._lk||(c._lk=citStickLook(CITM.ids[c.type]||'c'+c.type));_cC.setHex(L.robe);mb.setColorAt(n,_cC);_cC.setHex(L.hat==='helm'?0x7a8a9a:L.hat==='hood'?L.robe:L.hatC||0x4a3322);mh.setColorAt(n,_cC);n++;}
       M.fT=t;M.aVel.needsUpdate=M.aWalk.needsUpdate=true;mb.count=mr.count=mh.count=n;mb.instanceMatrix.needsUpdate=mr.instanceMatrix.needsUpdate=mh.instanceMatrix.needsUpdate=true;mb.instanceColor.needsUpdate=mh.instanceColor.needsUpdate=true;M.drawn=n;}
     else{
     for(const c of M.list){if(c.I||c.d>M.FAR||n>=M.cap)continue;const q=c.q;const fr=CIT_FRAME_OF[q.mode||c.mode]||[0,0];
-      aP[n*3]=q.x;aP[n*3+1]=heightAt(q.x,q.z)+(c.y||0);aP[n*3+2]=q.z;aI[n*4]=c.type;aI[n*4+1]=Math.atan2(q.vx,q.vz);aI[n*4+2]=c.sc;aI[n*4+3]=c.ph;
+      aP[n*3]=q.x;aP[n*3+1]=citGround(q.x,q.z)+(c.y||0);aP[n*3+2]=q.z;aI[n*4]=c.type;aI[n*4+1]=Math.atan2(q.vx,q.vz);aI[n*4+2]=c.sc;aI[n*4+3]=c.ph;
       const walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const idle=walking&&!q.walk;aF[n*3]=idle?0:fr[0];aF[n*3+1]=idle?0:fr[1];aF[n*3+2]=c.mode==='hoe'||c.mode==='hammer'?1.1:walking?c.sp*1.6:.6;n++;}
     M.aPos.needsUpdate=M.aInf.needsUpdate=M.aF.needsUpdate=true;M.mesh.geometry.instanceCount=n;M.drawn=n;}}
   if(OLD&&M.fU){M.fU.uT.value=t;M.fU.uDT.value=Math.min(.5,t-(M.fT||t));}
-  for(const c of M.list){if(!c.I)continue;const q=refresh?c.q:citQ(c,t);const G=c.I.g;G.position.set(q.x,heightAt(q.x,q.z)+(c.y||0)+((q.mode||c.mode)==='sit'?-.53:0),q.z);   /* 앉은 막대 주민: 엉덩이가 벤치 앉는 면(0.6m)에 닿게 */
+  for(const c of M.list){if(!c.I)continue;const q=refresh?c.q:citQ(c,t);const G=c.I.g;G.position.set(q.x,citGround(q.x,q.z)+(c.y||0)+((q.mode||c.mode)==='sit'?-.53:0),q.z);   /* 앉은 막대 주민: 엉덩이가 벤치 앉는 면(0.6m)에 닿게 */
     const want=Math.atan2(q.vx,q.vz);let dr=Math.atan2(Math.sin(want-G.rotation.y),Math.cos(want-G.rotation.y));G.rotation.y+=Math.sign(dr)*Math.min(Math.abs(dr),Math.abs(dr)*dt*4.5+dt*1.2);   /* 사람처럼 천천히 돌아선다 */
     const mode=q.mode||c.mode,walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const vk=q.v??1;c.w=(c.w??0)+(((walking&&q.walk)?Math.max(.25,vk):0)-(c.w??0))*Math.min(1,dt*5);
     if(c.I.stick){crowdYield(c,G,dt);if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2*Math.max(.3,vk);stickWalkPose(G,c.ph,c.w,t);}else stickNpcPose(G,CIT_STICK_POSE[mode]||'idle',t+c.off);if(CIT_SMALL(c.type)&&G.scale.x>.8)G.scale.setScalar(c.sc*.7);continue;}
@@ -12899,7 +12912,9 @@ function buildExMarket(K){
       const wx=M.x+mx,wz=M.z+my;for(const c of colliders){if(c.r<1.5)continue;if(Math.hypot(c.x-wx,c.z-wz)<c.r+r)return false;}
       for(const h of hs)if(Math.hypot(h.mx-mx,h.my-my)<r*1.8)return false;return true;};
       /* 울타리처럼 촘촘히: 둥근 반지름 대신 상자 모양 그대로 겹침을 본다 (광장 가장자리 바로 바깥 띠) */
-      const freeR=(mx,my,hw,hd,ry,sm=2.0)=>{if(gateLane(mx,my,Math.max(hw,hd)))return false;if(PL.nearStreet(mx,my,sm)||PL.waterDepth(mx,my)>0||PL.riverDist(mx,my)<MARCUS_RIVER_W/2+6||PL.wallDist(mx,my)>-8)return false;
+      /* 시청 큰 아치를 나서면 바로 궁전 길: 길 위로 삐져나온 집이 출구를 가렸다. 아치 북쪽 길 양옆으로 집 반 폭만큼은 비운다 */
+      const PR=PL.streets.find(st=>st.name==='궁전 길'),archLane=(mx,my,r)=>{if(!PR||!PZ||my>PZ.y-PZ.r+4)return false;for(let i=0;i<Math.min(2,PR.p.length-1);i++)if(PL.segDist(mx,my,PR.p[i],PR.p[i+1])<PR.w/2+r+.6)return true;return false;};
+      const freeR=(mx,my,hw,hd,ry,sm=2.0)=>{if(gateLane(mx,my,Math.max(hw,hd))||archLane(mx,my,Math.max(hw,hd)))return false;if(PL.nearStreet(mx,my,sm)||PL.waterDepth(mx,my)>0||PL.riverDist(mx,my)<MARCUS_RIVER_W/2+6||PL.wallDist(mx,my)>-8)return false;
         const wx=M.x+mx,wz=M.z+my,rr=Math.max(hw,hd);for(const c of colliders){if(c.r<1.5)continue;const dx=wx-c.x,dz=wz-c.z;if(Math.hypot(dx,dz)>c.r+rr)continue;
           if(!c.box)return false;const cs=c.cs==null?1:c.cs,sn=c.sn||0,lx=dx*cs-dz*sn,lz=dx*sn+dz*cs;if(Math.abs(lx)<c.hw+Math.min(hw,hd)*.9&&Math.abs(lz)<c.hd+Math.min(hw,hd)*.9)return false;}
         for(const h of hs)if(Math.hypot(h.mx-mx,h.my-my)<9.4)return false;return true;};
@@ -12915,7 +12930,8 @@ function buildExMarket(K){
     /* 중앙 광장 둘레: 광장을 울타리처럼 빙 둘러 집을 세운다 (앞면이 광장을 본다). 길이 지나는 자리는 비운다 */
     {const pz=PL.zone('plaza');if(pz){const R=pz.r+6,n1=Math.round(2*PI*R/11.2);
       for(let k=0;k<n1;k++){const a0=k/n1*PI*2+.03;let put=false;
-        for(const [dr,da] of [[0,0],[3,0],[-2.5,0],[0,.05],[0,-.05],[3,.06],[3,-.06]]){const a=a0+da,r=R+dr,mx=pz.x+Math.cos(a)*r,my=pz.y+Math.sin(a)*r;if(!freeR(mx,my,4.8,4,a))continue;
+        const nearArch=Math.abs(Math.atan2(Math.sin(a0+PI/2),Math.cos(a0+PI/2)))<.5;   /* 아치(광장 북쪽) 옆 집은 길을 비키도록 오른쪽(동쪽)으로 더 밀어 본다 */
+        for(const [dr,da] of nearArch?[[0,0],[3,0],[-2.5,0],[0,.05],[0,.08],[0,.11],[0,.14],[3,.08],[3,.12],[0,-.05],[3,-.06]]:[[0,0],[3,0],[-2.5,0],[0,.05],[0,-.05],[3,.06],[3,-.06]]){const a=a0+da,r=R+dr,mx=pz.x+Math.cos(a)*r,my=pz.y+Math.sin(a)*r;if(!freeR(mx,my,4.8,4,a))continue;
           hs.push({mx,my,w:9.6,d:8,rot:Math.atan2(-Math.cos(a),-Math.sin(a)),roof:K.TERRA[(n++)%K.TERRA.length],dk:rnd()<.6?'commerce':'residential',fl:rnd()<.5?2:3});put=true;break;}}
       /* 바깥 두 번째 줄: 틈을 메운다 */
       const R2=R+9.5,n2=Math.round(2*PI*R2/11.2);for(let k=0;k<n2;k++){const a=(k+.5)/n2*PI*2,mx=pz.x+Math.cos(a)*R2,my=pz.y+Math.sin(a)*R2;if(!freeR(mx,my,4.6,4,a))continue;
