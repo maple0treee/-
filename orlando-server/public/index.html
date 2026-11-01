@@ -1376,7 +1376,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@2573fe263d3e5c6a2fc3f425d455f39cb3a8ea91/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@a9997e44927f439a4b3cbd9b7d00690e81914b3f/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -14912,7 +14912,35 @@ function drawMarcusLabels(c,X,Z,sc,I){const PL=marcusPlan();c.save();c.textAlign
   for(const [n,x,y,big] of L){const fs=Math.round((big?13:11)*k);c.font=`700 ${fs}px "Gowun Batang","Nanum Myeongjo",serif`;const px=Math.round(X(I.x+x)),py=Math.round(Z(I.z+y));
     c.lineWidth=3.2*k;c.strokeStyle='rgba(28,20,12,.88)';c.strokeText(n,px,py);c.fillStyle='#fff3dc';c.fillText(n,px,py);}
   c.restore();}
+/* 엑시즈 밖 사냥터 미니맵: 땅 전체를 한눈에. 땅 둘레(안개 경계)를 뚜렷이, 가운데 길, 동·서로 이어진 땅 이름과 화살표, 북쪽 표시 */
+function drawHuntMini(I){const S=264,VR=I.R+40,sc=S/(2*VR),X=v=>S/2+(v-I.x)*sc,Z=v=>S/2+(v-I.z)*sc,c=mctx;
+  c.save();c.clearRect(0,0,S,S);c.beginPath();c.arc(S/2,S/2,S/2,0,7);c.clip();
+  /* 바깥: 안개 (옅은 회백색 줄무늬) */
+  c.fillStyle='#b9b4aa';c.fillRect(0,0,S,S);c.strokeStyle='rgba(255,255,255,.35)';c.lineWidth=3;for(let k=-S;k<S*2;k+=9){c.beginPath();c.moveTo(k,0);c.lineTo(k-S,S);c.stroke();}
+  /* 땅 */
+  const edgePath=()=>{c.beginPath();for(let i=0;i<=90;i++){const a=i/90*Math.PI*2,r=OR.isleEdge(I,a);const x=X(I.x+Math.cos(a)*r),y=Z(I.z+Math.sin(a)*r);i?c.lineTo(x,y):c.moveTo(x,y);}c.closePath();};
+  c.fillStyle=(ZONES[I.id]&&ZONES[I.id].mm)||'#7f9a4e';edgePath();c.fill();
+  {const g=c.createRadialGradient(S/2,S/2,I.R*sc*.7,S/2,S/2,I.R*sc);g.addColorStop(0,'rgba(255,255,255,0)');g.addColorStop(1,'rgba(230,226,216,.45)');c.fillStyle=g;edgePath();c.fill();}   /* 가장자리로 갈수록 안개가 낀다 */
+  /* 길 */
+  c.strokeStyle='#d8c8a0';c.lineWidth=Math.max(3,9*sc);c.lineCap='round';c.beginPath();for(let x=-I.R;x<=I.R;x+=6){const px=X(I.x+x),py=Z(I.z+(typeof mhRoad==='function'?mhRoad(I,x):0));x===-I.R?c.moveTo(px,py):c.lineTo(px,py);}c.stroke();
+  /* 경계선 */
+  c.strokeStyle='#fffaf0';c.lineWidth=2.4;c.setLineDash([7,5]);edgePath();c.stroke();c.setLineDash([]);
+  /* 몬스터 · 다른 사람 */
+  for(const m of monsters)if(m.dying===null&&Math.hypot(m.mesh.position.x-I.x,m.mesh.position.z-I.z)<I.R+5){const gap=m.lv-(P?P.lv:1);c.fillStyle=gap>=6?'#ff2a2a':gap>2?'#ff8a5a':'#e0533f';c.beginPath();c.arc(X(m.mesh.position.x),Z(m.mesh.position.z),2.6,0,7);c.fill();}
+  c.fillStyle='#9fd3e6';for(const o of others.values())if(Math.hypot(o.mesh.position.x-I.x,o.mesh.position.z-I.z)<I.R+5){c.beginPath();c.arc(X(o.mesh.position.x),Z(o.mesh.position.z),4,0,7);c.fill();}
+  /* 이어진 땅: 동·서 가장자리에 화살표와 이름 */
+  c.font='700 16px "Gowun Batang",serif';c.textBaseline='middle';
+  for(const p of PORTALS){if(!p.edge||Math.hypot(p.x-I.x,p.z-I.z)>I.R)continue;const east=p.x>I.x,nm=(p.label||'').replace(/(으)?로 (가기|돌아가기)$/,'').replace(/^마르쿠스 /,'');
+    const ax=X(p.x+(east?2:-2)),ay=Z(p.z);c.save();c.translate(ax,ay);c.fillStyle='#ffe08a';c.strokeStyle='#2a1e10';c.lineWidth=2;c.beginPath();const d=east?1:-1;c.moveTo(d*9,0);c.lineTo(-d*3,-7);c.lineTo(-d*3,7);c.closePath();c.stroke();c.fill();c.restore();
+    c.textAlign=east?'right':'left';const tx=ax+(east?-4:4),ty=ay-16;c.lineWidth=3.5;c.strokeStyle='rgba(28,20,12,.9)';c.strokeText(nm,tx,ty);c.fillStyle='#fff3dc';c.fillText(nm,tx,ty);}
+  /* 북쪽 */
+  c.textAlign='center';c.font='700 17px "Gowun Batang",serif';c.lineWidth=3.5;c.strokeStyle='rgba(28,20,12,.9)';c.strokeText('북',S/2,22);c.fillStyle='#ffe08a';c.fillText('북',S/2,22);
+  /* 나 */
+  const x=X(player.position.x),y=Z(player.position.z);c.translate(x,y);c.rotate(-player.rotation.y);c.fillStyle='#fff';c.strokeStyle='#1b1712';c.lineWidth=2;
+  c.beginPath();c.moveTo(0,10);c.lineTo(-7,-7);c.lineTo(0,-3);c.lineTo(7,-7);c.closePath();c.stroke();c.fill();
+  c.restore();}
 function drawIsleMini(){
+  {const I0=OR.isleAt(player.position.x,player.position.z);if(OPT.mini!=='all'&&OR.MHUNT.includes(I0.id)){drawHuntMini(I0);return;}}
   if(OPT.mini==='all'&&OR.MHUNT.includes(OR.isleAt(player.position.x,player.position.z).id)){const S=264;mctx.save();mctx.clearRect(0,0,S,S);mctx.beginPath();mctx.arc(S/2,S/2,S/2,0,7);mctx.clip();drawMarcusOverview(mctx,S,S,{mini:true});mctx.restore();return;}
   const I=OR.isleAt(player.position.x,player.position.z),S=264,VR=70,sc=S/(2*VR),px=player.position.x,pz=player.position.z,X=v=>S/2+(v-px)*sc,Z=v=>S/2+(v-pz)*sc;
   mctx.save();mctx.clearRect(0,0,S,S);mctx.beginPath();mctx.arc(S/2,S/2,S/2,0,7);mctx.clip();
