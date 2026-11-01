@@ -1376,7 +1376,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="fade"></div>
 </div>
 
-<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@2b064d6c7cf8297e6fcbbcd5501dfb54aba8aa4e/orlando-server/public/";</script>
+<script>window.ORLANDO_WS=true;window.ORLANDO_CDN="https://cdn.jsdelivr.net/gh/maple0treee/-@fb2c7d4f15105d1e5bfd18d89a7d0eb726b9f7a8/orlando-server/public/";</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>window.THREE||document.write('<script src="three.min.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script><script>window.THREE&&THREE.GLTFLoader||document.write('<script src="GLTFLoader.js"><\/script>')</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script><script>window.THREE&&THREE.SkeletonUtils||document.write('<script src="SkeletonUtils.js"><\/script>')</script>
@@ -14781,16 +14781,20 @@ function wmvClamp(W,H){const mx=W/2*Math.abs(WMV.zoom-1)+(WMV.zoom<1?W*.25:0),my
   cv.addEventListener('wheel',e=>{e.preventDefault();const [mx,my]=toPx(e),W=cv.width,H=cv.height,z0=WMV.zoom,zin=e.deltaY<0;
     if(wmvKingdomOK()){   /* 단계 바꾸기 */
       if(WMV.level==='local'&&!zin&&z0<=.84){WMV.level='kingdom';WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}
-      if(WMV.level==='kingdom'&&zin&&z0>=1.72){const Lo=movLayout(W,H,false),lx=(mx-W/2-WMV.px)/z0+W/2,ly=(my-H/2-WMV.py)/z0+H/2;let hit=null,bd=1e9;
-        for(const id in Lo.zones){const Z=Lo.zones[id],d=Math.hypot(lx-Z.x,ly-Z.y);if(d<Z.r*1.5&&d<bd){bd=d;hit=id;}}
-        if(!hit&&Math.hypot(lx-Lo.cx,ly-Lo.cy)<Lo.rc*1.3)hit='marcus';
-        if(hit){const pid=OR.isleAt(player.position.x,player.position.z).id;WMV.level='local';WMV.focus=hit===pid||(hit==='marcus'&&MARCUS_PLACES.has(pid))?null:hit;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}}}
-    const z1=Math.max(.3,Math.min(6,z0*(zin?1.2:1/1.2)));if(z1===z0)return;
+      if(WMV.level==='kingdom'&&zin&&z0>=1.72){const hit=wmvHit(mx,my,W,H);if(hit){wmvEnter(hit);return;}}}
+    const z1=Math.max(WMV.level==='kingdom'&&wmvKingdomOK()?1:.3,Math.min(6,z0*(zin?1.2:1/1.2)));if(z1===z0)return;   /* 왕국 전체 지도는 더 작게 줄이지 않는다 (빈 곳이 보이지 않게) */
     const wx=(mx-W/2-WMV.px)/z0,wy=(my-H/2-WMV.py)/z0;WMV.zoom=z1;WMV.px=mx-W/2-wx*z1;WMV.py=my-H/2-wy*z1;wmvClamp(W,H);drawWorldMap();},{passive:false});
   cv.addEventListener('pointerdown',e=>{if(e.button!==0)return;WMV.drag={x:e.clientX,y:e.clientY,px:WMV.px,py:WMV.py};cv.setPointerCapture(e.pointerId);});
   cv.addEventListener('pointermove',e=>{const D=WMV.drag;if(!D)return;const b=cv.getBoundingClientRect(),k=cv.width/b.width;WMV.px=D.px+(e.clientX-D.x)*k;WMV.py=D.py+(e.clientY-D.y)*k;wmvClamp(cv.width,cv.height);drawWorldMap();});
   const up=e=>{WMV.drag=null;};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
-  cv.addEventListener('dblclick',()=>{wmvReset();drawWorldMap();});})();
+  /* 더블클릭: 누른 곳을 자세히 (왕국 지도에서는 그 땅의 지도로, 그 밖에서는 누른 곳을 가운데로 두 배 확대) */
+  cv.addEventListener('dblclick',e=>{const [mx,my]=toPx(e),W=cv.width,H=cv.height,z0=WMV.zoom;
+    if(WMV.level==='kingdom'&&wmvKingdomOK()){const h=wmvHit(mx,my,W,H);if(h){wmvEnter(h);return;}}
+    const z1=Math.min(6,z0*2);if(z1===z0)return;const wx=(mx-W/2-WMV.px)/z0,wy=(my-H/2-WMV.py)/z0;WMV.zoom=z1;WMV.px=-wx*z1;WMV.py=-wy*z1;wmvClamp(W,H);drawWorldMap();});})();
+function wmvHit(mx,my,W,H){const z0=WMV.zoom,Lo=movLayout(W,H,false),lx=(mx-W/2-WMV.px)/z0+W/2,ly=(my-H/2-WMV.py)/z0+H/2;let hit=null,bd=1e9;
+  for(const id in Lo.zones){const Z=Lo.zones[id],d=Math.hypot(lx-Z.x,ly-Z.y);if(d<Z.r*1.5&&d<bd){bd=d;hit=id;}}
+  if(!hit&&Math.hypot(lx-Lo.cx,ly-Lo.cy)<Lo.rc*1.3)hit='marcus';return hit;}
+function wmvEnter(hit){const pid=OR.isleAt(player.position.x,player.position.z).id;WMV.level='local';WMV.focus=hit===pid||(hit==='marcus'&&MARCUS_PLACES.has(pid))?null:hit;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();}
 function toggleWorldMap(v){wmapOpen=v??!wmapOpen;$('#wmap').hidden=!wmapOpen;if(wmapOpen){wmvReset();drawWorldMap();}}
 function drawWorldMap(){
   const cv=$('#wmapC'),box=cv.getBoundingClientRect();if(!box.width)return;
@@ -15791,7 +15795,7 @@ function damageMonster(m,mult,o={}){
   return d;
 }
 function isRogueLine(){return !!P&&jobChain(P.job).includes('rogue');}   /* 도적·약탈자·암살자: 처형 가능 HP 표시 */
-function execTh(m){return m.lassoT>tAll?.4:.1;}   /* 처형 가능 HP: 10% 미만 (올가미에 걸리면 40%) */
+function execTh(m){return m.lassoT>tAll?.4:P&&jobChain(P.job).includes('assassin')?.15:.1;}   /* 처형 가능 HP: 10% 미만 (암살자 계열은 15%, 올가미에 걸리면 40%) */
 function plunderReward(m){const lv=m.lv,r=Math.floor(Math.random()*3);let got='';
   if(r===0){const g=Math.round(lv*rnd(15,25)+20);P.gold+=g;got=`${g} 골드`;}
   else if(r===1){const id=Math.random()<.6?(lv>=12?'hp_l':'hp_s'):(lv>=12?'mp_l':'mp_s');if(addItem(id))got=ITEMS[id].name;else{const g=Math.round(lv*rnd(15,25)+20);P.gold+=g;got=`${g} 골드`;}}
