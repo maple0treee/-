@@ -20125,7 +20125,7 @@ function updatePlayer(dt){
 /* 1인칭에서는 몸이 안 보여서 몸 자세(공격·스킬·앉기·걷기)를 움직이지 않았다. 그래서 거울에는 늘 가만히 선 모습만 비쳤다.
    거울이 가까이(8m 안) 있으면 1인칭에서도 몸 자세를 3인칭과 똑같이 움직인다 */
 function mirrorNear(){if(!MIRRORS.length||!player)return false;const p=player.position;for(const m of MIRRORS){if(Math.abs(m.position.x-p.x)+Math.abs(m.position.z-p.z)<11&&Math.abs(m.position.y-p.y)<4)return true;}return false;}
-function mirrorAdd(x,y,z,w,h,ry){
+function mirrorAdd(x,y,z,w,h,ry,hide){   /* hide: 거울 뒤에 있어 거울 속에 끼어드는 것들(벽 등)을 돌려주는 함수 — 거울을 그릴 때만 감춘다 */
   const rt=new THREE.WebGLRenderTarget(512,Math.round(512*h/w),{type:THREE.HalfFloatType});   /* 256이면 가까이서 볼 때 몸이 뭉개져 흐릿했다 */
   const tm=new THREE.Matrix4(),mat=new THREE.ShaderMaterial({uniforms:{tDiffuse:{value:rt.texture},textureMatrix:{value:tm}},
     vertexShader:'uniform mat4 textureMatrix;varying vec4 vUv;void main(){vUv=textureMatrix*vec4(position,1.0);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
@@ -20145,8 +20145,9 @@ function mirrorAdd(x,y,z,w,h,ry){
     /* 막대 인형은 몸의 좌우가 거꾸로 만들어져 있다(오른손에 든 무기가 몸 왼쪽에 붙어 있다). 1인칭 손은 오른쪽인데 거울 속에선 반대쪽 손이 움직였다.
        거울에 그릴 때만 내 몸을 좌우로 뒤집어, 오른손을 들면 거울 속에서도 오른쪽(보는 사람 쪽에서 같은 쪽) 손이 올라가게 */
     const psx=player?player.scale.x:1;if(player)player.scale.x=-psx;
+    const hs=hide?hide():null,hv2=hs?hs.map(o=>o.visible):null;if(hs)for(const o of hs)o.visible=false;
     m.visible=false;const prt=renderer.getRenderTarget(),sau=renderer.shadowMap.autoUpdate;renderer.shadowMap.autoUpdate=false;renderer.setRenderTarget(rt);renderer.state.buffers.depth.setMask(true);if(renderer.autoClear===false)renderer.clear();
-    renderer.render(sc,vc);renderer.shadowMap.autoUpdate=sau;renderer.setRenderTarget(prt);m.visible=true;if(player){player.scale.x=psx;player.updateMatrix();player.updateMatrixWorld(true);player.visible=pv;}if(hd)hd.visible=hv;if(vm!==null)viewModel.visible=vm;};
+    renderer.render(sc,vc);if(hs)hs.forEach((o,i)=>o.visible=hv2[i]);renderer.shadowMap.autoUpdate=sau;renderer.setRenderTarget(prt);m.visible=true;if(player){player.scale.x=psx;player.updateMatrix();player.updateMatrixWorld(true);player.visible=pv;}if(hd)hd.visible=hv;if(vm!==null)viewModel.visible=vm;};
   return m;}
 /* 벽난로 불: 겹친 불꽃 혀(바깥 주황·가운데 노랑·속 흰빛)가 제각각 일렁이고, 불티가 솟고, 불빛이 깜빡인다. (x,y,z) 아궁이 바닥 가운데, w 너비(z 방향) */
 function hearthAdd(x,y,z,w){const g=new THREE.Group();g.position.set(x,y,z);g.userData.keepMx=true;scene.add(g);
@@ -21901,7 +21902,7 @@ function myHomeBuild(r,key){MYH.built=key;
     p.b(W+.14,.55,.08,WD,0,.45,L/2);   /* 발판 */
     p.b(W,.18,L-.12,LIN,0,.5,0);p.b(W+.04,.08,L*.62,cloth,0,.62,L*.17);p.b(W+.06,.14,.12,cloth,0,.59,L*.17-L*.31);   /* 매트리스·이불(접힌 끝) */
     p.b(W*.62,.13,.38,0xfaf6ec,0,.66,-L/2+.3);
-    col(x,z-L/4,W/2+.15,fy,.7);col(x,z+L/4,W/2+.15,fy,.7);seat(x,z+L/2-.05,fy+.66,0,{lie:1,px:x,pz:z,sx:X+x+side*(W/2+.7),sz:Z+z+.3});};   /* sx,sz: 일어설 자리 (침대 옆 방 쪽) */
+    col(x,z-L/4,W/2+.15,fy,.7);col(x,z+L/4,W/2+.15,fy,.7);seat(x,z+L/2-.05,fy+.66,0,{lie:1,px:X+x,pz:Z+z,sx:X+x+side*(W/2+.7),sz:Z+z+.3});};   /* sx,sz: 일어설 자리 (침대 옆 방 쪽) */
   const wardrobe=(x,fy,z,ry,c=WD)=>{const p=piece(x,fy,z,ry);p.b(1.3,2.05,.6,c,0,1.06,0);p.b(1.42,.1,.68,WD2,0,2.13,0);p.b(1.36,.12,.64,WD2,0,.06,0);
     p.b(.02,1.8,.02,WD2,0,1.08,.31);for(const sx of [-1,1]){p.b(.5,.75,.02,WD3,sx*.32,1.5,.305);p.b(.5,.75,.02,WD3,sx*.32,.6,.305);p.c(.025,.025,.05,0xc9a050,sx*.07,1.1,.33,6).rotation.x=Math.PI/2;}
     col(x,z,.55,fy,2);const ax=Math.abs(Math.cos(ry))>.5;col(x+(ax?.4:0),z+(ax?0:.4),.35,fy,2);col(x-(ax?.4:0),z-(ax?0:.4),.35,fy,2);};
@@ -21970,13 +21971,13 @@ function myHomeBuild(r,key){MYH.built=key;
   for(let i=1;i<LV.length;i++){const fy=LV[i].y,last=i===LV.length-1;if(last){rail(SX[0],S1[0]+.05,SX[0],S1[1],fy);rail(SX[0],S1[1],SX[1],S1[1],fy);}else rail(SX[0]+.8,S1[1],SX[1],S1[1],fy);}
   /* 천장(맨 위) */B(HW*2+1,.3,HD*2+1,m(0x8a6a4c),0,top+.15,0);{const c={cx:X,cz:Z,cs:1,sn:0,hw:HW+.5,hd:HD+.5,y:top};CEILS.push(c);MYH.ceils.push(c);}
   /* ---- 벽 (층마다) ---- 1층 남쪽 벽에만 문 구멍 */
-  const DX=-3.4,DW=1.3,DT=2.0+DW/2+.25;
+  const DX=-3.4,DW=1.3,DT=2.0+DW/2+.25;MYH.westWall=[];const F2W=G+FH;   /* 2층 서쪽 벽(거울 뒤) */
   for(const L of LV){const fy=L.y,b=L.k==='b',wm=(w,h)=>b?stoneM:wallM(w,h);
-    B(.5,FH,HD*2+1,wm(HD*2,FH),-HW-.25,fy+FH/2,0);B(.5,FH,HD*2+1,wm(HD*2,FH),HW+.25,fy+FH/2,0);B(HW*2+1,FH,.5,wm(HW*2,FH),0,fy+FH/2,-HD-.25);
+    {const ww=B(.5,FH,HD*2+1,wm(HD*2,FH),-HW-.25,fy+FH/2,0);if(fy===F2W)MYH.westWall.push(ww);}B(.5,FH,HD*2+1,wm(HD*2,FH),HW+.25,fy+FH/2,0);B(HW*2+1,FH,.5,wm(HW*2,FH),0,fy+FH/2,-HD-.25);
     if(L.k===0){const l=HW+DX-DW/2-.42,rr=HW-DX-DW/2-.42;B(l,FH,.5,wm(l,FH),-HW+l/2,fy+FH/2,HD+.25);B(rr,FH,.5,wm(rr,FH),HW-rr/2,fy+FH/2,HD+.25);B(DW+.9,FH-DT,.5,wm(2,1),DX,fy+DT+(FH-DT)/2,HD+.25);}
     else B(HW*2+1,FH,.5,wm(HW*2,FH),0,fy+FH/2,HD+.25);
     if(!b){/* 아래쪽 나무 징두리 판과 위 띠, 걸레받이 (벽 세 면 + 문 있는 남쪽) */
-      for(const [w,d,x,z] of [[.05,HD*2,-HW+.03,0],[.05,HD*2,HW-.03,0],[HW*2,.05,0,-HD+.03],[HW*2,.05,0,HD-.03]]){B(w,1.0,d,S.band,x,fy+.5,z);B(w+.04,.06,d+.04,WD2,x,fy+1.02,z);B(w+.06,.12,d+.06,WD2,x,fy+.06,z);}
+      for(const [w,d,x,z] of [[.05,HD*2,-HW+.03,0],[.05,HD*2,HW-.03,0],[HW*2,.05,0,-HD+.03],[HW*2,.05,0,HD-.03]]){{const bd=B(w,1.0,d,S.band,x,fy+.5,z);if(fy===F2W&&x<0&&w<.1)MYH.westWall.push(bd);}B(w+.04,.06,d+.04,WD2,x,fy+1.02,z);B(w+.06,.12,d+.06,WD2,x,fy+.06,z);}
       const bt=fy+FH>=top-.01?fy+FH+.05:fy+FH-.02;for(const x of [-4.2,-1.6,1.4,4.2]){const z0=x>SX[0]?S1[1]:-HD,L=HD-z0;B(.2,bt-(fy+FH-.22),L,WD2,x,(bt+fy+FH-.22)/2,(z0+HD)/2);}}}   /* 들보: 남북으로, 계단 위는 비운다. 윗면이 위층 바닥 윗면과 같은 높이면 바닥에 줄무늬가 깜빡인다 → 아래층 들보는 바닥판 속, 맨 위층 들보는 천장판 속으로 */
   /* ---- 방마다 살림 ---- */
   const G1=G,F2=G+FH,F3=G+2*FH;
@@ -21991,7 +21992,11 @@ function myHomeBuild(r,key){MYH.built=key;
   /* 2층: 침실 */
   bed(-4.55,F2,-3.1,S.cloth);chest(-4.55,F2,-1.45,0);{const p=piece(-3.45,F2,-4.1);p.b(.5,.55,.45,WD,0,.28,0);p.b(.56,.05,.5,WD3,0,.58,0);candle(-3.45,F2+.6,-4.1);col(-3.45,-4.1,.32,F2,.6);}
   wardrobe(-4.4,F2,HD-.35,Math.PI);rug(-2.5,F2,.9,2.4,1.7,S.rug);desk(3.6,F2,HD-.4,Math.PI);chair(3.6,F2,3.45,0);plant(5.0,F2,.2,.8);bookcase(-1.2,F2,HD-.25,Math.PI);
-  winPane(-HW+.01,F2,.6,Math.PI/2);winPane(1.6,F2,HD-.01,Math.PI);{const p=piece(-HW+.05,F2,-1.6,Math.PI/2);p.b(.6,.9,.04,m(0xc8d8e0,{metalness:.6,roughness:.15}),0,1.55,.03);p.b(.7,1,.03,WD2,0,1.55,0);}   /* 벽 거울 */
+  winPane(-HW+.01,F2,.6,Math.PI/2);winPane(1.6,F2,HD-.01,Math.PI);{const p=piece(-HW+.55,F2,2.2,Math.PI/2);   /* 서 있는 전신 거울: 벽에 바짝 붙이면 거울 속에 뒤쪽 벽이 비쳐 거울이 안 됐다 → 벽에서 반 미터 떨어진 받침대 거울 */
+    for(const sd of [-1,1]){p.b(.07,1.5,.07,WD2,sd*.41,1.4,0);p.b(.07,.06,.6,WD2,sd*.41,.03,0);p.c(.04,.04,.06,WD3,sd*.41,2.18,0,8);
+      p.b(.08,1.44,.06,WD,sd*.36,1.4,-.02);p.b(.8,.08,.06,WD,0,1.4+sd*.7,-.02);p.c(.03,.03,.05,0xc9a050,sd*.45,1.4,0,6).rotation.z=Math.PI/2;}
+    p.c(.05,.05,.12,WD3,0,2.16,-.02,8);col(-HW+.55,2.2,.5,F2,2.2);
+    if(!MYH.mirror){MYH.mirror=mirrorAdd(X-HW+.55+.015,F2+1.4,Z+2.2,.64,1.32,Math.PI/2,()=>MYH.westWall||[]);MYH.mirror.userData.noMap=true;}}   /* noMap: 맵 나누기(MapSplit)가 집 자리를 다른 맵으로 보고 거울을 안 보이는 층으로 옮겼다 */
   lamp(-2.2,F2+FH-.75,.6);
   /* 3층: 서재와 손님방 */
   if(S.up>=3){bookcase(-4.4,F3,-HD+.25,0);bookcase(-3.0,F3,-HD+.25,0);bookcase(-1.6,F3,-HD+.25,0,false);desk(-4.5,F3,1.2,Math.PI/2);chair(-3.9,F3,1.2,-Math.PI/2);
@@ -22011,7 +22016,7 @@ function myHomeTick(t){if(!player)return;if(P&&P.mq==='home100'&&!P.myHome)myHom
   /* 문 자리는 따로 기억한다: 전에는 다른 곳(지도·포탈 검사)이 먼저 집을 찾아 두면 문을 옮기지 않아, 다시 접속한 뒤 집에 못 들어갔다 */
   {const key=P&&P.myHome?P.myHome.n+':'+P.myHome.x+':'+P.myHome.z:null;if(MYH.doorIn&&(MYH.doorIn.key!==key||(myHomeRec()&&MYH.built!==MYH.rec.n+':'+myHomeName())))myHomeDoorSync();}
   const inH=OR.inMyHome(player.position.x,player.position.z);if(!MYH.g&&inH)myHomeBuild(null,'none');if(!MYH.g)return;
-  if(MYH.g.visible!==inH)MYH.g.visible=inH;if(inH)for(const L of MYH.fires)L.intensity=1.3+Math.sin(t*9.3)*.12+Math.sin(t*23.1)*.08;
+  if(MYH.g.visible!==inH)MYH.g.visible=inH;if(MYH.mirror&&MYH.mirror.visible!==inH)MYH.mirror.visible=inH;if(inH)for(const L of MYH.fires)L.intensity=1.3+Math.sin(t*9.3)*.12+Math.sin(t*23.1)*.08;
   if(inH&&P&&P.mq==='home100'&&mode==='world'&&!warping){mqComplete('home100');sfx('quest');toast(`오늘부터 여기가 ${myHomeName()}이다`);log('아늑한 집이다. 위층 침대에서 쉬어 갈 수도 있다.','sys');}}
 /* 지도: 배정된 집 자리에 집 그림 (엑시즈 지도·미니맵) */
 function myHomeMapMark(c,X,Z,f,I,lab){const r=myHomeRec();if(!r||!I||I.id!=='marcus')return;const x=X(r.x),y=Z(r.z);f=f||1;
