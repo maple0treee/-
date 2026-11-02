@@ -138,7 +138,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brass);outline-
 #toast{position:fixed;left:50%;top:40%;transform:translateX(-50%);font-size:15px;color:#ffd9a0;text-shadow:0 1px 4px #000;pointer-events:none;opacity:0;transition:opacity .3s}
 #toast.on{opacity:1}
 /* 전리품 알림: 몬스터를 잡고 얻은 것을 오른쪽에 잠깐 띄운다 (등급 색 테두리·이름, 좋은 등급은 빛이 한 번 스쳐 간다) */
-#lootFeed{position:fixed;right:calc(var(--gut) + min(300px,calc(100vw - 2*var(--gut) - 140px)) + 16px);bottom:calc(var(--safe-b) + 112px);display:flex;flex-direction:column;align-items:flex-end;gap:4px;pointer-events:none;z-index:20}
+#lootFeed{position:fixed;right:calc(var(--gut) + min(300px,calc(100vw - 2*var(--gut) - 140px)) + 16px);bottom:calc(var(--safe-b) + 112px);display:flex;flex-direction:column;align-items:flex-end;gap:4px;pointer-events:none;z-index:45}
+#lootFeed.ov{right:var(--gut);bottom:auto;top:calc(var(--safe-t) + 280px)}   /* 상점·대화 창이 열려 있으면 창을 가리지 않게 작은 지도 밑으로 */
 #lootFeed .lf{--tier:#b3a98f;position:relative;display:flex;align-items:center;gap:7px;max-width:240px;padding:3px 10px 3px 4px;border-right:2px solid var(--tier);border-radius:3px;background:linear-gradient(90deg,rgba(18,13,8,0),rgba(18,13,8,.7) 28%);font-size:13px;line-height:1.2;color:var(--parch);text-shadow:0 1px 2px #000;white-space:nowrap;overflow:hidden;animation:lfIn .32s cubic-bezier(.2,.9,.3,1.15) both;transition:opacity .45s,transform .45s}
 #lootFeed .lf.out{opacity:0;transform:translateX(14px)}
 #lootFeed .ic{flex:none;min-width:24px;height:24px;padding:0 2px;box-sizing:border-box;border:1px solid var(--tier);border-radius:4px;background:#2a2219;display:grid;place-items:center;font-size:9px;font-weight:700;color:var(--tier);box-shadow:0 0 6px color-mix(in srgb,var(--tier) 40%,transparent)}
@@ -10123,7 +10124,11 @@ function marcusPlan(){if(MARCUS.plan)return MARCUS.plan;
     for(const st of streets)for(let i=0;i<st.p.length-1;i++){const a=st.p[i],b=st.p[i+1],ia=inPoly(hill,a[0],a[1]),ib=inPoly(hill,b[0],b[1]);if(ia===ib)continue;
       const [pi,po]=ia?[a,b]:[b,a];let lo=0,hi=1;for(let k=0;k<30;k++){const m=(lo+hi)/2,x=pi[0]+(po[0]-pi[0])*m,y=pi[1]+(po[1]-pi[1])*m;if(inPoly(hill,x,y))lo=m;else hi=m;}
       const px=pi[0]+(po[0]-pi[0])*hi,py=pi[1]+(po[1]-pi[1])*hi,L=Math.hypot(po[0]-pi[0],po[1]-pi[1]),ux=(po[0]-pi[0])/L,uy=(po[1]-pi[1])/L;
-      if(_hs.some(q=>Math.hypot(q.x-px,q.y-py)<12))continue;_hs.push({x:px,y:py,ux,uy,w:Math.max(8,st.w+2),L:Ls});}
+      if(_hs.some(q=>Math.hypot(q.x-px,q.y-py)<12))continue;
+      /* 계단이 내려가는 자리에 관청 건물이 서 있으면 놓지 않는다: 기록원 앞 계단이 기록원 건물 속으로 파묻혀 지붕 위로만 보였다 */
+      const w=Math.max(8,st.w+2);if(['archive','chamber','admin','treasury','library','clinic','trade'].some(id=>{const z=zones.find(q=>q.id===id);if(!z)return false;
+        for(let t=.15;t<=1.01;t+=.1)for(const s of [-.5,0,.5])if(inZone(z,px+ux*Ls*t-uy*w*s,py+uy*Ls*t+ux*w*s,1))return true;return false;}))continue;
+      _hs.push({x:px,y:py,ux,uy,w,L:Ls});}
     return _hs;};
   const hillH=(x,y)=>{if(inPoly(hill,x,y))return MARCUS_HILL_H;
     for(const q of hillStairs()){const dx=x-q.x,dy=y-q.y,t=(dx*q.ux+dy*q.uy)/q.L,lat=Math.abs(-dx*q.uy+dy*q.ux);if(t>=-.02&&t<=1&&lat<q.w/2)return MARCUS_HILL_H*(1-Math.max(0,t));}
@@ -10372,12 +10377,17 @@ function buildMarcus(H){
     const alongX=Math.abs(p1.x-p0.x)>Math.abs(p1.z-p0.z);
     if(alongX)SURFACES.push({x0:a-.2,x1:b+.2,z0:c-1.3,z1:d+1.3,ramp:'x',ya:p0.x<p1.x?-deep:0,yb:p0.x<p1.x?0:-deep});else SURFACES.push({x0:a-1.3,x1:b+1.3,z0:c-.2,z1:d+.2,ramp:'z',ya:p0.z<p1.z?-deep:0,yb:p0.z<p1.z?0:-deep});
     for(const sx of [-1,1]){const q0=W(sx*1.4,n/2),q1=W(sx*1.4,-n/2);segBox(q0.x,q0.z,q1.x,q1.z,.3,0,{y0:-6,y1:2.6,h:undefined});}STAIRS.push([x,z,ry]);};
+  /* 계단 위·아래 길목에 둑 벽이 걸리는가: 강이 굽는 자리에서는 옆 토막 둑 벽이 계단 꼭대기를 가로막아 계단이 있는데 올라설 수 없었다.
+     둑 벽은 모아 두었다가 계단을 다 놓은 뒤, 어느 계단 길목(폭 2.8m, 맨 윗단에서 뭍 쪽 5m까지)에 걸리면 짓지 않는다 */
+  const stairLane=(wx,wz)=>STAIRS.some(([x,z,ry])=>{const dx=wx-x,dz=wz-z,s=Math.sin(ry),c=Math.cos(ry),lx=dx*c-dz*s,lz=dx*s+dz*c;return Math.abs(lx)<1.4&&lz<-2.4&&lz>-9;});
+  const bankHits=(x,z,ry,len)=>{const s=Math.sin(ry),c=Math.cos(ry);for(let a=-len/2;a<=len/2+.01;a+=.5)for(const b of [-.7,0,.7])if(stairLane(x+s*a+c*b,z+c*a-s*b))return true;return false;};
+  const BANKS=[],bankLater=(...a)=>BANKS.push(a),bankFlush=()=>{for(const a of BANKS)if(!bankHits(a[0],a[1],a[2],a[3]))bankWall(...a);BANKS.length=0;};
   /* 안쪽 강 둑: 가운데 선을 따라 4m마다 */
   {const R=PL.river;let acc=0,nextStair=28;for(let i=0;i<R.length-1;i++){const a=R[i],b=R[i+1],L=Math.hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/L,uy=(b[1]-a[1])/L,nx=-uy,ny=ux;
       for(let t=2;t<L;t+=4){const mx=a[0]+ux*t,my=a[1]+uy*t;if(!inWall(mx,my,2))continue;acc+=4;
         for(const sd of [-1,1]){const px=mx+nx*sd*(RVW/2+.5),py=my+ny*sd*(RVW/2+.5);if(PL.bridgeAt(mx,my)||PL.inHarbor(px,py,5)||PL.inHarbor(mx+ux*3,my+uy*3,5))continue;
           if(acc>nextStair&&t<L-12){/* 계단 자리: 둑 틈 */if(sd===1)nextStair=acc+56;stair(cx+px-nx*sd*3.6,cz+py-ny*sd*3.6,Math.atan2(-nx*sd,-ny*sd),DEEP);continue;}   /* 맨 윗단이 둑 선에 딱 닿게 */
-          bankWall(cx+px,cz+py,Math.atan2(ux,uy),4.1,DEEP,{k:(t/4|0)%3});}}}}
+          bankLater(cx+px,cz+py,Math.atan2(ux,uy),4.1,DEEP,{k:(t/4|0)%3});}}}bankFlush();}
   /* 강 다리: 길이 강을 건너는 자리마다 돌 아치 다리 몸통을 둑 사이에 놓는다 (위에서 보면 길, 강에서 보면 아치 셋이 받치는 다리) */
   {const R=PL.river;for(const bx of PL.bridges){let best=null;for(let i=0;i<R.length-1;i++){const a=R[i],b=R[i+1];if((a[0]-bx)*(b[0]-bx)>0&&Math.abs(a[0]-bx)>.01)continue;const k=Math.abs(b[0]-a[0])<1e-6?0:(bx-a[0])/(b[0]-a[0]);if(k<0||k>1)continue;const L=Math.hypot(b[0]-a[0],b[1]-a[1]);best={mx:a[0]+(b[0]-a[0])*k,my:a[1]+(b[1]-a[1])*k,ux:(b[0]-a[0])/L,uy:(b[1]-a[1])/L};break;}
       if(!best||!inWall(best.mx,best.my,0))continue;const F=frame(cx+best.mx,cz+best.my,Math.atan2(best.ux,best.uy),0),BL=14,BW=RVW+3;
@@ -10387,13 +10397,15 @@ function buildMarcus(H){
       for(const sd of [-1,1]){F.P(BOX,0,.5,sd*(BL/2-.35),BW+.4,1,.5,PIETRA);F.P(BOX,0,1.05,sd*(BL/2-.35),BW+.6,.12,.6,SERENA);}
       for(const sd of [-1,1]){const q0=F.W(-BW/2,sd*(BL/2-.35)),q1=F.W(BW/2,sd*(BL/2-.35));segBox(q0.x,q0.z,q1.x,q1.z,.5,0,{y0:-1,y1:1.6,h:undefined});}}}   /* 난간에 부딪힘 */
   /* 항구 부두: 다각형 변을 따라 (바다 쪽으로 트인 동남쪽 변은 빼고) */
+  /* 무역 공회 부두 단(물 위 돌 단, 아래 관청들에서 짓는다) 자리: 그 밑으로 들어가는 계단은 놓지 않는다 (계단 아랫단이 돌 단 밑동에 막혀 있었다) */
+  const onTrade=(mx,my)=>{const t=Z('trade');if(!t)return false;const R=Math.max(t.w,t.h)/2+6;return mx>t.x-R&&mx<t.x+R+9&&my>t.y-R&&my<t.y+R;};   /* 건물은 돌려 지어서 가로세로가 바뀐다: 긴 쪽 기준으로 */
   {const Hp=PL.harbor;for(let i=0;i<Hp.length;i++){const a=Hp[i],b=Hp[(i+1)%Hp.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/L,uy=(b[1]-a[1])/L;
       const mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];if(!inWall(mid[0],mid[1],-6))continue;   /* 성 밖으로 트인 변 */
       let sc=0;for(let t=2;t<L-1;t+=4){const mx=a[0]+ux*t,my=a[1]+uy*t;sc+=4;const inward=PL.inPoly(Hp,mx-uy*2,my+ux*2)?1:-1;   /* 물이 있는 쪽 */
         const px=mx-inward*(-uy)*.6,py=my-inward*ux*.6;
         if(PL.waterDepth(mx+uy*inward*3,my-ux*inward*3)>1)continue;   /* 뒤(뭍 쪽)도 물이면 (성벽 밖으로 나간 항구) 둑·계단을 놓지 않는다 */
-        if(sc>40&&t<L-12){sc=0;stair(cx+mx+(-uy)*inward*4.0,cz+my+ux*inward*4.0,Math.atan2(-uy*inward,ux*inward),3.2);   /* 앞(+z)이 물 쪽: 물에서 부두로 오른다 */continue;}
-        bankWall(cx+px,cz+py,Math.atan2(ux,uy)+(inward>0?PI:0),4.1,3.2,{k:(t/4|0)%3,noRail:true});}}}
+        if(sc>40&&t<L-12&&!onTrade(mx-uy*inward*9,my+ux*inward*9)){sc=0;stair(cx+mx+(-uy)*inward*4.0,cz+my+ux*inward*4.0,Math.atan2(-uy*inward,ux*inward),3.2);   /* 앞(+z)이 물 쪽: 물에서 부두로 오른다 */continue;}
+        bankLater(cx+px,cz+py,Math.atan2(ux,uy)+(inward>0?PI:0),4.1,3.2,{k:(t/4|0)%3,noRail:true});}}bankFlush();}
   /* 해자 둑: 성벽 밖 10m 선을 따라 낮은 돌 둑 (난간 없음) */
   {const Wl=PL.wall;for(let i=0;i<Wl.length;i++){const a=Wl[i],b=Wl[(i+1)%Wl.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/L,uy=(b[1]-a[1])/L,nx=uy,ny=-ux;   /* 바깥쪽 법선 (시계 방향 다각형) */
       for(let t=2;t<L;t+=4){const mx=a[0]+ux*t+nx*10.5,my=a[1]+uy*t+ny*10.5;if(PL.moatDepth(mx+nx*4,my+ny*4)<.5||PL.inHarbor(mx,my,28))continue;
@@ -10478,6 +10490,8 @@ function buildMarcus(H){
   /* 집이 이미 선 건물이나 자리 잡아 둔 관청과 파고들면 짓지 않는다: 전에는 집 벽이 옆집·길드홀·도서관 벽을 뚫고 나와 건물이 군데군데 뚫려 보였다 */
   const PALAZZO_AT=[['archive',PI],['chamber',PI],['admin',0],['treasury',0],['library',PI/2],['clinic',0],['trade',-PI/2]];   /* 관청 자리와 돌린 각도 (아래에서 이대로 짓는다) */
   const HOUSE_RESERVE=PALAZZO_AT.map(([id,ry])=>{const q=Z(id);return q&&{x:cx+q.x,z:cz+q.y,hw:q.w/2+.8,hd:q.h/2+.8,cs:Math.cos(ry),sn:Math.sin(ry)};}).filter(Boolean);   /* 지붕 처마(+0.8)까지 */
+  /* 강·부두 계단 꼭대기 앞 땅(맨 윗단에서 뭍 쪽 6m)은 비워 둔다: 집이 계단 바로 위에 서서 계단을 막고 있었다 */
+  for(const [x,z,ry] of STAIRS){const s=Math.sin(ry),c=Math.cos(ry);HOUSE_RESERVE.push({x:x-s*7,z:z-c*7,hw:2.2,hd:3.2,cs:c,sn:s});}
   const obbHit=(a,b,m)=>{const ax=[[a.cs,-a.sn],[a.sn,a.cs]],bx=[[b.cs,-b.sn],[b.sn,b.cs]],dx=a.x-b.x,dz=a.z-b.z;
     for(const n of [ax[0],ax[1],bx[0],bx[1]]){const pa=Math.abs(ax[0][0]*n[0]+ax[0][1]*n[1])*a.hw+Math.abs(ax[1][0]*n[0]+ax[1][1]*n[1])*a.hd,pb=Math.abs(bx[0][0]*n[0]+bx[0][1]*n[1])*b.hw+Math.abs(bx[1][0]*n[0]+bx[1][1]*n[1])*b.hd;if(pa+pb-m<=Math.abs(dx*n[0]+dz*n[1]))return false;}return true;};
   const houseRoom=(x,z,ry,w,d)=>{const me={x,z,hw:w/2,hd:d/2,cs:Math.cos(ry),sn:Math.sin(ry)},r=Math.hypot(w,d)/2;
@@ -17837,7 +17851,10 @@ function startGameNow(data){
   // 저장된 높이를 기준으로 그 층 바닥에 세운다 (기록관 안에서 끝냈다면 땅속이 아니라 그 층에)
   {const old=data.x!=null&&data.x<170&&Math.abs(data.z||0)<300;if(old){data.x=null;data.z=null;data.y=null;}}
   if(data.x!=null&&OR.ISLES.arena&&Math.hypot(data.x-OR.ISLES.arena.x,(data.z||0)-OR.ISLES.arena.z)<OR.ISLES.arena.R){data.x=null;data.z=null;data.y=null;}   /* 투기장에서 끊겼으면 하레나로 */   /* 옛 첫 지역에 저장된 자리는 하레나로 */
-  player.position.set(data.x??(OR.C2.x-6),0,data.z??(OR.C2.z+4));{const x=player.position.x,z=player.position.z,base=isFinite(data.y)?data.y:(x>=120?height2Raw(x,z):heightAt(x,z));player.position.y=floorAt(x,z,base+.3);}
+  player.position.set(data.x??(OR.C2.x-6),0,data.z??(OR.C2.z+4));
+  /* 내 집 안에서 끊겼으면(새로고침·업데이트) 집 바닥·계단을 먼저 지어 둔다. 전엔 바닥이 생기기 전에 높이를 재서 캐릭터가 바닥 아래로 꺼졌다 */
+  try{if(OR.inMyHome(player.position.x,player.position.z)){myHomeDoorSync();if(!MYH.g)myHomeBuild(null,'none');}}catch(e){}
+  {const x=player.position.x,z=player.position.z,base=isFinite(data.y)?data.y:(x>=120?height2Raw(x,z):heightAt(x,z));player.position.y=floorAt(x,z,base+.3);}
   scene.add(player);setViewModel(P.job);
   cam.yaw=0;cam.pitch=0;
   $('#start').hidden=true;$('#hud').hidden=false;
@@ -17957,7 +17974,7 @@ $('#shopSell').onclick=()=>{shopTab='sell';renderShop();};
 function buy(id,n){
   const cost=priceOf(id)*n;if(P.gold<cost){toast('골드가 부족해요');return;}
   const I=ITEMS[id];if(I.kind==='gear'&&P.bag.length+n>BAG_SIZE||I.kind==='use'&&!P.bag.some(e=>e.id===id)&&P.bag.length>=BAG_SIZE){toast('가방이 가득 찼어요');return;}
-  P.gold-=cost;addItem(id,n,true);sfx('coin');log(`${itemName(id,P.job)}${n>1?` ${n}개`:''} 구매 · -${cost} 골드`,'sys');renderShop();save();
+  P.gold-=cost;addItem(id,n,true);sfx('coin');lootFeed(id,n);log(`${itemName(id,P.job)}${n>1?` ${n}개`:''} 구매 · -${cost} 골드`,'sys');renderShop();save();
 }
 function sell(idx,all){
   const e=P.bag[idx];if(!e)return;const n=all?e.n:1;const g=sellPrice(e.id)*n;
@@ -18191,7 +18208,8 @@ function fillWhy(p){const g=qGoals(p)[0];const s=String(p.why||'').replace(/\{m\
   return s.replace(/([가-힣])(이\(가\)|을\(를\)|은\(는\)|와\(과\))/g,(m,ch,j)=>{const b=(ch.charCodeAt(0)-0xac00)%28>0;const [x,y]=j.replace(')','').split('(');return ch+(b?x:y);});}
 function questPayout(q){
     P.gold+=q.gold;const t=Math.min(9,tierForLevel(q.lv)+(q.rare?1:0));const reward=pick(GEAR_BY_TIER[t]||GEAR_BY_TIER[tierForLevel(q.lv)]);const gotItem=addItem(reward,1,true);
-    const pot=q.lv>=20?'hp_l':'hp_s';if(ITEMS[pot])addItem(pot,3+(q.rare?3:0),true);
+    const pot=q.lv>=20?'hp_l':'hp_s',pn=3+(q.rare?3:0),gotPot=ITEMS[pot]&&addItem(pot,pn,true);
+    lootShow(null,q.gold,[...(gotItem?[[reward,1]]:[]),...(gotPot?[[pot,pn]]:[])]);   /* 의뢰 보상도 획득 알림으로 */
     log(`의뢰 완료! EXP +${Math.round(q.exp*expMul())} · ${q.gold} 골드${gotItem?` · [${itemName(reward,P.job)}]`:''}`,'sys');P.quest=null;gainExp(q.exp);updateQuestHud();save();}
 function renderQuest(msg){
   const q=P.quest,T=qTone(),here=npcCur?npcCur.id:'kyle';
@@ -18591,7 +18609,7 @@ function endProj(p,i){if(p.o.onEnd){const cb=p.o.onEnd;p.o.onEnd=null;cb(p.m.pos
 }
 // 화면 가운데 조준선에 가장 가까운 적 하나 (마법사 기본 공격)
 function aimTarget(maxD=30,cosMin=.965){const o=camera.position,d=camDir(),arm=camArm(o,d);let best=null,bc=cosMin;
-  for(const m of alive()){const c=mCenter(m),v=c.clone().sub(o),l=v.length();if(l>maxD||l<.5)continue;const k=v.dot(d)/l;if(k>bc&&losClear(o,c,arm)){bc=k;best=m;}}return best;}   /* 벽 너머 적은 고르지 않는다 */
+  for(const m of alive()){const c=mCenter(m),v=c.clone().sub(o),l=v.length();if(l>maxD||l<.5)continue;const k=v.dot(d)/l;if(k>bc&&losClear(o,o.clone().addScaledVector(v,Math.max(0,l-m.r-.3)/l),arm)){bc=k;best=m;}}return best;}   /* 벽 너머 적은 고르지 않는다 (적의 몸 앞까지만 본다: 허수아비 기둥처럼 적과 같은 자리에 있는 막힘은 무시) */
 // 폭발마법-근접: 뛰어오른 꼭대기에서 있던 자리를 향해 마법을 쏘고, 떨어진 곳에서 터진다
 function lblastFire(){const L=P.lblast;L.fired=true;const S=L.S,R=S.radius,mul=S.mult*L.pw,o2=L.opt;
   if(mode!=='world'||P.hp<=0){P.lblast=null;return;}
@@ -19510,6 +19528,7 @@ function removeItem(id,n=1){for(let i=P.bag.length-1;i>=0&&n>0;i--){const e=P.ba
 /* 전리품 알림: 얻은 것을 오른쪽에 한 줄씩 띄웠다가 지운다. 같은 것이 이어서 들어오면 한 줄에 개수만 더한다 */
 const LOOTF={max:4,life:2600};
 function lootFeed(id,n=1){const box=$('#lootFeed');if(!box||!P)return;
+  box.classList.toggle('ov',mode!=='world'||!!document.querySelector('.overlay:not([hidden])'));
   if(document.body.classList.contains('touch')){let y=0;for(const q of ['#where','#mMenu','#mBag']){const el=$(q),r=el&&!el.hidden&&el.getBoundingClientRect();if(r&&r.height&&r.right>innerWidth*.6)y=Math.max(y,r.bottom);}if(y)box.style.top=Math.round(y+6)+'px';}   /* 휴대폰: 작은 지도(세로 화면이면 메뉴·가방 단추까지) 바로 밑, 공격·점프 버튼과 안 겹치게 */
   const gold=id==='gold',I=gold?null:ITEMS[id];if(!gold&&!I)return;
   let e=[...box.children].find(x=>x.dataset.k===id&&!x.classList.contains('out'));
@@ -20062,7 +20081,10 @@ const SENS=.0022;
 function look(dx,dy){cam.yaw-=dx*SENS;cam.pitch=clamp(cam.pitch-dy*SENS,-1.45,1.45);lieLook();}
 /* 침대에 누워 1인칭이면 진짜 누운 사람처럼만 본다: 고개는 좌우로 돌리고(발 쪽 기준 ±1.3) 천장은 올려다보지만,
    발 쪽으로 너무 내려다보거나(목이 보임) 머리 뒤쪽을 볼 수는 없다. 옆으로 돌릴수록 아래로는 덜 내려간다 */
-function lieLook(){if(cam.third||!P||P.seat==null)return;const q=SEATS[P.seat];if(!q||!q.lie)return;
+function lieLook(){if(cam.third||!P||CCAR.ride||P.fly)return;const q=P.seat!=null?SEATS[P.seat]:null;
+  if(!q||!q.lie){   /* 앉아 있으면: 몸이 보이니 목(어깨 위)이 보일 만큼 내려다보지 못하게, 의자에선 몸을 등지고 뒤를 보지 못하게 */
+    if(sitEase(player.userData.sitK||0)<=.05)return;cam.pitch=Math.max(cam.pitch,-1.2);
+    if(q){const b=q.ry+Math.PI;let d=Math.atan2(Math.sin(cam.yaw-b),Math.cos(cam.yaw-b));cam.yaw=b+clamp(d,-1.7,1.7);}return;}
   const b=q.ry+Math.PI;let d=Math.atan2(Math.sin(cam.yaw-b),Math.cos(cam.yaw-b));d=clamp(d,-1.3,1.3);cam.yaw=b+d;
   cam.pitch=clamp(cam.pitch,-.32+.3*Math.abs(d)/1.3,1.45);}
 // Esc로 창을 닫은 뒤 다시 고정되기 전까지도 마우스로 시점이 돌아가게 (커서는 숨긴다)
@@ -20296,7 +20318,8 @@ function updatePlayer(dt){
       camera.position.set(player.position.x-lx*rx+lz*f.x,player.position.y+RH+HR*Math.cos(rollA),player.position.z-lx*rz+lz*f.z);}
     sitKStep(player.userData,sitting||!!P.fly,dt);
     const lk=lieK();lieLook();
-    const lieSee=lk>.05&&!CCAR.ride;   /* 누우면 1인칭에서도 내 몸(목 아래)이 보이게: 머리만 감추고 몸을 그린다 */
+    /* 누우거나 앉으면 1인칭에서도 내 몸(목 아래)이 보이게: 머리만 감추고 몸을 그린다 */
+    const lieSee=!CCAR.ride&&!P.fly&&(lk>.05||sitEase(player.userData.sitK||0)>.05);
     if(lieSee||mirrorNear()){player.visible=true;animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);lieApply(player,lk);player.visible=lieSee;}   /* 거울에 지금 하는 동작이 비치게 */
     else player.rotation.x=-Math.PI/2*lk;
     if(player.userData.head)player.userData.head.visible=!lieSee;if(lieSee&&viewModel)viewModel.visible=false;
@@ -20355,7 +20378,7 @@ function hearthTick(dt){if(!HEARTHS.length)return;const p=player.position;
       a.setXYZ(i,e.x,e.y,e.z);}a.needsUpdate=true;}}
 /* 벽난로 불 소리 (music/fire.mp3, 원호가 준 불 타는 소리): 가까울수록 크게, 길드홀 밖에서는 꺼진다 */
 const FIRE_AMB={el:null,v:0};
-function fireAmbTick(){const F=typeof MARCUS!=='undefined'&&MARCUS.guildFire;if(!F||typeof player==='undefined'||!player)return;
+function fireAmbTick(){let F=typeof MARCUS!=='undefined'&&MARCUS.guildFire;{const H=typeof MYH!=='undefined'&&MYH.hearthPos;if(H&&typeof player!=='undefined'&&player&&OR.inMyHome(player.position.x,player.position.z))F=H;}   /* 내 집 안이면 집 벽난로 소리 */if(!F||typeof player==='undefined'||!player)return;
   const d=Math.hypot(player.position.x-F.x,(player.position.y-F.y)*1.6,player.position.z-F.z),inside=Math.abs(player.position.x-F.x)<40&&Math.abs(player.position.z-F.z)<40;
   const want=inside&&!document.hidden?Math.pow(Math.max(0,1-(d-1)/22),2)*.9*(OPT.sfx??.7):0;
   if(want>0&&!FIRE_AMB.el){const src='music/fire.mp3?v=1',c=typeof cdnURL==='function'?cdnURL(src):src,el=new Audio(c);if(c!==src)el.addEventListener('error',()=>{if(!el._fb){el._fb=1;el.src=src;}});el.loop=true;el.volume=0;FIRE_AMB.el=el;}
@@ -21398,8 +21421,8 @@ function openBossChest(i){const c=bossChests[i];if(!c||c.empty)return;if(mode!==
   chestCur=c;mode='dialog';attackHeld=false;unlockPointer();syncLockTip();$('#chestTitle').textContent=`${c.from}의 상자`;renderChest();$('#chestWin').hidden=false;}
 function closeChest(){$('#chestWin').hidden=true;chestCur=null;mode='world';syncLockTip();focusGame();relock();}
 function takeChest(k){const c=chestCur;if(!c)return;
-  if(k==='gold'){P.gold+=c.gold;log(`${c.gold.toLocaleString('ko-KR')} 골드를 챙겼다`,'good');c.gold=0;sfx('coin');}
-  else{const [id,n]=c.items[k];if(!addItem(id,n)){toast('가방이 가득 찼어요');return;}c.items.splice(k,1);log(`${n>1?`${itemName(id,P.job)} ${n}개`:`[${itemName(id,P.job)}]`}을(를) 챙겼다`,'good');sfx('coin');}
+  if(k==='gold'){P.gold+=c.gold;log(`${c.gold.toLocaleString('ko-KR')} 골드를 챙겼다`,'good');lootFeed('gold',c.gold);c.gold=0;sfx('coin');}
+  else{const [id,n]=c.items[k];if(!addItem(id,n)){toast('가방이 가득 찼어요');return;}lootShow(null,0,[[id,n]]);c.items.splice(k,1);log(`${n>1?`${itemName(id,P.job)} ${n}개`:`[${itemName(id,P.job)}]`}을(를) 챙겼다`,'good');sfx('coin');}
   if(!c.gold&&!c.items.length){c.empty=true;closeChest();}else renderChest();updateHud();invDirty();save();}
 function renderChest(){const c=chestCur,L=$('#chestList');L.innerHTML='';
   const row=(cell,name,col,sub,k)=>{const r=document.createElement('div');r.className='srow';const tx=document.createElement('div');tx.className='stx';
@@ -22118,8 +22141,10 @@ function myHomeBuild(r,key){MYH.built=key;
   const fireplace=(x,fy,z,ry)=>{const p=piece(x,fy,z,ry),sm=stoneM;p.b(.38,1.25,.7,sm,-.88,.62,-.15);p.b(.38,1.25,.7,sm,.88,.62,-.15);p.b(2.3,.22,.75,sm,0,1.36,-.13);p.b(2.55,.1,.95,WD2,0,1.52,-.03);
     p.b(1.9,FH-1.57,.55,sm,0,1.57+(FH-1.57)/2,-.23);p.b(1.4,1.1,.2,m(0x2a1c14,{roughness:1}),0,.55,-.4);p.b(2.4,.08,1.1,sm,0,.04,.05);
     for(let k=0;k<3;k++){const lg=p.c(.07,.08,.9,0x5a3a22,(k-1)*.18,.12+(k===1?.1:0),-.08,7);lg.rotation.z=Math.PI/2;lg.rotation.y=(k-1)*.25;}
-    const wp=new THREE.Vector3(0,.08,-.08);g.updateMatrixWorld(true);p.q.updateMatrixWorld(true);p.q.localToWorld(wp);addHearthFire(g,wp.x-X,fy+.08,wp.z-Z,.55,.8);
-    const L=new THREE.PointLight(0xff8a3a,1.4,11,1.6);const lp=new THREE.Vector3(0,.9,.6);p.q.localToWorld(lp);L.position.set(lp.x-X,lp.y,lp.z-Z);g.add(L);MYH.fires.push(L);
+    /* 불: 길드홀 벽난로와 같은 진짜 불(hearthAdd — 흔들리는 불꽃 세 겹·튀는 불똥·깜빡이는 불빛). 집 자리는 늘 같으니 한 번만 만들고 집 안에 있을 때만 보인다 */
+    const wp=new THREE.Vector3(0,.04,-.12).applyAxisAngle(new THREE.Vector3(0,1,0),ry).add(p.q.position);wp.x+=X;wp.z+=Z;   /* 세계 좌표 (localToWorld는 얼린 행렬 때문에 집 자리가 빠질 수 있다) */
+    {const c=[];for(let k=0;k<12;k++){const e=p.c(.05+Math.random()*.03,.06,.06,[0x3a1a10,0x6a2410,0xb03a10][k%3],(Math.random()-.5)*.9,.08,-.05-Math.random()*.25,5);e.material=e.material.clone();e.material.emissive=new THREE.Color(k%3===2?0xff5010:0x401008);e.material.emissiveIntensity=1;c.push(e);}}   /* 장작 밑 숯불 */
+    if(!MYH.hearth){hearthAdd(wp.x,fy+.04,wp.z,1.0);MYH.hearth=HEARTHS[HEARTHS.length-1];MYH.hearth.g.userData.noMap=true;MYH.hearth.li.userData.yr=[fy-.5,fy+FH];MYH.hearthPos={x:wp.x,y:fy+.8,z:wp.z};}
     const ax=Math.abs(Math.cos(ry))>.5;col(x+(ax?.75:0),z+(ax?0:.75),.55,fy,2);col(x-(ax?.75:0),z-(ax?0:.75),.55,fy,2);
     /* 선반 위 작은 것들 */const s2=piece(x,fy,z,ry);s2.c(.06,.08,.2,0xb0603a,-.8,1.67,0,8);s2.c(.05,.05,.24,0xc9a050,.75,1.69,0,8);};
   const shelfWall=(x,fy,z,ry,L=1.4)=>{const p=piece(x,fy,z,ry);p.b(L,.05,.26,WD,0,1.7,.13);for(const sx of [-1,1])p.b(.05,.18,.2,WD2,sx*(L/2-.1),1.6,.1);
@@ -22206,7 +22231,7 @@ function myHomeTick(t){if(!player)return;if(P&&P.mq==='home100'&&!P.myHome)myHom
   /* 문 자리는 따로 기억한다: 전에는 다른 곳(지도·포탈 검사)이 먼저 집을 찾아 두면 문을 옮기지 않아, 다시 접속한 뒤 집에 못 들어갔다 */
   {const key=P&&P.myHome?P.myHome.n+':'+P.myHome.x+':'+P.myHome.z:null;if(MYH.doorIn&&(MYH.doorIn.key!==key||(myHomeRec()&&MYH.built!==MYH.rec.n+':'+myHomeName())))myHomeDoorSync();}
   const inH=OR.inMyHome(player.position.x,player.position.z);if(!MYH.g&&inH)myHomeBuild(null,'none');if(!MYH.g)return;
-  if(MYH.g.visible!==inH)MYH.g.visible=inH;if(MYH.mirror&&MYH.mirror.visible!==inH)MYH.mirror.visible=inH;if(inH)for(const L of MYH.fires)L.intensity=1.3+Math.sin(t*9.3)*.12+Math.sin(t*23.1)*.08;
+  if(MYH.g.visible!==inH)MYH.g.visible=inH;if(MYH.mirror&&MYH.mirror.visible!==inH)MYH.mirror.visible=inH;if(MYH.hearth&&MYH.hearth.g.visible!==inH)MYH.hearth.g.visible=inH;if(inH)for(const L of MYH.fires)L.intensity=1.3+Math.sin(t*9.3)*.12+Math.sin(t*23.1)*.08;
   if(inH&&P&&P.mq==='home100'&&mode==='world'&&!warping){mqComplete('home100');sfx('quest');toast(`오늘부터 여기가 ${myHomeName()}이다`);log('아늑한 집이다. 위층 침대에서 쉬어 갈 수도 있다.','sys');}}
 /* 지도: 배정된 집 자리에 집 그림 (엑시즈 지도·미니맵) */
 function myHomeMapMark(c,X,Z,f,I,lab){const r=myHomeRec();if(!r||!I||I.id!=='marcus')return;const x=X(r.x),y=Z(r.z);f=f||1;
