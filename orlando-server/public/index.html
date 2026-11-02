@@ -11132,12 +11132,48 @@ function _marcusLife(cx,cz){
     LIFE.dogs.push({...d,R,s,s1:s,side,sp:rr(1.1,1.8),st:'rest',stT:rr(1,6),pose:pick(['sit','lie','stand']),ph:rnd()*9,yaw:rnd()*6.28,x:p.x,z:p.z,wag:0});}
 
   /* ===== 고양이 ===== */
-  const CATC=[0x3a3430,0xd88a40,0xe8e0d8,0x8a8078,0x5a4a3a,0xc8b8a0];
-  const makeCat=c=>{const D=new THREE.Group();D.add(new THREE.Mesh(merge([[SPH,0,.17,-.02,.24,.3,.32,c],[BOX,-.05,.04,.1,.05,.08,.06,c],[BOX,.05,.04,.1,.05,.08,.06,c]]),VC));
-    const H=new THREE.Group();H.position.set(0,.36,.08);D.add(H);H.add(new THREE.Mesh(merge([[SPH,0,0,0,.17,.15,.15,c],[CONE(3),-.055,.09,0,.06,.08,.04,c],[CONE(3),.055,.09,0,.06,.08,.04,c],[BOX,-.035,.01,.075,.025,.02,.01,0x7ac040],[BOX,.035,.01,.075,.025,.02,.01,0x7ac040]]),VC));
-    const T=new THREE.Group();T.position.set(0,.05,-.16);D.add(T);T.add(new THREE.Mesh(merge([[BOX,0,.02,-.15,.035,.035,.3,c,.2,0,0]]),VC));D.traverse(o=>{if(o.isMesh)o.castShadow=true;});return {D,H,T};};
+  /* 고양이: 둥근 엉덩이와 허벅지, 앞으로 살짝 기운 가슴, 가는 앞다리와 발, 볼살 있는 머리(주둥이·분홍 코·눈동자·속귀·수염),
+     몸을 감아 앞발 쪽으로 오는 꼬리. 털빛은 줄무늬·턱시도·단색 가운데 하나. 달아날 때는 몸을 길게 펴고 네 다리로 뛴다.
+     생김새는 따로 둔 씨앗으로 골라, 뒤에 놓이는 비둘기·거리 예술가 자리가 바뀌지 않게 한다. */
+  const CATS=[[0x3a3430,0xe8e4dc,0x1e1a18],[0xd88a40,0xf0d8b0,0xa85a22],[0xe8e0d8,0xf6f2ec,0xb8b0a8],[0x8a8078,0xc8c0b8,0x5a524c],[0x5a4a3a,0xc8b090,0x3a2e24],[0xc8b8a0,0xece2d0,0x8a7a62],[0x2a2624,0x2a2624,0x161412]];
+  let cseed=4271;const crnd=()=>{cseed=(cseed*16807)%2147483647;return (cseed-1)/2147483646;};
+  const CONE4=new THREE.ConeGeometry(.5,1,4),PINK=0xd8909a,CEYE=[0x9ac040,0xd8b030,0x6aa0c8,0xc89a3a];
+  const makeCat=(sd0)=>{cseed=sd0;for(let k=0;k<4;k++)crnd();const [c,cb,cd]=CATS[Math.floor(crnd()*CATS.length)],kind=crnd(),tabby=kind<.4,tux=!tabby&&kind<.7;
+    const c2=tux?0xf2eee6:cb,ec=CEYE[Math.floor(crnd()*CEYE.length)];
+    const D=new THREE.Group();
+    /* 앉은 몸 */
+    const S=new THREE.Group();D.add(S);
+    const sit=[[SPH2,0,.1,-.05,.25,.2,.27,c],[SPH2,0,.21,.03,.17,.27,.17,c,.28,0,0],[SPH2,0,.21,.085,.12,.19,.08,c2,.28,0,0],
+      [SPH2,-.095,.09,-.03,.075,.15,.2,c,0,0,.08],[SPH2,.095,.09,-.03,.075,.15,.2,c,0,0,-.08],   /* 엉덩이·가슴·턱받이·허벅지 */
+      [SPH2,-.045,.15,.085,.07,.13,.08,c],[SPH2,.045,.15,.085,.07,.13,.08,c],[CYL2,-.04,.08,.105,.044,.15,.044,c],[CYL2,.04,.08,.105,.044,.15,.044,c],[SPH2,-.04,.014,.118,.055,.03,.07,c2],[SPH2,.04,.014,.118,.055,.03,.07,c2],   /* 앞다리·앞발 */
+      [SPH2,-.085,.014,.06,.05,.028,.09,c2],[SPH2,.085,.014,.06,.05,.028,.09,c2]];   /* 뒷발 */
+    if(tabby)for(let k=0;k<4;k++)sit.push([SPH2,0,.13+k*.05,-.07+k*.035,.2-k*.02,.035,.1,cd,.28,0,0],[SPH2,-.11,.06+k*.04,-.06+k*.04,.03,.06,.06,cd],[SPH2,.11,.06+k*.04,-.06+k*.04,.03,.06,.06,cd]);
+    /* 꼬리: 뒤에서 오른쪽으로 감아 앞발 옆까지 */
+    const arc=(k)=>{const a=k/14*Math.PI*.82;return [.17*Math.sin(a),.026,-.21+.17*(1-Math.cos(a))];};
+    for(let k=0;k<9;k++){const [x,y,z]=arc(k);sit.push([SPH2,x,y,z,.056,.05,.056,(tabby&&(k>>1)%2)?cd:c]);}
+    S.add(new THREE.Mesh(merge(sit),VCS));
+    const T=new THREE.Group();{const [x,y,z]=arc(8);T.position.set(x,y,z);}S.add(T);   /* 꼬리 끝: 살랑인다 */
+    const tip=[];for(let k=9;k<15;k++){const [x,y,z]=arc(k),[x0,y0,z0]=arc(8);tip.push([SPH2,x-x0,y-y0+(k-8)*.008,z-z0,.054-(k-9)*.004,.048-(k-9)*.003,.054,k>=13&&tux?c2:(tabby&&(k>>1)%2)?cd:c]);}
+    T.add(new THREE.Mesh(merge(tip),VCS));
+    /* 달아나는 몸: 길게 펴고 꼬리를 뒤로 세운다 */
+    const R=new THREE.Group();R.visible=false;D.add(R);
+    R.add(new THREE.Mesh(merge([[SPH2,0,.21,0,.17,.17,.42,c],[SPH2,0,.22,.15,.15,.16,.16,c],[SPH2,0,.25,.2,.1,.11,.12,c,.6,0,0],[SPH2,0,.17,.03,.11,.08,.26,c2],[CYL2,0,.26,-.27,.035,.22,.035,c,-.9,0,0],[SPH2,0,.33,-.37,.04,.05,.04,tux?c2:c],
+      ...(tabby?[0,1,2,3].map(k=>[SPH2,0,.215,-.12+k*.08,.175,.175,.03,cd]):[])]),VCS));
+    const legs=[];for(const [x,z] of [[-.05,.13],[.05,.13],[-.055,-.13],[.055,-.13]]){const L=new THREE.Group();L.position.set(x,.19,z);R.add(L);
+      L.add(new THREE.Mesh(merge([[SPH2,0,-.03,0,.065,.1,.08,c],[CYL2,0,-.1,0,.042,.17,.042,c],[SPH2,0,-.185,.012,.05,.03,.065,c2]]),VCS));legs.push(L);}
+    /* 머리 */
+    const H=new THREE.Group();H.position.set(0,.36,.09);D.add(H);
+    const head=[[SPH2,0,0,0,.15,.13,.14,c],[SPH2,-.036,-.028,.035,.075,.065,.065,c],[SPH2,.036,-.028,.035,.075,.065,.065,c],[SPH2,0,-.03,.06,.06,.042,.045,c2],   /* 머리·볼·주둥이 */
+      [SPH2,0,-.006,.083,.02,.013,.012,PINK],[SPH2,0,-.05,.05,.04,.02,.035,c2],   /* 코·턱 */
+      [SPH2,-.034,.016,.057,.034,.028,.014,ec],[SPH2,.034,.016,.057,.034,.028,.014,ec],[SPH2,-.034,.016,.063,.009,.024,.006,0x0c0a08],[SPH2,.034,.016,.063,.009,.024,.006,0x0c0a08],   /* 눈·세로 눈동자 */
+      [CONE4,-.045,.08,-.005,.058,.075,.03,c,0,Math.PI/4,.22],[CONE4,.045,.08,-.005,.058,.075,.03,c,0,Math.PI/4,-.22],[CONE4,-.044,.075,.006,.034,.05,.008,PINK,0,Math.PI/4,.22],[CONE4,.044,.075,.006,.034,.05,.008,PINK,0,Math.PI/4,-.22]];   /* 귀·속귀 */
+    for(const sd of [-1,1])for(const k of [-1,1])head.push([BOX,sd*.075,-.03+k*.006,.068,.08,.0025,.0025,0xf0ece4,0,-sd*.25,sd*k*.12]);   /* 수염 */
+    if(tabby)head.push([SPH2,0,.055,.02,.03,.012,.07,cd,.3,0,0],[SPH2,-.03,.05,.015,.02,.01,.06,cd,.3,0,0],[SPH2,.03,.05,.015,.02,.01,.06,cd,.3,0,0]);   /* 이마 줄무늬 M */
+    if(tux)head.push([SPH2,0,-.035,.055,.08,.05,.05,c2]);
+    H.add(new THREE.Mesh(merge(head),VCS));
+    D.traverse(o=>{if(o.isMesh)o.castShadow=true;});return {D,H,T,S,R,legs};};
   for(let i=0,tries=0;i<14&&tries<400;tries++){const R=pick(routes);const s=rr(3,R.T-3),side=(rnd()<.5?-1:1)*(R.w/2+rr(.5,1.0)),p=along(R,s,side);
-    if(!inCity(p.x,p.z)||PL.nearStreet(p.x-cx,p.z-cz,.1)||!free(p.x,p.z,.3)||!clear(p.x,p.z,.4))continue;const C=makeCat(pick(CATC));C.D.position.set(p.x,heightAt(p.x,p.z),p.z);C.D.rotation.y=Math.atan2(p.uz*Math.sign(side),-p.ux*Math.sign(side))+rr(-.6,.6);G.add(C.D);
+    if(!inCity(p.x,p.z)||PL.nearStreet(p.x-cx,p.z-cz,.1)||!free(p.x,p.z,.3)||!clear(p.x,p.z,.4))continue;rnd();const C=makeCat(1+Math.floor(Math.abs(p.x*73.1+p.z*131.7))%2147483640);C.D.position.set(p.x,heightAt(p.x,p.z),p.z);C.D.rotation.y=Math.atan2(p.uz*Math.sign(side),-p.ux*Math.sign(side))+rr(-.6,.6);G.add(C.D);
     LIFE.cats.push({...C,x:p.x,z:p.z,hx:p.x,hz:p.z,st:'sit',ph:rnd()*9,run:0});claim(p.x,p.z,.4);i++;}
 
   /* ===== 비둘기 ===== */
@@ -11253,12 +11289,15 @@ function lifeTick(dt,p,inM){if(!LIFE.ready)return;const G=LIFE.g;inM=inM&&Math.h
     D.T.rotation.z=Math.sin(t*(D.wag>.1||walk?14:3)+D.ph)*(D.wag>.1?.7:walk?.35:.2);D.T.rotation.x=D.pose==='lie'&&!walk?.9:-.2;}
   /* 고양이 */
   for(const C of LIFE.cats){const vis=!far(C.x,C.z,45);if(C.D.visible!==vis)C.D.visible=vis;if(!vis)continue;const dp=Math.hypot(p.x-C.x,p.z-C.z);
-    if(C.run>0){C.run-=dt;const a=C.D.rotation.y;C.x+=Math.sin(a)*4.5*dt;C.z+=Math.cos(a)*4.5*dt;C.D.position.set(C.x,heightAt(C.x,C.z)+Math.abs(Math.sin(t*16))*.06,C.z);if(C.run<=0){C.away=8+Math.random()*8;}}
+    const running=C.run>0;if(C.R.visible!==running){C.R.visible=running;C.S.visible=!running;C.H.position.set(0,running?.3:.36,running?.27:.09);C.H.rotation.set(0,0,0);}
+    if(running){C.run-=dt;const a=C.D.rotation.y;C.x+=Math.sin(a)*4.5*dt;C.z+=Math.cos(a)*4.5*dt;const g=t*16;C.D.position.set(C.x,heightAt(C.x,C.z)+Math.abs(Math.sin(g))*.05,C.z);
+      const L=C.legs,s1=Math.sin(g);L[0].rotation.x=s1*.9;L[1].rotation.x=s1*.7;L[2].rotation.x=-s1*.9;L[3].rotation.x=-s1*.7;C.H.rotation.x=Math.sin(g)*.06;   /* 앞다리끼리, 뒷다리끼리 같이 뻗는 뜀박질 */
+      if(C.run<=0){C.away=8+Math.random()*8;}}
     else if(C.away>0){C.away-=dt;if(C.away<=0){C.x=C.hx;C.z=C.hz;C.D.position.set(C.x,heightAt(C.x,C.z),C.z);}}
     else if(dp<2.4){C.run=1.4;C.D.rotation.y=Math.atan2(C.x-p.x,C.z-p.z);}
     else{const look=dp<9;C.H.rotation.y=look?Math.max(-1,Math.min(1,Math.atan2(Math.sin(Math.atan2(p.x-C.x,p.z-C.z)-C.D.rotation.y),Math.cos(Math.atan2(p.x-C.x,p.z-C.z)-C.D.rotation.y)))):Math.sin(t*.3+C.ph)*.4;
       C.H.rotation.x=!look&&Math.sin(t*.2+C.ph)>.8?.6:0;}
-    C.T.rotation.y=Math.sin(t*1.2+C.ph)*.6;}
+    if(!running)C.T.rotation.y=Math.sin(t*1.2+C.ph)*.45;}
   /* 비둘기 */
   const BI=LIFE.bird;if(BI){let ch=false;
     for(const F of LIFE.flocks){const vis=!far(F.x,F.z,70);const dpl=Math.hypot(p.x-F.x,p.z-F.z);
