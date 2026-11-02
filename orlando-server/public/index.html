@@ -2403,7 +2403,7 @@ const ZONES={
   wnorth:{name:'깊은 사막3',diff:5,sky:0xc8957a,mm:'#b46a46'},
   wsouth:{name:'깊은 사막4',diff:5,sky:0xa88670,mm:'#8a5e44'},
   thouse:{name:'튀르팽의 집',diff:0,rec:'',sky:0x1c150f,mm:'#5a4632'},
-  myhome:{name:'내 집',diff:0,rec:'',sky:0x1c150f,mm:'#5a4632'},
+  myhome:{get name(){return P&&P.name?`${P.name}의 집`:'내 집';},diff:0,rec:'',sky:0x1c150f,mm:'#5a4632'},
   hall:{name:'길드홀 지하실',diff:0,rec:'',sky:0x16110c,mm:'#4a3e34'},
   wlair:{name:'와이번 둥지',diff:5,rec:'',sky:0xb9c6cc,mm:'#6a6258'},
   weast:{name:'깊은 사막5',diff:5,sky:0x7a6c68,mm:'#5a4a44'},
@@ -18223,7 +18223,7 @@ function projWall(x,y,z){
     if(c.box){const lx=dx*c.cs-dz*c.sn,lz=dx*c.sn+dz*c.cs;if(Math.abs(lx)<c.hw+.08&&Math.abs(lz)<c.hd+.08)return true;continue;}
     if(dx*dx+dz*dz<_r*_r)return true;}
   if(x<800&&(z>300||z<-300)){const q={x,z};OR.worldClamp(q,.05);if(Math.abs(q.x-x)+Math.abs(q.z-z)>.02)return true;   /* 둘레가 벽으로 막힌 곳: 걸어 다닐 수 있는 곳 밖이면 벽 속이다 */
-    const c=hallCeil(x,z);if(c!=null&&y>c-.05)return true;if(OR.inTHouse(x,z)&&y>OR.THOUSE.rh)return true;if(OR.inMyHome(x,z)&&y>OR.MYHOME.rh)return true;}
+    const c=hallCeil(x,z);if(c!=null&&y>c-.05)return true;if(OR.inTHouse(x,z)&&y>OR.THOUSE.rh)return true;if(OR.inMyHome(x,z)&&y>MYH.top)return true;}
   return false;}
 /* 카메라(start)에서 dir로 날아갈 때 내 몸 옆을 지날 때까지의 거리 */
 function camArm(start,dir){if(!player)return 0;const hl=dir.x*dir.x+dir.z*dir.z;if(hl<.04)return 0;return Math.max(0,Math.min(12,((player.position.x-start.x)*dir.x+(player.position.z-start.z)*dir.z)/hl));}
@@ -21468,7 +21468,8 @@ gqTick.ok=1;
 /* ---------- 새 집: 버키를 만난 뒤 왕국이 엑시즈 시내 살림집 하나를 내어 준다 ----------
    MARCUS.homes = 배정할 수 있는 시내 집들의 앞문 자리 (buildHouse에서 적어 둔다).
    P.myHome = {n:집 번호, x,z:앞문 자리}. 집 안은 OR.MYHOME 방 하나로, 문을 지나면 그 방으로 옮겨 간다 (안에서는 다른 모험가가 보이지 않는다) */
-const MYH={g:null,fire:null,door:null,doorIn:null,doorOut:null,rec:null,recKey:null,sign:null};
+const MYH={g:null,fires:[],doorIn:null,doorOut:null,rec:null,recKey:null,sign:null,built:null,top:OR.MYHOME.rh,cols:[],surfs:[],seats:[],ceils:[]};
+const MYH_G=3.4,MYH_FH=3.4;   /* 1층 바닥 높이(지하가 없어도 같다)와 층 높이 */
 function myHomeRec(){if(!P||!P.myHome)return null;const H=MARCUS.homes||[],m=P.myHome,key=m.n+':'+m.x+':'+m.z;if(MYH.recKey===key)return MYH.rec;
   let r=H.find(h=>h.n===m.n&&Math.hypot(h.x-m.x,h.z-m.z)<3);
   if(!r){let bd=30;for(const h of H){const d=Math.hypot(h.x-m.x,h.z-m.z);if(d<bd){bd=d;r=h;}}}   /* 거리가 조금 바뀌었으면 가장 가까운 집 */
@@ -21476,97 +21477,184 @@ function myHomeRec(){if(!P||!P.myHome)return null;const H=MARCUS.homes||[],m=P.m
 /* 엑시즈 시내 집 하나를 랜덤으로 배정한다 (이미 있으면 그대로) */
 function myHomeAssign(){if(!P)return null;if(myHomeRec())return MYH.rec;const H=MARCUS.homes||[];if(!H.length)return null;
   const h=H[Math.floor(Math.random()*H.length)];P.myHome={n:h.n,x:+h.x.toFixed(2),z:+h.z.toFixed(2)};MYH.recKey=null;myHomeRec();myHomeDoorSync();save();return h;}
-const myHomeOut=r=>({x:r.x+r.nx*2.1,z:r.z+r.nz*2.1,yaw:Math.atan2(-r.nx,-r.nz)});
-/* 배정된 집 앞문: 걸어 들어가면 집 안으로. 문 옆에 '내 집' 문패가 걸린다 */
-function myHomeDoorSync(){const D=MYH.doorIn;if(!D)return;const r=myHomeRec();if(!r){D.fx.g.visible=false;return;}
-  D.x=r.x+r.nx*.45;D.z=r.z+r.nz*.45;D.ry=r.ry;D.fx.g.position.set(r.x,r.y,r.z);D.fx.g.rotation.y=r.ry;}
-function myHomeSignTex(){const c=document.createElement('canvas');c.width=256;c.height=128;const x=c.getContext('2d');
-  x.fillStyle='#6a4a2c';x.fillRect(0,0,256,128);x.strokeStyle='#3a2616';x.lineWidth=10;x.strokeRect(5,5,246,118);
-  for(let k=0;k<6;k++){x.strokeStyle='rgba(40,24,12,.25)';x.lineWidth=2;x.beginPath();x.moveTo(12,22+k*17);x.bezierCurveTo(80,18+k*17,170,28+k*17,244,22+k*17);x.stroke();}
-  x.fillStyle='#f3dca0';x.font='bold 64px "KMUSunggokSerif","Gowun Batang",serif';x.textAlign='center';x.textBaseline='middle';x.fillText('내 집',128,68);
+const myHomeOut=r=>({x:r.x+r.nx*2.6,z:r.z+r.nz*2.6,yaw:Math.atan2(-r.nx,-r.nz)});
+const myHomeName=()=>P&&P.name?`${P.name}의 집`:'내 집';
+/* 집마다 다른 생김새: 층수는 바깥에서 본 집 층수를 따르고(2층 집 → 2층, 3층 이상 → 3층), 지하는 집 번호로 정한다 */
+function myHomeShape(r){const n=r?r.n:0,h=k=>{const v=Math.sin((n+7)*12.9898+k*78.233)*43758.5453;return v-Math.floor(v);};
+  return {up:r&&r.fl>=3?3:2,base:h(1)<.55,wall:[0xf6ecda,0xf2e2c8,0xeae6dc,0xf4e4d4][Math.floor(h(2)*4)],band:[0x9ab0b8,0xb89a72,0xa8b890,0xc0a0a0][Math.floor(h(3)*4)],
+    cloth:[0xa83a32,0x3a5a8a,0x4a7a4a,0x8a5a9a][Math.floor(h(4)*4)],rug:[0x8a3a2a,0x2e4a6a,0x6a5a2a,0x5a3a5a][Math.floor(h(5)*4)],h};}
+/* 배정된 집 앞문: 걸어 들어가면 집 안으로. 문 옆에 '(이름)의 집' 문패가 걸린다 */
+function myHomeDoorSync(){const D=MYH.doorIn;if(!D)return;const r=myHomeRec();D.key=MYH.recKey;if(!r){D.fx.g.visible=false;return;}
+  D.x=r.x+r.nx*.95;D.z=r.z+r.nz*.95;   /* 집 벽 충돌 때문에 몸이 벽에서 1.1m 안으로는 못 다가간다: 문 판정 줄을 벽에서 0.95m에 둔다 (0.35~1.55m에서 들어간다) */D.ry=r.ry;D.fx.g.position.set(r.x,r.y,r.z);D.fx.g.rotation.y=r.ry;
+  const key=r.n+':'+myHomeName();if(MYH.built!==key)myHomeBuild(r,key);}
+function myHomeSignTex(name){const c=document.createElement('canvas');c.width=512;c.height=160;const x=c.getContext('2d');
+  x.fillStyle='#6a4a2c';x.fillRect(0,0,512,160);x.strokeStyle='#3a2616';x.lineWidth=12;x.strokeRect(6,6,500,148);
+  for(let k=0;k<7;k++){x.strokeStyle='rgba(40,24,12,.25)';x.lineWidth=2;x.beginPath();x.moveTo(14,24+k*18);x.bezierCurveTo(160,20+k*18,340,30+k*18,498,24+k*18);x.stroke();}
+  let fs=70;x.font=`bold ${fs}px "KMUSunggokSerif","Gowun Batang",serif`;while(x.measureText(name).width>460&&fs>30){fs-=4;x.font=`bold ${fs}px "KMUSunggokSerif","Gowun Batang",serif`;}
+  x.fillStyle='#f3dca0';x.textAlign='center';x.textBaseline='middle';x.fillText(name,256,84);
   const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;return t;}
-(function buildMyHome(){
-  const T=OR.MYHOME,X=T.x,Z=T.z,HW=T.hw,HD=T.hd,RH=T.rh;const G=new THREE.Group();scene.add(G);MYH.g=G;G.visible=false;
-  const add=(m,shadow=true)=>{m.castShadow=shadow;m.receiveShadow=true;G.add(m);return m;};
-  const box=(w,h,d,m,x,y,z,ry=0)=>{const q=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);q.position.set(X+x,y,Z+z);q.rotation.y=ry;return add(q);};
-  const plT=thPlasterTex(),pkT=thPlankTex();
-  const wallM=(w,h)=>{const t=plT.clone();t.needsUpdate=true;t.repeat.set(w/3,h/3);return new THREE.MeshStandardMaterial({map:t,color:0xf6ecda,roughness:.95});};
-  const floorT=pkT.clone();floorT.needsUpdate=true;floorT.repeat.set(HW*2/3,HD*2/3);const floorM=new THREE.MeshStandardMaterial({map:floorT,color:0xd8b48a,roughness:.88});
-  const ceilT=pkT.clone();ceilT.needsUpdate=true;ceilT.repeat.set(HW*2/4,HD*2/4);const ceilM=new THREE.MeshStandardMaterial({map:ceilT,color:0x9a7a58,roughness:.95});
-  const beamM=new THREE.MeshStandardMaterial({map:pkT,color:0x7a5636,roughness:.9}),darkW=mat(0x4a3220),baseM=mat(0x8a6a48,{flatShading:false,roughness:.95});
-  const stoneM=new THREE.MeshStandardMaterial({map:royalTex('brick',2,2),color:0xd8d0c4,roughness:.95});
-  /* 바닥·천장·벽 (남쪽 벽 서쪽에 문) */
-  box(HW*2+1,.3,HD*2+1,floorM,0,-.15,0);box(HW*2+1,.3,HD*2+1,ceilM,0,RH+.15,0);if(typeof ceilAdd==='function')ceilAdd(X,Z,0,HW+.5,HD+.5,RH);
-  box(.5,RH,HD*2+1,wallM(HD*2,RH),-HW-.25,RH/2,0);box(.5,RH,HD*2+1,wallM(HD*2,RH),HW+.25,RH/2,0);box(HW*2+1,RH,.5,wallM(HW*2,RH),0,RH/2,-HD-.25);
-  const DX=-1.9,DW=1.3,DH=2.0,DT=DH+DW/2+.25;
-  {const l=HW+DX-DW/2-.42,r=HW-DX-DW/2-.42;box(l,RH,.5,wallM(l,RH),-HW+l/2,RH/2,HD+.25);box(r,RH,.5,wallM(r,RH),HW-r/2,RH/2,HD+.25);box(DW+.9,RH-DT,.5,wallM(2,1),DX,DT+(RH-DT)/2,HD+.25);}
-  for(const [w,d,x,z] of [[.06,HD*2,-HW,0],[.06,HD*2,HW,0],[HW*2,.06,0,-HD]])box(w+.02,.7,d,mat(0x9ab0b8,{flatShading:false,roughness:1}),x,.35,z);   /* 아래쪽 옅은 푸른 띠 */
-  for(const [w,d,x,z] of [[.1,HD*2,-HW+.03,0],[.1,HD*2,HW-.03,0],[HW*2,.1,0,-HD+.03]])box(w,.14,d,baseM,x,.07,z);
-  for(let k=0;k<4;k++)box(HW*2,.26,.24,beamM,0,RH-.13,-HD+1.1+k*(HD*2-2.2)/3);
-  box(.24,.3,HD*2,beamM,-HW+.12,RH-.15,0);box(.24,.3,HD*2,beamM,HW-.12,RH-.15,0);
-  /* 창: 서쪽 벽 둘, 남쪽 벽 하나 */
-  const paneM=new THREE.MeshStandardMaterial({color:0xfff2d0,emissive:0xffe2a8,emissiveIntensity:1.1,roughness:1});
-  const win=(x,z,ry)=>{const g=new THREE.Group();g.position.set(X+x,1.75,Z+z);g.rotation.y=ry;G.add(g);
-    const p=new THREE.Mesh(new THREE.PlaneGeometry(.9,.75),paneM);p.position.z=.02;g.add(p);
-    for(const [w,h,px,py] of [[1.1,.12,0,.43],[1.1,.14,0,-.44],[.12,.9,-.5,0],[.12,.9,.5,0],[.06,.75,0,0],[.9,.05,0,0]]){const b=new THREE.Mesh(new THREE.BoxGeometry(w,h,.12),darkW);b.position.set(px,py,.06);b.castShadow=true;g.add(b);}
-    const sill=new THREE.Mesh(new THREE.BoxGeometry(1.2,.07,.26),baseM);sill.position.set(0,-.5,.12);g.add(sill);
-    const fl=new THREE.MeshStandardMaterial({color:0xe05a6a,roughness:.8});for(let k=0;k<3;k++){const f=new THREE.Mesh(new THREE.SphereGeometry(.07,6,5),k%2?fl:mat(0xf0d050));f.position.set(-.3+k*.3,-.4,.2);g.add(f);}   /* 창턱 꽃 */
-    const L=new THREE.PointLight(0xffe6c0,.55,6,2);L.position.set(0,0,.9);g.add(L);};
-  win(-HW+.01,-1.4,Math.PI/2);win(-HW+.01,2.0,Math.PI/2);win(2.6,HD-.01,Math.PI);
-  /* 벽난로: 동쪽 벽 남쪽 */
-  const FZ=1.4;{box(.7,1.25,.38,stoneM,HW-.35,.62,FZ-.88);box(.7,1.25,.38,stoneM,HW-.35,.62,FZ+.88);box(.75,.22,2.3,stoneM,HW-.37,1.36,FZ);
-    box(.95,.1,2.55,mat(0x6a4a30),HW-.47,1.52,FZ);box(.55,RH-1.57,1.9,stoneM,HW-.27,1.57+(RH-1.57)/2,FZ);box(.2,1.1,1.4,mat(0x2a1c14,{roughness:1}),HW-.1,.55,FZ);
-    box(1.1,.08,2.4,stoneM,HW-.55,.04,FZ);
-    for(let k=0;k<3;k++){const lg=new THREE.Mesh(new THREE.CylinderGeometry(.07,.08,.9,7),mat(0x5a3a22));lg.rotation.z=Math.PI/2;lg.rotation.y=Math.PI/2+(k-1)*.25;lg.position.set(X+HW-.42,.12+(k===1?.1:0),Z+FZ+(k-1)*.18);add(lg);}
-    addHearthFire(G,X+HW-.42,.08,Z+FZ,.55,.8);
-    const L=new THREE.PointLight(0xff8a3a,1.5,11,1.6);L.position.set(X+HW-1.1,.9,Z+FZ);L.castShadow=false;G.add(L);MYH.fire=L;
-    colliders.push({x:X+HW-.5,z:Z+FZ-.7,r:.6},{x:X+HW-.5,z:Z+FZ+.7,r:.6});}
-  for(const x of [1.2,-2.2]){const c=new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,.2,8),mat(0xf0e6d0,{flatShading:false}));c.position.set(X+x,2.05,Z-HD+.18);G.add(c);
-    const f=new THREE.Mesh(new THREE.ConeGeometry(.035,.09,6),mat(0xffc060,{emissive:0xffa030,emissiveIntensity:2}));f.position.set(X+x,2.2,Z-HD+.18);G.add(f);
-    const b=new THREE.Mesh(new THREE.BoxGeometry(.16,.05,.22),mat(0x3a2e24,{metalness:.5}));b.position.set(X+x,1.94,Z-HD+.12);G.add(b);}
-  {const L=new THREE.PointLight(0xffc880,.7,9,1.8);L.position.set(X-.5,2.4,Z-HD+1.2);G.add(L);}
-  /* 가구 (튀르팽의 집과 같은 GLB 묶음) */
-  const L=[],put=(m,x,z,ry=0,s=1,y=0)=>L.push({m,x:X+x,y,z:Z+z,ry,s});
-  put('bed_single_A',4.35,-3.0,0,.95);colliders.push({x:X+4.35,z:Z-3.8,r:.75},{x:X+4.35,z:Z-2.6,r:.75});if(typeof seatAdd==='function')seatAdd(X+4.35,Z-1.98,.74,0,{lie:1,px:X+4.35,pz:Z-3.0});put('pillow_A',4.35,-3.95,0,.9,.62);
-  put('chest_gold',4.35,-1.05,-Math.PI/2,.5);colliders.push({x:X+4.35,z:Z-1.05,r:.42});
-  put('shelf_B_large_decorated',.6,-HD,0,1,1.45);put('book_set',.15,-HD+.22,0,.9,1.45+.25);
-  put('cabinet_medium_decorated',-3.4,-HD+.52,0,1);colliders.push({x:X-3.9,z:Z-HD+.5,r:.6},{x:X-2.9,z:Z-HD+.5,r:.6});put('cactus_small_A',-4.1,-HD+.5,0,.9,1.83);
-  put('rug_oval_A',.6,.7,Math.PI/2,1.15);
-  put('armchair_pillows',3.0,FZ,Math.PI/2,.85);colliders.push({x:X+3.0,z:Z+FZ,r:.7});put('stool',3.7,FZ+1.9,0,.9);
-  put('table_medium',-2.6,-.2,0,.72);colliders.push({x:X-2.6,z:Z-.2,r:.85});put('candle_triple',-2.85,.0,0,.75,.72);
-  put('chair_A_wood',-2.6,-1.35,0,.85);put('chair_B_wood',-2.6,.95,Math.PI,.85);colliders.push({x:X-2.6,z:Z-1.4,r:.35},{x:X-2.6,z:Z+1.0,r:.35});
-  put('barrel_small_stack',4.55,3.65,Math.PI/2,.6);colliders.push({x:X+4.6,z:Z+3.65,r:.75});
-  put('cactus_medium_A',-4.9,3.95,0,.9);colliders.push({x:X-4.9,z:Z+3.95,r:.4});
-  if(THREE.GLTFLoader)new THREE.GLTFLoader().load('models/thouse.glb.wasm?v=1',g=>{let kids=[...g.scene.children];while(kids.length===1&&kids[0].children.length>1&&!kids[0].isMesh)kids=[...kids[0].children];
-    const parts={};for(const c of kids){c.updateMatrixWorld(true);const ms=[];c.traverse(o=>{if(o.isMesh)ms.push(o);});parts[c.name]=ms;}
-    const by={};for(const p of L){if(!parts[p.m])continue;(by[p.m]=by[p.m]||[]).push(p);}
-    const M4=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler(),v=new THREE.Vector3(),sv=new THREE.Vector3();
-    for(const m in by){const ps=by[m];for(const src of parts[m]){const mt=(Array.isArray(src.material)?src.material[0]:src.material).clone();mt.roughness=.8;mt.metalness=0;
-      const im=new THREE.InstancedMesh(src.geometry,mt,ps.length);ps.forEach((p,i)=>{e.set(0,p.ry,0);q.setFromEuler(e);sv.setScalar(p.s);v.set(p.x,p.y,p.z);M4.compose(v,q,sv);M4.multiply(src.matrixWorld);im.setMatrixAt(i,M4);});
-      im.frustumCulled=false;im.castShadow=true;im.receiveShadow=true;G.add(im);}}},undefined,e=>console.warn('myhome props',e));
-  /* 문: 안쪽 남쪽 벽 ↔ 배정된 집 앞문 */
-  {makeDoorway(X+DX,0,Z+HD+.02,Math.PI,{w:DW,h:DH,lamps:false,light:false,stone:0xc8ae86,stone2:0xb09670});
-    const g1=new THREE.Group();g1.position.set(X+DX,0,Z+HD-.75);scene.add(g1);
-    MYH.doorOut={id:'myhome_out',x:X+DX,z:Z+HD-.75,ry:Math.PI,hw:.9,minLv:0,label:'엑시즈 시내로 나가기',to:{x:OR.ISLES.marcus.entry.x,z:OR.ISLES.marcus.entry.z,yaw:Math.PI},msg:null,color:0xffd23a,door:1,fx:{g:g1,cols:[]},
-      alt:()=>{const r=myHomeRec();return r?{...myHomeOut(r),msg:null}:null;}};
-    PORTALS.push(MYH.doorOut);
-    const g2=new THREE.Group();scene.add(g2);
-    {const sg=new THREE.Mesh(new THREE.PlaneGeometry(.62,.31),new THREE.MeshStandardMaterial({map:myHomeSignTex(),roughness:.85}));sg.position.set(1.15,2.15,.14);g2.add(sg);
-      const bk=new THREE.Mesh(new THREE.BoxGeometry(.68,.36,.05),mat(0x3a2616));bk.position.set(1.15,2.15,.1);g2.add(bk);
-      const mt=new THREE.Mesh(new THREE.BoxGeometry(1.1,.03,.6),mat(0x9a6a3a,{roughness:1}));mt.position.set(0,.02,.55);mt.receiveShadow=true;g2.add(mt);   /* 문 앞 깔개 */
-      const iron=mat(0x2c2a28,{metalness:.6,roughness:.45});for(const [w,h,d,x,y,z] of [[.05,.05,.34,-1.15,2.62,.2],[.05,.32,.05,-1.15,2.5,.04],[.2,.04,.2,-1.15,2.45,.34],[.22,.05,.22,-1.15,2.1,.34]]){const q=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),iron);q.position.set(x,y,z);g2.add(q);}   /* 벽 등: 쇠 걸이와 등갓 */
-      const cap=new THREE.Mesh(new THREE.ConeGeometry(.16,.14,4),iron);cap.position.set(-1.15,2.53,.34);cap.rotation.y=Math.PI/4;g2.add(cap);
-      const lp=new THREE.Mesh(new THREE.BoxGeometry(.14,.3,.14),mat(0xffd080,{emissive:0xffb040,emissiveIntensity:1.6}));lp.position.set(-1.15,2.28,.34);g2.add(lp);
-      for(const [x,z] of [[-.07,-.07],[.07,-.07],[-.07,.07],[.07,.07]]){const b=new THREE.Mesh(new THREE.BoxGeometry(.025,.32,.025),iron);b.position.set(-1.15+x,2.28,.34+z);g2.add(b);}MYH.sign=g2;}
-    MYH.doorIn={id:'myhome_in',x:0,z:0,ry:0,hw:.85,minLv:0,label:'내 집으로 들어가기',to:{x:X+DX,z:Z+HD-2.2,yaw:0,y:0},msg:null,color:0xffd23a,door:1,fx:{g:g2,cols:[]},need:()=>!!myHomeRec()};
-    PORTALS.push(MYH.doorIn);}
-})();
-/* 매 프레임: 집 안이면 방을 보이고 벽난로 불빛을 흔든다. 처음 들어오면 '새 집' 퀘스트가 끝난다 */
-function myHomeTick(t){if(!player||!MYH.g)return;const inH=OR.inMyHome(player.position.x,player.position.z);
-  if(MYH.g.visible!==inH)MYH.g.visible=inH;if(inH&&MYH.fire)MYH.fire.intensity=1.35+Math.sin(t*9.3)*.12+Math.sin(t*23.1)*.08;
-  if(P&&P.mq==='home100'&&!P.myHome)myHomeAssign();
-  if(MYH.doorIn&&MYH.recKey!==(P&&P.myHome?P.myHome.n+':'+P.myHome.x+':'+P.myHome.z:null))myHomeDoorSync();
-  if(inH&&P&&P.mq==='home100'&&mode==='world'&&!warping){mqComplete('home100');sfx('quest');toast('오늘부터 여기가 내 집이다');log('작지만 아늑한 집이다. 침대에서 쉬어 갈 수도 있다.','sys');}}
+/* 문 두 개는 한 번만 만든다 (안쪽 문: 1층 남쪽 벽 서쪽) */
+(function myHomeDoors(){const T=OR.MYHOME,X=T.x,Z=T.z,HD=T.hd,DX=-3.4,G=MYH_G;
+  makeDoorway(X+DX,G,Z+HD+.02,Math.PI,{w:1.3,h:2.0,lamps:false,light:false,stone:0xc8ae86,stone2:0xb09670});
+  const g1=new THREE.Group();g1.position.set(X+DX,G,Z+HD-.75);scene.add(g1);
+  MYH.doorOut={id:'myhome_out',x:X+DX,z:Z+HD-.75,ry:Math.PI,hw:.9,minLv:0,label:'엑시즈 시내로 나가기',to:{x:OR.ISLES.marcus.entry.x,z:OR.ISLES.marcus.entry.z,yaw:Math.PI},msg:null,color:0xffd23a,door:1,fx:{g:g1,cols:[]},
+    alt:()=>{const r=myHomeRec();return r?{...myHomeOut(r),msg:null}:null;}};
+  PORTALS.push(MYH.doorOut);
+  const g2=new THREE.Group();scene.add(g2);
+  {const sg=new THREE.Mesh(new THREE.PlaneGeometry(.84,.26),new THREE.MeshStandardMaterial({map:myHomeSignTex('내 집'),roughness:.85}));sg.position.set(1.25,2.15,.14);g2.add(sg);MYH.signM=sg;
+    const bk=new THREE.Mesh(new THREE.BoxGeometry(.9,.31,.05),mat(0x3a2616));bk.position.set(1.25,2.15,.1);g2.add(bk);
+    const mt=new THREE.Mesh(new THREE.BoxGeometry(1.1,.03,.6),mat(0x9a6a3a,{roughness:1}));mt.position.set(0,.02,.55);mt.receiveShadow=true;g2.add(mt);   /* 문 앞 깔개 */
+    const iron=mat(0x2c2a28,{metalness:.6,roughness:.45});for(const [w,h,d,x,y,z] of [[.05,.05,.34,-1.15,2.62,.2],[.05,.32,.05,-1.15,2.5,.04],[.2,.04,.2,-1.15,2.45,.34],[.22,.05,.22,-1.15,2.1,.34]]){const q=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),iron);q.position.set(x,y,z);g2.add(q);}   /* 벽 등 */
+    const cap=new THREE.Mesh(new THREE.ConeGeometry(.16,.14,4),iron);cap.position.set(-1.15,2.53,.34);cap.rotation.y=Math.PI/4;g2.add(cap);
+    const lp=new THREE.Mesh(new THREE.BoxGeometry(.14,.3,.14),mat(0xffd080,{emissive:0xffb040,emissiveIntensity:1.6}));lp.position.set(-1.15,2.28,.34);g2.add(lp);
+    for(const [x,z] of [[-.07,-.07],[.07,-.07],[-.07,.07],[.07,.07]]){const b=new THREE.Mesh(new THREE.BoxGeometry(.025,.32,.025),iron);b.position.set(-1.15+x,2.28,.34+z);g2.add(b);}MYH.sign=g2;}
+  MYH.doorIn={id:'myhome_in',x:0,z:0,ry:0,hw:.85,minLv:0,label:'내 집으로 들어가기',to:{x:X+DX,z:Z+HD-2.2,yaw:0,y:G},msg:null,color:0xffd23a,door:1,fx:{g:g2,cols:[]},need:()=>!!myHomeRec()};
+  PORTALS.push(MYH.doorIn);})();
+/* 집 안을 짓는다 (배정된 집이 바뀌면 다시). 가구는 모두 상자·원기둥으로 직접 깎아 만든다 */
+function myHomeBuild(r,key){MYH.built=key;
+  /* 지난번 것 치우기 */
+  if(MYH.g){scene.remove(MYH.g);MYH.g.traverse(o=>{if(o.geometry)o.geometry.dispose();});}
+  for(const c of MYH.cols){const i=colliders.indexOf(c);if(i>=0)colliders.splice(i,1);}for(const s of MYH.surfs){const i=SURFACES.indexOf(s);if(i>=0)SURFACES.splice(i,1);}
+  for(const s of MYH.seats){const i=SEATS.indexOf(s);if(i>=0)SEATS.splice(i,1);}for(const s of MYH.ceils){const i=CEILS.indexOf(s);if(i>=0)CEILS.splice(i,1);}
+  MYH.cols=[];MYH.surfs=[];MYH.seats=[];MYH.ceils=[];MYH.fires=[];
+  if(MYH.signM){MYH.signM.material.map&&MYH.signM.material.map.dispose();MYH.signM.material.map=myHomeSignTex(myHomeName());MYH.signM.material.needsUpdate=true;}
+  const T=OR.MYHOME,X=T.x,Z=T.z,HW=T.hw,HD=T.hd,G=MYH_G,FH=MYH_FH,S=myHomeShape(r),hh=S.h;
+  const LV=[];if(S.base)LV.push({k:'b',y:0});for(let i=0;i<S.up;i++)LV.push({k:i,y:G+i*FH});const top=G+S.up*FH;MYH.top=top;
+  const g=new THREE.Group();g.position.set(X,0,Z);g.visible=false;scene.add(g);MYH.g=g;
+  const M={};const m=(c,o)=>M[c+(o?JSON.stringify(o):'')]||(M[c+(o?JSON.stringify(o):'')]=mat(c,o));
+  const B=(w,h,d,c,x,y,z,ry=0,par=g)=>{const q=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),typeof c==='number'?m(c):c);q.position.set(x,y,z);q.rotation.y=ry;q.castShadow=q.receiveShadow=true;par.add(q);return q;};
+  const C=(rt,rb,h,c,x,y,z,seg=10,par=g)=>{const q=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),typeof c==='number'?m(c):c);q.position.set(x,y,z);q.castShadow=q.receiveShadow=true;par.add(q);return q;};
+  const col=(lx,lz,rr,fy,h=1.7)=>{const c={x:X+lx,z:Z+lz,r:rr,y0:fy-.4,y1:fy+h,bld:true};colliders.push(c);MYH.cols.push(c);};
+  const surf=s=>{const q={...s,x0:X+s.x0,x1:X+s.x1,z0:Z+s.z0,z1:Z+s.z1};SURFACES.push(q);MYH.surfs.push(q);};
+  const seat=(lx,lz,y,ry,o)=>{seatAdd(X+lx,Z+lz,y,ry,o);MYH.seats.push(SEATS[SEATS.length-1]);};
+  /* 놓을 자리(가운데 x,z, 바닥 높이 fy, 돌림 ry)에 조립하는 작은 무리. 무리 안에서 +z가 앞 */
+  const piece=(x,fy,z,ry=0)=>{const q=new THREE.Group();q.position.set(x,fy,z);q.rotation.y=ry;g.add(q);return {b:(w,h,d,c,px,py,pz,r2=0)=>B(w,h,d,c,px,py,pz,r2,q),c:(rt,rb,h,c,px,py,pz,seg)=>C(rt,rb,h,c,px,py,pz,seg,q),q};};
+  const WD=0x8a5e38,WD2=0x5e3e24,WD3=0xa8784a,IRON=0x34322f,LIN=0xece4d0;
+  const pkT=thPlankTex(),plT=thPlasterTex();
+  const floorM=(w,d)=>{const t=pkT.clone();t.needsUpdate=true;t.repeat.set(w/3,d/3);return new THREE.MeshStandardMaterial({map:t,color:0xd8b48a,roughness:.88});};
+  const wallM=(w,h)=>{const t=plT.clone();t.needsUpdate=true;t.repeat.set(w/3,h/3);return new THREE.MeshStandardMaterial({map:t,color:S.wall,roughness:.95});};
+  const stoneM=new THREE.MeshStandardMaterial({map:royalTex('brick',3,1.5),color:0xc8c0b4,roughness:.95}),stoneF=new THREE.MeshStandardMaterial({map:royalTex('brick',4,3),color:0x9a9288,roughness:1});
+  /* ---- 가구 ---- */
+  const table=(x,fy,z,ry,w=1.8,d=.9)=>{const p=piece(x,fy,z,ry);p.b(w,.08,d,WD3,0,.76,0);p.b(w-.2,.12,d-.16,WD,0,.66,0);for(const sx of [-1,1])for(const sz of [-1,1])p.b(.09,.72,.09,WD2,sx*(w/2-.12),.36,sz*(d/2-.1));
+    const ax=Math.abs(Math.cos(ry))>.5;for(const k of [-1,0,1])col(x+(ax?k*w/3:0),z+(ax?0:k*w/3),d/2+.1,fy,.8);return p;};
+  const chair=(x,fy,z,ry,c=WD)=>{const p=piece(x,fy,z,ry);p.b(.46,.06,.46,c,0,.45,0);for(const sx of [-1,1])for(const sz of [-1,1])p.b(.06,.45,.06,WD2,sx*.19,.22,sz*.19);
+    for(const sx of [-1,1])p.b(.06,.55,.06,WD2,sx*.19,.75,-.2);p.b(.44,.08,.05,c,0,1.0,-.2);p.b(.44,.06,.04,c,0,.78,-.2);seat(x,z,fy+.48,ry);col(x,z,.28,fy,.9);return p;};
+  const stool=(x,fy,z)=>{const p=piece(x,fy,z);p.c(.2,.2,.06,WD3,0,.5,0,10);for(let k=0;k<3;k++){const a=k*2.1;p.b(.05,.48,.05,WD2,Math.cos(a)*.13,.24,Math.sin(a)*.13);}col(x,z,.22,fy,.6);};
+  const bench=(x,fy,z,ry,L=1.6)=>{const p=piece(x,fy,z,ry);p.b(L,.07,.38,WD,0,.45,0);for(const sx of [-1,1])p.b(.07,.45,.32,WD2,sx*(L/2-.15),.22,0);
+    const ax=Math.abs(Math.cos(ry))>.5;for(const k of [-.5,.5])seat(x+(ax?k*L*.5:0),z+(ax?0:k*L*.5),fy+.48,ry);col(x,z,.3,fy,.6);for(const k of [-1,1])col(x+(ax?k*L*.35:0),z+(ax?0:k*L*.35),.3,fy,.6);};
+  const bed=(x,fy,z,cloth,small)=>{const L=small?1.95:2.1,W=small?.95:1.25,p=piece(x,fy,z,0);   /* 머리는 북쪽(-z) */
+    p.b(W+.1,.2,L,WD2,0,.3,0);for(const sx of [-1,1])for(const sz of [-1,1])p.b(.1,.4,.1,WD2,sx*(W/2),.2,sz*(L/2-.05));
+    p.b(W+.14,1.05,.1,WD,0,.62,-L/2);p.b(W+.24,.08,.14,WD2,0,1.18,-L/2);for(const sx of [-1,1])p.c(.06,.06,.1,WD3,sx*(W/2+.07),1.26,-L/2,8);   /* 머리판 */
+    p.b(W+.14,.55,.08,WD,0,.45,L/2);   /* 발판 */
+    p.b(W,.18,L-.12,LIN,0,.5,0);p.b(W+.04,.08,L*.62,cloth,0,.62,L*.17);p.b(W+.06,.14,.12,cloth,0,.59,L*.17-L*.31);   /* 매트리스·이불(접힌 끝) */
+    p.b(W*.62,.13,.38,0xfaf6ec,0,.66,-L/2+.3);
+    col(x,z-L/4,W/2+.15,fy,.7);col(x,z+L/4,W/2+.15,fy,.7);seat(x,z+L/2-.05,fy+.66,0,{lie:1,px:x,pz:z});};
+  const wardrobe=(x,fy,z,ry,c=WD)=>{const p=piece(x,fy,z,ry);p.b(1.3,2.05,.6,c,0,1.06,0);p.b(1.42,.1,.68,WD2,0,2.13,0);p.b(1.36,.12,.64,WD2,0,.06,0);
+    p.b(.02,1.8,.02,WD2,0,1.08,.31);for(const sx of [-1,1]){p.b(.5,.75,.02,WD3,sx*.32,1.5,.305);p.b(.5,.75,.02,WD3,sx*.32,.6,.305);p.c(.025,.025,.05,0xc9a050,sx*.07,1.1,.33,6).rotation.x=Math.PI/2;}
+    col(x,z,.55,fy,2);const ax=Math.abs(Math.cos(ry))>.5;col(x+(ax?.4:0),z+(ax?0:.4),.35,fy,2);col(x-(ax?.4:0),z-(ax?0:.4),.35,fy,2);};
+  const BOOKC=[0x8a2a22,0x2a4a6a,0x3a6a3a,0x9a7a3a,0x5a3a5a,0x6a4a2a,0xb89a5a];
+  const bookcase=(x,fy,z,ry,full=true)=>{const p=piece(x,fy,z,ry),H=full?2.1:1.1,n=full?4:2;p.b(1.2,H,.04,WD2,0,H/2,-.17);for(const sx of [-1,1])p.b(.06,H,.38,WD,sx*.6,H/2,0);
+    for(let k=0;k<=n;k++)p.b(1.2,.05,.38,WD,0,.04+k*(H-.06)/n,0);
+    for(let k=0;k<n;k++){let bx=-.54;const yb=.07+k*(H-.06)/n;while(bx<.5){const bw=.05+hh(bx*13+k*7)*.05,bh=.24+hh(bx*31+k)*.14;if(hh(bx*7+k*3)<.12){bx+=.08;continue;}
+        p.b(bw,bh,.24,BOOKC[Math.floor(hh(bx*17+k*11)*BOOKC.length)],bx+bw/2,yb+bh/2,.02);bx+=bw+.008;}}
+    col(x,z,.5,fy,H);const ax=Math.abs(Math.cos(ry))>.5;col(x+(ax?.4:0),z+(ax?0:.4),.3,fy,H);col(x-(ax?.4:0),z-(ax?0:.4),.3,fy,H);};
+  const chest=(x,fy,z,ry,c=WD)=>{const p=piece(x,fy,z,ry);p.b(.9,.5,.55,c,0,.25,0);p.b(.94,.16,.59,WD2,0,.56,0);for(const sx of [-.3,.3])p.b(.06,.68,.6,IRON,sx,.33,0);p.b(.12,.14,.03,0xc9a050,0,.48,.29);col(x,z,.45,fy,.6);};
+  const barrel=(x,fy,z,s=1)=>{const p=piece(x,fy,z);p.c(.3*s,.3*s,.82*s,WD,0,.41*s,0,12);p.c(.34*s,.34*s,.42*s,WD,0,.41*s,0,12);for(const y of [.12,.41,.7])p.c(.345*s,.345*s,.05*s,IRON,0,y*s,0,12);p.c(.29*s,.29*s,.02,WD2,0,.83*s,0,12);col(x,z,.36*s,fy,.8*s);};
+  const crate=(x,fy,z,s=.7,ry=0)=>{const p=piece(x,fy,z,ry);p.b(s,s,s,WD3,0,s/2,0);for(const sz of [-1,1]){p.b(s+.02,.07,.04,WD2,0,s*.15,sz*s/2);p.b(s+.02,.07,.04,WD2,0,s*.85,sz*s/2);p.b(s*1.2,.07,.04,WD2,0,s/2,sz*s/2,Math.PI/4).rotation.set(0,0,Math.PI/4);}col(x,z,s*.6,fy,s);};
+  const sack=(x,fy,z)=>{const p=piece(x,fy,z);const q=p.c(.24,.3,.55,0xc8b088,0,.27,0,8);p.c(.08,.12,.12,0xc8b088,0,.6,0,6);p.c(.09,.09,.03,0x8a6a40,0,.55,0,6);};
+  const rug=(x,fy,z,w,d,c)=>{B(w,.02,d,0xd8c8a0,x,fy+.012,z);B(w-.16,.025,d-.16,c,x,fy+.016,z);B(w-.5,.03,d-.5,0xd8b060,x,fy+.019,z);B(w-.62,.032,d-.62,c,x,fy+.021,z);};
+  const candle=(x,y,z)=>{C(.06,.07,.03,IRON,x,y+.015,z,8);C(.035,.035,.16,0xf0e6d0,x,y+.11,z,8);const f=C(0,.022,.06,m(0xffc060,{emissive:0xffa030,emissiveIntensity:2}),x,y+.22,z,6);};
+  const plant=(x,fy,z,s=1)=>{C(.2*s,.15*s,.32*s,0xb0603a,x,fy+.16*s,z,10);for(let k=0;k<7;k++){const a=k*.9,q=new THREE.Mesh(new THREE.SphereGeometry(.16*s,6,5),m(k%2?0x4a7a3a:0x5a8a42));q.position.set(x+Math.cos(a)*.1*s,fy+(.42+(k%3)*.1)*s,z+Math.sin(a)*.1*s);q.scale.y=1.2;g.add(q);}col(x,z,.25*s,fy,.9);};
+  const desk=(x,fy,z,ry)=>{const p=piece(x,fy,z,ry);p.b(1.3,.06,.7,WD3,0,.76,0);p.b(.45,.7,.64,WD,.4,.37,0);for(const sz of [-1,1])p.b(.06,.73,.06,WD2,-.6,.37,sz*.3);for(let k=0;k<3;k++){p.b(.4,.18,.02,WD3,.4,.15+k*.22,.33);p.b(.08,.03,.03,0xc9a050,.4,.15+k*.22,.35);}
+    p.b(.42,.02,.3,0xf0e6c8,-.15,.8,.05,.2);p.c(.05,.06,.1,0x2a3a5a,-.45,.84,-.15,8);p.b(.01,.2,.01,0xf0f0f0,-.43,.92,-.15,.3);const ax=Math.abs(Math.cos(ry))>.5;col(x+(ax?.35:0),z+(ax?0:.35),.45,fy,.8);col(x-(ax?.35:0),z-(ax?0:.35),.45,fy,.8);return p;};
+  const counter=(x,fy,z,ry,L=2.4)=>{const p=piece(x,fy,z,ry);p.b(L,.86,.6,WD,0,.43,0);p.b(L+.06,.07,.66,0xd8d0c0,0,.9,0);for(let k=0;k<3;k++){p.b(L/3-.08,.6,.02,WD3,-L/3+k*L/3,.45,.305);p.b(.1,.03,.03,IRON,-L/3+k*L/3,.62,.32);}
+    p.c(.18,.15,.22,IRON,-L/3,1.05,0,10);p.c(.12,.12,.02,0x6a6a68,-L/3,1.17,0,10);p.b(.45,.04,.3,0xa8784a,.15,.95,0);p.c(.11,.09,.24,0xb0603a,L/3,1.06,-.05,8);p.c(.07,.07,.08,0xf0e8d8,L/3+.2,.99,.1,8);
+    const ax=Math.abs(Math.cos(ry))>.5;for(const k of [-1,0,1])col(x+(ax?k*L/3:0),z+(ax?0:k*L/3),.4,fy,1);
+    /* 위 선반: 단지·접시 */const sh=piece(x,fy,z,ry);sh.b(L,.05,.28,WD,0,1.85,-.17);for(let k=0;k<5;k++){const px=-L/2+.3+k*(L-.6)/4;if(k%2)sh.c(.08,.1,.22,[0xb0603a,0x6a8aa8,0xd8c8a0][k%3],px,1.99,-.17,8);else sh.c(.13,.13,.02,0xe8e0d0,px,2.05,-.2,12).rotation.x=Math.PI/2-.2;}};
+  const fireplace=(x,fy,z,ry)=>{const p=piece(x,fy,z,ry),sm=stoneM;p.b(.38,1.25,.7,sm,-.88,.62,-.15);p.b(.38,1.25,.7,sm,.88,.62,-.15);p.b(2.3,.22,.75,sm,0,1.36,-.13);p.b(2.55,.1,.95,WD2,0,1.52,-.03);
+    p.b(1.9,FH-1.57,.55,sm,0,1.57+(FH-1.57)/2,-.23);p.b(1.4,1.1,.2,m(0x2a1c14,{roughness:1}),0,.55,-.4);p.b(2.4,.08,1.1,sm,0,.04,.05);
+    for(let k=0;k<3;k++){const lg=p.c(.07,.08,.9,0x5a3a22,(k-1)*.18,.12+(k===1?.1:0),-.08,7);lg.rotation.z=Math.PI/2;lg.rotation.y=(k-1)*.25;}
+    const wp=new THREE.Vector3(0,.08,-.08);g.updateMatrixWorld(true);p.q.updateMatrixWorld(true);p.q.localToWorld(wp);addHearthFire(g,wp.x-X,fy+.08,wp.z-Z,.55,.8);
+    const L=new THREE.PointLight(0xff8a3a,1.4,11,1.6);const lp=new THREE.Vector3(0,.9,.6);p.q.localToWorld(lp);L.position.set(lp.x-X,lp.y,lp.z-Z);g.add(L);MYH.fires.push(L);
+    const ax=Math.abs(Math.cos(ry))>.5;col(x+(ax?.75:0),z+(ax?0:.75),.55,fy,2);col(x-(ax?.75:0),z-(ax?0:.75),.55,fy,2);
+    /* 선반 위 작은 것들 */const s2=piece(x,fy,z,ry);s2.c(.06,.08,.2,0xb0603a,-.8,1.67,0,8);s2.c(.05,.05,.24,0xc9a050,.75,1.69,0,8);};
+  const shelfWall=(x,fy,z,ry,L=1.4)=>{const p=piece(x,fy,z,ry);p.b(L,.05,.26,WD,0,1.7,.13);for(const sx of [-1,1])p.b(.05,.18,.2,WD2,sx*(L/2-.1),1.6,.1);
+    for(let k=0;k<4;k++)p.c(.07,.09,.2+(k%2)*.08,[0xb0603a,0x6a8aa8,0x7a9a5a,0xd8c8a0][k],-L/2+.25+k*(L-.5)/3,1.83+(k%2)*.04,.13,8);};
+  const winPane=(x,fy,z,ry)=>{const p=piece(x,fy,z,ry);p.b(.9,.75,.02,m(0xfff2d0,{emissive:0xffe2a8,emissiveIntensity:1.1,roughness:1}),0,1.75,.01);
+    for(const [w,h,px,py] of [[1.1,.12,0,2.18],[1.1,.14,0,1.31],[.12,.9,-.5,1.75],[.12,.9,.5,1.75],[.06,.75,0,1.75],[.9,.05,0,1.75]])p.b(w,h,.12,0x4a3220,px,py,.06);
+    p.b(1.2,.07,.26,0x8a6a48,0,1.25,.12);for(let k=0;k<3;k++){const f=new THREE.Mesh(new THREE.SphereGeometry(.07,6,5),m(k%2?S.cloth:0xf0d050));f.position.set(-.3+k*.3,1.34,.2);p.q.add(f);}};
+  const lamp=(x,y,z)=>{const L=new THREE.PointLight(0xffd8a0,.85,10,1.7);L.position.set(x,y,z);g.add(L);   /* 천장 쇠 등 */
+    C(.012,.012,.5,IRON,x,y+.45,z,4);C(.3,.3,.04,IRON,x,y+.18,z,8);for(let k=0;k<4;k++){const a=k*Math.PI/2;candle(x+Math.cos(a)*.24,y+.2,z+Math.sin(a)*.24);}};
+  const rail=(x0,z0,x1,z1,fy,h=1.0,y1=null)=>{const L=Math.hypot(x1-x0,z1-z0),n=Math.max(1,Math.round(L/.6));
+    for(let i=0;i<=n;i++){const t=i/n;B(.07,h,.07,WD2,x0+(x1-x0)*t,fy+h/2,z0+(z1-z0)*t);}const ry=Math.atan2(x1-x0,z1-z0);B(.09,.08,L+.07,WD,(x0+x1)/2,fy+h,(z0+z1)/2,ry);B(.05,.05,L,WD2,(x0+x1)/2,fy+h*.45,(z0+z1)/2,ry);
+    const k=Math.ceil(L/.35);for(let i=0;i<=k;i++){const t=i/k,c={x:X+x0+(x1-x0)*t,z:Z+z0+(z1-z0)*t,r:.2,y0:fy-.4,y1:y1??fy+1.2,bld:true};colliders.push(c);MYH.cols.push(c);}};
+  /* ---- 바닥·계단 ---- 계단 자리: S1(북쪽 줄)은 1층→2층, S2(그 남쪽 줄)는 지하→1층과 2층→3층. 계단은 x∈SX */
+  const S1=[-HD+.05,-HD+1.85],S2=[-HD+1.85,-HD+3.65],SX=[-.2,HW-.05],RUN=SX[1]-SX[0];
+  const slab=(fy,holes,top,under)=>{let rects=[[-HD,HD,-HW,HW]];
+    for(const [hz,hx] of holes)rects=rects.flatMap(([z0,z1,x0,x1])=>{if(hz[1]<=z0||hz[0]>=z1||hx[1]<=x0||hx[0]>=x1)return [[z0,z1,x0,x1]];const o=[];
+      if(hz[0]>z0)o.push([z0,hz[0],x0,x1]);if(hz[1]<z1)o.push([hz[1],z1,x0,x1]);const a=Math.max(z0,hz[0]),b=Math.min(z1,hz[1]);if(hx[0]>x0)o.push([a,b,x0,hx[0]]);if(hx[1]<x1)o.push([a,b,hx[1],x1]);return o;});
+    for(const [z0,z1,x0,x1] of rects){const w=x1-x0,d=z1-z0;B(w,.3,d,[m(0x6a4a30),m(0x6a4a30),top||floorM(w,d),under||m(0x9a7a58),m(0x6a4a30),m(0x6a4a30)],(x0+x1)/2,fy-.15,(z0+z1)/2);surf({x0,x1,z0,z1,y:fy});}};
+  const stair=(strip,fromY,dir)=>{const n=14,zc=(strip[0]+strip[1])/2,sw=strip[1]-strip[0]-.06;
+    for(let i=0;i<n;i++){const t=(i+.5)/n,x=dir>0?SX[0]+RUN*t:SX[1]-RUN*t,h=fromY+FH*(i+1)/n;B(RUN/n+.02,.1,sw,WD,x,h-.05,zc);B(RUN/n+.02,FH/n,.06,WD2,x,h-FH/n/2-.05,strip[0]+.05);B(RUN/n+.02,FH/n,.06,WD2,x,h-FH/n/2-.05,strip[1]-.05);}
+    /* 옆판(비스듬한 나무판) */{const ang=Math.atan2(FH,RUN)*(dir>0?1:-1),L=Math.hypot(FH,RUN);for(const zz of [strip[0]+.04,strip[1]-.04]){const q=B(L,.28,.06,WD2,(SX[0]+SX[1])/2,fromY+FH/2-.15,zz);q.rotation.z=ang;}}
+    const hAt=x=>fromY+FH*(dir>0?(x-SX[0])/RUN:(SX[1]-x)/RUN);
+    for(const zz of [strip[0],strip[1]])for(let x=SX[0]+.2;x<=SX[1]-.1;x+=.4){const h=hAt(x);if(h-fromY<.55)continue;const c={x:X+x,z:Z+zz,r:.2,y0:fromY-.4,y1:h-.55,bld:true};colliders.push(c);MYH.cols.push(c);}
+    {const xe=dir>0?SX[1]:SX[0];for(let z=strip[0];z<=strip[1]+.01;z+=.4){const c={x:X+xe,z:Z+z,r:.2,y0:fromY-.4,y1:fromY+FH-1.3,bld:true};colliders.push(c);MYH.cols.push(c);}}
+    surf({x0:SX[0],x1:SX[1],z0:strip[0],z1:strip[1],ramp:'x',ya:dir>0?fromY:fromY+FH,yb:dir>0?fromY+FH:fromY});};
+  for(const L of LV){const fy=L.y;
+    if(L.k==='b'){slab(0,[],stoneF);continue;}
+    const holes=[];if(L.k===0&&S.base)holes.push([S2,SX]);if(L.k===1)holes.push([S1,SX]);if(L.k===2)holes.push([S2,SX]);
+    slab(fy,holes,null,L.k===0&&!S.base?null:m(0x9a7a58));}
+  if(S.base){stair(S2,0,-1);rail(SX[0]+.5,S2[1],SX[1],S2[1],G);rail(SX[0]+.5,S2[0],SX[1],S2[0],G,1.0,G+FH-.9);}
+  stair(S1,G,1);
+  {const F2=G+FH;rail(SX[0],S1[0]+.05,SX[0],S1[1],F2);rail(SX[0],S1[1],SX[1]-.75,S1[1],F2);}
+  if(S.up>=3){stair(S2,G+FH,-1);const F3=G+2*FH;rail(SX[0]+.6,S2[1],SX[1]-.05,S2[1],F3);rail(SX[0]+.6,S2[0],SX[1]-.05,S2[0],F3);}
+  /* 천장(맨 위) */B(HW*2+1,.3,HD*2+1,m(0x8a6a4c),0,top+.15,0);{const c={cx:X,cz:Z,cs:1,sn:0,hw:HW+.5,hd:HD+.5,y:top};CEILS.push(c);MYH.ceils.push(c);}
+  /* ---- 벽 (층마다) ---- 1층 남쪽 벽에만 문 구멍 */
+  const DX=-3.4,DW=1.3,DT=2.0+DW/2+.25;
+  for(const L of LV){const fy=L.y,b=L.k==='b',wm=(w,h)=>b?stoneM:wallM(w,h);
+    B(.5,FH,HD*2+1,wm(HD*2,FH),-HW-.25,fy+FH/2,0);B(.5,FH,HD*2+1,wm(HD*2,FH),HW+.25,fy+FH/2,0);B(HW*2+1,FH,.5,wm(HW*2,FH),0,fy+FH/2,-HD-.25);
+    if(L.k===0){const l=HW+DX-DW/2-.42,rr=HW-DX-DW/2-.42;B(l,FH,.5,wm(l,FH),-HW+l/2,fy+FH/2,HD+.25);B(rr,FH,.5,wm(rr,FH),HW-rr/2,fy+FH/2,HD+.25);B(DW+.9,FH-DT,.5,wm(2,1),DX,fy+DT+(FH-DT)/2,HD+.25);}
+    else B(HW*2+1,FH,.5,wm(HW*2,FH),0,fy+FH/2,HD+.25);
+    if(!b){for(const [w,d,x,z] of [[.06,HD*2,-HW,0],[.06,HD*2,HW,0],[HW*2,.06,0,-HD]])B(w+.02,.7,d,m(S.band,{flatShading:false,roughness:1}),x,fy+.35,z);   /* 아래쪽 띠 */
+      for(const [w,d,x,z] of [[.1,HD*2,-HW+.03,0],[.1,HD*2,HW-.03,0],[HW*2,.1,0,-HD+.03]])B(w,.14,d,0x8a6a48,x,fy+.07,z);
+      for(let k=0;k<4;k++)B(HW*2,.22,.2,WD2,0,fy+FH-.11,-HD+1.1+k*(HD*2-2.2)/3);}   /* 들보 */
+    else for(const x of [-3,0,3])B(.3,FH,.3,WD2,x,fy+FH/2,HD-.15);}
+  /* ---- 방마다 살림 ---- */
+  const G1=G,F2=G+FH,F3=G+2*FH;
+  /* 1층: 부엌 겸 거실 — 벽난로, 식탁, 조리대, 창가 벤치 */
+  fireplace(-HW+.38,G1,-.9,Math.PI/2);rug(-3.7,G1,-.9,1.8,2.6,S.rug);chair(-3.5,G1,-2.2,-Math.PI*.28,S.cloth);chair(-3.5,G1,.4,-Math.PI*.72,S.cloth);
+  table(1.6,G1,1.5,0);for(const [cx,cz,ry] of [[1.0,.75,0],[2.2,.75,0],[1.0,2.25,Math.PI],[2.2,2.25,Math.PI]])chair(cx,G1,cz,ry);candle(1.6,G1+.8,1.5);C(.16,.12,.08,0xe8e0d0,1.2,G1+.84,1.6,12);C(.08,.08,.06,0xd8a040,1.2,G1+.9,1.6,8);
+  counter(3.9,G1,HD-.33,Math.PI,2.6);barrel(5.0,G1,2.5,.9);sack(4.95,G1,1.7);
+  bench(-HW+.3,G1,2.6,Math.PI/2,1.6);winPane(-HW+.01,G1,2.6,Math.PI/2);winPane(1.6,G1,HD-.01,Math.PI);
+  chest(-1.3,G1,HD-.4,Math.PI);plant(-2.2,G1,-HD+.35,.9);bookcase(-4.4,G1,-HD+.25,0,false);
+  for(let k=0;k<3;k++){B(.06,.06,.18,WD2,-2.0-k*.3,G1+1.7,HD-.1);}C(.18,.18,.04,0x6a3a2a,-2.3,G1+1.55,HD-.14,10).rotation.x=Math.PI/2;   /* 문 옆 옷걸이·모자 */
+  lamp(1.6,G1+FH-.75,1.5);
+  /* 2층: 침실 */
+  bed(-4.55,F2,-3.1,S.cloth);chest(-4.55,F2,-1.45,0);{const p=piece(-3.45,F2,-4.1);p.b(.5,.55,.45,WD,0,.28,0);p.b(.56,.05,.5,WD3,0,.58,0);candle(-3.45,F2+.6,-4.1);col(-3.45,-4.1,.32,F2,.6);}
+  wardrobe(-4.4,F2,HD-.35,Math.PI);rug(-2.5,F2,.9,2.4,1.7,S.rug);desk(3.6,F2,HD-.4,Math.PI);chair(3.6,F2,3.45,0);plant(5.0,F2,.2,.8);bookcase(-1.2,F2,HD-.25,Math.PI);
+  winPane(-HW+.01,F2,.6,Math.PI/2);winPane(1.6,F2,HD-.01,Math.PI);{const p=piece(-HW+.05,F2,-1.6,Math.PI/2);p.b(.6,.9,.04,m(0xc8d8e0,{metalness:.6,roughness:.15}),0,1.55,.03);p.b(.7,1,.03,WD2,0,1.55,0);}   /* 벽 거울 */
+  lamp(-2.2,F2+FH-.75,.6);
+  /* 3층: 서재와 손님방 */
+  if(S.up>=3){bookcase(-4.4,F3,-HD+.25,0);bookcase(-3.0,F3,-HD+.25,0);bookcase(-1.6,F3,-HD+.25,0,false);desk(-4.5,F3,1.2,Math.PI/2);chair(-3.9,F3,1.2,-Math.PI/2);
+    {const p=piece(-2.4,F3,-2.6);p.b(.5,.7,.5,WD,0,.35,0);col(-2.4,-2.6,.35,F3,.8);const gl=new THREE.Mesh(new THREE.SphereGeometry(.17,12,9),m(0x4a7aa8));gl.position.set(0,.82,0);p.q.add(gl);p.c(.02,.02,.4,0xc9a050,0,.85,0,6).rotation.z=.4;}
+    bed(4.6,F3,1.6,S.cloth,true);crate(1.0,F3,3.9,.7,.3);crate(1.7,F3,4.0,.55,-.2);chest(-1.2,F3,HD-.4,Math.PI,WD2);rug(-2.6,F3,1.4,2.2,2.6,S.rug);
+    winPane(-HW+.01,F3,-1.2,Math.PI/2);winPane(-3.2,F3,HD-.01,Math.PI);lamp(-2.4,F3+FH-.75,1.0);}
+  /* 지하: 술통·포도주 시렁·궤짝·자루 */
+  if(S.base){for(const z of [-3.6,-2.8,-2.0,-1.2])barrel(-HW+.45,0,z,.85);barrel(-HW+.45,0,-.4,.85);barrel(-HW+1.15,0,-3.6,.85);
+    {const p=piece(-2.4,0,-HD+.3);p.b(2.0,1.8,.04,WD2,0,.9,-.2);for(let k=0;k<=4;k++)p.b(.05,1.8,.4,WD,-1+k*.5,.9,0);for(let r2=0;r2<4;r2++){p.b(2.0,.04,.4,WD,0,.2+r2*.45,0);for(let k=0;k<4;k++)for(let j=0;j<2;j++)p.c(.045,.045,.06,[0x3a1a20,0x2a3a1a][(k+j+r2)%2],-.87+k*.5+j*.24,.3+r2*.45,.18,6).rotation.x=Math.PI/2;}
+      col(-2.9,-HD+.3,.45,0,1.8);col(-1.9,-HD+.3,.45,0,1.8);}
+    crate(-1.2,0,2.6,.75,.2);crate(-1.3,0,3.6,.6,-.3);crate(-1.2,.75,2.6,.5,.6);sack(-2.4,0,3.9);sack(-2.9,0,3.8);sack(-2.6,0,3.2);
+    shelfWall(-HW+.05,0,2.6,Math.PI/2,1.6);{const p=piece(-HW+.05,0,2.6,Math.PI/2);p.b(1.6,.05,.3,WD,0,1.1,.15);for(let k=0;k<4;k++)p.c(.09,.11,.22,[0xc8a868,0xb0603a,0x9a8a6a,0xc8a868][k],-.6+k*.4,1.24,.15,8);}
+    {const L=new THREE.PointLight(0xffc880,.75,9,1.8);L.position.set(-2.0,2.3,0);g.add(L);C(.012,.012,.6,IRON,-2.0,2.95,0,4);const ln=B(.18,.26,.18,m(0xffd080,{emissive:0xffb040,emissiveIntensity:1.5}),-2.0,2.55,0);B(.24,.04,.24,IRON,-2.0,2.7,0);}}
+}
+/* 매 프레임: 집 안이면 집을 보이고 벽난로 불빛을 흔든다. 처음 들어오면 '새 집' 퀘스트가 끝난다 */
+function myHomeTick(t){if(!player)return;if(P&&P.mq==='home100'&&!P.myHome)myHomeAssign();
+  /* 문 자리는 따로 기억한다: 전에는 다른 곳(지도·포탈 검사)이 먼저 집을 찾아 두면 문을 옮기지 않아, 다시 접속한 뒤 집에 못 들어갔다 */
+  {const key=P&&P.myHome?P.myHome.n+':'+P.myHome.x+':'+P.myHome.z:null;if(MYH.doorIn&&(MYH.doorIn.key!==key||(myHomeRec()&&MYH.built!==MYH.rec.n+':'+myHomeName())))myHomeDoorSync();}
+  const inH=OR.inMyHome(player.position.x,player.position.z);if(!MYH.g&&inH)myHomeBuild(null,'none');if(!MYH.g)return;
+  if(MYH.g.visible!==inH)MYH.g.visible=inH;if(inH)for(const L of MYH.fires)L.intensity=1.3+Math.sin(t*9.3)*.12+Math.sin(t*23.1)*.08;
+  if(inH&&P&&P.mq==='home100'&&mode==='world'&&!warping){mqComplete('home100');sfx('quest');toast(`오늘부터 여기가 ${myHomeName()}이다`);log('아늑한 집이다. 위층 침대에서 쉬어 갈 수도 있다.','sys');}}
 /* 지도: 배정된 집 자리에 집 그림 (엑시즈 지도·미니맵) */
 function myHomeMapMark(c,X,Z,f,I,lab){const r=myHomeRec();if(!r||!I||I.id!=='marcus')return;const x=X(r.x),y=Z(r.z);f=f||1;
   c.save();c.translate(x,y);c.scale(f,f);c.fillStyle='#f3cf6a';c.strokeStyle='#2a1c10';c.lineWidth=2;
@@ -21576,8 +21664,8 @@ function myHomeMapMark(c,X,Z,f,I,lab){const r=myHomeRec();if(!r||!I||I.id!=='mar
 /* 집 안 평면도 (미니맵·큰 지도) */
 function drawMyHomePlan(c,X,Z,sc){const T=OR.MYHOME;c.fillStyle='#211b14';c.fillRect(-9999,-9999,99999,99999);
   c.fillStyle='#8a6a48';c.fillRect(X(T.x-T.hw),Z(T.z-T.hd),T.hw*2*sc,T.hd*2*sc);c.strokeStyle='#e0d4bc';c.lineWidth=Math.max(2,.35*sc);c.strokeRect(X(T.x-T.hw),Z(T.z-T.hd),T.hw*2*sc,T.hd*2*sc);
-  c.fillStyle='#5a4030';c.fillRect(X(T.x+T.hw-1.8),Z(T.z-4.5),1.6*sc,3*sc);c.fillRect(X(T.x-3.3),Z(T.z-.9),1.4*sc,1.4*sc);c.fillStyle='#c4502a';c.fillRect(X(T.x+T.hw-.7),Z(T.z+.5),.7*sc,1.8*sc);
-  c.fillStyle='#d4ae63';c.fillRect(X(T.x-1.9-.65),Z(T.z+T.hd)-1,1.3*sc,Math.max(3,.35*sc));}
+  c.fillStyle='#5a4030';c.fillRect(X(T.x-.2),Z(T.z-T.hd+.05),5.65*sc,3.6*sc);c.strokeStyle='#3a2a1c';c.lineWidth=1;for(let k=0;k<=14;k++){const x=X(T.x-.2+k*5.65/14);c.beginPath();c.moveTo(x,Z(T.z-T.hd+.05));c.lineTo(x,Z(T.z-T.hd+3.65));c.stroke();}   /* 계단 */
+  c.fillStyle='#d4ae63';c.fillRect(X(T.x-3.4-.65),Z(T.z+T.hd)-1,1.3*sc,Math.max(3,.35*sc));}
 /* 버키: 첫 만남 대사 뒤 '새 집' 퀘스트. 그 퀘스트 동안 다시 말을 걸면 집 이야기를 해 준다 */
 function mqBuckyHome(n){n.mqLock=true;
   showPages(['집은 찾아가 봤어? 시내 지도를 열면 네 집 자리에 금빛 집 그림이 있을 거야.','서두를 것 없어. 엑시즈는 넓으니까 구경하면서 천천히 가 봐.'],0,last=>{n.mqLock=false;npcEndLine(last);});}
