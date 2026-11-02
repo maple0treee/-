@@ -17639,7 +17639,8 @@ function fireProj(o){
     if(d>.5){const disc=v*v*v*v-G*(G*d*d+2*h*v*v),th=disc>=0?Math.atan((v*v-Math.sqrt(disc))/(G*d)):Math.PI/4,ux=hx/d,uz=hz/d;
       let yaw0=0;if(o.yawOff){const a=o.yawOff,c=Math.cos(a),s=Math.sin(a);yaw0=1;const nx=ux*c+uz*s,nz=-ux*s+uz*c;dir.set(nx*Math.cos(th),Math.sin(th),nz*Math.cos(th));}
       if(!yaw0)dir.set(ux*Math.cos(th),Math.sin(th),uz*Math.cos(th));dir.normalize();o.life=Math.max(o.life||1.3,d/(v*Math.cos(th))+.25);}}
-  if(!o.visual)netFx({k:'p',x:start.x,y:start.y,z:start.z,dx:dir.x,dy:dir.y,dz:dir.z,sp:o.speed,s:o.size,c:o.color,g:o.g,...(o.rim!=null?{r:o.rim}:{}),...(o.arrow?{a:1}:{})});
+  const arm=o.arm!==undefined?o.arm:start.distanceTo(camera.position)<1.6?camArm(start,dir):0;   /* 3인칭 카메라에서 쏘면 내 몸을 지나기 전까지는 벽을 보지 않는다 (카메라가 내 뒤 나무·벽에 걸쳐 있어도 바로 꺼지지 않게) */
+  if(!o.visual)netFx({k:'p',x:start.x,y:start.y,z:start.z,dx:dir.x,dy:dir.y,dz:dir.z,sp:o.speed,s:o.size,c:o.color,g:o.g,...(o.rim!=null?{r:o.rim}:{}),...(o.arrow?{a:1}:{}),...(arm>.05?{w:arm}:{})});
   const rim=o.rim!=null?o.rim:o.color;
   const m=new THREE.Mesh(new THREE.SphereGeometry(1,10,8),new THREE.MeshBasicMaterial({color:rim,transparent:true,opacity:o.rim!=null?.4:.95,blending:THREE.AdditiveBlending,depthWrite:false}));
   if(o.size>=.18&&!o.star){const core=new THREE.Mesh(new THREE.SphereGeometry(o.rim!=null?.5:.62,12,10),new THREE.MeshBasicMaterial({color:o.color}));m.add(core);
@@ -17654,7 +17655,7 @@ function fireProj(o){
     const hd=new THREE.Mesh(new THREE.SphereGeometry(.045,8,6),new THREE.MeshBasicMaterial({color:tc.clone().lerp(new THREE.Color(1,1,1),.5),transparent:true,opacity:.9,blending:THREE.AdditiveBlending,depthWrite:false}));hd.position.z=.42;m.add(hd);}   // 활: 빛나는 구슬 대신 진짜 화살
   else m.scale.set(o.size,o.size,o.size*(o.size<.16?6:1.6));
   m.position.copy(start);m.lookAt(start.clone().add(dir));scene.add(m);
-  projs.push({m,vel:dir.multiplyScalar(o.speed),life:o.life||1.3,o,hit:new Set()});
+  projs.push({m,vel:dir.multiplyScalar(o.speed),life:o.life||1.3,o,hit:new Set(),arm,trav:0});
 }
 function endProj(p,i){if(p.o.onEnd){const cb=p.o.onEnd;p.o.onEnd=null;cb(p.m.position.clone(),p);}
   {const big=p.o.size>=.18&&!p.o.star;VFX.burst(p.m.position,p.o.rim!=null?p.o.rim:p.o.color,big?18:p.o.star?5:7,big?4:p.o.star?1.6:2.5,p.o.star?.3:.45,{mix:0xffffff,glow:!p.o.star});}   /* 수리검은 맞은 자리에 작은 불꽃만 */
@@ -17663,8 +17664,8 @@ function endProj(p,i){if(p.o.onEnd){const cb=p.o.onEnd;p.o.onEnd=null;cb(p.m.pos
   scene.remove(p.m);p.m.traverse(o=>{if(o.userData.keep)return;if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});projs.splice(i,1);
 }
 // 화면 가운데 조준선에 가장 가까운 적 하나 (마법사 기본 공격)
-function aimTarget(maxD=30,cosMin=.965){const o=camera.position,d=camDir();let best=null,bc=cosMin;
-  for(const m of alive()){const c=mCenter(m),v=c.clone().sub(o),l=v.length();if(l>maxD||l<.5)continue;const k=v.dot(d)/l;if(k>bc){bc=k;best=m;}}return best;}
+function aimTarget(maxD=30,cosMin=.965){const o=camera.position,d=camDir(),arm=camArm(o,d);let best=null,bc=cosMin;
+  for(const m of alive()){const c=mCenter(m),v=c.clone().sub(o),l=v.length();if(l>maxD||l<.5)continue;const k=v.dot(d)/l;if(k>bc&&losClear(o,c,arm)){bc=k;best=m;}}return best;}   /* 벽 너머 적은 고르지 않는다 */
 // 폭발마법-근접: 뛰어오른 꼭대기에서 있던 자리를 향해 마법을 쏘고, 떨어진 곳에서 터진다
 function lblastFire(){const L=P.lblast;L.fired=true;const S=L.S,R=S.radius,mul=S.mult*L.pw,o2=L.opt;
   if(mode!=='world'||P.hp<=0){P.lblast=null;return;}
@@ -17707,6 +17708,25 @@ function xtrapTick(dt){for(let i=XTRAPS.length-1;i>=0;i--){const T=XTRAPS[i];T.t
 function trapMark(m,sec){if(!m.trapG){const g=new THREE.Group();const a=new THREE.Mesh(new THREE.ConeGeometry(.16,.32,4),new THREE.MeshBasicMaterial({color:0xffb030}));a.rotation.x=Math.PI;g.add(a);
     const r=new THREE.Mesh(new THREE.TorusGeometry(.22,.03,6,18),new THREE.MeshBasicMaterial({color:0xc9a46a}));r.position.y=.25;g.add(r);m.trapG=g;scene.add(g);}}
 const _projPrev=new THREE.Vector3(),_sdA=new THREE.Vector3(),_sdB=new THREE.Vector3();
+/* 투사체를 막는 것: 집·성벽·담·나무·바위·가구 같은 부딪힘(사람은 빼고), 지하실·던전·튀르팽의 집 벽과 천장.
+   전에는 '폭발 화살' 같은 몇 개만 나무·벽을 보고 나머지는 땅만 봐서, 일반 공격과 스킬 투사체가 벽을 그냥 지나갔다 */
+function projWall(x,y,z){
+  for(const c of colNear(x,z,.6)){if(c.npc||!(c.r>0))continue;const dx=x-c.x,dz=z-c.z,_r=c.r+.08;if(dx>_r||dx<-_r||dz>_r||dz<-_r)continue;
+    if(c.y0!==undefined){if(y<c.y0||y>c.y1)continue;}else if(y>heightAt(c.x,c.z)+(c.h||7))continue;
+    if(c.box){const lx=dx*c.cs-dz*c.sn,lz=dx*c.sn+dz*c.cs;if(Math.abs(lx)<c.hw+.08&&Math.abs(lz)<c.hd+.08)return true;continue;}
+    if(dx*dx+dz*dz<_r*_r)return true;}
+  if(x<800&&(z>300||z<-300)){const q={x,z};OR.worldClamp(q,.05);if(Math.abs(q.x-x)+Math.abs(q.z-z)>.02)return true;   /* 둘레가 벽으로 막힌 곳: 걸어 다닐 수 있는 곳 밖이면 벽 속이다 */
+    const c=hallCeil(x,z);if(c!=null&&y>c-.05)return true;if(OR.inTHouse(x,z)&&y>OR.THOUSE.rh)return true;}
+  return false;}
+/* 카메라(start)에서 dir로 날아갈 때 내 몸 옆을 지날 때까지의 거리 */
+function camArm(start,dir){if(!player)return 0;const hl=dir.x*dir.x+dir.z*dir.z;if(hl<.04)return 0;return Math.max(0,Math.min(12,((player.position.x-start.x)*dir.x+(player.position.z-start.z)*dir.z)/hl));}
+/* a에서 b까지 가는 길이 벽·땅에 막히는가. 막히면 막히기 직전 자리를 out에 넣고 true (arm: 처음 이만큼은 벽을 보지 않는다) */
+const _swQ=new THREE.Vector3();
+function sweepWall(a,b,arm,trav,out){const L=a.distanceTo(b),n=Math.max(1,Math.ceil(L/.25));let px=a.x,py=a.y,pz=a.z;
+  for(let k=1;k<=n;k++){const t=k/n;_swQ.lerpVectors(a,b,t);const x=_swQ.x,y=_swQ.y,z=_swQ.z;
+    if(y<heightAt(x,z)||(trav+L*t>=arm&&projWall(x,y,z))){if(out)out.set(px,py,pz);return true;}px=x;py=y;pz=z;}
+  return false;}
+function losClear(a,b,arm=0){return !sweepWall(a,b,arm,0,null);}
 function segDist3(a,b,c){_sdA.subVectors(b,a);const L=_sdA.lengthSq();if(L<1e-9)return a.distanceTo(c);const t=Math.max(0,Math.min(1,_sdB.subVectors(c,a).dot(_sdA)/L));return _sdB.copy(a).addScaledVector(_sdA,t).distanceTo(c);}
 function updateProjs(dt){
   for(let i=projs.length-1;i>=0;i--){
@@ -17715,9 +17735,10 @@ function updateProjs(dt){
     if(!p.o.arrow&&!p.o.star&&!p.o.dagger){const q=p.m.position,big=p.o.size>=.18;   /* 수리검·단검은 빛 구슬 꼬리 대신 제 모양과 옅은 꼬리만 */ p.trailT=(p.trailT||0)+dt;if(p.trailT>(big?.016:.03)){p.trailT=0;VFX.emit(big&&(p.o.rim==null||(p.tk=(p.tk||0)+1)%4===0)?1:0,q.x,q.y,q.z,(Math.random()-.5)*.6,(Math.random()-.5)*.6+(big?.4:0),(Math.random()-.5)*.6,p.o.rim!=null?p.o.trailC||(p.o.trailC=new THREE.Color(p.o.rim).multiplyScalar(.55).getHex()):p.o.color,big?.32:.22,0,2);
       if(big)VFX.emit(0,q.x,q.y,q.z,(Math.random()-.5)*2,(Math.random()-.5)*2,(Math.random()-.5)*2,p.o.rim!=null?p.o.trailC:0xffffff,.25,0,3);}}
     const _pv=_projPrev.copy(p.m.position);p.m.position.addScaledVector(p.vel,dt);p.life-=dt;if(p.o.spinner){if(p.o.spinX)p.o.spinner.rotation.x+=dt*24;else p.o.spinner.rotation.y+=dt*28;}
-    if(p.life<=0||p.m.position.y<heightAt(p.m.position.x,p.m.position.z)){if(p.o.visual){scene.remove(p.m);p.m.traverse(o=>{if(o.userData.keep)return;if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});projs.splice(i,1);}else endProj(p,i);continue;}
-    if(p.o.visual)continue;
-    if(p.o.solid){const q=p.m.position,t={x:q.x,y:q.y,z:q.z};pushOutFly(t,.15);if(Math.abs(t.x-q.x)+Math.abs(t.z-q.z)>1e-4){endProj(p,i);continue;}}   /* 나무·바위·벽에 맞으면 */
+    /* 한 프레임 동안 지나간 길을 0.25m씩 나눠 땅·벽을 본다 (빠른 투사체가 얇은 벽을 건너뛰지 않게). 막히면 벽 바로 앞에 멈춘다 */
+    const blocked=sweepWall(_pv,p.m.position,p.arm,p.trav,p.m.position);p.trav+=_pv.distanceTo(p.m.position);
+    const stop=blocked||p.life<=0;
+    if(p.o.visual){if(stop){scene.remove(p.m);p.m.traverse(o=>{if(o.userData.keep)return;if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});projs.splice(i,1);}continue;}
     let ended=false;
     for(const m of alive()){
       if(p.hit.has(m))continue;if(p.o.target&&m!==p.o.target)continue;
@@ -17727,14 +17748,17 @@ function updateProjs(dt){
       }
     }
     if(ended)continue;
+    if(stop)endProj(p,i);   /* 벽·땅에 맞았거나 다 날아갔으면 (벽 앞까지 오는 동안 지나친 적은 위에서 먼저 맞힌다) */
   }
 }
 /* 포물선 투사체가 노릴 곳: 조준선 가까이의 적, 없으면 조준선이 닿는 땅·벽, 그것도 없으면 사거리 끝 */
 function arcAim(start,range){const m=aimTarget(Math.min(range,45),.97);if(m)return mCenter(m);
-  const dir=camDir(),p=camera.position.clone();for(let t=0;t<range;t+=.5){p.addScaledVector(dir,.5);if(p.y<floorAt(p.x,p.z,p.y+.5))return p;}return p;}
+  const dir=camDir(),p=camera.position.clone(),arm=camArm(p,dir);for(let t=0;t<range;t+=.5){p.addScaledVector(dir,.5);if(p.y<floorAt(p.x,p.z,p.y+.5))return p;if(t+.5>=arm&&projWall(p.x,p.y,p.z))return p.addScaledVector(dir,-.4);}return p;}
 function aimPoint(max=24){
   const dir=camDir(),p=camera.position.clone();if(P&&P.fly){dir.applyAxisAngle(new THREE.Vector3(0,1,0),(Math.random()-.5)*.3);dir.y+=(Math.random()-.5)*.2;dir.normalize();}
-  for(let t=0;t<max;t+=.5){p.addScaledVector(dir,.5);if(p.y<heightAt(p.x,p.z))return p;}
+  const arm=camArm(p,dir);
+  for(let t=0;t<max;t+=.5){p.addScaledVector(dir,.5);if(p.y<heightAt(p.x,p.z))return p;
+    if(t+.5>=arm&&projWall(p.x,p.y,p.z)){p.addScaledVector(dir,-.6);p.y=heightAt(p.x,p.z);return p;}}   /* 벽에 닿으면 벽 앞 바닥 (벽 너머에 떨어지지 않게) */
   p.y=heightAt(p.x,p.z);return p;
 }
 // 마법사 기본 구체: 처음엔 하얀색, 전직하면 전직 색
@@ -18170,7 +18194,7 @@ function rayTick(dt){rayGaugeTick(dt);const Rr=P.ray;if(!Rr)return;const S=Rr.S;
   const held=Rr.i===1||Rr.i===2?Rr.t<1.5:!!skHeld[Rr.i];
   if(!held||mode!=='world'||P.hp<=0||myMoId!=='holyray'||P.rayG<=0){if(P.rayG<=0)P.rayHot=true;rayEnd();return;}
   P.rayG=Math.max(0,P.rayG-25*dt);swingT=Math.min(swingT,.8);
-  const o=staffTip(),dir=aimPoint(S.range).sub(o).normalize();let end=S.range;const q=new THREE.Vector3();for(let d=1;d<S.range;d+=.5){q.copy(o).addScaledVector(dir,d);if(q.y<heightAt(q.x,q.z)){end=d;break;}}
+  const o=staffTip(),dir=aimPoint(S.range).sub(o).normalize();let end=S.range;const q=new THREE.Vector3();for(let d=1;d<S.range;d+=.5){q.copy(o).addScaledVector(dir,d);if(q.y<heightAt(q.x,q.z)||projWall(q.x,q.y,q.z)){end=d;break;}}
   const e=o.clone().addScaledVector(dir,end);
   if(!Rr.g){const g=new THREE.Group();const mk=(r,c,op)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,1,10,1,true),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:op,depthWrite:false,side:THREE.DoubleSide}));m.rotation.x=Math.PI/2;m.position.z=.5;g.add(m);return m;};
     Rr.core=mk(.045,0xffffff,.9);Rr.glow=mk(.13,0xffe8a0,.45);Rr.glow2=mk(.22,0xffd060,.12);scene.add(g);Rr.g=g;}
@@ -18891,7 +18915,7 @@ function playRemoteFx(d){
   const col=Math.floor(n(d.c,0,0xffffff,0xffffff));
   if(d.k==='p'){sfx(d.a?'bw_fire':n(d.g,0,20)>0?'bow':'cast',{x:n(d.x,-WB,WB),z:n(d.z,-WB,WB)},.45);
     const dir=new THREE.Vector3(n(d.dx,-1,1),n(d.dy,-1,1),n(d.dz,-1,1));if(dir.lengthSq()<.01)return;
-    fireProj({visual:true,start:new THREE.Vector3(n(d.x,-WB,WB),n(d.y,-50,200),n(d.z,-WB,WB)),dir,speed:n(d.sp,5,80,30),size:n(d.s,.05,.6,.2),color:col,g:n(d.g,0,20),...(d.r!=null?{rim:n(d.r,0,0xffffff,0)}:{}),...(d.a?{arrow:true}:{})});
+    fireProj({visual:true,start:new THREE.Vector3(n(d.x,-WB,WB),n(d.y,-50,200),n(d.z,-WB,WB)),dir,speed:n(d.sp,5,80,30),size:n(d.s,.05,.6,.2),color:col,g:n(d.g,0,20),...(d.r!=null?{rim:n(d.r,0,0xffffff,0)}:{}),...(d.a?{arrow:true}:{}),arm:n(d.w,0,12,0)});
   }else if(d.k==='r'){spawnRing(col,new THREE.Vector3(n(d.x,-WB,WB),0,n(d.z,-WB,WB)),n(d.s,.5,8,2),n(d.d,.1,2,.5));}
   else if(d.k==='l'){addLightZone(new THREE.Vector3(n(d.x,-WB,WB),0,n(d.z,-WB,WB)),n(d.s,1,12,5),n(d.d,1,10,6),n(d.g,100,200,115)/100,false);}
   else{spawnFx(col,new THREE.Vector3(n(d.x,-WB,WB),n(d.y,-50,200),n(d.z,-WB,WB)),n(d.s,.2,6,1),n(d.d,.1,2,.45));}
