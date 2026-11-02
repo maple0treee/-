@@ -6138,10 +6138,11 @@ function makeStickPlayer(job,gear){
       for(let k=0;k<6;k++){const a=k/6*Math.PI*2;const sp=new THREE.Mesh(new THREE.ConeGeometry(.035,.1,4),gold);sp.position.set(Math.cos(a)*.2,.24,Math.sin(a)*.2);head.add(sp);}}
     else if(G.helm===0){const cap=new THREE.Mesh(new THREE.SphereGeometry(.235,14,8,0,Math.PI*2,0,Math.PI*.42),mat(0x6a4426,{flatShading:false}));cap.position.y=.02;head.add(cap);}
     else{const hm=mat(new THREE.Color(0x9aa2ac).lerp(c,.35).getHex(),{metalness:.6,roughness:.35,flatShading:false});
-      const cap=new THREE.Mesh(new THREE.SphereGeometry(.24,16,10,0,Math.PI*2,0,Math.PI*.5),hm);cap.position.y=.0;head.add(cap);
-      const rim=new THREE.Mesh(new THREE.TorusGeometry(.235,.018,6,20),hm);rim.rotation.x=Math.PI/2;head.add(rim);
-      const nose=new THREE.Mesh(new THREE.BoxGeometry(.03,.14,.03),hm);nose.position.set(0,-.02,.23);head.add(nose);
-      if(G.helm>=4){const crest=new THREE.Mesh(new THREE.BoxGeometry(.03,.1,.32),mat(c.getHex(),{emissive:G.helm>=6?c.getHex():0,emissiveIntensity:.4}));crest.position.y=.25;head.add(crest);}}}
+      /* 눈(높이 .03, 위끝 .058)이 가리지 않게 투구 아래끝을 눈썹 위(.07)로 올려 쓰고, 코가리개만 눈 사이로 내려온다 */
+      const HY=.07;const cap=new THREE.Mesh(new THREE.SphereGeometry(.24,16,10,0,Math.PI*2,0,Math.PI*.5),hm);cap.position.y=HY;head.add(cap);
+      const rim=new THREE.Mesh(new THREE.TorusGeometry(.235,.018,6,20),hm);rim.position.y=HY;rim.rotation.x=Math.PI/2;head.add(rim);
+      const nose=new THREE.Mesh(new THREE.BoxGeometry(.03,.13,.03),hm);nose.position.set(0,.02,.215);head.add(nose);
+      if(G.helm>=4){const crest=new THREE.Mesh(new THREE.BoxGeometry(.03,.1,.32),mat(c.getHex(),{emissive:G.helm>=6?c.getHex():0,emissiveIntensity:.4}));crest.position.y=.25+HY;head.add(crest);}}}
   if(G.armor>=0){const c=tierCol(G.armor);
     const am=G.armor===0?mat(0x6a4426,{flatShading:false}):mat(new THREE.Color(0x8a929c).lerp(c,.4).getHex(),{metalness:.55,roughness:.35,flatShading:false});
     const plate=new THREE.Mesh(new THREE.CylinderGeometry(.205,.18,.42,16),am);plate.position.y=.36;upper.add(plate);
@@ -10668,7 +10669,7 @@ function makeCitizens(cx,cz){
   const inWallFree=(mx,my)=>PL.wallDist(mx,my)<-6&&PL.waterDepth(mx,my)<=0&&PL.hillH(mx,my)<.3;
   const free=(mx,my,allow)=>PL.wallDist(mx,my)<-6&&PL.waterDepth(mx,my)<=0&&PL.riverDist(mx,my)>MARCUS_RIVER_W/2+2&&!nearHouse(mx,my,1.2)&&!big(mx,my,1,allow)&&PL.hillH(mx,my)<.3;
   /* 한 명 추가. k: 'pl'(길 왕복) 'circ'(원) 'st'(제자리) */
-  const add=o=>{o.type=ti(o.id);delete o.id;o.ph=rnd()*6.28;o.off=rnd()*1000;o.sc=rr(.94,1.08);o.pause=o.pause??(1.5+rnd()*3);o.mode=o.mode||'walk';if(o.mode==='stand'&&rnd()<.7)o.mode=pick(['cross','hips','think','drink','read','point','stretch','pray','shrug','crouch','talk','wave']);o.sp=o.sp??(1.05+rnd()*.5);o.I=null;o.d=1e9;L.push(o);
+  const add=o=>{o.mode=citFitMode(o.id,o.mode);if(o.sch)for(const q of o.sch)if(q.mode)q.mode=citFitMode(o.id,q.mode);o.type=ti(o.id);delete o.id;o.ph=rnd()*6.28;o.off=rnd()*1000;o.sc=rr(.94,1.08);o.pause=o.pause??(1.5+rnd()*3);o.mode=o.mode||'walk';if(o.mode==='stand'&&rnd()<.7)o.mode=pick(['cross','hips','think','drink','read','point','stretch','pray','shrug','crouch','talk','wave']);o.sp=o.sp??(1.05+rnd()*.5);o.I=null;o.d=1e9;L.push(o);
     if(typeof chatterAdd==='function'){const tp=CITM.ids[o.type]||'';o.chat=chatterAdd({kind:chatKind(tp),seed:L.length,pos:()=>{const q=o.k==='st'?o:o.q;return q?{x:q.x,y:citGround(q.x,q.z)+(o.y||0),z:q.z}:null;},visible:()=>!!o.I,look:(typeof citStickLook==='function'?citStickLook(tp):{}),pose:'idle',cit:o});
       /* 성격에 따라 걸음 빠르기·쉬는 시간이 다르다 (길 위 일정도 그에 맞춰 다시 잰다) */
       const pp=o.pp=CHATTER[o.chat].pp;if(pp){o.sp*=pp.sp;o.pause*=pp.pause;
@@ -10934,6 +10935,10 @@ function citStickInst(type){const pool=CROWD.spool[type]||(CROWD.spool[type]=[])
 function citStickMake(type){
   const g=makeNpcStick(citStickLook(CITM.ids[type]||'c'+type));if(g.userData.marker){g.remove(g.userData.marker);g.userData.marker=null;}stickSkin(g,'cit:'+type);
   g.traverse(o=>{if(o.isMesh)o.castShadow=false;});return {g,stick:true,id:type,sh:false};}
+/* 일하는 자세는 그 일을 하는 사람만: 하녀가 괭이질하거나 빨래꾼이 망치질하지 않게 (안 맞으면 그냥 서 있고, 서 있는 자세는 성격이 고른다) */
+const CIT_WORK_FIT={hoe:/farmer|shepherd|stablehand|worker|c_wife/,reap:/farmer|shepherd|stablehand|worker|c_wife/,
+  hammer:/smith|cooper|mason|carpenter|worker|dock|squire|merc|knight|archer|guard|hunter/};
+function citFitMode(id,mode){const re=CIT_WORK_FIT[mode];return re&&!re.test(id||'')?'stand':mode;}
 const CIT_STICK_POSE={stand:'idle',walk:'idle',talk:'talk',lean:'cross',sit:'sitb',guard:'guard',hammer:'hammer',hoe:'hoe',reap:'hoe',sweep:'sweep',carry:'carry',shoulder:'carry',wave:'wave',cross:'cross',hips:'hips',think:'think',drink:'drink',read:'read',point:'point',stretch:'stretch',pray:'pray',shrug:'shrug',crouch:'crouch',behind:'behind',clap:'clap',play:'play',dance:'dance',wavebig:'wavebig',peek:'peek',fixhair:'fixhair',kick:'kick',shakefist:'shakefist',brush:'brush',yawn:'yawn',checkhand:'checkhand',pockets:'pockets',lookfar:'lookfar',laugh:'laugh',beard:'beard',hush:'hush',bow:'bow',flex:'flex',scold:'scold',jump:'jump',cry:'cry',kneel:'kneel',coins:'coins',whisper:'whisper',shadowbox:'shadowbox',stomp:'stomp',eat:'eat',belly:'belly',back:'back'};
 /* 먼 사람: 막대 인형 하나를 통째로 합친 모양을 수천 개 한 번에 그린다 (옷 색만 사람마다) */
 function crowdInitSticks(){const cap=CROWD.cap,G=new THREE.Group();
@@ -11286,6 +11291,8 @@ function _marcusLife(cx,cz){
   // 술래잡기 하는 아이들: 큰 작은광장
   {const p=pz[4]||pz[0];if(p){const [x0,z0,r]=p;const kids=[];for(let k=0;k<3;k++){const g=npc({robe:pick([0xd84a3a,0x3a8ad8,0xe8c040]),robe2:0xf0e8d8,hat:'hair',hatC:pick([0x3a2a1a,0xb07a3a]),small:1},'idle',x0,z0,0);kids.push({g,a:k*2.1,ph:rnd()*9});}
       addAct({kids,x0,z0,R:Math.max(2.5,r-3.5)});}}
+  /* 달아나는 고양이가 집·성벽·물로 뛰어들지 않게: 앞이 막혔는지 본다 */
+  LIFE.catBlocked=(x,z)=>{const lx=x-cx,lz=z-cz;return PL.wallDist(lx,lz)>-3||PL.waterDepth(lx,lz)>0||PL.riverDist(lx,lz)<MARCUS_RIVER_W/2+1||blocked(x,z,.22);};
   LIFE.cx=cx;LIFE.cz=cz;LIFE.ready=true;}
 /* 매 프레임 */
 const _lv=new THREE.Vector3(),_lq=new THREE.Quaternion(),_ls=new THREE.Vector3(1,1,1),_lm=new THREE.Matrix4(),_le=new THREE.Euler(),_lY=new THREE.Vector3(0,1,0);
@@ -11309,7 +11316,10 @@ function lifeTick(dt,p,inM){if(!LIFE.ready)return;const G=LIFE.g;inM=inM&&Math.h
   /* 고양이 */
   for(const C of LIFE.cats){const vis=!far(C.x,C.z,45);if(C.D.visible!==vis)C.D.visible=vis;if(!vis)continue;const dp=Math.hypot(p.x-C.x,p.z-C.z);
     const running=C.run>0;if(C.R.visible!==running){C.R.visible=running;C.S.visible=!running;C.H.position.set(0,running?.3:.36,running?.27:.09);C.H.rotation.set(0,0,0);}
-    if(running){C.run-=dt;const a=C.D.rotation.y;C.x+=Math.sin(a)*4.5*dt;C.z+=Math.cos(a)*4.5*dt;const g=t*16;C.D.position.set(C.x,heightAt(C.x,C.z)+Math.abs(Math.sin(g))*.05,C.z);
+    if(running){C.run-=dt;const st=4.5*dt,ok=b=>!LIFE.catBlocked(C.x+Math.sin(b)*(st+.35),C.z+Math.cos(b)*(st+.35));let a=C.D.rotation.y;
+      if(!ok(a)){/* 앞이 막히면 덜 꺾이는 쪽부터 비켜 갈 길을 찾고, 없으면 그 자리에 멈춘다 */let b2=null;for(const da of [.45,-.45,.9,-.9,1.4,-1.4,2,-2,2.7,-2.7])if(ok(a+da)){b2=a+da;break;}
+        if(b2===null)C.run=0;else{a=b2;C.D.rotation.y=a;}}
+      if(C.run>0){C.x+=Math.sin(a)*st;C.z+=Math.cos(a)*st;}const g=t*16;C.D.position.set(C.x,heightAt(C.x,C.z)+Math.abs(Math.sin(g))*.05,C.z);
       const L=C.legs,s1=Math.sin(g);L[0].rotation.x=s1*.9;L[1].rotation.x=s1*.7;L[2].rotation.x=-s1*.9;L[3].rotation.x=-s1*.7;C.H.rotation.x=Math.sin(g)*.06;   /* 앞다리끼리, 뒷다리끼리 같이 뻗는 뜀박질 */
       if(C.run<=0){C.away=8+Math.random()*8;}}
     else if(C.away>0){C.away-=dt;if(C.away<=0){C.x=C.hx;C.z=C.hz;C.D.position.set(C.x,heightAt(C.x,C.z),C.z);}}
