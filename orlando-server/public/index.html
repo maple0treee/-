@@ -14055,7 +14055,7 @@ function chatDlgFits(D,ppl,area){const lines=chatDlgLines(D);
 function chatPickDlg(list,ppl,area,k){const ok=list.filter(D=>chatDlgFits(D,ppl,area));if(!ok.length)return null;
   const special=ok.filter(D=>D.tags||D.area||D.sv),pool=special.length&&(k%2)?special:ok;return pool[((k%pool.length)+pool.length)%pool.length];}
 /* 한 마디 고르기: 직업 말이 가장 많고, 그 곳의 말·옆 사람에 따른 말·그 사람만의 사정이 섞인다 */
-function chatLineFor(c,ppl,area){if(c.kind==='server')return chatPick(c,CHAT_LINES.server);   /* 서빙 직원은 제 일 이야기만 */
+function chatLineFor(c,ppl,area,want){if(c.kind==='server')return chatPick(c,CHAT_LINES.server);   /* 서빙 직원은 제 일 이야기만 */
 const v=chatVoice(c),r=Math.floor((c.seed||0)*13+(c.n||0)*7)%10,fit=a=>(a||[]).filter(s=>chatFitsArea(s,area)&&chatFitsSpeaker(s,c,false)),fitP=a=>(a||[]).filter(s=>chatFitsArea(s,area)&&chatFitsSpeaker(s,c,true));
   const A=CHAT_AREA[area]||{},X=CHAT_IN_EXIS[area]&&area!=='exis'?CHAT_AREA.exis:{},slot={kid:'k',elder:'e',noble:'n',armed:'m'}[v]||'a';
   let areaL=(A[slot]||[]).concat(X[slot]||[]);if(!areaL.length&&slot!=='k')areaL=(A.a||[]).concat(X.a||[]);
@@ -14069,7 +14069,8 @@ const v=chatVoice(c),r=Math.floor((c.seed||0)*13+(c.n||0)*7)%10,fit=a=>(a||[]).f
   const watch=D.show?fit(citPersonaLines(c,'W').map(s=>s.replace(/\{act\}/g,CHAT_SHOW[D.show]))).concat(fit((CHAT_WATCH[D.show]||{})[sl])):[];
   const doing=D.k==='talk'&&!others.length?[]:fitP((CHAT_DOING[D.k]||{})[sl]),mine=fitP(citPersonaLines(c,'L'));   /* 혼자 서 있으면 '이야기하던 중' 말은 하지 않는다 */
   let line,src='';
-  if(watch.length&&r<5)line=chatPick(c,watch);   /* 구경하는 사람은 구경 이야기를 많이 한다 */
+  if(want==='p'&&mine.length){line=chatPick(c,mine);src='p';}   /* 성격 말을 하기로 정한 차례 (chatterTalk) */
+  else if(watch.length&&r<5)line=chatPick(c,watch);   /* 구경하는 사람은 구경 이야기를 많이 한다 */
   else if(r===9&&!noPers&&c.my){line=c.my;src='p';}   /* 그 사람만의 사정 */
   else if(r===8&&!noPers&&pers.length)line=chatPick(c,pers);
   else if((r===6||r===7)&&mine.length){line=chatPick(c,mine);src='p';}   /* 성격 말 */
@@ -14080,8 +14081,8 @@ const v=chatVoice(c),r=Math.floor((c.seed||0)*13+(c.n||0)*7)%10,fit=a=>(a||[]).f
   else if(mine.length){line=chatPick(c,mine);src='p';}
   else if(doing.length)line=chatPick(c,doing);
   else line=chatPick(c,areaL.length?areaL:sit.length?sit:fit(CHAT_LINES.common).length?fit(CHAT_LINES.common):['안녕하세요.']);
-  /* 말머리: 성격이 말투에 묻어난다 (네 번에 한 번쯤) */
-  if(src!=='p'&&P&&P.pre&&P.pre.length&&line&&!/^[…(]/.test(line)&&citHash(c.seed,c.n||0)%4===0)line=P.pre[citHash(c.seed,7)%P.pre.length]+line;
+  /* 말머리: 성격이 말투에 묻어난다 (두 번에 한 번쯤) */
+  if(src!=='p'&&P&&P.pre&&P.pre.length&&line&&!/^[…(]/.test(line)&&citHash(c.seed,c.n||0)%2===0)line=P.pre[citHash(c.seed,7)%P.pre.length]+line;
   return line;}
 /* 대화를 끝내고 곧 다시 말을 걸면 한동안은 아까 한 말을 그대로 되풀이한다 */
 const CHAT_KEEP=150000;
@@ -14093,7 +14094,8 @@ function chatterTalk(i){const c=CHATTER[i];if(!c||mode!=='world')return;const p=
   if(M&&M.grp&&M.grp.every(k=>grp.includes(k)))grp=M.grp.slice();
   const ppl=grp.map(k=>CHATTER[k]),people=grp.map((gi,k)=>chatPerson(CHATTER[gi],k));
   if(!M){c.n=(c.n||0)+1;const r=Math.floor((c.seed||0)*31+c.n*17)%10,area=chatArea(p);
-    if(r<5&&c.kind!=='server'){const D=chatPickDlg(CHAT_ASK,ppl,area,Math.floor(((c.seed||0)+c.n)*13));if(D)M={type:'ask',D,grp:grp.slice()};}   /* 플레이어에게 묻는다 */
+    if(c.kind!=='server'&&c.kind!=='guild'&&citHash(c.seed,c.n*3+1)%3===0){const t=chatLineFor(c,ppl,area,'p');if(t)M={type:'line',line:t};}   /* 셋에 한 번쯤은 그 사람 성격대로 말한다 */
+    if(!M&&r<5&&c.kind!=='server'){const D=chatPickDlg(CHAT_ASK,ppl,area,Math.floor(((c.seed||0)+c.n)*13));if(D)M={type:'ask',D,grp:grp.slice()};}   /* 플레이어에게 묻는다 */
     if(!M&&grp.length>=2&&r<8&&c.kind!=='server'){const G=CHAT_GROUP.map(d=>Array.isArray(d)?{d}:d);const D=chatPickDlg(G,ppl,area,Math.floor(((c.seed||0)+c.n)*7));if(D)M={type:'group',D,grp:grp.slice()};}
     if(!M)M={type:'line',line:chatLineFor(c,ppl,area)};
     M.until=now+CHAT_KEEP;if(M.type==='group')for(const k of M.grp)CHATTER[k].memo=M;else c.memo=M;}
