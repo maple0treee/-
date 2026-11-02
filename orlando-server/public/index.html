@@ -15710,12 +15710,34 @@ function guildFix(o){const g=gMine();if(!g||!o||!gkOk(o.gk))return;
   if(!$('#gwin').hidden)renderGuild();}
 function guildOnline(){const out=[];for(const [id,o] of others)if(o.gd)out.push([id,o]);return out;}
 function guildPush(g){g=g||gMine();if(!g)return;for(const [id,o] of guildOnline())if(o.gd.id===g.id)dm(id,{k:'gset',g});}
-function guildChanged(){save();publishPresence(true);if(!$('#gwin').hidden)renderGuild();}
+function guildChanged(){save();publishPresence(true);gdirReport();if(!$('#gwin').hidden)renderGuild();}
+/* 모든 길드 목록: 서버가 모든 길드(이름·색·인원·길드장)를 기억하고 접속하면 보내 준다(gdir). 길드원이 아무도 접속하지 않은 길드도 보인다.
+   이 브라우저에도 적어 두었다가, 서버가 다시 켜져 목록을 잊었으면 되돌려 보낸다(gknow). 내 길드는 바뀔 때마다 알린다(gdir).
+   가입 신청은 서버에도 맡겨서(gapp), 길드장이 나중에 접속해도 전해진다. */
+const GDIR_KEY='orlando3d.gdir';let GDIR=new Map(),gdirSent=false;
+function gdirClean(q){if(!q||typeof q!=='object'||typeof q.id!=='string'||!/^[a-z0-9]{1,10}$/.test(q.id)||!guildNameOk(q.name))return null;
+  return {id:q.id,name:q.name,c:GUILD_COLS.includes(q.c)?q.c:GUILD_COLS[0],n:clamp(Math.floor(num(q.n,0)),0,GUILD_MAX),m:typeof q.m==='string'&&q.m?safeName(q.m):'',rv:Math.max(0,Math.floor(num(q.rv,0))),at:num(q.at,0),dis:q.dis?1:0};}
+try{const a=JSON.parse(localStorage.getItem(GDIR_KEY)||'[]');if(Array.isArray(a))for(const q of a){const e=gdirClean(q);if(e)GDIR.set(e.id,e);}}catch(e){}
+function gdirSave(){try{localStorage.setItem(GDIR_KEY,JSON.stringify([...GDIR.values()]));}catch(e){}}
+function onGdir(m){const L=m&&m.d;if(!Array.isArray(L))return;const nm=new Map();for(const q of L){const e=gdirClean(q);if(e)nm.set(e.id,e);}GDIR=nm;gdirSave();if(!$('#gwin').hidden)renderGuild();}
+const gdirOn=()=>!!(window.ORLANDO_WS&&room&&room.connected()&&P&&mode!=='title');
+function gdirReport(dis){if(!gdirOn())return;const g=gMine();if(!g)return;const ms=g.roster.find(m=>m.r==='m');
+  room.emit('gdir',{id:g.id,name:g.name,c:g.c,n:dis?0:g.roster.length,m:ms?ms.n:'',rv:g.rv+(dis?1:0),dis:dis?1:0}).catch(()=>{});}
+/* 접속할 때 한 번: 기억해 둔 목록, 내 길드, 아직 전해지지 않은 가입 신청을 서버에 보낸다 */
+function gdirHello(){if(!gdirOn())return;gdirSent=true;
+  if(GDIR.size)room.emit('gknow',[...GDIR.values()]).catch(()=>{});
+  gdirReport();
+  if(!gMine()&&P.gApply&&!P.gApply.ok)room.emit('gapp',{gid:P.gApply.gid,n:P.name,mk:P.gk}).catch(()=>{});}
+/* 길드 창에 보일 모든 길드: 서버 목록 + 지금 접속한 사람들의 길드 */
+function guildAll(){const all=new Map();
+  for(const e of GDIR.values())if(!e.dis)all.set(e.id,{gd:{id:e.id,name:e.name,c:e.c},tot:e.n,mn:e.m,n:0,m:0});
+  for(const [,o] of guildOnline()){let q=all.get(o.gd.id);if(!q){const e=GDIR.get(o.gd.id);if(e&&e.dis&&e.rv>=o.gd.rv)continue;q={gd:o.gd,tot:0,mn:'',n:0,m:0};all.set(o.gd.id,q);}q.n++;if(o.gd.r==='m')q.m=1;}
+  return [...all.values()].sort((a,b)=>(b.n>0)-(a.n>0)||b.tot-a.tot||a.gd.name.localeCompare(b.gd.name,'ko'));}
 
 function guildCreate(name,c){
   if(gMine()){toast('이미 길드에 있어요');return;}
   name=(name||'').trim();if(!guildNameOk(name)){toast('길드 이름은 2~12자 (한글·영문·숫자)');return;}
-  if(guildOnline().some(([,o])=>o.gd.name===name)){toast('같은 이름의 길드가 있어요');return;}
+  if(guildAll().some(q=>q.gd.name===name)){toast('같은 이름의 길드가 있어요');return;}
   P.guild={id:Math.random().toString(36).slice(2,10).padEnd(8,'0'),name,c:GUILD_COLS.includes(c)?c:GUILD_COLS[0],rv:1,roster:[{n:P.name,r:'m',k:P.gk}]};P.gApply=null;
   log(`길드 「${name}」을(를) 만들었다`,'good');sfx('door');guildChanged();}
 function guildInvite(peer){const g=gMine(),o=others.get(peer);if(!g||!o)return;
@@ -15728,10 +15750,11 @@ function guildRequest(peer){const o=others.get(peer);if(!o||!o.gd)return;guildAp
 function guildApply(gid,gn){if(gMine()){toast('이미 길드에 있어요');return;}if(!guildNameOk(gn))return;
   P.gApply={gid,gn,ok:0,t:Date.now()};save();let n=0;
   for(const [id,o] of guildOnline())if(o.gd.id===gid){o._gReq=1;setTimeout(()=>{o._gReq=0;},30000);dm(id,{k:'greq',gid,n:P.name,mk:P.gk});n++;}
+  if(gdirOn())room.emit('gapp',{gid,n:P.name,mk:P.gk}).catch(()=>{});   /* 길드장이 지금 없어도 서버가 맡아 두었다가 전한다 */
   log(`「${gn}」에 가입 신청서를 냈다. 길드장이 길드홀 2층 에일리에게서 확인하면 들어가게 된다`,'sys');
   if(!guildOnline().some(([,o])=>o.gd.id===gid&&o.gd.r==='m'))toast('길드장이 접속하면 신청서가 전해져요');
   if(!$('#gwin').hidden)renderGuild();}
-function guildApplyCancel(){const a=P.gApply;if(!a)return;for(const [id,o] of guildOnline())if(o.gd.id===a.gid&&o.gd.r==='m')dm(id,{k:'gcan',gid:a.gid,mk:P.gk});
+function guildApplyCancel(){const a=P.gApply;if(!a)return;if(gdirOn())room.emit('gcan',{gid:a.gid,mk:P.gk}).catch(()=>{});for(const [id,o] of guildOnline())if(o.gd.id===a.gid&&o.gd.r==='m')dm(id,{k:'gcan',gid:a.gid,mk:P.gk});
   P.gApply=null;save();log(`「${a.gn}」 가입 신청을 거두었다`,'sys');if(!$('#gwin').hidden)renderGuild();}
 /* 길드장: 신청 받기·거절 */
 function guildAppOk(k){const g=gMine();if(!g||gRank()!=='m'||!P.gApps)return;const a=P.gApps.list.find(q=>q.k===k);if(!a)return;
@@ -15757,7 +15780,7 @@ function guildLeave(){const g=gMine();if(!g)return;const me=gMe();
     if(rest.length){toast('길드장은 먼저 길드장을 넘기거나 길드를 해산해야 해요');return;}}
   for(const [id,o] of guildOnline())if(o.gd.id===g.id)dm(id,{k:'gleave',gid:g.id,n:P.name,mk:P.gk});
   P.guild=null;log(`길드 「${g.name}」에서 나왔다`,'sys');guildChanged();}
-function guildDisband(){const g=gMine();if(!g||gRank()!=='m')return;const gone={...g,roster:[],rv:g.rv+1,dis:1};
+function guildDisband(){const g=gMine();if(!g||gRank()!=='m')return;const gone={...g,roster:[],rv:g.rv+1,dis:1};gdirReport(true);
   for(const [id,o] of guildOnline())if(o.gd.id===g.id)dm(id,{k:'gset',g:gone});P.guild=null;log(`길드 「${g.name}」을(를) 해산했다`,'sys');guildChanged();}
 function guildChat(t){const g=gMine();if(!g){toast('길드가 없어요');return;}logChat(`[길드] ${P.name}`,t,true);
   for(const [id,o] of guildOnline())if(o.gd.id===g.id)dm(id,{k:'gchat',m:t});}
@@ -15827,10 +15850,12 @@ function renderGuild(){const box=$('#gBody');box.innerHTML='';const g=gMine(),me
       list.appendChild(row);}
     box.appendChild(list);};
   /* 지금 접속한 길드들 (join 보기에서는 가입 신청 단추) */
-  const others2=(apply)=>{const seen=new Map();for(const [,o] of guildOnline()){const q=seen.get(o.gd.id)||{gd:o.gd,n:0,m:0};q.n++;if(o.gd.r==='m')q.m=1;seen.set(o.gd.id,q);}
-    if(g)seen.delete(g.id);const d=sec(g?'다른 길드':'지금 접속한 길드');
-    if(!seen.size)d.appendChild(el('p','gNone','—'));
-    for(const q of seen.values()){const row=el('div','gRow on');const cr=el('span','gCrest sm');cr.style.background='#'+q.gd.c;row.append(cr,el('span','gN',q.gd.name),el('small','',`접속 ${q.n}명${q.m?' · 길드장 있음':''}`));
+  /* 모든 길드 (접속한 사람이 있는 길드가 먼저). join 보기에서는 가입 신청 단추 */
+  const others2=(apply)=>{const all=guildAll().filter(q=>!g||q.gd.id!==g.id);const d=sec(g?'다른 길드':'모든 길드');
+    if(!all.length)d.appendChild(el('p','gNone','—'));
+    for(const q of all){const row=el('div','gRow'+(q.n?' on':''));const cr=el('span','gCrest sm');cr.style.background='#'+q.gd.c;
+      const info=[q.tot?`길드원 ${q.tot}명`:'',q.n?`접속 ${q.n}명${q.m?' · 길드장 있음':''}`:'지금 접속한 사람 없음'].filter(Boolean).join(' · ');
+      row.append(cr,el('span','gN',q.gd.name),el('small','',info));
       if(apply){const mine=P.gApply&&P.gApply.gid===q.gd.id;const b=btn(mine?'신청함':'가입 신청',()=>{if(P.gApply&&!mine)askPrompt(`「${P.gApply.gn}」에 낸 신청을 거두고 「${q.gd.name}」에 낼까요?`,'신청','취소',ok=>{if(ok)guildApply(q.gd.id,q.gd.name);});else guildApply(q.gd.id,q.gd.name);},'mini');b.disabled=mine;row.appendChild(b);}
       d.appendChild(row);}};
   if(v==='book'){
@@ -19717,7 +19742,7 @@ function updateOthers(dt){
 var roomStatus='연결 중…',presErr='',pageViewers=0;
 function setRoomStatus(t){roomStatus=t;renderOnline();}
 // 자체 서버(WebSocket)용 연결: claude room과 같은 모양으로 감싼다
-const SERVER_VER=11;let srvVer=null,monsGot=0;
+const SERVER_VER=12;let srvVer=null,monsGot=0;
 function makeWsRoom(){
   const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
   let ws=null,myId=null,ok=false,retry=1000;const peers=new Map(),peerFns=[],topicFns={},connFns=[];const mine={};
@@ -19764,12 +19789,12 @@ function attachRoom(r,isWs){
   room.onPeers(ch=>syncPeers(ch.peers),e=>{room=null;for(const [k,o] of others){scene.remove(o.mesh);o.tag.remove();}others.clear();setRoomStatus('동시접속 끊김 ('+(e&&e.code||'오류')+')');});
   room.on('fx',msg=>{if(msg.sameTab||mode==='title')return;const d=msg.data;if(d&&typeof d==='object')playRemoteFx(d);});
   room.on('dm',msg=>{const d=msg.data||msg.d;if(!d||typeof d!=='object')return;const from=msg.peer||msg.from;if(!from||from===myPeer())return;if(d.to&&d.to!==myPeer())return;onDm(from,d);});
-  room.on('board',onBoardMsg);room.on('btook',onBoardMsg);
+  room.on('board',onBoardMsg);room.on('btook',onBoardMsg);room.on('gdir',onGdir);room.onConnection(c=>{if(!c)gdirSent=false;else setTimeout(gdirHello,500);});
   room.on('chat',msg=>{if(msg.sameTab)return;const d=msg.data||msg.d;if(!d||typeof d!=='object')return;
     const name=safeName(d.n),text=cleanChat(d.m);if(!text)return;
     logChat(name,text,false);const o=others.get(msg.peer||msg.id);if(o){o.chat={text,t:6};}});
   setRoomStatus(room.connected()?'':'연결 중…');publishPresence(true);
-  setInterval(()=>{if(room&&P&&mode!=='title'){lastPresKey='';publishPresence(true);}},5000);
+  setInterval(()=>{if(room&&P&&mode!=='title'){lastPresKey='';publishPresence(true);if(!gdirSent)gdirHello();}},5000);
 }
 (async function(){
   try{

@@ -11,7 +11,7 @@ const createSim = require('./sim.js');
 const OR = require('./shared.js');
 
 const PORT = process.env.PORT || 3000;
-const VERSION = 11; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
+const VERSION = 12; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
 const PUBLIC = path.join(__dirname, 'public');
 
 // 파일을 미리 읽어 두고(압축본 포함) 바로 보내 준다
@@ -198,6 +198,101 @@ setInterval(() => {
   }
 }, 60 * 1000);
 
+// 길드 목록: 서버가 모든 길드의 이름·색·인원·길드장을 기억해서, 길드원이 아무도 접속하지 않은 길드도 보이게 한다.
+// 명단 자체는 여전히 길드원 각자의 저장에 있다. 서버가 다시 켜지면(새 버전 배포 등) 접속한 사람들이 기억해 둔 목록을 보내 다시 채운다.
+// 가입 신청도 길드장이 없을 때 받아 두었다가, 길드장이 접속하면 전해 준다.
+const GUILD_FILE = path.join(__dirname, '.data', 'guilds.json');
+const GUILD_KEEP = 60 * 24 * 3600 * 1000;   // 60일 동안 길드원이 아무도 오지 않으면 목록에서 뺀다
+const GAPP_KEEP = 14 * 24 * 3600 * 1000;    // 가입 신청은 2주까지 맡아 둔다
+const guilds = new Map();   // id -> {id, name, c, n(인원), m(길드장 이름), rv(명단 판수), at(마지막으로 길드원이 온 때), dis(해산)}
+const gapps = new Map();    // 길드 id -> [{n, mk, t}]
+const G_ID = /^[a-z0-9]{1,10}$/, G_NAME = /^[가-힣A-Za-z0-9 ]{2,12}$/, G_COL = /^[0-9a-f]{6}$/, G_KEY = /^[a-z0-9]{6,16}$/;
+const gInt = (v, a, b) => (typeof v === 'number' && isFinite(v) ? Math.max(a, Math.min(b, Math.floor(v))) : a);
+function cleanGuild(d) {
+  if (!d || typeof d !== 'object' || typeof d.id !== 'string' || !G_ID.test(d.id)) return null;
+  if (typeof d.name !== 'string' || !G_NAME.test(d.name) || d.name.trim() !== d.name) return null;
+  return { id: d.id, name: d.name, c: typeof d.c === 'string' && G_COL.test(d.c) ? d.c : 'b8342a', n: gInt(d.n, 0, 30), m: cleanText(d.m, 12), rv: gInt(d.rv, 0, 9999999), at: Math.min(Date.now(), gInt(d.at, 0, 9e15)), dis: d.dis ? 1 : 0 };
+}
+try {
+  const j = JSON.parse(fs.readFileSync(GUILD_FILE, 'utf8'));
+  for (const q of j.guilds || []) { const g = cleanGuild(q); if (g) guilds.set(g.id, g); }
+  for (const gid in j.apps || {}) if (G_ID.test(gid) && Array.isArray(j.apps[gid])) gapps.set(gid, j.apps[gid].filter((a) => a && G_KEY.test(a.mk)).slice(0, 40));
+} catch (e) {}
+let gSaveT = null, gSendT = null;
+function guildSaveSoon() {
+  if (gSaveT) return;
+  gSaveT = setTimeout(() => {
+    gSaveT = null;
+    try { fs.mkdirSync(path.dirname(GUILD_FILE), { recursive: true }); fs.writeFileSync(GUILD_FILE, JSON.stringify({ guilds: [...guilds.values()], apps: Object.fromEntries(gapps) })); } catch (e) {}
+  }, 5000);
+}
+const guildList = () => [...guilds.values()];
+function guildsChanged() {
+  guildSaveSoon();
+  if (gSendT) return;
+  gSendT = setTimeout(() => { gSendT = null; broadcast({ t: 'gdir', d: guildList() }); }, 1000);
+}
+// 길드원이 알려 준 자기 길드 (명단 판수가 같거나 새것일 때만)
+function guildReport(d) {
+  const g = cleanGuild(d); if (!g) return;
+  const cur = guilds.get(g.id);
+  if (cur && g.rv < cur.rv) return;
+  g.at = Date.now(); if (g.dis) g.n = 0;
+  if (cur && cur.name === g.name && cur.c === g.c && cur.n === g.n && cur.m === g.m && cur.rv === g.rv && cur.dis === g.dis) { cur.at = g.at; guildSaveSoon(); return; }
+  guilds.set(g.id, g); if (g.dis) gapps.delete(g.id);
+  guildsChanged();
+}
+// 서버가 다시 켜진 뒤: 접속한 사람이 기억해 둔 목록에서 서버가 모르는 길드만 채운다
+function guildKnow(list) {
+  if (!Array.isArray(list)) return;
+  let ch = false;
+  for (const q of list.slice(0, 200)) {
+    const g = cleanGuild(q); if (!g || guilds.has(g.id) || Date.now() - g.at > GUILD_KEEP) continue;
+    guilds.set(g.id, g); ch = true;
+  }
+  if (ch) guildsChanged();
+}
+// 이름표의 길드(gd)로도 길드가 살아 있음을 안다. 옛 게임 화면을 쓰는 사람의 길드도 목록에 들어온다
+function guildSeen(ws) {
+  const s = ws.pres.gd; if (!s) return;
+  const [id, name, r, rv, c] = s.split('|'), v = parseInt(rv, 10) || 0;
+  const cur = guilds.get(id);
+  if (!cur || (cur.dis && v > cur.rv)) { guilds.set(id, { id, name, c, n: 0, m: r === 'm' ? ws.pres.n : '', rv: v, at: Date.now(), dis: 0 }); guildsChanged(); }
+  else if (!cur.dis && Date.now() - cur.at > 60 * 1000) { cur.at = Date.now(); guildSaveSoon(); }
+  if (r === 'm') guildDeliver(ws, id);
+}
+// 길드장에게 맡아 둔 가입 신청 전하기 (접속할 때마다 한 번씩)
+function guildDeliver(ws, gid) {
+  const L = gapps.get(gid); if (!L) return;
+  ws.gSent = ws.gSent || new Set();
+  for (const a of L) {
+    const key = gid + ':' + a.mk; if (ws.gSent.has(key)) continue;
+    ws.gSent.add(key);
+    send(ws, { t: 'dm', from: 'srv', d: { k: 'greq', gid, n: a.n, mk: a.mk } });
+  }
+}
+function guildApp(d) {
+  if (!d || typeof d !== 'object' || typeof d.gid !== 'string' || !G_KEY.test(d.mk || '')) return;
+  const g = guilds.get(d.gid); if (!g || g.dis) return;
+  const L = (gapps.get(d.gid) || []).filter((a) => a.mk !== d.mk && Date.now() - a.t < GAPP_KEEP);
+  L.push({ n: cleanText(d.n, 12) || '모험가', mk: d.mk, t: Date.now() });
+  gapps.set(d.gid, L.slice(-40)); guildSaveSoon();
+  for (const ws of clients.values()) { const p = ws.pres.gd; if (p && p.startsWith(d.gid + '|') && p.split('|')[2] === 'm') guildDeliver(ws, d.gid); }
+}
+function guildAppCancel(d) {
+  if (!d || typeof d !== 'object' || typeof d.gid !== 'string') return;
+  const L = gapps.get(d.gid); if (!L) return;
+  const K = L.filter((a) => a.mk !== d.mk); if (K.length === L.length) return;
+  if (K.length) gapps.set(d.gid, K); else gapps.delete(d.gid);
+  guildSaveSoon();
+}
+setInterval(() => {
+  const now = Date.now(); let ch = false;
+  for (const [id, g] of guilds) if (now - g.at > GUILD_KEEP) { guilds.delete(id); gapps.delete(id); ch = true; }
+  for (const [id, L] of gapps) { const K = L.filter((a) => now - a.t < GAPP_KEEP); if (!K.length) gapps.delete(id); else if (K.length !== L.length) gapps.set(id, K); }
+  if (ch) guildsChanged();
+}, 3600 * 1000);
+
 wss.on('connection', (ws) => {
   const id = 'p' + (++counter).toString(36) + Math.random().toString(36).slice(2, 6);
   ws.id = id; ws.pres = {}; ws.alive = true; ws.budget = 60; ws.chatAt = 0;
@@ -206,6 +301,7 @@ wss.on('connection', (ws) => {
   const peers = {};
   for (const [k, c] of clients) if (k !== id) peers[k] = c.pres;
   send(ws, { t: 'hello', id, peers, v: VERSION, b: files['/'] && files['/'].etag });   // b: 지금 게임 페이지의 지문 (바뀌면 접속한 사람들이 알아서 새 버전으로 바꾼다)
+  send(ws, { t: 'gdir', d: guildList() });
   sim.join(id, (msg) => send(ws, msg));
   broadcast({ t: 'join', id }, ws);
 
@@ -217,6 +313,15 @@ wss.on('connection', (ws) => {
       ws.pres = cleanPresence(m.d);
       sim.presence(id, ws.pres);
       broadcastPres(id, ws);
+      guildSeen(ws);
+    } else if (m.t === 'gdir') {
+      guildReport(m.d);
+    } else if (m.t === 'gknow') {
+      guildKnow(m.d);
+    } else if (m.t === 'gapp') {
+      guildApp(m.d);
+    } else if (m.t === 'gcan') {
+      guildAppCancel(m.d);
     } else if (m.t === 'hit') {
       sim.hit(id, m.d);
     } else if (m.t === 'fx' && m.d && typeof m.d === 'object') {
