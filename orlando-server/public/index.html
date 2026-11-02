@@ -17462,8 +17462,8 @@ function updateQuestHud(){if(typeof mqAdvSync==='function')mqAdvSync();const e=$
   const q=P.quest;
   if(q&&q.special&&P.mq==='portal60');   /* 길 끝 포탈 조사는 메인 칸에 뜬다 */
   else if(q){const lines=q.special?((q.stage|0)<1?['길 끝 포탈 조사']:(q.stage|0)<2?['포탈 밖으로 돌아오기']:[]):qGoals(q).map(g=>`${MON[g.ty].name} 처치 ${Math.min(g.have,g.need)}/${g.need}`);
-    if(qDone(q))lines.push(`${q.fromName||'의뢰인'}에게 보고하기`);sec('의뢰','sub',null,lines);}
-  else sec('의뢰','sub',null,['받은 의뢰가 없다'],true);
+    if(qDone(q))lines.push(`${q.fromName||'의뢰인'}에게 보고하기`);sec('퀘스트','sub',null,lines);}
+  else sec('퀘스트','sub',null,['받은 퀘스트가 없다'],true);
   placeQuestBox();}
 // 의뢰 창은 상태 창 바로 아래에 붙인다 (상태 창 높이가 버프·파티로 바뀌어도 따라간다)
 function placeQuestBox(){const s=$('#stat'),bx=$('#questBox');if(!s||!bx)return;const r=s.getBoundingClientRect();if(r.height)bx.style.top=Math.round(r.bottom+8)+'px';}
@@ -20845,7 +20845,7 @@ addEventListener('keydown',e=>{const el=document.getElementById('bookWin');if(!e
    끝내고 보고하면 그 레벨 한 칸의 절반이 넘는 경험치를 준다. 한 번 끝낸 퀘스트는 다시 받을 수 없다.
    P.gq[id] = {s:단계, h:그 단계에서 한 수}, P.gqDone[id] = {n:끝낸 횟수, t:마지막으로 끝낸 때} */
 const GENQ={
-  farm1:{title:'밭일 돕기',npc:'farmer',minLv:100,maxLv:200,where:'엑시즈 북쪽 농장',
+  farm1:{title:'밭일 돕기',npc:'farmer',minLv:100,maxLv:200,daily:1,where:'엑시즈 북쪽 농장',
     steps:[{key:'weed',need:6,goal:'밀밭의 잡초 뽑기',act:'잡초 뽑기',dur:1.5,fx:0x6a8a3a},
            {key:'water',need:4,goal:'마른 고랑에 물 주기',act:'물 주기',dur:1.7,fx:0x9ad7ff}],
     report:'베르타에게 돌아가기',exp:.6,gold:25},
@@ -20854,16 +20854,19 @@ const GQ={sp:{},mk:null,work:null,bar:null};
 const gqOf=id=>P&&P.gq&&P.gq[id];
 const gqStepOf=id=>{const q=gqOf(id),G=GENQ[id];return q&&G?G.steps[q.s]:null;};
 const gqDoneQ=id=>{const q=gqOf(id);return !!q&&q.s>=GENQ[id].steps.length;};
-const gqClear=id=>!!(P&&P.gqDone&&P.gqDone[id]);   /* 이미 끝낸 퀘스트 (다시 못 한다) */
+/* 이미 끝낸 퀘스트: 다시 못 한다. 일일 퀘스트(daily)는 오늘 끝냈을 때만 막고, 자정이 지나면 다시 받는다 */
+const gqDay=t=>{const d=new Date(t);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();};
+const gqClear=id=>{const d=P&&P.gqDone&&P.gqDone[id];if(!d)return false;return GENQ[id].daily?gqDay(d.t)===gqDay(Date.now()):true;};
+const gqTag=id=>GENQ[id]&&GENQ[id].daily?'일일':'일반';
 const gqLvOk=id=>{const G=GENQ[id];return !!P&&P.lv>=G.minLv&&P.lv<=G.maxLv;};
 /* 퀘스트 창의 '일반' 칸 */
 function gqHud(sec){if(!P||!P.gq)return;for(const id in P.gq){const G=GENQ[id];if(!G)continue;const q=P.gq[id],st=G.steps[q.s];
-    sec('일반','gen',G.title,st?[`${st.goal} ${Math.min(q.h|0,st.need)}/${st.need}`]:[G.report]);}}
+    sec(gqTag(id),'gen',G.title,st?[`${st.goal} ${Math.min(q.h|0,st.need)}/${st.need}`]:[G.report]);}}
 /* 새 일반 퀘스트 알림 (메인 퀘스트 알림과 같은 꼴, 초록빛) */
 function gqFx(id,tries=0){const G=GENQ[id];if(!G||!gqOf(id))return;if(mode!=='world'&&tries<150){setTimeout(()=>gqFx(id,tries+1),200);return;}
   sfx('quest');document.querySelectorAll('.mqnew').forEach(e=>e.remove());
   const o=document.createElement('div');o.className='mqnew gen';o.setAttribute('role','status');const w=document.createElement('div');
-  const t=document.createElement('span');t.className='mqtag';t.textContent='새 일반 퀘스트';const b=document.createElement('b');b.textContent=G.title;
+  const t=document.createElement('span');t.className='mqtag';t.textContent=`새 ${gqTag(id)} 퀘스트`;const b=document.createElement('b');b.textContent=G.title;
   const g=document.createElement('span');g.className='mqgoal';g.textContent=G.steps[0].goal;w.append(t,b,g);o.appendChild(w);document.body.appendChild(o);setTimeout(()=>o.remove(),4200);}
 /* 일할 자리: 잡초 덤불 / 마른 고랑. 머리 위에 초록 빛 표시가 떠서 밀밭 속에서도 보인다 */
 let _gqGlow=null;
@@ -20915,17 +20918,17 @@ function gqAct(id){const G=GENQ[id],n=npcCur;if(!G||!P)return;
   if(gqDoneQ(id)){const exp=Math.round(needExp(P.lv)*G.exp),gold=P.lv*G.gold;n.mqLock=true;
     showPages(['어머, 벌써 다 했어? 밭이 훨씬 숨을 쉬네.','잡초 뿌리까지 깔끔하게 뽑았구먼. 고랑도 촉촉하고.'],0,last=>{n.mqLock=false;
       delete P.gq[id];const d=(P.gqDone=P.gqDone||{})[id]||{n:0};P.gqDone[id]={n:(d.n|0)+1,t:Date.now()};gqClearSpots(id);
-      P.gold+=gold;log(`일반 퀘스트 완료: ${G.title} · 경험치 ${exp.toLocaleString('ko-KR')} · ${gold.toLocaleString('ko-KR')} 골드`,'good');sfx('coin');gainExp(exp);updateQuestHud();updateHud();save();
-      npcEndLine('고마워, 정말 큰 도움이 됐어. 이건 품삯이야. 덕분에 올해 농사는 걱정 없겠어!');});return;}
+      P.gold+=gold;log(`${gqTag(id)} 퀘스트 완료: ${G.title} · 경험치 ${exp.toLocaleString('ko-KR')} · ${gold.toLocaleString('ko-KR')} 골드`,'good');sfx('coin');gainExp(exp);updateQuestHud();updateHud();save();
+      npcEndLine('고마워, 정말 큰 도움이 됐어. 이건 품삯이야. 내일 또 들러 줘!');});return;}
   if(gqOf(id)){const st=gqStepOf(id),q=gqOf(id);renderNpc(`${st.goal}, 아직 ${st.need-(q.h|0)}군데 남았어. 초록 빛이 떠 있는 데가 일할 자리야.`,box=>{
-      npcBtn(box,'일을 그만두기',()=>{delete P.gq[id];gqClearSpots(id);updateQuestHud();save();log(`일반 퀘스트를 그만뒀다: ${G.title}`,'sys');renderNpc('괜찮아, 다음에 손 빌려줘.');},'wide');});return;}
-  if(gqClear(id)){renderNpc('그때 도와준 덕에 밀이 쑥쑥 자라고 있어. 정말 고마웠어!');return;}
+      npcBtn(box,'일을 그만두기',()=>{delete P.gq[id];gqClearSpots(id);updateQuestHud();save();log(`${gqTag(id)} 퀘스트를 그만뒀다: ${G.title}`,'sys');renderNpc('괜찮아, 다음에 손 빌려줘.');},'wide');});return;}
+  if(gqClear(id)){renderNpc(G.daily?'오늘 몫은 다 해 줬잖아. 땅도 좀 쉬어야지. 내일 또 와 줘!':'그때 도와준 덕에 밀이 쑥쑥 자라고 있어. 정말 고마웠어!');return;}
   if(P.lv<G.minLv){renderNpc(`마음은 고맙지만, 밭일이 보기보다 고되단다. 좀 더 단련하고 와. (Lv ${G.minLv}부터)`);return;}
   if(P.lv>G.maxLv){renderNpc('자네처럼 이름난 모험가한테 잡초를 맡기자니 내가 다 송구하네. 밭은 우리가 돌볼게.');return;}
   n.mqLock=true;
-  showPages(['혹시 지나가던 모험가야? 잘됐다, 손이 하나 모자라던 참이었거든.','올해 비가 들쭉날쭉해서 잡초는 무성하고 고랑은 바짝 말랐어.'],0,last=>{n.mqLock=false;
+  showPages(P.gqDone&&P.gqDone[id]?['또 와 줬구나! 하룻밤 새 잡초가 또 올라왔지 뭐야.']:['혹시 지나가던 모험가야? 잘됐다, 손이 하나 모자라던 참이었거든.','올해 비가 들쭉날쭉해서 잡초는 무성하고 고랑은 바짝 말랐어.'],0,last=>{n.mqLock=false;
     renderNpc(last+' 밀밭 잡초 좀 뽑아 주고, 마른 고랑에 물도 좀 줄래? 품삯은 넉넉히 줄게.',box=>{box.dataset.noskip='1';
-      npcBtn(box,'도와 드릴게요',()=>{(P.gq=P.gq||{})[id]={s:0,h:0};gqPlaceSpots(id);updateQuestHud();save();log(`일반 퀘스트: ${G.title} — ${G.steps[0].goal}`,'sys');
+      npcBtn(box,'도와 드릴게요',()=>{(P.gq=P.gq||{})[id]={s:0,h:0};gqPlaceSpots(id);updateQuestHud();save();log(`${gqTag(id)} 퀘스트: ${G.title} — ${G.steps[0].goal}`,'sys');
         npcEndLine('고마워! 초록 빛이 떠 있는 데가 일할 자리야. 다가가서 F를 누르면 돼.');gqFx(id);},'pri wide');
       npcBtn(box,'다음에요',()=>renderNpc('그래, 시간 될 때 와 줘.'),'wide');});});}
 /* 퀘스트 주는 사람 머리 위: 받을 수 있거나 보고할 때 초록 느낌표 */
