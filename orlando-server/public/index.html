@@ -16866,7 +16866,17 @@ function renderChars(){
   }
 }
 function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:spAll(),skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mentorReady:P.mentorReady,faith:P.faith|0||undefined,needBook:P.needBook||undefined,mq:P.mq||undefined,mqDone:P.mqDone||undefined,gq:P.gq&&Object.keys(P.gq).length?P.gq:undefined,gqDone:P.gqDone||undefined,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap),gk:P.gk,guild:P.guild||undefined,gApply:P.gApply||undefined,gApps:P.gApps&&P.gApps.list.length?{gid:P.gApps.gid,list:P.gApps.list.map(a=>({n:a.n,k:a.k,t:a.t,no:a.no?1:undefined}))}:undefined}:null;}
-function save(){const s=snapshotP();if(!s)return;const list=loadChars();const i=list.findIndex(c=>c.id===s.id);if(i>=0)list[i]=s;else list.push(s);storeChars(list);}
+/* 같은 캐릭터를 창 두 개(또는 휴대폰에 남아 있던 옛 탭)에서 켜 두면, 옛 창이 나중에 저장하면서 새 창의 기록을 덮어썼다.
+   만든 길드처럼 옛 창에 없던 것이 통째로 사라졌다. 그래서 저장할 때 이 창의 표(tab)를 남기고,
+   이 창이 캐릭터를 불러온 뒤에 다른 창이 같은 캐릭터를 저장했으면 이 창은 더 저장하지 않는다. */
+const SAVE_TAB=Math.random().toString(36).slice(2,10);let saveClaimT=0,saveStale=false;
+function saveTaken(c){return !!(c&&c.tab&&c.tab!==SAVE_TAB&&(c.t||0)>=saveClaimT);}
+function saveLost(){if(saveStale)return;saveStale=true;
+  askPrompt('다른 창에서 이 캐릭터로 접속했어요. 기록이 덮어써지지 않도록 이 창은 더 저장하지 않아요.','다시 불러오기','닫기',ok=>{if(ok)location.reload();});}
+function save(){if(saveStale)return;const s=snapshotP();if(!s)return;s.tab=SAVE_TAB;const list=loadChars();const i=list.findIndex(c=>c.id===s.id);
+  if(i>=0&&saveTaken(list[i])){saveLost();return;}
+  if(i>=0)list[i]=s;else list.push(s);storeChars(list);}
+addEventListener('storage',e=>{if(e.key!=='orlando3d.chars'||!P||saveStale||mode==='title')return;if(saveTaken(loadChars().find(c=>c.id===P.id)))saveLost();});
 
 /* ---------- 메뉴 ---------- */
 let quietUnlock=false;
@@ -16928,7 +16938,7 @@ function startGame(data){const ap=apParse(data.ap)||(data.ap&&data.ap.g?data.ap:
   pmLoad(ap.g).catch(()=>{}).then(()=>{L.hidden=true;startGameNow(data);});}
 function startGameNow(data){
   setTimeout(precompileAll,4000);setTimeout(precompileAll,12000);setTimeout(()=>warmGpu(),1500);
-  P={...data,buffs:{}};if(!P.id)P.id='c'+Date.now().toString(36);P.seat=null;P.ride=null;P.drunk=0;P.blackout=false;
+  P={...data,buffs:{}};delete P.tab;saveStale=false;saveClaimT=Date.now();if(!P.id)P.id='c'+Date.now().toString(36);P.seat=null;P.ride=null;P.drunk=0;P.blackout=false;
   P.gold=data.gold||0;P.equip={weapon:null,sub:null,helm:null,armor:null,boots:null,acc:null,...(data.equip||{})};
   for(const k in P.equip)if(P.equip[k]&&!ITEMS[P.equip[k]])P.equip[k]=null;
   P.enh={...(data.enh||{})};P.home='town';P.quest=data.quest&&(data.quest.goals||MON[data.quest.ty])&&ZONES[data.quest.zone]?{...data.quest}:null;if(P.quest)qGoals(P.quest);
@@ -16963,7 +16973,7 @@ function startGameNow(data){
   setZone(zoneAt(player.position.x,player.position.z));
   {const al=advLv(P.job);if(al==null||P.lv<al)P.mentorReady=false;else P.mentorReady=true;}
   if(P.mentorReady)summonMentor(true);
-  updateHud();updateQuestHud();renderParty();renderOnline();canvas.focus();syncLockTip();publishPresence(true);
+  updateHud();updateQuestHud();renderParty();renderOnline();canvas.focus();syncLockTip();publishPresence(true);save();
   if(P.needBook){const n=NPCS.find(q=>q.id==='turpin');if(n){cam.yaw=Math.atan2(-(n.x-player.position.x),-(n.z-player.position.z));setTimeout(()=>{if(P&&P.needBook&&mode==='world')openNpc(n);},1400);}}
 }
 
@@ -20885,7 +20895,7 @@ if(hot&&typeof hot.ready==='function')hot.ready(boot);else boot(hot&&hot.data);
 function autoUpdate(){if(autoUpdate.on)return;autoUpdate.on=true;
   const safe=()=>!P||mode==='title'||(mode==='world'&&!DUEL&&!CCAR.ride&&!P.dash&&!P.leap&&swingT>=1&&tAll-(P.hurtAt||-99)>6&&!alive().some(m=>m.aggro===P.id||Math.hypot(m.mesh.position.x-player.position.x,m.mesh.position.z-player.position.z)<8));
   const go=()=>{if(!safe()){setTimeout(go,1000);return;}
-    try{if(P&&player&&mode!=='title'){save();sessionStorage.setItem('orlando3d.resume',JSON.stringify({id:P.id,yaw:cam.yaw,t:Date.now()}));}}catch(e){}
+    try{if(P&&player&&mode!=='title'&&!saveStale){save();sessionStorage.setItem('orlando3d.resume',JSON.stringify({id:P.id,yaw:cam.yaw,t:Date.now()}));}}catch(e){}
     location.reload();};
   setTimeout(go,1500);}
 try{const r=JSON.parse(sessionStorage.getItem('orlando3d.resume')||'null');sessionStorage.removeItem('orlando3d.resume');
