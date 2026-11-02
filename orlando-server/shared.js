@@ -80,9 +80,10 @@
     { n: 3, gate: '동문', zones: [['m3a', 'field'], ['m3b', 'river'], ['m3c', 'field'], ['m3d', 'wood'], ['m3e', 'hill']] },
     { n: 4, gate: '남문', zones: [['m4a', 'wood'], ['m4b', 'vale'], ['m4c', 'marsh'], ['m4d', 'vale'], ['m4e', 'pass']] },
   ];
-  // 사냥터 땅은 한 판(5칸 × 4줄)에 지그재그로 놓는다: 1·3줄은 서→동, 2·4줄은 동→서. 그래서 한 줄의 마지막 땅 바로 옆(북쪽)에 다음 줄의 첫 땅이 붙는다
-  const MH = { x0: 2700, z0: 900, step: 450, R: 150, neckHW: 60, passHW: 22 };
-  for (const L of MLINES) L.zones.forEach(([id, kind], i) => { const col = L.n % 2 ? i : 4 - i; const I = ISLES[id] || (ISLES[id] = { R: MH.R }); I.x = MH.x0 + col * MH.step; I.z = MH.z0 + (L.n - 1) * MH.step; I.kind = kind; I.line = L.n; I.seq = i; I.col = col; I.dir = L.n % 2 ? 1 : -1; });
+  // 사냥터 땅 스무 곳은 엑시즈를 빙 두르는 고리에 레벨 순서대로 놓는다: 서쪽(서문, Lv 60)에서 시작해 시계 방향으로 북(북문, 95) → 동(동문, 130) → 남(남문, 165) → 남서(200).
+  // 마지막 땅(4E)과 첫 땅(1A) 사이만 높은 산줄기로 막혀 있다. 고리 안쪽은 엑시즈를 둘러싼 산이고, 문마다 안쪽으로 고갯길이 나 있다
+  const MH = { cx: 3600, cz: 1750, RR: 1150, R: 150, neckHW: 60, gateHW: 14, gateLen: 55 };
+  MLINES.forEach((L) => L.zones.forEach(([id, kind], i) => { const k = (L.n - 1) * 5 + i, th = PI + k * PI / 10; const I = ISLES[id] || (ISLES[id] = { R: MH.R }); I.R = MH.R; I.x = MH.cx + Math.cos(th) * MH.RR; I.z = MH.cz + Math.sin(th) * MH.RR; I.kind = kind; I.line = L.n; I.seq = i; I.k = k; I.th = th; }));
   const MHUNT = MLINES.flatMap((L) => L.zones.map((q) => q[0]));
   const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle', 'guildhall', 'exmarket', 'arena', ...MHUNT];
   // 엑시즈 성벽(섬 중심 기준 m, 시계 방향)과 가장자리: 성벽에서 바깥으로 약 70m까지만 땅이 있다 (들쭉날쭉)
@@ -91,10 +92,15 @@
   function polyRay(P, a) { const ux = Math.cos(a), uz = Math.sin(a); let best = 0; for (let i = 0; i < P.length; i++) { const A = P[i], B = P[(i + 1) % P.length], dx = B[0] - A[0], dz = B[1] - A[1], den = ux * dz - uz * dx; if (Math.abs(den) < 1e-9) continue; const t = (A[0] * dz - A[1] * dx) / den, s = (A[0] * uz - A[1] * ux) / den; if (t > best && s >= 0 && s <= 1) best = t; } return best; }
   for (const k of ISLE_ORDER) { const I = ISLES[k]; I.id = k; I.entry = { x: I.x, z: I.z + I.R - 12 }; }   // 들어오는 자리 (남쪽 가장자리)
   ISLES.marcus.entry = { x: ISLES.marcus.x, z: ISLES.marcus.z + isleEdge(ISLES.marcus, Math.PI / 2) - 12 };   // 엑시즈: 가장자리가 성벽을 따르므로 남쪽 끝에서 잰다
-  for (const k of MHUNT) { const I = ISLES[k]; I.entry = { x: I.x - I.dir * (I.R - 14), z: I.z }; I.exit = { x: I.x + I.dir * (I.R - 14), z: I.z }; }   // 사냥터: 줄 방향(1·3줄 동쪽, 2·4줄 서쪽)으로 걸어간다
-  // 걸어 다닐 수 있는 사냥터 모양: 둥근 땅들 + 줄 안에서 이웃 땅을 잇는 넓은 목(neck). 줄과 줄은 지도에서 멀리 떨어져 있어 잇지 않는다 (엑시즈 문으로 오간다)
+  // 고리 위의 자리 (각도 th, 중심에서 거리 r)
+  const ringP = (th, r) => ({ x: MH.cx + Math.cos(th) * r, z: MH.cz + Math.sin(th) * r });
+  for (const k of MHUNT) { const I = ISLES[k], dt = (I.R - 14) / MH.RR; I.entry = ringP(I.th - dt, MH.RR); I.exit = ringP(I.th + dt, MH.RR); }   // 사냥터: 레벨이 낮은 쪽(고리 반시계)에서 들어와 높은 쪽(시계)으로 나간다
+  // 걸어 다닐 수 있는 사냥터 모양: 둥근 땅들 + 이웃 땅을 잇는 넓은 목(neck) + 문마다 엑시즈 쪽(안쪽)으로 난 고갯길(gate), 밀골로 가는 바깥 고갯길
   MH.links = [];
-  for (const L of MLINES) for (let i = 0; i + 1 < L.zones.length; i++) { const A = ISLES[L.zones[i][0]], B = ISLES[L.zones[i + 1][0]]; MH.links.push({ a: A.id, b: B.id, ax: A.x, az: A.z, bx: B.x, bz: B.z, hw: MH.neckHW, k: 'neck' }); }
+  for (let i = 0; i + 1 < MHUNT.length; i++) { const A = ISLES[MHUNT[i]], B = ISLES[MHUNT[i + 1]]; MH.links.push({ a: A.id, b: B.id, ax: A.x, az: A.z, bx: B.x, bz: B.z, hw: MH.neckHW, k: 'neck' }); }
+  // gate: 고갯길 끝의 문(엑시즈·밀골로 넘어가는 자리)과 넘어왔을 때 서는 자리(arr), 바라보는 방향(ux, uz)
+  for (const L of MLINES) { const F = ISLES[L.zones[0][0]], e = ringP(F.th, MH.RR - F.R - MH.gateLen); F.gate = { ...ringP(F.th, MH.RR - F.R - MH.gateLen + 6), arr: ringP(F.th, MH.RR - F.R - MH.gateLen + 14), ux: Math.cos(F.th), uz: Math.sin(F.th) }; MH.links.push({ a: F.id, b: null, ax: F.x, az: F.z, bx: e.x, bz: e.z, hw: MH.gateHW, k: 'gate' });
+    if (L.end === 'milgol') { const E = ISLES[L.zones[L.zones.length - 1][0]], o = ringP(E.th, MH.RR + E.R + MH.gateLen); E.mgate = { ...ringP(E.th, MH.RR + E.R + MH.gateLen - 6), arr: ringP(E.th, MH.RR + E.R + MH.gateLen - 14), ux: -Math.cos(E.th), uz: -Math.sin(E.th) }; MH.links.push({ a: E.id, b: null, ax: E.x, az: E.z, bx: o.x, bz: o.z, hw: MH.gateHW, k: 'gate' }); } }
   const segQ = (L, x, z) => { const dx = L.bx - L.ax, dz = L.bz - L.az, t = clampN(((x - L.ax) * dx + (z - L.az) * dz) / (dx * dx + dz * dz), 0, 1), qx = L.ax + dx * t, qz = L.az + dz * t; return { x: qx, z: qz, t, d: Math.hypot(x - qx, z - qz) }; };
   // 걸을 수 있는 곳 경계까지의 거리 (안쪽은 음수)
   function mhWalkD(x, z) { let e = 1e9;
@@ -108,7 +114,7 @@
     for (const k of MHUNT) { const I = ISLES[k]; const d = Math.hypot(p.x - I.x, p.z - I.z); if (d > I.R + 200) continue; const r = I.R - rad - 0.05, kk = r / Math.max(d, 1e-4); tryQ(I.x + (p.x - I.x) * kk, I.z + (p.z - I.z) * kk); }
     for (const L of MH.links) { const q = segQ(L, p.x, p.z); if (q.d > L.hw + 200) continue; const r = L.hw - rad - 0.05, kk = r / Math.max(q.d, 1e-4); tryQ(q.x + (p.x - q.x) * kk, q.z + (p.z - q.z) * kk); }
     if (bd < 1e9) { p.x = bx; p.z = bz; } }
-  MH.walkD = mhWalkD; MH.clamp = mhClamp; MH.segQ = segQ;
+  MH.walkD = mhWalkD; MH.clamp = mhClamp; MH.segQ = segQ; MH.ringP = ringP;
   // 섬 가장자리 반지름 (엑시즈는 둥글지 않게 들쭉날쭉: 언덕 너머로 이어지는 땅처럼 보이게)
   function isleEdge(I, a) { if (I.id !== 'marcus') return I.R; return polyRay(MARCUS_WALL_M, a) + MARCUS_EDGE_GAP + 6 * Math.sin(3 * a + 1.3) + 4 * Math.sin(7 * a + 0.4) + 2 * Math.sin(13 * a + 2.1); }
   function isleAt(x, z) { let b = null, bd = 1e9; for (const k of ISLE_ORDER) { const I = ISLES[k]; const d = Math.hypot(x - I.x, z - I.z) - I.R; if (d < bd) { bd = d; b = I; } } return b; }
