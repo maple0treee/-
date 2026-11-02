@@ -8884,7 +8884,7 @@ function addPalm(x,y,z,h,seed){
    발이 돌판 속에 묻혀 보였다. 여기 넣은 바닥 위에서는 그 높이를 밟고, 앞뒤 계단 폭(f) 안에서는 천천히 오르내린다 */
 const CIT_SLABS=[];
 function citGround(x,z){let h=heightAt(x,z);for(const s of CIT_SLABS){if(x<s.x0||x>s.x1)continue;const dz=Math.max(s.z0-z,z-s.z1,0);if(dz>=s.f)continue;const y=s.y*(1-dz/s.f);if(y>h)h=y;}return h;}
-const SURFACES=[];const CEILS=[];const HDOORS=[];const HEARTHS=[];   /* CEILS: 건물 천장 아랫면 (ceilAdd로 넣는다, 3인칭 카메라가 뚫고 나가지 않게) */ // {x0,x1,z0,z1,y} 평평한 바닥, {..., ramp:'x', ya, yb} x0→x1로 높아지는 계단
+const SURFACES=[];const CEILS=[];const HDOORS=[];const SWINGS=[];const HEARTHS=[];   /* CEILS: 건물 천장 아랫면 (ceilAdd로 넣는다, 3인칭 카메라가 뚫고 나가지 않게) */ // {x0,x1,z0,z1,y} 평평한 바닥, {..., ramp:'x', ya, yb} x0→x1로 높아지는 계단
 const SWAMP_WY=-1.25;
 function floorAt(x,z,y){
   let g=heightAt(x,z);
@@ -12715,8 +12715,8 @@ function buildGuildHallMap(K){
     for(const [x0,z0,x1,z1] of [[-HW-.5,y0,HW+.5,y0],[-HW-.5,y0,-HW-.5,-HD],[HW+.5,y0,HW+.5,-HD]]){const L=Math.hypot(x1-x0,z1-z0),alongX=Math.abs(x1-x0)>1;P(BOX,(x0+x1)/2,1.8,(z0+z1)/2,alongX?L+1:1,3.6,alongX?1:L,PIETRA);P(BOX,(x0+x1)/2,3.7,(z0+z1)/2,alongX?L+1.3:1.3,.3,alongX?1.3:L,PIETRA2);wallC(x0,z0,x1,z1,-2,40,1);}
     /* 뒷문 둘레 */
     P(BOX,BACK[0],3.4,-HD-.05,BACK[1]+.6,.3,.8,BEAM);for(const s of [-1,1])P(BOX,BACK[0]+s*(BACK[1]/2+.15),1.6,-HD-.05,.3,3.2,.8,BEAM);
-    /* 뒷문: 두 짝 나무문, F로 함께 여닫고 훈련장 쪽(북쪽)으로 열린다. 처음엔 닫혀 있다 */
-    {const hw=BACK[1]/2,dz=-HD+T/2,E=W(BACK[0]+hw,dz),Wd=W(BACK[0]-hw,dz);const a=hdoorAdd(E.x,.08,E.z,hw,BACK[3]-.12,-1,false,1),b=hdoorAdd(Wd.x,.08,Wd.z,hw,BACK[3]-.12,-1,false,-1);a.pair=b;b.pair=a;
+    /* 뒷문: 서부 술집식 스윙도어 두 짝. 지나가면 밀려 열리고, 지나간 뒤엔 앞뒤로 흔들리다 닫힌다 (F 없이, 부딪힘 없이) */
+    {const hw=BACK[1]/2,dz=-HD+T/2,E=W(BACK[0]+hw,dz),Wd=W(BACK[0]-hw,dz);swingDoorAdd(E.x,.08,E.z,hw,1);swingDoorAdd(Wd.x,.08,Wd.z,hw,-1);
       P(BOX,BACK[0],.05,dz,BACK[1],.1,T+.2,0x6a6058);}   /* 문턱 */
     /* 허수아비 (때리면 피해가 뜬다) */
     for(let k=0;k<5;k++){const px=-14+k*7,pz=y0+7;P(CYL(.08,.1,6),px,1,pz,1,2,1,WOOD);P(BOX,px,1.5,pz,.6,.8,.3,0xd8c896);P(BOX,px,1.5,pz,1.4,.1,.1,WOOD);P(SPH,px,2.15,pz,.22,.26,.22,0xd8c896);const p=W(px,pz);colliders.push({x:p.x,z:p.z,r:.4});if(typeof dummyAdd==='function')dummyAdd(p.x,p.z);}
@@ -19926,6 +19926,28 @@ function hdoorAdd(hx,y,hz,w,h,sd,open,dir=1){const g=new THREE.Group();g.positio
   {const c=d.cC;c.x=hx-dir*w/2;c.z=hz;c.hw=w/2;c.hd=.06;c.r=w/2+.06;}
   {const c=d.cO,dx=-dir*Math.cos(1.75),dz=sd*Math.sin(1.75);c.x=hx+dx*w/2;c.z=hz+dz*w/2;c.hw=(Math.abs(dx)*w+.12)/2;c.hd=(Math.abs(dz)*w+.12)/2;c.r=Math.hypot(c.hw,c.hd);}
   g.rotation.y=d.base+d.a;HDOORS.push(d);hdoorCol(d);return d;}
+/* 스윙도어 (서부 술집 문): 경첩(hx,hz)에서 dir=+1이면 서쪽, -1이면 동쪽으로 뻗는 허리 높이 반쪽 문. 사람이 지나가면 가는 쪽으로 밀려 열리고,
+   비켜나면 용수철처럼 앞뒤로 몇 번 흔들리다 닫힌다. 부딪힘은 없다 (SWINGS는 HDOORS 곁에) */
+function swingDoorAdd(hx,y,hz,w,dir){const g=new THREE.Group();g.position.set(hx,y,hz);const base=dir<0?Math.PI:0;g.rotation.y=base;scene.add(g);const leaf=g;   /* 장면 바로 아래 그룹을 돌린다 (자식만 돌리면 얼린 행렬이 안 풀릴 때가 있다) */
+  const wood=new THREE.MeshStandardMaterial({color:0x7a4e2c,roughness:.8}),dark=new THREE.MeshStandardMaterial({color:0x4a2e18,roughness:.85}),brass=new THREE.MeshStandardMaterial({color:0xc8a050,metalness:.7,roughness:.35});
+  const add=(geo,m,x,yy,z)=>{const q=new THREE.Mesh(geo,m);q.position.set(x,yy,z);q.castShadow=true;q.receiveShadow=true;leaf.add(q);return q;};
+  const y0=.55,y1=1.75,yc=(y0+y1)/2,ww=w-.04;   /* 무릎 위에서 어깨 아래까지 */
+  for(const x of [-.05,-ww+.05])add(new THREE.BoxGeometry(.09,y1-y0+(x<-.1?.18:0),.07),dark,x,yc+(x<-.1?.09:0),0);   /* 세로 틀 (가운데 쪽이 조금 높다) */
+  add(new THREE.BoxGeometry(ww,.1,.07),dark,-ww/2,y0+.05,0);add(new THREE.BoxGeometry(ww,.08,.07),dark,-ww/2,y0+.62,0);   /* 아래·가운데 가로대 */
+  for(let k=0;k<8;k++){const t=(k+.5)/8,top=y1-.05+.18*t*t;const x=-.05-(ww-.1)*t,hh=top-(y0+.62);add(new THREE.BoxGeometry((ww-.1)/8*.62,hh,.035),wood,x,y0+.62+hh/2,0);}   /* 위쪽 살: 가운데로 갈수록 높아지는 곡선 */
+  for(let k=0;k<4;k++)add(new THREE.BoxGeometry((ww-.12)/4-.03,.5,.05),wood,-.06-((ww-.12)/4)*(k+.5),y0+.34,0);   /* 아래쪽 판 */
+  {const pts=[];for(let k=0;k<=12;k++){const t=k/12;pts.push(new THREE.Vector3(-.05-(ww-.1)*t,y1+.18*t*t,0));}const cv=new THREE.CatmullRomCurve3(pts);const q=new THREE.Mesh(new THREE.TubeGeometry(cv,16,.04,6,false),dark);q.castShadow=true;leaf.add(q);}   /* 위 테두리 */
+  for(const hy of [y0+.15,y1-.15])add(new THREE.BoxGeometry(.12,.1,.11),brass,0,hy,0);   /* 놋쇠 경첩 */
+  const d={g,hx,hz,y,w,dir,base,a:0,v:0};SWINGS.push(d);return d;}
+function swingTick(dt){if(!SWINGS.length||!player)return;dt=Math.min(dt,.05);
+  for(const d of SWINGS){const tipX=d.hx-d.dir*d.w;let want=0;
+    const feel=(q,me)=>{if(Math.abs(q.y-d.y)>2)return;const mx=Math.min(d.hx,tipX)-.35,Mx=Math.max(d.hx,tipX)+.35,dz=q.z-d.hz;if(q.x<mx||q.x>Mx||Math.abs(dz)>1.1){if(me)d.side=0;return;}
+      if(me){if(!d.side)d.side=Math.sign(dz)||1;want=-d.side;}else if(!want)want=-(Math.sign(dz)||1);};   /* 들어온 쪽의 반대로 민다 (지나가는 동안 그대로) */
+    feel(player.position,true);for(const o of others.values())feel(o.mesh.position,false);
+    /* 열림 각도(+1이 남쪽)를 문짝 회전으로: dir=+1은 그대로, dir=-1은 뒤집는다 */
+    if(want){const t=want*1.35;d.a+=(t-d.a)*Math.min(1,dt*12);d.v=(t-d.a)*6;}
+    else{d.v+=(-34*d.a-1.6*d.v)*dt;d.a+=d.v*dt;if(Math.abs(d.a)<.002&&Math.abs(d.v)<.01){d.a=0;d.v=0;}}   /* 용수철: 앞뒤로 흔들리다 멈춘다 */
+    const r=d.base+d.a*d.dir;if(d.g.rotation.y!==r)d.g.rotation.y=r;}}
 function hdoorCol(d){const on=c=>{c.y0=d.y-.4;c.y1=d.y+d.h;},off=c=>{c.y0=-1e9;c.y1=-1e9;};if(d.open){on(d.cO);off(d.cC);}else{on(d.cC);off(d.cO);}}
 function hdoorNear(){let b=-1,bd=1.7;const p=player.position;for(let i=0;i<HDOORS.length;i++){const d=HDOORS[i];if(Math.abs(p.y-d.y)>1.5)continue;const q=d.pair?d.pair.hx:d.hx-d.dir*d.w;const dd=Math.hypot(p.x-(d.hx+q)/2,p.z-d.hz)-(d.pair?.6:0);if(dd<bd){bd=dd;b=i;}}return b;}   /* 두 짝 문은 두 짝 가운데에서 재고 조금 더 멀리서도 된다 */
 function hdoorToggle(i){const d=HDOORS[i];if(!d)return;const o=!d.open;for(const e of d.pair?[d,d.pair]:[d]){e.open=o;hdoorCol(e);   /* 두 짝 문은 함께 여닫는다 */
@@ -19988,7 +20010,7 @@ function updateWorld(dt){
   if(!it&&MARCUS.guildBook&&Math.hypot(player.position.x-MARCUS.guildBook.x,player.position.z-MARCUS.guildBook.z)<2.4&&Math.abs(player.position.y-MARCUS.guildBook.y)<2)it='gbook';
   if(!it&&Math.hypot(player.position.x-DOOR_IN.x,player.position.z-DOOR_IN.z)<2.8)it='door_in';
   if(!it&&Math.hypot(player.position.x-DOOR_OUT.x,player.position.z-DOOR_OUT.z)<2.6)it='door_out';
-  hdoorTick(dt);hearthTick(dt);if(gqTick.ok){gqSync();gqTick(dt);gqMarkTick();if(!it){const g=gqNear();if(g)it=g;}}if(!it&&HDOORS.length){const di=hdoorNear();if(di>=0)it='hdoor:'+di;}
+  hdoorTick(dt);swingTick(dt);hearthTick(dt);if(gqTick.ok){gqSync();gqTick(dt);gqMarkTick();if(!it){const g=gqNear();if(g)it=g;}}if(!it&&HDOORS.length){const di=hdoorNear();if(di>=0)it='hdoor:'+di;}
   // 사람들: 머리 위 표시가 돈다 (말을 걸 때만 쳐다본다)
   let bestN=null,bd=3.3;
   for(const n of NPCS){const hid=!!(n.hideIf&&n.hideIf()),d=hid?1e9:Math.hypot(player.position.x-n.x,player.position.z-n.z);n.mesh.visible=d<110;{const ol=n.mesh.userData.outlines,on=d<20;if(ol&&ol.length&&ol[0].visible!==on)for(const m of ol)m.visible=on;}
