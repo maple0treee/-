@@ -17230,15 +17230,22 @@ function tryJump(){if(!P||!player)return;
   if(jumpY<=0.001){vy=8.6;P.airJ=false;return;}
   if(jobChain(P.job).includes('assassin')&&!P.airJ&&!P.dash&&!P.leap){   /* 암살자 더블 점프: 닌자·어쌔신으로 전직해도 남는다 */P.airJ=true;vy=Math.max(vy,0)*.2+8.4;
     const p=player.position.clone();VFX.shock(p,0x9a90b0,1.1,.28);dustPuffs(p,.5,5);sfx('whoosh',p,.7,1.25);}}
-let blinkCd=0;
+let blinkCd=0,blinkTipT=0;
+const BLINK_CD=3,BLINK_DIST=7;   /* 마법사 계열 순간이동: 다시 쓰기까지 3초, 최대 7m */
 // 마법사 계열: Shift를 누르면 이동 방향(없으면 정면)으로 순간이동
-function mageBlink(dir){if(mode!=='world'||P.hp<=0||tAll<blinkCd||P.dash||P.leap)return;if(P.fly){toast('지팡이 위에서는 순간이동을 쓸 수 없어요');return;}const ag=false;blinkCd=tAll+.5;
+function mageBlink(dir){if(mode!=='world'||P.hp<=0||P.dash||P.leap)return;
+  if(tAll<blinkCd){if(tAll>blinkTipT){blinkTipT=tAll+.8;toast('순간이동 준비 중 ('+Math.ceil(blinkCd-tAll)+'초)');}return;}
+  if(P.fly){toast('지팡이 위에서는 순간이동을 쓸 수 없어요');return;}
   const f=dir||moveDir()||flatFwd(),from=player.position.clone(),pos={x:from.x,z:from.z};
-  // 벽·바위·보스 몸을 그대로 넘어 7m 앞에 나타난다. 도착 자리가 막혀 있으면 조금 더 앞의 빈 자리로 (그래도 없으면 가장 가까운 빈 곳으로 밀려난다)
-  {const free=q=>{const t={x:q.x,z:q.z,y:from.y+1};pushOut(t,.5);if(Math.hypot(t.x-q.x,t.z-q.z)>.05)return false;for(const m of alive()){if(!(m.D.boss||m.D.dragon))continue;if(Math.hypot(q.x-m.mesh.position.x,q.z-m.mesh.position.z)<m.r+.5)return false;}return true;};
-    let best=null;for(let d=7;d<=13;d+=.5){const q={x:from.x+f.x*d,z:from.z+f.z*d};OR.worldClamp(q,.5);if(free(q)){best=q;break;}}
-    if(!best){best={x:from.x+f.x*7,z:from.z+f.z*7};OR.worldClamp(best,.5);const t={x:best.x,z:best.z,y:from.y+1};pushOut(t,.5);best.x=t.x;best.z=t.z;}
-    pos.x=best.x;pos.z=best.z;}
+  // 7m 앞까지 0.25m씩 나아가다 벽·건물·바위에 막히면 그 바로 앞에서 멈춘다 (벽을 뚫고 지나가지 않는다).
+  // 몬스터 몸은 지나갈 수 있지만 보스 몸 속에는 내려앉지 않는다
+  {const y=from.y+1,wall=q=>{if(projWall(q.x,y,q.z))return true;const c={x:q.x,z:q.z};OR.worldClamp(c,.5);return Math.hypot(c.x-q.x,c.z-q.z)>.05;},
+      inBoss=q=>{for(const m of alive()){if(!(m.D.boss||m.D.dragon))continue;if(Math.hypot(q.x-m.mesh.position.x,q.z-m.mesh.position.z)<m.r+.5)return true;}return false;};
+    const path=[{x:from.x,z:from.z}];for(let d=.25;d<=BLINK_DIST+1e-6;d+=.25){const q={x:from.x+f.x*d,z:from.z+f.z*d};if(wall(q))break;path.push(q);}
+    let k=path.length-1;while(k>0&&inBoss(path[k]))k--;
+    pos.x=path[k].x;pos.z=path[k].z;const t={x:pos.x,z:pos.z,y};pushOut(t,.5);pos.x=t.x;pos.z=t.z;   /* 벽에 바짝 붙었으면 몸 반지름만큼 떼어 놓는다 */
+    if(k<2){toast('막혀서 순간이동할 수 없어요');return;}}
+  blinkCd=tAll+BLINK_CD;
   OR.worldClamp(pos,.5);player.position.x=pos.x;player.position.z=pos.z;const gy=heightAt(pos.x,pos.z);if(player.position.y<gy)player.position.y=gy;pvel.x=pvel.z=0;
   const to=player.position.clone(),col=basicRim(P.job)||0x9fb8ff;
   for(const at of [from,to]){VFX.burst(at.clone().setY(at.y+1),col,18,3,.4,{mix:0xffffff,up:.3});VFX.shock(at,col,1.4,.3);}
