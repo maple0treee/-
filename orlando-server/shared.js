@@ -104,9 +104,13 @@
   // 내 집: 엑시즈 시내에서 배정받은 집의 안 (집마다 문은 다르지만 안은 이 방 하나를 함께 쓴다, 다른 사람은 안 보인다)
   const MYHOME = { x: -200, z: -840, hw: 5.5, hd: 4.5, rh: 3.8 };
   const inMyHome = (x, z) => Math.abs(x - MYHOME.x) < MYHOME.hw + 6 && Math.abs(z - MYHOME.z) < MYHOME.hd + 6;
+  // 가늘롱 저택: 엑시즈 귀족 구역에 선 귀족 가늘롱의 집 안 (큰 응접실 하나, 앞문으로 드나든다)
+  const GHOUSE = { x: -240, z: -800, hw: 8, hd: 6, rh: 5.2 };
+  const inGHouse = (x, z) => Math.abs(x - GHOUSE.x) < GHOUSE.hw + 6 && Math.abs(z - GHOUSE.z) < GHOUSE.hd + 6;
   function zoneAt(x, z) {
     if (inTHouse(x, z)) return 'thouse';
     if (inMyHome(x, z)) return 'myhome';
+    if (inGHouse(x, z)) return 'ghouse';
     if (x >= 800) return isleAt(x, z).id;
     if (z > 300) return 'dungeon';
     if (z < -300) return x > 100 ? 'wlair' : 'hall';
@@ -115,7 +119,7 @@
     const n = spNear(x, z); const i = n ? clampN(Math.floor(n.t / SP.Q), 0, 7) : 0;
     return SP.ZONES[i];
   }
-  const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, myhome: 1, marcus: 1, milgol: 1, fort: 1, coachway: 1, castle: 1, guildhall: 1, exmarket: 1, arena: 1 };
+  const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, myhome: 1, ghouse: 1, marcus: 1, milgol: 1, fort: 1, coachway: 1, castle: 1, guildhall: 1, exmarket: 1, arena: 1 };
 
   // 걸어 다닐 수 있는 곳 안으로 붙잡는다 (첫 지역 원, 길, 두 번째 지역 원, 석굴)
   function roomClamp(p, rad) {
@@ -131,6 +135,7 @@
     { const C = CELLAR; if (Math.abs(p.x - C.x) < C.hw - rad && p.z > C.z0 + rad && p.z <= C.z1 - rad) return true; } return Math.abs(p.x - H.x) < H.corHw - rad && p.z > H.z1 - 1 && p.z < HALL.z - HALL.R + 2; };   // 벽에 바짝 붙어도 눈(카메라)이 벽 속으로 들어가지 않게 몸 반지름만큼 띄운다
   function worldClamp(p, rad) {
     if (inTHouse(p.x, p.z)) { const T = THOUSE; p.x = clampN(p.x, T.x - T.hw + rad, T.x + T.hw - rad); p.z = clampN(p.z, T.z - T.hd + rad, T.z + T.hd - rad); return; }
+    if (inGHouse(p.x, p.z)) { const T = GHOUSE; p.x = clampN(p.x, T.x - T.hw + rad, T.x + T.hw - rad); p.z = clampN(p.z, T.z - T.hd + rad, T.z + T.hd - rad); return; }
     if (inMyHome(p.x, p.z)) { const T = MYHOME; p.x = clampN(p.x, T.x - T.hw + rad, T.x + T.hw - rad); p.z = clampN(p.z, T.z - T.hd + rad, T.z + T.hd - rad); return; }
     if (p.x >= 800) { const I = isleAt(p.x, p.z); const d = Math.hypot(p.x - I.x, p.z - I.z), r = isleEdge(I, Math.atan2(p.z - I.z, p.x - I.x)) - rad; if (d > r) { p.x = I.x + (p.x - I.x) * r / d; p.z = I.z + (p.z - I.z) * r / d; } return; }
     if (p.z > 300) return roomClamp(p, rad);
@@ -357,6 +362,6 @@
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { boardTierOf, MHUNT, MLINES, THOUSE, inTHouse, MYHOME, inMyHome, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { boardTierOf, MHUNT, MLINES, THOUSE, inTHouse, MYHOME, inMyHome, GHOUSE, inGHouse, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
