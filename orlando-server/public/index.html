@@ -2817,6 +2817,8 @@ const sitEase=k=>k*k*(3-2*k);
 function seatLeave(){if(!P||P.seat==null)return;const s=SEATS[P.seat];P.seat=null;sitting=false;if(s){const tx=s.x+Math.sin(s.ry)*.7,tz=s.z+Math.cos(s.ry)*.7;
   const q=standSpot(s,tx,tz);
   standUp={t:0,T:.42,fx:player.position.x,fy:player.position.y,fz:player.position.z,tx:q.x,ty:q.y,tz:q.z,ry:s.ry,u:0};}}
+/* 앉으면 머리가 엉덩이보다 앞에 있다: 앉은 만큼 시선을 몸 앞쪽으로 내민다 (의자에 앉으면 0.32m, 바닥에 앉으면 0.2m) */
+function sitLean(v,k){if(CCAR.ride||(P&&P.fly))return;const a=sitEase(player.userData.sitK||0)*(.2+seatLift()*.12)*k;if(a<1e-3)return;const ry=player.rotation.y;v.x+=Math.sin(ry)*a;v.z+=Math.cos(ry)*a;}
 function seatLift(){return P&&P.seat!=null?1:standUp?1-sitEase(standUp.u):0;}
 /* 일어설 자리 고르기: 길드홀 둥근 탁자 걸상처럼 바로 앞에 탁자가 붙어 있으면 0.7m 앞이 탁자와 걸상 사이에 끼어,
    다 일어선 뒤 몸이 옆으로 확 밀려나며 튕겼다. 앞쪽부터 양옆·뒤로 돌려 보며 아무것에도 겹치지 않는 자리를 찾는다 */
@@ -19298,7 +19300,7 @@ function updatePlayer(dt){
     sitKStep(player.userData,sitting||!!P.fly,dt);
     animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);
     const back=new THREE.Vector3(0,0,1).applyQuaternion(camera.quaternion);
-    const eye=new THREE.Vector3(player.position.x,player.position.y+1.65-sitEase(player.userData.sitK||0)*.7+seatLift()*.25,player.position.z);
+    const eye=new THREE.Vector3(player.position.x,player.position.y+1.65-sitEase(player.userData.sitK||0)*.7+seatLift()*.25,player.position.z);sitLean(eye,.8);
     let dist=4.2;const cp=eye.clone().addScaledVector(back,dist);
     if(CCAR.ride)cp.y+=1.3;
     const gh=heightAt(cp.x,cp.z)+.4;if(cp.y<gh)cp.y=gh;
@@ -19315,22 +19317,23 @@ function updatePlayer(dt){
       camera.position.set(player.position.x-lx*rx+lz*f.x,player.position.y+RH+HR*Math.cos(rollA),player.position.z-lx*rz+lz*f.z);}
     sitKStep(player.userData,sitting||!!P.fly,dt);
     if(mirrorNear()){player.visible=true;animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);player.visible=false;}   /* 거울에 지금 하는 동작이 비치게 */
-    if(CCAR.ride)camera.position.y+=.6;else camera.position.y+=seatLift()*.28;
+    if(CCAR.ride)camera.position.y+=.6;else{camera.position.y+=seatLift()*.28;sitLean(camera.position,1);}
     updateViewModel(dt,moving&&jumpY===0);
   }
   camNearFit();
   return moving;
 }
 /* 진짜 거울: 거울 면에 비친 쪽으로 카메라를 하나 더 두어 그 그림을 거울에 붙인다 (three.js Reflector와 같은 방법, 비스듬한 자르기 면 포함).
+   거울 그림은 장면을 그릴 때 이미 밝기 낮추기(톤 매핑)를 거치므로 거울 면에서 한 번 더 하지 않는다 (두 번 하면 거울 속이 36% 어둡고 뿌옇게 보였다).
    가까이(7m 안) 거울 앞쪽에 있을 때만 그린다. 1인칭에서도 거울에는 내 모습이 비치도록 그리는 동안만 몸을 보이게 한다 */
 /* 1인칭에서는 몸이 안 보여서 몸 자세(공격·스킬·앉기·걷기)를 움직이지 않았다. 그래서 거울에는 늘 가만히 선 모습만 비쳤다.
    거울이 가까이(8m 안) 있으면 1인칭에서도 몸 자세를 3인칭과 똑같이 움직인다 */
 function mirrorNear(){if(!MIRRORS.length||!player)return false;const p=player.position;for(const m of MIRRORS){if(Math.abs(m.position.x-p.x)+Math.abs(m.position.z-p.z)<11&&Math.abs(m.position.y-p.y)<4)return true;}return false;}
 function mirrorAdd(x,y,z,w,h,ry){
-  const rt=new THREE.WebGLRenderTarget(256,Math.round(256*h/w),{type:THREE.HalfFloatType});
+  const rt=new THREE.WebGLRenderTarget(512,Math.round(512*h/w),{type:THREE.HalfFloatType});   /* 256이면 가까이서 볼 때 몸이 뭉개져 흐릿했다 */
   const tm=new THREE.Matrix4(),mat=new THREE.ShaderMaterial({uniforms:{tDiffuse:{value:rt.texture},textureMatrix:{value:tm}},
     vertexShader:'uniform mat4 textureMatrix;varying vec4 vUv;void main(){vUv=textureMatrix*vec4(position,1.0);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
-    fragmentShader:'uniform sampler2D tDiffuse;varying vec4 vUv;void main(){vec3 c=texture2DProj(tDiffuse,vUv).rgb*vec3(.93,.96,1.0);gl_FragColor=vec4(c,1.0);\n#include <tonemapping_fragment>\n#include <encodings_fragment>\n}'});
+    fragmentShader:'uniform sampler2D tDiffuse;varying vec4 vUv;void main(){vec3 c=texture2DProj(tDiffuse,vUv).rgb*vec3(.97,.98,1.0);gl_FragColor=vec4(c,1.0);\n#include <encodings_fragment>\n}'});
   const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat);m.position.set(x,y,z);m.rotation.y=ry||0;scene.add(m);
   const vc=new THREE.PerspectiveCamera(),N=new THREE.Vector3(),RP=new THREE.Vector3(),CP=new THREE.Vector3(),V=new THREE.Vector3(),LA=new THREE.Vector3(),TG=new THREE.Vector3(),R=new THREE.Matrix4(),PL=new THREE.Plane(),CL=new THREE.Vector4(),Q=new THREE.Vector4();
   MIRRORS.push(m);
