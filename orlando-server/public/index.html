@@ -22810,6 +22810,9 @@ const GENQ={
     steps:[{key:'weed',need:6,goal:'밀밭의 잡초 뽑기',act:'잡초 뽑기',dur:1.5,fx:0x6a8a3a},
            {key:'water',need:4,goal:'마른 고랑에 물 주기',act:'물 주기',dur:1.7,fx:0x9ad7ff}],
     report:'베르타에게 돌아가기',exp:.6,gold:25},
+  /* 가늘롱과 차 한잔: 날마다 다른 귀족들의 이야기(마르쿠스 왕국·엑시즈)를 듣고 대답한다. 대화 한 번으로 끝난다 */
+  ganel1:{title:'귀족들의 이야기',npc:'ganel',npcs:['ganel','ganel_walk'],minLv:60,maxLv:200,daily:1,where:'엑시즈 귀족 구역 · 가늘롱 저택',
+    steps:[{key:'talk',talk:1,need:1,goal:'가늘롱의 이야기 듣기'}],report:'가늘롱에게 대답하기',exp:.4,gold:15,talk:(id,n)=>ganelTalkQ(id,n)},
 };
 const GQ={sp:{},mk:null,work:null,bar:null};
 const gqOf=id=>P&&P.gq&&P.gq[id];
@@ -22844,7 +22847,7 @@ function gqSpotMesh(kind){const g=new THREE.Group();g.userData.noMap=1;
   return g;}
 function gqClearSpots(id){const L=GQ.sp[id];if(L)for(const o of L)if(o.mesh)scene.remove(o.mesh);delete GQ.sp[id];}
 /* 지금 단계의 남은 자리만 땅에 놓는다 (불러온 뒤에도 남은 수만큼) */
-function gqPlaceSpots(id){gqClearSpots(id);const st=gqStepOf(id),q=gqOf(id);if(!st)return;const H=MARCUS.farmHouse;if(!H||!H.spots.length)return;
+function gqPlaceSpots(id){gqClearSpots(id);const st=gqStepOf(id),q=gqOf(id);if(!st||st.talk)return;   /* 이야기 퀘스트는 일할 자리가 없다 */const H=MARCUS.farmHouse;if(!H||!H.spots.length)return;
   if(!H.free)H.free=H.spots.filter(p=>!colliders.some(c=>Math.abs(c.x-p.x)<12&&Math.abs(c.z-p.z)<12&&Math.hypot(c.x-p.x,c.z-p.z)<(c.box?Math.max(c.hw||0,c.hd||0):c.r||1)+1.8));   /* 나중에 놓인 나무·사람에도 막히지 않게 한 번 더 거른다 */
   const F=H.free.length>=10?H.free:H.spots,left=st.need-(q.h|0),off=q.s?6:0,L=[];
   for(let k=0;k<left;k++){const p=F[(off+k)%F.length],m=gqSpotMesh(st.key);m.position.set(p.x,heightAt(p.x,p.z),p.z);m.rotation.y=k*1.7;scene.add(m);L.push({x:p.x,z:p.z,mesh:m,done:false});}
@@ -22875,7 +22878,7 @@ function gqTick(dt){if(!gqTick.ok||!P)return;
   updateQuestHud();save();}
 const _gqWet=new THREE.Color(0x5a4028);
 /* 농부 대화 */
-function gqAct(id){const G=GENQ[id],n=npcCur;if(!G||!P)return;
+function gqAct(id){const G=GENQ[id],n=npcCur;if(!G||!P)return;if(G.talk)return G.talk(id,n);
   if(gqDoneQ(id)){const exp=Math.round(needExp(P.lv)*G.exp),gold=P.lv*G.gold;n.mqLock=true;
     showPages(['어머, 벌써 다 했어? 밭이 훨씬 숨을 쉬네.','잡초 뿌리까지 깔끔하게 뽑았구먼. 고랑도 촉촉하고.'],0,last=>{n.mqLock=false;
       delete P.gq[id];const d=(P.gqDone=P.gqDone||{})[id]||{n:0};P.gqDone[id]={n:(d.n|0)+1,t:Date.now()};gqClearSpots(id);
@@ -22893,18 +22896,110 @@ function gqAct(id){const G=GENQ[id],n=npcCur;if(!G||!P)return;
         npcEndLine('고마워! 초록 빛이 떠 있는 데가 일할 자리야. 거기 가서 손을 보태 주면 돼.');gqFx(id);},'pri wide');
       npcBtn(box,'다음에요',()=>renderNpc('그래, 시간 될 때 와 줘.'),'wide');});});}
 /* 퀘스트 주는 사람 머리 위: 받을 수 있거나 보고할 때 초록 느낌표 */
-function gqMarkTick(){if(!gqTick.ok||!player)return;if(!GQ.mk){GQ.mk=qmarkMake(0x9fe870,0x1e3a10);}const g=GQ.mk;let n=null;
-  for(const id in GENQ){const G=GENQ[id];if(gqDoneQ(id)||(!gqOf(id)&&gqLvOk(id)&&!gqClear(id))){n=NPCS.find(q=>q.id===G.npc);if(n)break;}}
-  const ok=n&&n.mesh&&!(QMARK.n===n&&QMARK.g&&QMARK.g.visible),d=ok?Math.hypot(camera.position.x-n.mesh.position.x,camera.position.z-n.mesh.position.z):1e9;
-  if(GQ.mkN&&GQ.mkN!==n&&GQ.mkN.mesh.userData.marker)GQ.mkN.mesh.userData.marker.visible=true;GQ.mkN=n;
-  g.visible=!!ok&&d<160&&mode!=='title';if(!g.visible)return;if(n.mesh.userData.marker)n.mesh.userData.marker.visible=false;
-  const p=n.mesh.position,hy=(n.mesh.userData.markerY??2.6)+.25;g.position.set(p.x,p.y+hy+Math.sin(tAll*2.4)*.07,p.z);g.scale.setScalar(1.1);
-  g.rotation.y=Math.atan2(camera.position.x-p.x,camera.position.z-p.z);g.userData.halo.material.opacity=.7+Math.sin(tAll*3)*.2;}
+function gqMarkTick(){if(!gqTick.ok||!player)return;const want=[];
+  for(const id in GENQ){const G=GENQ[id];if(!(gqDoneQ(id)||(!gqOf(id)&&gqLvOk(id)&&!gqClear(id))))continue;
+    const n=(G.npcs||[G.npc]).map(i=>NPCS.find(q=>q.id===i)).find(n=>n&&n.mesh&&!(n.hideIf&&n.hideIf()));if(n&&!want.includes(n))want.push(n);}   /* 같은 사람이 여러 곳에 있으면(산책) 지금 보이는 쪽 */
+  const L=GQ.mks=GQ.mks||[];while(L.length<want.length)L.push({g:qmarkMake(0x9fe870,0x1e3a10),n:null});
+  for(let i=0;i<L.length;i++){const M=L[i],n=want[i]||null,g=M.g;
+    if(M.n&&M.n!==n&&!want.includes(M.n)&&M.n.mesh.userData.marker)M.n.mesh.userData.marker.visible=true;M.n=n;
+    const ok=n&&!(QMARK.n===n&&QMARK.g&&QMARK.g.visible),d=ok?Math.hypot(camera.position.x-n.mesh.position.x,camera.position.z-n.mesh.position.z):1e9;
+    g.visible=!!ok&&d<160&&mode!=='title';if(!g.visible)continue;if(n.mesh.userData.marker)n.mesh.userData.marker.visible=false;
+    const p=n.mesh.position,hy=(n.mesh.userData.markerY??2.6)+.25;g.position.set(p.x,p.y+hy+Math.sin(tAll*2.4)*.07,p.z);g.scale.setScalar(1.1);
+    g.rotation.y=Math.atan2(camera.position.x-p.x,camera.position.z-p.z);g.userData.halo.material.opacity=.7+Math.sin(tAll*3)*.2;}}
 /* 농부 베르타: 엑시즈 북쪽 농장의 가운데 농가 앞 */
 (function(){const H=MARCUS.farmHouse;if(!H||NPCS.some(n=>n.id==='farmer'))return;NPC_POSE.farmer='hips';
   addNpc({id:'farmer',name:'베르타',role:'농부',x:H.stand.x,z:H.stand.z,faceX:H.face.x,faceZ:H.face.z,look:{robe:0x7a5a3a,robe2:0xd8c8a0,hat:'wide',hatC:0xc8a860,long:1,cloth:{apron:0x6a5a3a}},
     lines:['밀은 정직해. 돌본 만큼 자라거든.','왕실 곡창에 들어가는 밀 절반이 이 들판에서 나와. 자랑할 만하지?','비가 오면 좋고, 안 오면 물동이를 들어야지 뭐.'],acts:[['밭일 돕기','gq:farm1']]});})();
 gqTick.ok=1;
+/* ---- 일일 퀘스트 '귀족들의 이야기': 가늘롱이 차를 마시며 마르쿠스 왕국과 엑시즈를 두고 귀족들 사이에 도는 이야기를 들려준다.
+   날마다(자정 기준) 차례로 다른 이야기. 마지막에 가늘롱이 묻고, 대답에 따라 맞장구가 다르다 */
+const GN_TALES=[
+  {pages:['오늘은 이 나라 이름 이야기를 해 보리다. 마르쿠스. 그대는 이 이름이 어디서 왔는지 아시오?',
+    '의회장의 늙은 귀족들은 해마다 이걸로 말다툼을 하오. 한쪽은 강가에 첫 망루를 세운 어부 우두머리의 이름이라 하고,',
+    '다른 쪽은 옛말로 \'바다로 가는 길\'이라는 뜻이라 우기지. 왕실 기록원 사서에게 물으면 빙그레 웃기만 한다오.',
+    '작년엔 두 쪽이 하도 목소리를 높여서, 의장이 회의를 접고 모두에게 차를 돌렸소. 차가 식을 때쯤엔 다들 무엇으로 다퉜는지도 잊었지.'],
+   q:'그래서 말인데, 그대는 어느 쪽이 그럴듯하오?',
+   a:[['어부 우두머리의 이름 같아요','허허, 소박한 쪽을 골랐구려. 왕국이 강가 그물에서 시작됐다는 이야기, 나도 싫지 않소.'],
+      ['\'바다로 가는 길\'이 더 멋져요','그렇지! 이름엔 멋이 있어야 하오. 다음 의회에서 그대 이름을 대며 거들어도 되겠소?'],
+      ['둘 다 아닐 것 같은데요','오호, 셋째 길이라. 의회장에 그 말을 던지면 올해 회의는 봄까지 끝나지 않겠구려. 허허.']]},
+  {pages:['의회장 이야기를 하나 더 하리다. 그곳 귀족들의 의자는 모두 같은 참나무로 짠 것인데, 높이가 조금씩 다르오.',
+    '가문이 오래될수록 한 치씩 높다는 소문이 있지. 그래서 새로 작위를 받은 집안은 첫 회의 날 방석을 두 장씩 깔고 온다오.',
+    '한번은 방석을 세 장 깐 어느 남작이 연설하다 그만 의자째 뒤로 넘어갔소. 의회장이 그렇게 조용했던 날이 없었지.',
+    '폐하께선 그 이야기를 들으시고 이듬해부터 의자 높이를 모두 같게 맞추라 하셨소. …그런데 방석은 아직도 몰래들 깔고 온다오.'],
+   q:'자리의 높이가 사람의 높이를 정한다고 보시오?',
+   a:[['아니요, 하는 일이 정하죠','옳소. 넘어진 남작도 그 뒤로 곡창 장부를 누구보다 꼼꼼히 맡아 보았지. 지금은 다들 그를 높이 사오.'],
+      ['조금은 그렇지 않을까요','솔직하구려. 사람들 눈이란 그런 것이니까. 그러니 나도 모자만큼은 높은 걸 쓰는 것이오. 허허.'],
+      ['방석 몇 장이면 될까요?','허허허! 두 장까지는 애교요. 세 장부터는 의자가 허락하지 않는다는 걸 그 남작이 보여 주었지.']]},
+  {pages:['엑시즈의 성문은 넷이오. 북문, 서문, 남문, 그리고 동문.',
+    '옛날엔 문마다 그 문을 지키는 귀족 가문이 따로 있었다 하오. 문지기가 아니라, 문 앞 길을 닦고 등불 기름을 대는 집안이었지.',
+    '우리 가문은 서문을 맡았소. 그래서 우리 집 할아버님들은 서문 대로의 깃발 줄이 처질 때마다 하인을 보내 다시 매게 하셨다오.',
+    '그런데 동문만은 아무 가문도 맡으려 들지 않았소. 사냥꾼들이 드나들며 흙과 피를 묻혀 오는 문이었으니까. 결국 기사단이 맡게 되었지.'],
+   q:'그대라면 네 문 가운데 어느 문을 맡고 싶소?',
+   a:[['동문이요. 모험가의 문이잖아요','역시 모험가로구려! 흙 묻은 문을 마다하지 않는 사람이 결국 성 안을 지키는 법이오.'],
+      ['서문이요. 깃발 줄이 예쁘던데요','오호, 우리 집 문을 고르다니 안목이 있구려! 깃발 줄이 처지면 그대에게 기별하리다.'],
+      ['남문이요. 사람이 제일 많이 다니니까요','장사꾼의 셈이로군. 남문 대로가 붐비는 덕에 시장이 사는 것도 맞는 말이오.']]},
+  {pages:['밀골 들판의 밀 이야기를 아시오? 왕국이 먹는 빵의 절반이 그 들판과 성 밖 농장에서 나오지.',
+    '할아버님 때 큰 흉년이 든 해가 있었소. 귀족들은 왕실 곡창을 열지 말지를 두고 의회장에서 사흘을 다퉜다 하오.',
+    '곡창을 열면 내년이 걱정이고, 닫아 두면 올겨울이 걱정이었지. 그때 폐하께서 한마디로 끝내셨다 하오. "내년은 살아남은 자들의 몫이다."',
+    '곡창 문이 열리던 날, 할아버님은 우리 집 창고 문도 함께 여셨소. 그해 겨울 저택엔 손님용 찻잎 말고는 남은 게 없었다지.'],
+   q:'그대가 그 자리에 있었다면 곡창을 열었겠소?',
+   a:[['당연히 열어야죠','그렇소. 사람이 있어야 내년 밀도 거두지. 들판의 농부들은 아직도 그 해를 이야기한다오.'],
+      ['반만 열었을 것 같아요','신중하구려. 실은 의회에서도 그 말이 나왔소. 다만 배고픈 이에게 반만 주는 법을 아무도 몰랐지.'],
+      ['저희 집 창고부터 열게요','허허, 우리 할아버님과 똑같은 말을 하는구려! 그대에게선 귀족 냄새가 나오.']]},
+  {pages:['요즘 귀족들 사이에서 제일 뜨거운 이야기는 항구요. 무역 공회 상인들이 배로 들여오는 찻잎과 비단 말이오.',
+    '예전엔 귀족이 상인을 낮춰 보았지. 그런데 지금은 공회장 집 응접실 찻잔이 우리 집 것보다 얇다는 소문이 돈다오.',
+    '어느 백작 부인은 바다 건너 비단을 먼저 사려고 새벽부터 선착장에 마차를 대 놓고 기다렸다 하오. 배는 그날 오지 않았지.',
+    '나도 배가 들어오는 날이면 부두에 제일 먼저 나가 있소. …찻잎 때문이지, 소문 때문은 아니오. 정말이오.'],
+   q:'귀족과 상인, 앞으로 이 왕국은 누가 이끌 것 같소?',
+   a:[['배를 가진 상인이요','허허, 매섭구려. 그래도 배가 닿을 항구를 지키는 건 왕국이라는 걸 잊지 마시오.'],
+      ['둘이 함께 이끌겠죠','그게 가장 품위 있는 답이오. 찻잔도 받침이 있어야 넘치지 않는 법이지.'],
+      ['찻잎을 가진 쪽이요','하하하! 그렇다면 내 찻장이 왕국의 열쇠로구려. 문단속을 단단히 해야겠소.']]},
+  {pages:['하레나 이야기를 해 보리다. 사막 너머의 도시 말이오.',
+    '처음 포탈이 열렸을 때, 귀족들은 하레나를 \'모래 먼지 동네\'라 부르며 코웃음을 쳤소. 왕실 마법사들이 왜 그 먼 곳과 길을 잇는지 다들 수군거렸지.',
+    '그런데 몇 해 지나지 않아 하레나 향신료가 엑시즈 식탁을 휩쓸었소. 지금은 저녁 연회에 사막 후추가 없으면 손님들이 서운해한다오.',
+    '게다가 그 길 끝은 길드홀 아래로 이어지지. 강해진 모험가만 건너올 수 있다니, 귀족들도 요즘은 그 문을 함부로 말하지 않소.'],
+   q:'그대는 하레나를 거쳐 왔다 들었소. 그곳은 어떤 곳이오?',
+   a:[['물 한 잔도 나눠 주는 따뜻한 곳이에요','오호, 그거 참 귀한 예절이오. 엑시즈 귀족들도 좀 배워야겠군. 다음 연회에 그 이야기를 해 보리다.'],
+      ['모래바람이 지독한 곳이죠','허허, 그대 모자에 아직 모래가 남은 것 같구려. 그래도 그 바람이 그대를 단단하게 만들었겠지.'],
+      ['향신료가 정말 맛있어요','그렇지! 사막 후추 한 줌이면 밋밋한 수프도 연회 요리가 되오. 그 점은 하레나에 고개 숙이리다.']]},
+  {pages:['기사단 본부 이야기요. 귀족 집안의 둘째 아들들은 대개 기사단에 들어간다오. 집은 맏이가 잇고, 칼은 둘째가 드는 셈이지.',
+    '내 조카도 그랬소. 첫 달 훈련장에서 돌아온 날, 녀석은 흙투성이 얼굴로 은 포크도 못 들 만큼 팔이 떨렸지.',
+    '그 아이 어머니는 기겁을 했지만, 나는 그날 처음으로 녀석이 제대로 저녁을 먹는 걸 보았소. 귀족 식탁에서 그렇게 맛있게 먹는 얼굴은 드물다오.',
+    '지금은 동문 밖 사냥터까지 순찰을 나가오. 가끔 저택에 들러 모험가들 무용담을 늘어놓는데, 그대 이야기가 나올 날도 머지않았겠지.'],
+   q:'그 조카에게 모험가로서 한마디 해 준다면?',
+   a:[['쉬는 것도 싸움의 일부라고요','길드 수칙 다섯째 줄이로군! 녀석은 쉬는 걸 지는 것으로 아니, 꼭 전해 주리다.'],
+      ['동료를 먼저 챙기라고요','훌륭하오. 기사의 칼보다 그 말이 오래 남지. 녀석의 방패에 새겨 주고 싶구려.'],
+      ['포크 드는 연습부터 하라고요','하하하! 맞는 말이오. 기사도 저녁 식탁에선 귀족이니까. 그대 말이라 하면 녀석도 웃겠구려.']]},
+  {pages:['엑시즈라는 이름이 옛말로 \'강이 머무는 곳\'이라는 건 들었겠지. 이 도시는 강을 끼고 자랐소.',
+    '여름 축제 날이면 다리 위에 등불을 줄줄이 매달고, 귀족이며 뱃사람이며 할 것 없이 한데 섞여 춤을 추오. 일 년에 단 하루, 자리 순서가 없는 날이지.',
+    '언젠가 어느 자작이 다리 난간에 올라 건배를 하다가 그대로 강에 빠졌소. 뱃사람들이 건져 올렸는데, 그는 젖은 채로 술잔을 끝까지 비웠다오.',
+    '그 뒤로 그 자작은 뱃사람들 술자리에 늘 불려 다니지. 강에 한 번 빠지면 엑시즈 사람이 된다는 말이 그래서 생겼다오.'],
+   q:'그대도 엑시즈 사람이 되고 싶소?',
+   a:[['다리 축제엔 꼭 가 볼게요','그러시오. 그날만큼은 나도 모자를 벗고 춤을 추오. …딱 한 곡만.'],
+      ['강에 빠지는 건 사양할게요','허허, 현명하구려. 그 자작도 다음 날 고뿔로 사흘을 앓았다오.'],
+      ['이미 엑시즈 사람인걸요','오호, 그 말 듣기 좋구려! 그럼 그대에게도 이 도시 차 맛을 제대로 가르쳐 드려야겠소.']]},
+];
+const gnTale=()=>{const t=new Date();t.setHours(0,0,0,0);return GN_TALES[Math.floor((t.getTime()-t.getTimezoneOffset()*60000)/864e5)%GN_TALES.length];};
+function ganelTalkQ(id,n){const G=GENQ[id];
+  if(gqClear(id)){renderNpc('오늘 이야기는 여기까지요. 이야기도 차처럼 하루에 한 잔이 알맞지. 내일 차 시간에 다시 들르시오.');return;}
+  if(P.lv<G.minLv){renderNpc(`허허, 귀족들 수다는 조금 더 세상을 다녀 본 뒤에 들어야 재미있다오. 좀 더 이름을 알리고 오시오. (Lv ${G.minLv}부터)`);return;}
+  if(P.lv>G.maxLv){renderNpc('그대처럼 이름난 분께 귀족들 뒷말이나 늘어놓기는 내 체면이 서지 않소. 이야기는 그대의 무용담으로 대신하리다.');return;}
+  if(gqOf(id)){ganelTell(id,n);return;}   /* 받아 놓고 듣다 말았으면 오늘 이야기를 처음부터 */
+  const again=P.gqDone&&P.gqDone[id];n.mqLock=true;
+  renderNpc(again?'오, 또 왔구려! 마침 차를 막 우렸소. 오늘도 귀족들 사이에 도는 이야기 하나 들려줄까?':'마침 잘 왔소. 차를 우리는 동안 말벗이 필요하던 참이었지. 이 엑시즈 귀족들 사이에 도는 이야기, 하나 들어 보겠소?',box=>{box.dataset.noskip='1';
+    npcBtn(box,'듣겠습니다',()=>{(P.gq=P.gq||{})[id]={s:0,h:0};updateQuestHud();save();log(`${gqTag(id)} 퀘스트: ${G.title} — ${G.steps[0].goal}`,'sys');gqFx(id);ganelTell(id,n);},'pri wide');
+    npcBtn(box,'다음에요',()=>{n.mqLock=false;renderNpc('허허, 바쁜 모양이구려. 이야기는 어디 가지 않소.');},'wide');});}
+function ganelTell(id,n){const T=gnTale();n.mqLock=true;
+  showPages(T.pages.concat([T.q]),0,q=>renderNpc(q,box=>{box.dataset.noskip='1';
+    for(const [t,r] of T.a)npcBtn(box,t,()=>ganelTold(id,n,r),'wide');}));}
+function ganelTold(id,n,r){const G=GENQ[id];if(!gqOf(id))return;n.mqLock=false;const exp=Math.round(needExp(P.lv)*G.exp),gold=P.lv*G.gold;
+  delete P.gq[id];const d=(P.gqDone=P.gqDone||{})[id]||{n:0};P.gqDone[id]={n:(d.n|0)+1,t:Date.now()};
+  P.gold+=gold;log(`${gqTag(id)} 퀘스트 완료: ${G.title} · 경험치 ${exp.toLocaleString('ko-KR')} · ${gold.toLocaleString('ko-KR')} 골드`,'good');sfx('coin');gainExp(exp);updateQuestHud();updateHud();save();
+  showPages([r],0,last=>npcEndLine(last+' 오늘 말벗이 되어 준 답례요. 내일도 차 시간에 들르시구려.'));}
+/* 응접실의 가늘롱과 산책하는 가늘롱 모두 이야기를 들려준다 */
+for(const k of ['ganel','ganel_walk']){const g=NPCS.find(n=>n.id===k);if(g&&!g.acts.some(a=>a[1]==='gq:ganel1'))g.acts.push(['귀족들의 이야기','gq:ganel1']);}
+/* 퀘스트 대화를 도중에 닫았으면 다음에 말을 걸 때 버튼이 다시 나오게 */
+for(const k of ['ganel','ganel_walk','farmer']){const g=NPCS.find(n=>n.id===k);if(!g)continue;const prev=g.onOpen;g.onOpen=()=>{g.mqLock=false;return prev?prev():false;};}
 
 /* ---------- 새 집: 버키를 만난 뒤 왕국이 엑시즈 시내 살림집 하나를 내어 준다 ----------
    MARCUS.homes = 배정할 수 있는 시내 집들의 앞문 자리 (buildHouse에서 적어 둔다).
