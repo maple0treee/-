@@ -104,8 +104,8 @@
   // 내 집: 엑시즈 시내에서 배정받은 집의 안 (집마다 문은 다르지만 안은 이 방 하나를 함께 쓴다, 다른 사람은 안 보인다)
   const MYHOME = { x: -200, z: -840, hw: 5.5, hd: 4.5, rh: 3.8 };
   const inMyHome = (x, z) => Math.abs(x - MYHOME.x) < MYHOME.hw + 6 && Math.abs(z - MYHOME.z) < MYHOME.hd + 6;
-  // 가늘롱 저택: 엑시즈 귀족 구역에 선 귀족 가늘롱의 집 안 (큰 응접실 하나, 앞문으로 드나든다)
-  const GHOUSE = { x: -240, z: -800, hw: 8, hd: 6, rh: 5.2 };
+  // 가늘롱 저택: 엑시즈 귀족 구역에 선 귀족 가늘롱의 집 안 (2층: 1층 바닥 y 0, 2층 바닥 y 4.6, 천장 8.8. 가운데 두 층 높이 현관홀, 양옆 방들)
+  const GHOUSE = { x: -240, z: -800, hw: 10, hd: 7.5, f1: 4.6, rh: 8.8 };
   const inGHouse = (x, z) => Math.abs(x - GHOUSE.x) < GHOUSE.hw + 6 && Math.abs(z - GHOUSE.z) < GHOUSE.hd + 6;
   function zoneAt(x, z) {
     if (inTHouse(x, z)) return 'thouse';
