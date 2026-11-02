@@ -11196,7 +11196,7 @@ function _marcusLife(cx,cz){
   // 화가 셋: 광장 두 곳, 정원 길 한 곳
   [[P0.x,P0.z,PZ.r-9,.6,0],[P0.x,P0.z,PZ.r-9,3.6,1]].forEach(([x0,z0,R,a0,k])=>{const s=spotRing(x0,z0,R,a0,1.6);if(!s)return;const [x,z]=s,a=faceTo(x,z,x0,z0);
     const g=npc({robe:[0x8a6a4a,0x3a5a7a][k],robe2:0xe8e0d0,hat:k?'wide':'hair',hatC:k?0x2a2a3a:0x6a4a2a,beard:k?0x5a4a3a:undefined},'paint',x,z,a);
-    const pal=new THREE.Mesh(merge([[CYL(10),0,0,0,.28,.02,.2,0xb08858],[SPH,.06,.02,.03,.04,.02,.04,0xe04040],[SPH,-.05,.02,.04,.04,.02,.04,0x4060e0],[SPH,0,.02,-.05,.04,.02,.04,0xf0d040],[SPH,.08,.02,-.03,.04,.02,.04,0xf0f0f0]]),VC);pal.position.set(0,-.08,.06);pal.rotation.x=PI/2;g.userData.stick.AL.hand.add(pal);
+    const pal=new THREE.Mesh(merge([[CYL(10),0,0,0,.28,.02,.2,0xb08858],[SPH,.06,.02,.03,.04,.02,.04,0xe04040],[SPH,-.05,.02,.04,.04,.02,.04,0x4060e0],[SPH,0,.02,-.05,.04,.02,.04,0xf0d040],[SPH,.08,.02,-.03,.04,.02,.04,0xf0f0f0]]),VC);pal.position.set(-.019,-.079,.062);pal.rotation.set(3.142,-1.273,1.44);   /* 팔레트는 손 위에 수평으로 얹는다 (예전엔 손과 아래팔이 판을 뚫고 나왔다) */g.userData.stick.AL.hand.add(pal);
     const br=new THREE.Mesh(merge([[CYL(4),0,.12,0,.015,.25,.015,0x8a6a3a],[CYL(4),0,.25,0,.025,.03,.025,0x2a1a10]]),VC);br.position.set(0,-.05,.05);br.rotation.x=1.3;g.userData.stick.AR.hand.add(br);
     easel(x,z,a,k);take(x,z,.5);addAct({g,pose:'paint',ph:rnd()*9});});
   // 악사(류트) + 모자 + 구경꾼
@@ -13098,6 +13098,13 @@ function chatTx(s){if(typeof s!=='string')return s;const f=typeof P!=='undefined
 /* 엑시즈 시내에만 있는 것(광장·분수·시청·길드홀·시장·항구…)을 말하는 줄은 엑시즈 밖에서는 하지 않는다 */
 const CHAT_EXIS_RE=/광장|분수|시청|길드홀|시장|항구|부두|의사당|도서관|등대|브람|선착장|기사단 본부|하레나까지/;
 const CHAT_IN_EXIS={exis:1,plaza:1,market:1,port:1,farm:1,armed:1,palace:1,nobles:1,homes:1,inns:1,crafts:1,guildhall:1};
+/* 말하는 사람에게 맞는 말인지: 성별에 따라 쓰는 부름말(형·누나·오빠·언니)과 남편·아내, 그리고 자기 직업과 어긋나는 사정 말 (job: 사정·성격 말에만) */
+const CHAT_MALE_RE=/(^|[\s,.!?…'"])(형(이|은|님|한테|이랑|도)|누나|집사람|아내|마누라)/,CHAT_FEM_RE=/(^|[\s,.!?…'"])(오빠|언니|남편|바깥양반)/;
+const CHAT_JOB_NOT=[[/빵집 주인이|빵집이 문을|빵집 주인이에요/,/^baker$/],[/아버지가 대장장이/,/^smith$/],[/낚시를 가고 싶은데/,/^fisher$/],[/배를 타고 .*가 볼/,/^sailor$/],[/왕궁 요리사가/,/^cook$/],
+  [/형이 기사/,/^(knight|guard|merc|archer|squire|oldknight)$/],[/술을 끊었어요/,/^innkeeper$/],[/꽃, 제가 키운/,/^flower$/]];
+function chatFitsSpeaker(text,c,job){if(!c||!text)return true;const fem=typeof citFem==='function'&&citFem(c);
+  if(fem&&CHAT_MALE_RE.test(text))return false;if(!fem&&CHAT_FEM_RE.test(text))return false;
+  if(job)for(const [re,k] of CHAT_JOB_NOT)if(k.test(c.kind||'')&&re.test(text))return false;return true;}
 function chatFitsArea(text,area){if(!CHAT_IN_EXIS[area]&&CHAT_EXIS_RE.test(text))return false;if(area==='milgol'&&/밀골/.test(text))return false;return true;}
 /* 지금 서 있는 곳 */
 const CHAT_ZONE_AREA={plaza:'plaza',market:'market',warehouse:'port',harbor:'port',docks:'port',trade:'port',farm:'farm',pasture:'farm',lumber:'farm',guild:'armed',knights:'armed',training:'armed',barracks:'armed',palace:'palace',garden:'palace',civic:'palace',council:'palace',nobles:'nobles',residential:'homes',inns:'inns',artisans:'crafts',commerce:'crafts'};
@@ -13229,6 +13236,7 @@ function chatDlgFits(D,ppl,area){const lines=D.d||[D.open].concat(...(D.ask||[])
   const who=new Set(lines.map(l=>l[0]));if(Math.max(...who)>=ppl.length&&!D.ask)return false;
   if(D.area&&!D.area.includes(area))return false;
   if(!D.area&&!chatFitsArea(lines.map(l=>l[1]).join(' '),area))return false;
+  for(const l of lines)if(!chatFitsSpeaker(l[1],ppl[l[0]%ppl.length],false))return false;   /* 여자가 '형'·남자가 '남편' 같은 말을 하지 않게 */
   for(const w of who){const c=ppl[w%ppl.length],v=chatVoice(c);
     if(D.sv){if(!(D.sv[w]||[]).includes(v))return false;continue;}
     if(D.tags){if(!D.tags.includes(c.kind))return false;continue;}
@@ -13238,18 +13246,18 @@ function chatPickDlg(list,ppl,area,k){const ok=list.filter(D=>chatDlgFits(D,ppl,
   const special=ok.filter(D=>D.tags||D.area||D.sv),pool=special.length&&(k%2)?special:ok;return pool[((k%pool.length)+pool.length)%pool.length];}
 /* 한 마디 고르기: 직업 말이 가장 많고, 그 곳의 말·옆 사람에 따른 말·그 사람만의 사정이 섞인다 */
 function chatLineFor(c,ppl,area){if(c.kind==='server')return chatPick(c,CHAT_LINES.server);   /* 서빙 직원은 제 일 이야기만 */
-const v=chatVoice(c),r=Math.floor((c.seed||0)*13+(c.n||0)*7)%10,fit=a=>(a||[]).filter(s=>chatFitsArea(s,area));
+const v=chatVoice(c),r=Math.floor((c.seed||0)*13+(c.n||0)*7)%10,fit=a=>(a||[]).filter(s=>chatFitsArea(s,area)&&chatFitsSpeaker(s,c,false)),fitP=a=>(a||[]).filter(s=>chatFitsArea(s,area)&&chatFitsSpeaker(s,c,true));
   const A=CHAT_AREA[area]||{},X=CHAT_IN_EXIS[area]&&area!=='exis'?CHAT_AREA.exis:{},slot={kid:'k',elder:'e',noble:'n',armed:'m'}[v]||'a';
   let areaL=(A[slot]||[]).concat(X[slot]||[]);if(!areaL.length&&slot!=='k')areaL=(A.a||[]).concat(X.a||[]);
   const job=fit(CHAT_LINES[c.kind]).concat(((CHAT_AREA_JOB[area]||{})[c.kind])||[]),others=ppl.slice(1);
   const sit=(CHAT_SIT[!others.length?'alone':others.some(o=>chatVoice(o)==='kid')?'withKid':'withAdult']||{})[v]||[];
-  const pers=v==='adult'?fit(CHAT_ROUGH[c.kind]?CHAT_PERSONAL_V.rough:CHAT_PERSONAL):fit(CHAT_PERSONAL_V[v]);
+  const pers=v==='adult'?fitP(CHAT_ROUGH[c.kind]?CHAT_PERSONAL_V.rough:CHAT_PERSONAL):fitP(CHAT_PERSONAL_V[v]);
   if(!c.my&&pers.length)c.my=pers[(Math.floor((c.seed||0)*2654435761)>>>0)%pers.length];
   const noPers=c.kind==='guild';
   /* 성격·하는 일·구경거리에 맞춘 말 */
   const sl=v==='adult'&&CHAT_ROUGH[c.kind]?'r':(CIT_P_SLOT[v]||'a'),D=chatDoing(c),P=c.pp;
   const watch=D.show?fit(citPersonaLines(c,'W').map(s=>s.replace(/\{act\}/g,CHAT_SHOW[D.show]))).concat(fit((CHAT_WATCH[D.show]||{})[sl])):[];
-  const doing=fit((CHAT_DOING[D.k]||{})[sl]),mine=fit(citPersonaLines(c,'L'));
+  const doing=D.k==='talk'&&!others.length?[]:fitP((CHAT_DOING[D.k]||{})[sl]),mine=fitP(citPersonaLines(c,'L'));   /* 혼자 서 있으면 '이야기하던 중' 말은 하지 않는다 */
   let line,src='';
   if(watch.length&&r<5)line=chatPick(c,watch);   /* 구경하는 사람은 구경 이야기를 많이 한다 */
   else if(r===9&&!noPers&&c.my){line=c.my;src='p';}   /* 그 사람만의 사정 */
