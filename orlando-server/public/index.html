@@ -138,7 +138,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brass);outline-
 #toast{position:fixed;left:50%;top:40%;transform:translateX(-50%);font-size:15px;color:#ffd9a0;text-shadow:0 1px 4px #000;pointer-events:none;opacity:0;transition:opacity .3s}
 #toast.on{opacity:1}
 /* 전리품 알림: 몬스터를 잡고 얻은 것을 오른쪽에 잠깐 띄운다 (등급 색 테두리·이름, 좋은 등급은 빛이 한 번 스쳐 간다) */
-#lootFeed{position:fixed;right:calc(var(--gut) + min(300px,calc(100vw - 2*var(--gut) - 140px)) + 16px);bottom:calc(var(--safe-b) + 112px);display:flex;flex-direction:column;align-items:flex-end;gap:4px;pointer-events:none;z-index:20}
+#lootFeed{position:fixed;right:calc(var(--gut) + min(300px,calc(100vw - 2*var(--gut) - 140px)) + 16px);bottom:calc(var(--safe-b) + 112px);display:flex;flex-direction:column;align-items:flex-end;gap:4px;pointer-events:none;z-index:45}
+#lootFeed.ov{right:var(--gut);bottom:auto;top:calc(var(--safe-t) + 280px)}   /* 상점·대화 창이 열려 있으면 창을 가리지 않게 작은 지도 밑으로 */
 #lootFeed .lf{--tier:#b3a98f;position:relative;display:flex;align-items:center;gap:7px;max-width:240px;padding:3px 10px 3px 4px;border-right:2px solid var(--tier);border-radius:3px;background:linear-gradient(90deg,rgba(18,13,8,0),rgba(18,13,8,.7) 28%);font-size:13px;line-height:1.2;color:var(--parch);text-shadow:0 1px 2px #000;white-space:nowrap;overflow:hidden;animation:lfIn .32s cubic-bezier(.2,.9,.3,1.15) both;transition:opacity .45s,transform .45s}
 #lootFeed .lf.out{opacity:0;transform:translateX(14px)}
 #lootFeed .ic{flex:none;min-width:24px;height:24px;padding:0 2px;box-sizing:border-box;border:1px solid var(--tier);border-radius:4px;background:#2a2219;display:grid;place-items:center;font-size:9px;font-weight:700;color:var(--tier);box-shadow:0 0 6px color-mix(in srgb,var(--tier) 40%,transparent)}
@@ -17924,7 +17925,7 @@ $('#shopSell').onclick=()=>{shopTab='sell';renderShop();};
 function buy(id,n){
   const cost=priceOf(id)*n;if(P.gold<cost){toast('골드가 부족해요');return;}
   const I=ITEMS[id];if(I.kind==='gear'&&P.bag.length+n>BAG_SIZE||I.kind==='use'&&!P.bag.some(e=>e.id===id)&&P.bag.length>=BAG_SIZE){toast('가방이 가득 찼어요');return;}
-  P.gold-=cost;addItem(id,n,true);sfx('coin');log(`${itemName(id,P.job)}${n>1?` ${n}개`:''} 구매 · -${cost} 골드`,'sys');renderShop();save();
+  P.gold-=cost;addItem(id,n,true);sfx('coin');lootFeed(id,n);log(`${itemName(id,P.job)}${n>1?` ${n}개`:''} 구매 · -${cost} 골드`,'sys');renderShop();save();
 }
 function sell(idx,all){
   const e=P.bag[idx];if(!e)return;const n=all?e.n:1;const g=sellPrice(e.id)*n;
@@ -18158,7 +18159,8 @@ function fillWhy(p){const g=qGoals(p)[0];const s=String(p.why||'').replace(/\{m\
   return s.replace(/([가-힣])(이\(가\)|을\(를\)|은\(는\)|와\(과\))/g,(m,ch,j)=>{const b=(ch.charCodeAt(0)-0xac00)%28>0;const [x,y]=j.replace(')','').split('(');return ch+(b?x:y);});}
 function questPayout(q){
     P.gold+=q.gold;const t=Math.min(9,tierForLevel(q.lv)+(q.rare?1:0));const reward=pick(GEAR_BY_TIER[t]||GEAR_BY_TIER[tierForLevel(q.lv)]);const gotItem=addItem(reward,1,true);
-    const pot=q.lv>=20?'hp_l':'hp_s';if(ITEMS[pot])addItem(pot,3+(q.rare?3:0),true);
+    const pot=q.lv>=20?'hp_l':'hp_s',pn=3+(q.rare?3:0),gotPot=ITEMS[pot]&&addItem(pot,pn,true);
+    lootShow(null,q.gold,[...(gotItem?[[reward,1]]:[]),...(gotPot?[[pot,pn]]:[])]);   /* 의뢰 보상도 획득 알림으로 */
     log(`의뢰 완료! EXP +${Math.round(q.exp*expMul())} · ${q.gold} 골드${gotItem?` · [${itemName(reward,P.job)}]`:''}`,'sys');P.quest=null;gainExp(q.exp);updateQuestHud();save();}
 function renderQuest(msg){
   const q=P.quest,T=qTone(),here=npcCur?npcCur.id:'kyle';
@@ -19477,6 +19479,7 @@ function removeItem(id,n=1){for(let i=P.bag.length-1;i>=0&&n>0;i--){const e=P.ba
 /* 전리품 알림: 얻은 것을 오른쪽에 한 줄씩 띄웠다가 지운다. 같은 것이 이어서 들어오면 한 줄에 개수만 더한다 */
 const LOOTF={max:4,life:2600};
 function lootFeed(id,n=1){const box=$('#lootFeed');if(!box||!P)return;
+  box.classList.toggle('ov',mode!=='world'||!!document.querySelector('.overlay:not([hidden])'));
   if(document.body.classList.contains('touch')){let y=0;for(const q of ['#where','#mMenu','#mBag']){const el=$(q),r=el&&!el.hidden&&el.getBoundingClientRect();if(r&&r.height&&r.right>innerWidth*.6)y=Math.max(y,r.bottom);}if(y)box.style.top=Math.round(y+6)+'px';}   /* 휴대폰: 작은 지도(세로 화면이면 메뉴·가방 단추까지) 바로 밑, 공격·점프 버튼과 안 겹치게 */
   const gold=id==='gold',I=gold?null:ITEMS[id];if(!gold&&!I)return;
   let e=[...box.children].find(x=>x.dataset.k===id&&!x.classList.contains('out'));
@@ -21365,8 +21368,8 @@ function openBossChest(i){const c=bossChests[i];if(!c||c.empty)return;if(mode!==
   chestCur=c;mode='dialog';attackHeld=false;unlockPointer();syncLockTip();$('#chestTitle').textContent=`${c.from}의 상자`;renderChest();$('#chestWin').hidden=false;}
 function closeChest(){$('#chestWin').hidden=true;chestCur=null;mode='world';syncLockTip();focusGame();relock();}
 function takeChest(k){const c=chestCur;if(!c)return;
-  if(k==='gold'){P.gold+=c.gold;log(`${c.gold.toLocaleString('ko-KR')} 골드를 챙겼다`,'good');c.gold=0;sfx('coin');}
-  else{const [id,n]=c.items[k];if(!addItem(id,n)){toast('가방이 가득 찼어요');return;}c.items.splice(k,1);log(`${n>1?`${itemName(id,P.job)} ${n}개`:`[${itemName(id,P.job)}]`}을(를) 챙겼다`,'good');sfx('coin');}
+  if(k==='gold'){P.gold+=c.gold;log(`${c.gold.toLocaleString('ko-KR')} 골드를 챙겼다`,'good');lootFeed('gold',c.gold);c.gold=0;sfx('coin');}
+  else{const [id,n]=c.items[k];if(!addItem(id,n)){toast('가방이 가득 찼어요');return;}lootShow(null,0,[[id,n]]);c.items.splice(k,1);log(`${n>1?`${itemName(id,P.job)} ${n}개`:`[${itemName(id,P.job)}]`}을(를) 챙겼다`,'good');sfx('coin');}
   if(!c.gold&&!c.items.length){c.empty=true;closeChest();}else renderChest();updateHud();invDirty();save();}
 function renderChest(){const c=chestCur,L=$('#chestList');L.innerHTML='';
   const row=(cell,name,col,sub,k)=>{const r=document.createElement('div');r.className='srow';const tx=document.createElement('div');tx.className='stx';
