@@ -20016,7 +20016,10 @@ const SENS=.0022;
 function look(dx,dy){cam.yaw-=dx*SENS;cam.pitch=clamp(cam.pitch-dy*SENS,-1.45,1.45);lieLook();}
 /* 침대에 누워 1인칭이면 진짜 누운 사람처럼만 본다: 고개는 좌우로 돌리고(발 쪽 기준 ±1.3) 천장은 올려다보지만,
    발 쪽으로 너무 내려다보거나(목이 보임) 머리 뒤쪽을 볼 수는 없다. 옆으로 돌릴수록 아래로는 덜 내려간다 */
-function lieLook(){if(cam.third||!P||P.seat==null)return;const q=SEATS[P.seat];if(!q||!q.lie)return;
+function lieLook(){if(cam.third||!P||CCAR.ride||P.fly)return;const q=P.seat!=null?SEATS[P.seat]:null;
+  if(!q||!q.lie){   /* 앉아 있으면: 몸이 보이니 목(어깨 위)이 보일 만큼 내려다보지 못하게, 의자에선 몸을 등지고 뒤를 보지 못하게 */
+    if(sitEase(player.userData.sitK||0)<=.05)return;cam.pitch=Math.max(cam.pitch,-1.2);
+    if(q){const b=q.ry+Math.PI;let d=Math.atan2(Math.sin(cam.yaw-b),Math.cos(cam.yaw-b));cam.yaw=b+clamp(d,-1.7,1.7);}return;}
   const b=q.ry+Math.PI;let d=Math.atan2(Math.sin(cam.yaw-b),Math.cos(cam.yaw-b));d=clamp(d,-1.3,1.3);cam.yaw=b+d;
   cam.pitch=clamp(cam.pitch,-.32+.3*Math.abs(d)/1.3,1.45);}
 // Esc로 창을 닫은 뒤 다시 고정되기 전까지도 마우스로 시점이 돌아가게 (커서는 숨긴다)
@@ -20250,7 +20253,8 @@ function updatePlayer(dt){
       camera.position.set(player.position.x-lx*rx+lz*f.x,player.position.y+RH+HR*Math.cos(rollA),player.position.z-lx*rz+lz*f.z);}
     sitKStep(player.userData,sitting||!!P.fly,dt);
     const lk=lieK();lieLook();
-    const lieSee=lk>.05&&!CCAR.ride;   /* 누우면 1인칭에서도 내 몸(목 아래)이 보이게: 머리만 감추고 몸을 그린다 */
+    /* 누우거나 앉으면 1인칭에서도 내 몸(목 아래)이 보이게: 머리만 감추고 몸을 그린다 */
+    const lieSee=!CCAR.ride&&!P.fly&&(lk>.05||sitEase(player.userData.sitK||0)>.05);
     if(lieSee||mirrorNear()){player.visible=true;animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);lieApply(player,lk);player.visible=lieSee;}   /* 거울에 지금 하는 동작이 비치게 */
     else player.rotation.x=-Math.PI/2*lk;
     if(player.userData.head)player.userData.head.visible=!lieSee;if(lieSee&&viewModel)viewModel.visible=false;
