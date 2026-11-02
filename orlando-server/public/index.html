@@ -8937,11 +8937,13 @@ const SWAMP_WY=-1.25;
 /* 머리 위 천장 높이 (없으면 null): 건물 천장(CEILS 아랫면)과 위층 바닥·계단(SURFACES, 발보다 2.2m 넘게 위, 두께 0.3m)의 아랫면.
    전에는 바닥만 막혀 있어 뛰거나(이단 점프·도약) 날면 머리가 천장을 뚫고 위층으로 올라갔다 */
 const HEAD_H=1.75;
-function headCeil(x,z,y){let c=null;
-  for(const s of CEILS){const dx=x-s.cx,dz=z-s.cz,lx=dx*s.cs-dz*s.sn,lz=dx*s.sn+dz*s.cs;if(lx>s.hw||lx<-s.hw||lz>s.hd||lz<-s.hd)continue;if(s.y>y+1.2&&(c==null||s.y<c))c=s.y;}
+/* 발밑 바닥(g)보다 사람 키만큼 위에 있고, 머리가 아직 뚫고 지나가지 않은 판만 천장으로 본다.
+   전에는 '지금 발 높이'를 기준으로 2.2m 위만 봐서, 한 번 뛰어 천장 바로 밑까지 오르면 그 천장을 못 보고 더블 점프로 뚫었다 */
+function headCeil(x,z,y,g){if(g==null)g=y;let c=null;const ok=v=>v>=g+HEAD_H-.05&&v>y+HEAD_H-.5&&(c==null||v<c);
+  for(const s of CEILS){const dx=x-s.cx,dz=z-s.cz,lx=dx*s.cs-dz*s.sn,lz=dx*s.sn+dz*s.cs;if(lx>s.hw||lx<-s.hw||lz>s.hd||lz<-s.hd)continue;if(ok(s.y))c=s.y;}
   for(const s of SURFACES){if(x<s.x0||x>s.x1||z<s.z0||z>s.z1)continue;let h=s.y;if(s.ramp==='x')h=s.ya+(s.yb-s.ya)*(x-s.x0)/(s.x1-s.x0);else if(s.ramp==='z')h=s.ya+(s.yb-s.ya)*(z-s.z0)/(s.z1-s.z0);
-    if(h>y+2.2&&(c==null||h-.3<c))c=h-.3;}
-  const hc=hallCeil(x,z);if(hc!=null&&hc>y+1.2&&(c==null||hc<c))c=hc;   /* 길드 회관·지하실 천장 */
+    if(ok(h-.3))c=h-.3;}
+  const hc=hallCeil(x,z);if(hc!=null&&ok(hc))c=hc;   /* 길드 회관·지하실 천장 */
   return c;}
 function floorAt(x,z,y){
   let g=heightAt(x,z);
@@ -20153,7 +20155,7 @@ function updatePlayer(dt){
   if(dt>0){let cx=(pos.x-bx)/dt,cz=(pos.z-bz)/dt;const cl=Math.hypot(cx,cz);if(cl>6){cx*=6/cl;cz*=6/cl;}if(Math.abs(cx)>.01||Math.abs(cz)>.01){pvel.x+=cx*.9;pvel.z+=cz*.9;}}   /* 큰 물체 안에서 밀려날 때 튕겨 나가지 않게 */
   // 중력과 착지 (내리막에서는 땅에 붙어서 걷고, 절벽에서는 떨어진다)
   const ground=floorAt(pos.x,pos.z,pos.y);
-  const ceil=headCeil(pos.x,pos.z,pos.y);   /* 머리가 천장에 닿으면 더 못 오른다 */
+  const ceil=headCeil(pos.x,pos.z,pos.y,ground);   /* 머리가 천장에 닿으면 더 못 오른다 */
   if(P.fly){const zn=zoneAt(pos.x,pos.z);let cap=ground+(zn==='dungeon'||(zn==='hall'||zn==='thouse'||zn==='myhome')?2.6:45);if(ceil!=null)cap=Math.min(cap,Math.max(pos.y,ceil-HEAD_H));let py=pos.y+vy*dt;if(py>cap){py=cap;vy=Math.min(vy,0);}
     if(py<=ground){py=ground;if(vy<0&&(keys.ControlLeft||keys.ControlRight))toggleFly(false);vy=0;}pos.y=py;jumpY=Math.max(0,py-ground);}
   else{
