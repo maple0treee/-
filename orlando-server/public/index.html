@@ -137,6 +137,22 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brass);outline-
 #lockTip{position:fixed;left:50%;top:58%;transform:translateX(-50%);padding:9px 16px;font-size:14px;pointer-events:none;white-space:nowrap}
 #toast{position:fixed;left:50%;top:40%;transform:translateX(-50%);font-size:15px;color:#ffd9a0;text-shadow:0 1px 4px #000;pointer-events:none;opacity:0;transition:opacity .3s}
 #toast.on{opacity:1}
+/* 전리품 알림: 몬스터를 잡고 얻은 것을 오른쪽에 잠깐 띄운다 (등급 색 테두리·이름, 좋은 등급은 빛이 한 번 스쳐 간다) */
+#lootFeed{position:fixed;right:calc(var(--gut) + min(300px,calc(100vw - 2*var(--gut) - 140px)) + 16px);bottom:calc(var(--safe-b) + 112px);display:flex;flex-direction:column;align-items:flex-end;gap:4px;pointer-events:none;z-index:20}
+#lootFeed .lf{--tier:#b3a98f;position:relative;display:flex;align-items:center;gap:7px;max-width:240px;padding:3px 10px 3px 4px;border-right:2px solid var(--tier);border-radius:3px;background:linear-gradient(90deg,rgba(18,13,8,0),rgba(18,13,8,.7) 28%);font-size:13px;line-height:1.2;color:var(--parch);text-shadow:0 1px 2px #000;white-space:nowrap;overflow:hidden;animation:lfIn .32s cubic-bezier(.2,.9,.3,1.15) both;transition:opacity .45s,transform .45s}
+#lootFeed .lf.out{opacity:0;transform:translateX(14px)}
+#lootFeed .ic{flex:none;min-width:24px;height:24px;padding:0 2px;box-sizing:border-box;border:1px solid var(--tier);border-radius:4px;background:#2a2219;display:grid;place-items:center;font-size:9px;font-weight:700;color:var(--tier);box-shadow:0 0 6px color-mix(in srgb,var(--tier) 40%,transparent)}
+#lootFeed .lf.gold .ic{border-radius:50%;border-color:#c99a3a;background:radial-gradient(circle at 36% 32%,#fff1b0,#f0c445 46%,#9c6a16);color:#5b3a06;font-size:11px;text-shadow:none}
+#lootFeed b{color:var(--tier);font-weight:700;overflow:hidden;text-overflow:ellipsis}
+#lootFeed em{display:inline-block;font-style:normal;font-size:12px;color:#eadfc4;font-variant-numeric:tabular-nums}
+#lootFeed .lf.bump em{animation:lfBump .28s ease-out}
+#lootFeed .lf.hi::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.32) 50%,transparent 70%);transform:translateX(-110%);animation:lfShine .9s .2s ease-out both}
+#lootFeed .lf.top .ic{animation:lfGlow 1.1s ease-in-out 2}
+@keyframes lfIn{from{opacity:0;transform:translateX(22px)}to{opacity:1;transform:none}}
+@keyframes lfShine{to{transform:translateX(110%)}}
+@keyframes lfBump{50%{transform:scale(1.3)}}
+@keyframes lfGlow{50%{box-shadow:0 0 14px var(--tier),0 0 4px var(--tier) inset}}
+@media (prefers-reduced-motion:reduce){#lootFeed .lf,#lootFeed .lf::after,#lootFeed .ic,#lootFeed em{animation:none!important}}
 
 #interact{position:fixed;left:50%;bottom:calc(var(--safe-b) + 110px);transform:translateX(-50%);padding:10px 18px;font-size:15px;border:1px solid var(--brass);background:var(--panel);border-radius:6px;animation:pulse 1.6s ease-in-out infinite}
 @keyframes pulse{50%{box-shadow:0 0 0 6px rgba(212,174,99,.18)}}
@@ -763,6 +779,7 @@ body.touch #interact{padding:6px 12px;font-size:12.5px;bottom:calc(var(--safe-b)
 body.touch #bossbar{top:calc(var(--safe-t) + 40px);min-width:0;width:min(360px,calc(100vw - 2*var(--gut) - 160px));padding:4px 8px;gap:3px}
 body.touch #bossbar .bn b{font-size:14px}
 body.touch #toast{font-size:13px}
+body.touch #lootFeed{right:var(--gut);bottom:auto;top:calc(var(--safe-t) + 150px)}body.touch #lootFeed .lf{font-size:11px;gap:5px;padding:2px 8px 2px 3px;max-width:190px}body.touch #lootFeed .ic{min-width:19px;height:19px;font-size:8px}body.touch #lootFeed em{font-size:10.5px}
 body.touch #banner .t{font-size:clamp(28px,7vw,48px)}
 body.touch .ptag b{font-size:11px}
 body.touch .ptag span{font-size:9.5px}
@@ -1026,6 +1043,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     <div id="cross"></div>
     <div id="lockTip" class="panel">화면을 클릭하면 마우스로 시점을 움직일 수 있어요</div>
     <div id="toast"></div>
+    <div id="lootFeed" aria-live="polite"></div>
     <div id="joy" hidden><i></i></div>
     <div id="fps" hidden></div>
     <button id="mMenu" type="button" hidden>메뉴</button>
@@ -7732,6 +7750,7 @@ const SFX_DEF={
   splat:(o,t,p)=>{_noise(o,'lowpass',1100*p,180,t,.25,.9,3);_tone(o,'sine',240*p,80,t,.18,.5);},
   hurt:(o,t,p)=>{_tone(o,'sine',120,60,t,.18,1);_noise(o,'lowpass',900,200,t,.14,.7,1);_tone(o,'square',220,180,t,.08,.12);},
   levelup:(o,t,p)=>{[523,659,784,1046,1318].forEach((f,i)=>_tone(o,'triangle',f,f,t+i*.08,.45,.35,.01));_noise(o,'highpass',6000,8000,t+.3,.5,.15,1,.05);},
+  loot:(o,t,p)=>{_tone(o,'sine',1568*p,1568*p,t,.22,.14,.005);_tone(o,'sine',2093*p,2093*p,t+.06,.32,.11,.005);},   /* 장비 얻음: 작고 맑은 딸랑 */
   coin:(o,t,p)=>{_tone(o,'square',1320,1320,t,.07,.2);_tone(o,'square',1760,1760,t+.07,.18,.2);},
   advance:(o,t,p)=>{_tone(o,'sine',150,70,t,.7,.55,.005);_noise(o,'lowpass',900,200,t,.5,.3,1,.005);   /* 전직: 쿵 → 밝게 올라가는 화음 → 오래 남는 반짝임 (휴대폰 스피커에서도 들리게 높은 음 위주) */
     [523,659,784,1046,1318,1568].forEach((f,i)=>_tone(o,'triangle',f*p,f*p,t+.1+i*.075,.6,.42,.008));
@@ -18413,11 +18432,11 @@ function execOnDrop(m){if(mode!=='world'||!isRogueLine()||m.dummy||m.pvp||m.dyin
   if(P.lastHit!==m||tAll-P.lastHitT>8||tAll-(m.exSentT??-9)<.6)return;m.exSentT=tAll;damageMonster(m,1,{nohs:1});}
 function isRogueLine(){return !!P&&jobChain(P.job).includes('rogue');}   /* 도적·약탈자·암살자: 처형 가능 HP 표시 */
 function execTh(m){return m.lassoT>tAll?.4:P&&jobChain(P.job).includes('assassin')?.15:.1;}   /* 처형 가능 HP: 10% 미만 (암살자 계열은 15%, 올가미에 걸리면 40%) */
-function plunderReward(m){const lv=m.lv,r=Math.floor(Math.random()*3);let got='';
-  if(r===0){const g=Math.round(lv*rnd(15,25)+20);P.gold+=g;got=`${g} 골드`;}
-  else if(r===1){const id=Math.random()<.6?(lv>=12?'hp_l':'hp_s'):(lv>=12?'mp_l':'mp_s');if(addItem(id))got=ITEMS[id].name;else{const g=Math.round(lv*rnd(15,25)+20);P.gold+=g;got=`${g} 골드`;}}
-  else{const id=pick(GEAR_BY_TIER[tierForLevel(lv)]);if(id&&addItem(id))got=`[${itemName(id,P.job)}]`;else{const g=Math.round(lv*rnd(15,25)+20);P.gold+=g;got=`${g} 골드`;}}
-  log('약탈: '+got,'good');const c=mCenter(m);VFX.burst(c,0xffd040,18,4,.5,{mix:0xffffff,up:.5});sfx('coin',c,1);updateHud();invDirty();}
+function plunderReward(m){const lv=m.lv,r=Math.floor(Math.random()*3);let got='',sg=0,si=null;
+  if(r===0){const g=Math.round(lv*rnd(15,25)+20);P.gold+=g;got=`${g} 골드`;sg=g;}
+  else if(r===1){const id=Math.random()<.6?(lv>=12?'hp_l':'hp_s'):(lv>=12?'mp_l':'mp_s');if(addItem(id)){got=ITEMS[id].name;si=id;}else{const g=Math.round(lv*rnd(15,25)+20);P.gold+=g;got=`${g} 골드`;sg=g;}}
+  else{const id=pick(GEAR_BY_TIER[tierForLevel(lv)]);if(id&&addItem(id)){got=`[${itemName(id,P.job)}]`;si=id;}else{const g=Math.round(lv*rnd(15,25)+20);P.gold+=g;got=`${g} 골드`;sg=g;}}
+  log('약탈: '+got,'good');lootShow(null,sg,si?[[si,1]]:[]);const c=mCenter(m);VFX.burst(c,0xffd040,18,4,.5,{mix:0xffffff,up:.5});sfx('coin',c,1);updateHud();invDirty();}
 function killMonster(m,mine=true,partyN=1){
   if(mine&&P&&jobChain(P.job).includes('assassin')&&((m.deepT&&tAll-m.deepT<1.5)||(m.lastSk==='shuriken'&&tAll-m.lastSkT<1.5))&&(cds.quakedash||0)>0){cds.quakedash=0;spawnFx(0x6a50a0,player.position.clone().add(new THREE.Vector3(0,1.2,0)),1,.3);updateHud();}   /* 깊게 찌르기·투척하기로 처치: 돌진 초기화 */
   if(mine&&P&&m.lastSk==='plunder'&&tAll-m.lastSkT<1.5)plunderReward(m);
@@ -19442,17 +19461,38 @@ function addItem(id,n=1,quiet){
   invDirty();return true;
 }
 function removeItem(id,n=1){for(let i=P.bag.length-1;i>=0&&n>0;i--){const e=P.bag[i];if(e.id!==id)continue;const t=Math.min(n,e.n);e.n-=t;n-=t;if(e.n<=0)P.bag.splice(i,1);}invDirty();}
+/* 전리품 알림: 얻은 것을 오른쪽에 한 줄씩 띄웠다가 지운다. 같은 것이 이어서 들어오면 한 줄에 개수만 더한다 */
+const LOOTF={max:4,life:2600};
+function lootFeed(id,n=1){const box=$('#lootFeed');if(!box||!P)return;
+  if(document.body.classList.contains('touch')){let y=0;for(const q of ['#where','#mMenu','#mBag']){const el=$(q),r=el&&!el.hidden&&el.getBoundingClientRect();if(r&&r.height&&r.right>innerWidth*.6)y=Math.max(y,r.bottom);}if(y)box.style.top=Math.round(y+6)+'px';}   /* 휴대폰: 작은 지도(세로 화면이면 메뉴·가방 단추까지) 바로 밑, 공격·점프 버튼과 안 겹치게 */
+  const gold=id==='gold',I=gold?null:ITEMS[id];if(!gold&&!I)return;
+  let e=[...box.children].find(x=>x.dataset.k===id&&!x.classList.contains('out'));
+  if(e){e._n+=n;e.querySelector('em').textContent=gold?`+${e._n}`:`×${e._n}`;e.classList.remove('bump');void e.offsetWidth;e.classList.add('bump');}
+  else{e=document.createElement('div');e.className='lf'+(gold?' gold':'');e.dataset.k=id;e._n=n;
+    const t=gold?3:I.tier||0;e.style.setProperty('--tier',gold?'#f3d36a':TIER_COLOR[t]);
+    if(!gold&&t>=4)e.classList.add('hi');if(!gold&&t>=8)e.classList.add('top');
+    const ic=document.createElement('span');ic.className='ic';ic.textContent=gold?'G':itemShort(id,P.job);
+    const b=document.createElement('b');b.textContent=gold?'골드':itemName(id,P.job);
+    const c=document.createElement('em');c.textContent=gold?`+${n}`:n>1?`×${n}`:'';
+    e.append(ic,b,c);box.appendChild(e);
+    const live=[...box.children].filter(x=>!x.classList.contains('out'));const mx=document.body.classList.contains('touch')?3:LOOTF.max;while(live.length>mx)lootFeedOut(live.shift());}
+  clearTimeout(e._t);e._t=setTimeout(()=>lootFeedOut(e),LOOTF.life+(I&&I.tier>=8?1200:0));}
+function lootFeedOut(e){clearTimeout(e._t);e.classList.add('out');setTimeout(()=>e.remove(),460);}
+/* 몬스터를 잡고 얻은 것: 알림 + 장비면 몬스터 자리에 등급 색 반짝임과 작은 소리 */
+function lootShow(m,gold,items){if(gold>0)lootFeed('gold',gold);let best=-1;
+  for(const [id,n] of items){lootFeed(id,n);const I=ITEMS[id];if(I&&I.kind==='gear')best=Math.max(best,I.tier||0);}
+  if(best>=0){if(m&&m.mesh)VFX.burst(mCenter(m),parseInt(TIER_COLOR[best].slice(1),16),best>=8?16:10,best>=8?3.2:2.4,.5,{up:.6,glow:best>=6});sfx('loot',null,best>=6?1:.7);}}
 function dropLoot(m){
   const lv=m.lv,t=tierForLevel(lv),gm=gapExp(lv);
   const g=Math.round((lv*rnd(2,4)+2)*gm*(hasPilfer()?1.3:1));P.gold+=g;
-  const got=[`${g} 골드`];
-  const roll=(p,id,n=1)=>{if(Math.random()<p*gm&&addItem(id,n))got.push(ITEMS[id].name+(n>1?` ${n}개`:''));};
+  const got=[`${g} 골드`],shown=[];
+  const roll=(p,id,n=1)=>{if(Math.random()<p*gm&&addItem(id,n)){got.push(ITEMS[id].name+(n>1?` ${n}개`:''));shown.push([id,n]);}};
   roll(.28,lv>=12?'hp_l':'hp_s');roll(.2,lv>=12?'mp_l':'mp_s');
   if(lv>=15){roll(.05,'atk_p');roll(.05,'def_p');roll(.04,'spd_p');roll(.06,'recall');}
   if(lv>=40)roll(.03,'elixir');
   const gc=(.07+(m.D.scale>1.5?.08:0))*gm*(hasPilfer()?ROGUE_GEAR:1);
-  if(Math.random()<gc){const tt=Math.min(9,t+(Math.random()<.15?1:0));const id=pick(GEAR_BY_TIER[tt]);if(addItem(id))got.push(`[${itemName(id,P.job)}]`);}
-  log('획득: '+got.join(', '),'good');
+  if(Math.random()<gc){const tt=Math.min(9,t+(Math.random()<.15?1:0));const id=pick(GEAR_BY_TIER[tt]);if(addItem(id)){got.push(`[${itemName(id,P.job)}]`);shown.push([id,1]);}}
+  log('획득: '+got.join(', '),'good');lootShow(m,g,shown);
 }
 function useItem(id){
   if(!P||mode==='title')return false;
