@@ -20332,7 +20332,7 @@ function hearthTick(dt){if(!HEARTHS.length)return;const p=player.position;
       a.setXYZ(i,e.x,e.y,e.z);}a.needsUpdate=true;}}
 /* 벽난로 불 소리 (music/fire.mp3, 원호가 준 불 타는 소리): 가까울수록 크게, 길드홀 밖에서는 꺼진다 */
 const FIRE_AMB={el:null,v:0};
-function fireAmbTick(){const F=typeof MARCUS!=='undefined'&&MARCUS.guildFire;if(!F||typeof player==='undefined'||!player)return;
+function fireAmbTick(){let F=typeof MARCUS!=='undefined'&&MARCUS.guildFire;{const H=typeof MYH!=='undefined'&&MYH.hearthPos;if(H&&typeof player!=='undefined'&&player&&OR.inMyHome(player.position.x,player.position.z))F=H;}   /* 내 집 안이면 집 벽난로 소리 */if(!F||typeof player==='undefined'||!player)return;
   const d=Math.hypot(player.position.x-F.x,(player.position.y-F.y)*1.6,player.position.z-F.z),inside=Math.abs(player.position.x-F.x)<40&&Math.abs(player.position.z-F.z)<40;
   const want=inside&&!document.hidden?Math.pow(Math.max(0,1-(d-1)/22),2)*.9*(OPT.sfx??.7):0;
   if(want>0&&!FIRE_AMB.el){const src='music/fire.mp3?v=1',c=typeof cdnURL==='function'?cdnURL(src):src,el=new Audio(c);if(c!==src)el.addEventListener('error',()=>{if(!el._fb){el._fb=1;el.src=src;}});el.loop=true;el.volume=0;FIRE_AMB.el=el;}
@@ -22095,8 +22095,10 @@ function myHomeBuild(r,key){MYH.built=key;
   const fireplace=(x,fy,z,ry)=>{const p=piece(x,fy,z,ry),sm=stoneM;p.b(.38,1.25,.7,sm,-.88,.62,-.15);p.b(.38,1.25,.7,sm,.88,.62,-.15);p.b(2.3,.22,.75,sm,0,1.36,-.13);p.b(2.55,.1,.95,WD2,0,1.52,-.03);
     p.b(1.9,FH-1.57,.55,sm,0,1.57+(FH-1.57)/2,-.23);p.b(1.4,1.1,.2,m(0x2a1c14,{roughness:1}),0,.55,-.4);p.b(2.4,.08,1.1,sm,0,.04,.05);
     for(let k=0;k<3;k++){const lg=p.c(.07,.08,.9,0x5a3a22,(k-1)*.18,.12+(k===1?.1:0),-.08,7);lg.rotation.z=Math.PI/2;lg.rotation.y=(k-1)*.25;}
-    const wp=new THREE.Vector3(0,.08,-.08);g.updateMatrixWorld(true);p.q.updateMatrixWorld(true);p.q.localToWorld(wp);addHearthFire(g,wp.x-X,fy+.08,wp.z-Z,.55,.8);
-    const L=new THREE.PointLight(0xff8a3a,1.4,11,1.6);const lp=new THREE.Vector3(0,.9,.6);p.q.localToWorld(lp);L.position.set(lp.x-X,lp.y,lp.z-Z);g.add(L);MYH.fires.push(L);
+    /* 불: 길드홀 벽난로와 같은 진짜 불(hearthAdd — 흔들리는 불꽃 세 겹·튀는 불똥·깜빡이는 불빛). 집 자리는 늘 같으니 한 번만 만들고 집 안에 있을 때만 보인다 */
+    const wp=new THREE.Vector3(0,.04,-.12).applyAxisAngle(new THREE.Vector3(0,1,0),ry).add(p.q.position);wp.x+=X;wp.z+=Z;   /* 세계 좌표 (localToWorld는 얼린 행렬 때문에 집 자리가 빠질 수 있다) */
+    {const c=[];for(let k=0;k<12;k++){const e=p.c(.05+Math.random()*.03,.06,.06,[0x3a1a10,0x6a2410,0xb03a10][k%3],(Math.random()-.5)*.9,.08,-.05-Math.random()*.25,5);e.material=e.material.clone();e.material.emissive=new THREE.Color(k%3===2?0xff5010:0x401008);e.material.emissiveIntensity=1;c.push(e);}}   /* 장작 밑 숯불 */
+    if(!MYH.hearth){hearthAdd(wp.x,fy+.04,wp.z,1.0);MYH.hearth=HEARTHS[HEARTHS.length-1];MYH.hearth.g.userData.noMap=true;MYH.hearth.li.userData.yr=[fy-.5,fy+FH];MYH.hearthPos={x:wp.x,y:fy+.8,z:wp.z};}
     const ax=Math.abs(Math.cos(ry))>.5;col(x+(ax?.75:0),z+(ax?0:.75),.55,fy,2);col(x-(ax?.75:0),z-(ax?0:.75),.55,fy,2);
     /* 선반 위 작은 것들 */const s2=piece(x,fy,z,ry);s2.c(.06,.08,.2,0xb0603a,-.8,1.67,0,8);s2.c(.05,.05,.24,0xc9a050,.75,1.69,0,8);};
   const shelfWall=(x,fy,z,ry,L=1.4)=>{const p=piece(x,fy,z,ry);p.b(L,.05,.26,WD,0,1.7,.13);for(const sx of [-1,1])p.b(.05,.18,.2,WD2,sx*(L/2-.1),1.6,.1);
@@ -22183,7 +22185,7 @@ function myHomeTick(t){if(!player)return;if(P&&P.mq==='home100'&&!P.myHome)myHom
   /* 문 자리는 따로 기억한다: 전에는 다른 곳(지도·포탈 검사)이 먼저 집을 찾아 두면 문을 옮기지 않아, 다시 접속한 뒤 집에 못 들어갔다 */
   {const key=P&&P.myHome?P.myHome.n+':'+P.myHome.x+':'+P.myHome.z:null;if(MYH.doorIn&&(MYH.doorIn.key!==key||(myHomeRec()&&MYH.built!==MYH.rec.n+':'+myHomeName())))myHomeDoorSync();}
   const inH=OR.inMyHome(player.position.x,player.position.z);if(!MYH.g&&inH)myHomeBuild(null,'none');if(!MYH.g)return;
-  if(MYH.g.visible!==inH)MYH.g.visible=inH;if(MYH.mirror&&MYH.mirror.visible!==inH)MYH.mirror.visible=inH;if(inH)for(const L of MYH.fires)L.intensity=1.3+Math.sin(t*9.3)*.12+Math.sin(t*23.1)*.08;
+  if(MYH.g.visible!==inH)MYH.g.visible=inH;if(MYH.mirror&&MYH.mirror.visible!==inH)MYH.mirror.visible=inH;if(MYH.hearth&&MYH.hearth.g.visible!==inH)MYH.hearth.g.visible=inH;if(inH)for(const L of MYH.fires)L.intensity=1.3+Math.sin(t*9.3)*.12+Math.sin(t*23.1)*.08;
   if(inH&&P&&P.mq==='home100'&&mode==='world'&&!warping){mqComplete('home100');sfx('quest');toast(`오늘부터 여기가 ${myHomeName()}이다`);log('아늑한 집이다. 위층 침대에서 쉬어 갈 수도 있다.','sys');}}
 /* 지도: 배정된 집 자리에 집 그림 (엑시즈 지도·미니맵) */
 function myHomeMapMark(c,X,Z,f,I,lab){const r=myHomeRec();if(!r||!I||I.id!=='marcus')return;const x=X(r.x),y=Z(r.z);f=f||1;
