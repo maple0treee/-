@@ -7519,8 +7519,27 @@ const VOICE={kyle:{p:128,sp:46,vol:1.75},sera:{p:104,rasp:.35,sp:58,fs:.95,vol:1
   timo:{p:320,sp:40,fs:1.32,vol:1.5},mentor:{p:118,sp:50,vol:1.72}};
 const VW_F={a:[800,1200],e:[520,1850],eo:[600,1000],o:[460,820],u:[360,760],eu:[420,1450],i:[310,2250]};
 const VW_OF=['a','e','a','e','eo','e','eo','e','o','a','e','e','o','u','eo','e','i','u','eu','eu','i'];
-function voiceOf(n){if(!n)return {p:130,sp:46};const v=VOICE[n.id];if(v)return v;
-  const h=[...String(n.id||n.name||'')].reduce((a,c)=>a*31+c.charCodeAt(0)>>>0,7),i=h%4,r=(h>>3)%3?0:.15;return {p:[108,122,136,150][i],sp:46,rasp:r,vol:[1.68,1.73,1.61,1.45][i]*(r?.84:1)};}
+function voiceOf(n){if(!n)return {p:130,sp:46};if(n.voice)return n.voice;const v=VOICE[n.id];if(v)return v;
+  const L=n.look||{},age=L.small?'kid':(L.beard&&new THREE.Color(L.beard).getHSL({}).l>.8)?'elder':'adult';
+  return n._voice||(n._voice=voiceMake(String(n.id||n.name||''),!!(L.long||(L.cloth&&L.cloth.skirt)),age,null));}
+/* 사람마다 다른 목소리: 성별·나이로 높낮이와 울림(fs)의 범위를 정하고, 그 안에서 번호(key)로 한 자리를 고른다 (바뀌지 않는다).
+   쉰 목소리(rasp)·숨 섞인 목소리(air)는 몇 사람만. 성격이 있으면 말 빠르기·크기·높이를 조금 더 바꾼다 */
+const VOICE_RANGE={kid:{m:[265,330,1.25,1.34],f:[285,350,1.28,1.38],sp:40,vol:1.5},youth:{m:[128,165,1,1.07],f:[222,268,1.12,1.2],sp:44,vol:1.6},
+  adult:{m:[96,146,.9,1.02],f:[188,238,1.07,1.17],sp:46,vol:1.65},elder:{m:[86,118,.88,.97],f:[168,206,1.01,1.09],sp:56,vol:1.55}};
+const VOICE_PP={shy:{vol:.75,air:.2,p:1.05,sp:1.1},timid:{vol:.75,air:.2,p:1.06,sp:1.1},crybaby:{p:1.08,air:.15},whiner:{p:1.06,air:.1},grumpy:{p:.93,rasp:.15},cynic:{p:.95,rasp:.1},
+  boastful:{vol:1.15,p:.95},strongman:{vol:1.2,p:.92,rasp:.1},brave:{vol:1.1,p:.96},hothead:{vol:1.15,sp:.85},arrogant:{sp:1.12,p:.97},chatty:{sp:.8},gossip:{sp:.82},energetic:{sp:.82,p:1.04},
+  impatient:{sp:.78},cheerful:{p:1.05,sp:.9},merry:{p:1.04,sp:.9},jester:{p:1.06,sp:.85},sleepy:{sp:1.3,vol:.85,air:.15},lazy:{sp:1.22},melancholy:{sp:1.2,p:.96,vol:.85},calm:{sp:1.12},wise:{sp:1.15,p:.97},
+  thinker:{sp:1.12},secretive:{vol:.8,air:.2},taciturn:{sp:1.15,p:.95},smoothie:{p:.97,sp:1.05,air:.12},nagger:{sp:.85,p:1.05},kind:{sp:1.05},polite:{sp:1.05}};
+function voiceMake(key,fem,age,persona){const R=VOICE_RANGE[age]||VOICE_RANGE.adult,G=fem?R.f:R.m;
+  let h=7;for(const c of String(key))h=Math.imul(h^c.charCodeAt(0),2654435761)>>>0;h^=h>>>15;h=Math.imul(h,2246822519)>>>0;h^=h>>>13;
+  const r=k=>((h>>>k)&255)/255,P=VOICE_PP[persona]||{};
+  const rasp=Math.min(.5,(age==='elder'?.15+r(8)*.25:r(8)<.22?.08+r(16)*.22:0)+(P.rasp||0)),air=Math.min(.4,(fem&&r(20)<.3?.1+r(4)*.15:0)+(P.air||0));
+  return {p:Math.round((G[0]+(G[1]-G[0])*r(0))*(P.p||1)),fs:+((G[2]+(G[3]-G[2])*r(12))).toFixed(3),sp:Math.round(R.sp*(.92+r(24)*.16)*(P.sp||1)),
+    rasp,air,vol:+(R.vol*(fem?.88:1)*(rasp>.2?.86:1)*(P.vol||1)).toFixed(2)};}
+/* 주민(말 거는 사람)의 목소리: 차림으로 성별을, 말투 무리로 나이를 본다 */
+function citFem(c){const id=c.cit&&typeof CITM!=='undefined'?CITM.ids[c.cit.type]||'':'';const o=id?CIT_OUTFIT[id]:c.look;
+  if(o&&(o.long||(o.cloth&&o.cloth.skirt)))return true;return /(_f$|girl|granny|lady|maid|wife|nurse)/.test(id)||/^(lady|maid|laundress|fishwife|wife|milkmaid|seamstress|nurse|flower|weaver)$/.test(c.kind||'');}
+function citVoice(c){if(c._voice)return c._voice;const a=chatVoice(c);return c._voice=voiceMake('c'+(c.seed||0)+(c.kind||''),citFem(c),a==='kid'||a==='youth'||a==='elder'?a:'adult',c.persona);}
 function npcVoice(ch,v,q,at){const X=SFX.ctx;if(!X||!SFX.voice||OPT.voice<=0||!ch)return;const c=ch.charCodeAt(0);
   let vw='eo',coda=0;if(c>=0xAC00&&c<=0xD7A3){const k=c-0xAC00;vw=VW_OF[Math.floor(k/28)%21];coda=k%28;}
   else if(/[0-9A-Za-z\u3131-\u318E]/.test(ch))vw='eo';else return;
@@ -13276,7 +13295,7 @@ function poseKind(pose){const P=String(pose||'');const T=[['hammer','smith'],['c
 function chatterNear(){if(!player)return -1;const q=player.position;let b=-1,bd=2.6;for(let i=0;i<CHATTER.length;i++){const c=CHATTER[i];if(c.visible&&!c.visible())continue;const p=c.pos();if(!p||Math.abs(p.y-q.y)>2.5)continue;const d=Math.hypot(p.x-q.x,p.z-q.z);if(d<bd){bd=d;b=i;}}return b;}
 const CHAT_ROLE={server:'서빙 직원',guild:'길드 손님',merchant:'상인',vendor:'장사꾼',baker:'빵집 주인',flower:'꽃 파는 이',weaver:'직조공',apothecary:'약사',herbalist:'약초꾼',innkeeper:'여관 주인',cook:'요리사',butcher:'정육점 주인',guard:'경비병',knight:'기사',merc:'용병',archer:'궁수',squire:'종자',hunter:'사냥꾼',noble:'귀족',lady:'귀부인',rich:'부자',clerk:'서기',scribe:'필경사',scholar:'학자',nurse:'간호사',maid:'하녀',laundress:'세탁부',wife:'아낙',fishwife:'생선 장수',milkmaid:'우유 짜는 처녀',seamstress:'재봉사',tailor:'재단사',cooper:'통장이',mason:'석공',carpenter:'목수',smith:'대장장이',stablehand:'마부',farmer:'농부',shepherd:'양치기',sailor:'뱃사람',fisher:'어부',dock:'부두 일꾼',porter:'짐꾼',courier:'전령',lamplighter:'등불지기',worker:'일꾼',bard:'음유시인',beggar:'거지',elder:'노인',oldknight:'늙은 기사',kid:'아이',youth:'젊은이',common:'주민',chess:'체스 두는 노인',painter:'화가',musician:'악사',juggler:'곡예사',sculptor:'조각가',chalk:'분필 화가'};
 /* 대화창에 쓸 임시 인물: 이름은 역할, 초상화는 그 사람의 막대 인형 */
-function chatPerson(c,k){const p=c.pos();return {id:'chat'+k,name:c.name||CHAT_ROLE[c.kind]||'주민',role:c.role||'',x:p.x,z:p.z,look:c.look||{},lines:[],acts:[],noTalk:true,stickPortrait:true,pose:c.pose};}
+function chatPerson(c,k){const p=c.pos();return {id:'chat'+k,voice:citVoice(c),name:c.name||CHAT_ROLE[c.kind]||'주민',role:c.role||'',x:p.x,z:p.z,look:c.look||{},lines:[],acts:[],noTalk:true,stickPortrait:true,pose:c.pose};}
 function chatPick(c,pool){const n=pool.length;c.n=(c.n||0)+1;const seed=Math.floor((c.seed||0)*7919+c.n*104729);return pool[((seed%n)+n)%n]||pool[0];}
 /* 플레이어가 고르는 대화 */
 function chatAsk(D,people){const who=people[D.open[0]%people.length];npcCur=who;drawPortrait(who);
@@ -13312,8 +13331,8 @@ function hawkTick(dt){if(!player||mode!=='world'||!P)return;const I=OR.ISLES.exm
   el.style.cssText='position:fixed;transform:translate(-50%,-100%);pointer-events:none;z-index:25;max-width:240px;padding:5px 10px;border-radius:12px;background:rgba(255,248,232,.93);color:#3a2616;font:600 13px "KMUSunggokSemiSerif","Gowun Batang",serif;box-shadow:0 2px 6px rgba(0,0,0,.35);opacity:0;white-space:nowrap';
   document.body.appendChild(el);HAWK.el=el;BUBBLES.push({el,c:pick.c,t0:tAll,t1:tAll+3.2});
   /* 목소리: 외치는 소리라 조금 높고 빠르게, 멀수록 작게 */
-  const X=SFX&&SFX.ctx;if(!X||typeof npcVoice!=='function')return;const base=pick.npc?voiceOf(pick.npc):voiceOf({id:pick.id}),att=Math.max(.12,Math.min(1,6/(pick.d+2)));
-  const v={...base,p:(pick.fem?Math.max(base.p,205+(pick.c.seed||0)%40):base.p)*1.12,vol:(base.vol||1.5)*att*.9};let t=X.currentTime+.05;
+  const X=SFX&&SFX.ctx;if(!X||typeof npcVoice!=='function')return;const base=pick.npc?voiceOf(pick.npc):citVoice(pick.c),att=Math.max(.12,Math.min(1,6/(pick.d+2)));
+  const v={...base,p:base.p*1.12,vol:(base.vol||1.5)*att*.9};let t=X.currentTime+.05;
   for(const ch of text){if(ch===' '){t+=.05;continue;}if(/[!,.?]/.test(ch)){t+=.14;continue;}npcVoice(ch,v,false,t);t+=.055;}}
 function chatterTick(dt){if(typeof hawkTick==='function')hawkTick(dt);if(!BUBBLES.length)return;for(let i=BUBBLES.length-1;i>=0;i--){const b=BUBBLES[i];if(tAll>=b.t1){b.el.remove();BUBBLES.splice(i,1);continue;}if(tAll<b.t0){b.el.style.opacity='0';continue;}
     const p=b.c.pos();if(!p||typeof screenOf!=='function'){b.el.style.opacity='0';continue;}const s=screenOf(new THREE.Vector3(p.x,p.y+(b.c.h||2.15),p.z));
