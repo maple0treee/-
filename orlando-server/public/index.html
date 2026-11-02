@@ -2810,7 +2810,7 @@ const MIRRORS=[];   /* 진짜로 비치는 거울들 (mirrorAdd) */
 /* 앉을 자리. o.lie면 눕는 자리(침대): (x,z,y)는 발끝, ry는 머리 반대쪽(발 쪽)을 본다. o.px·o.pz는 '눕기'가 뜨는 기준점(침대 가운데) */
 function seatAdd(x,z,y,ry,o){SEATS.push(o?{x,z,y,ry,...o}:{x,z,y,ry});}
 function seatNear(){if(!player||!P||P.seat!=null)return -1;const q=player.position;let b=-1,bd=1.7;for(let i=0;i<SEATS.length;i++){const s=SEATS[i];if(Math.abs(s.y-q.y)>2.5)continue;const d=Math.hypot((s.px??s.x)-q.x,(s.pz??s.z)-q.z)-(s.lie?.6:0);   /* 침대는 크니 가운데에서 조금 더 멀어도 */if(d<bd){bd=d;b=i;}}return b;}
-function seatSit(i){const s=SEATS[i];if(!s||!P)return;standUp=null;if(P.ride&&typeof rideOff==='function')rideOff(true);P.seat=i;sitting=true;player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;cam.yaw=s.ry+Math.PI;if(s.lie)cam.pitch=.55;interactTarget=null;sfx('ui');if(typeof publishPresence==='function')publishPresence(true);}
+function seatSit(i){const s=SEATS[i];if(!s||!P)return;standUp=null;if(P.ride&&typeof rideOff==='function')rideOff(true);P.seat=i;sitting=true;player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;cam.yaw=s.ry+Math.PI;if(s.lie)cam.pitch=cam.third?.55:-.3;interactTarget=null;sfx('ui');if(typeof publishPresence==='function')publishPresence(true);}
 /* 일어나기: 앉은 자리에서 0.7m 앞 바닥으로 한 번에 옮기면 몸과 눈높이가 툭 떨어졌다가 다시 솟아 튕기는 느낌이 났다.
    이제 0.42초 동안 자리에서 일어선 곳까지 부드럽게 옮기고, 앉은 자세·눈높이도 같은 빠르기로 함께 푼다 (그동안은 움직이지 않는다) */
 let standUp=null;
@@ -2825,9 +2825,9 @@ function lieApply(mesh,k){mesh.rotation.order='YXZ';mesh.rotation.x=-Math.PI/2*k
   S.body.position.y=L(S.body.position.y,0);S.upper.rotation.x=L(S.upper.rotation.x,0);S.head.rotation.x=L(S.head.rotation.x,.3);
   S.AR.sh.rotation.x=L(S.AR.sh.rotation.x,.05);S.AR.sh.rotation.z=L(S.AR.sh.rotation.z,.14);S.AR.el.rotation.x=L(S.AR.el.rotation.x,-.25);
   S.AL.sh.rotation.x=L(S.AL.sh.rotation.x,.05);S.AL.sh.rotation.z=L(S.AL.sh.rotation.z,-.14);S.AL.el.rotation.x=L(S.AL.el.rotation.x,-.25);}
-/* 누운 동안 눈: 머리 자리(1인칭), 몸 가운데(3인칭)로 옮긴다 */
+/* 누운 동안 눈: 머리 자리(1인칭, 얼굴 앞쪽으로 f만큼 띄워 몸을 내려다볼 수 있게), 몸 가운데(3인칭)로 옮긴다 */
 const _lieV=new THREE.Vector3();
-function lieEye(v,h,k){if(k<=0)return;player.updateMatrix();player.updateMatrixWorld(true);_lieV.set(0,h,.06);player.localToWorld(_lieV);v.lerp(_lieV,k);}
+function lieEye(v,h,k,f){if(k<=0)return;player.updateMatrix();player.updateMatrixWorld(true);_lieV.set(0,h,f==null?.06:f);player.localToWorld(_lieV);v.lerp(_lieV,k);}
 /* 앉으면 머리가 엉덩이보다 앞에 있다: 앉은 만큼 시선을 몸 앞쪽으로 내민다 (의자에 앉으면 0.32m, 바닥에 앉으면 0.2m) */
 function sitLean(v,k){if(CCAR.ride||(P&&P.fly))return;const a=sitEase(player.userData.sitK||0)*(.2+seatLift()*.12)*k;if(a<1e-3)return;const ry=player.rotation.y;v.x+=Math.sin(ry)*a;v.z+=Math.cos(ry)*a;}
 function seatLift(){return P&&P.seat!=null?1:standUp?1-sitEase(standUp.u):0;}
@@ -19797,7 +19797,7 @@ function updatePlayer(dt){
   if(softRoll){const k=Math.sin(Math.min(1,Math.max(0,swingT))*Math.PI);camera.quaternion.multiply(_bq1.setFromAxisAngle(_rv.set(-Math.cos(rollPhi),0,Math.sin(rollPhi)),.32*k));}
   else if(rollA&&!cam.third){camera.quaternion.multiply(_bq1.setFromAxisAngle(_rv.set(-Math.cos(rollPhi),0,Math.sin(rollPhi)),rollA));if(rollA>.2&&rollA<6)camera.quaternion.multiply(_bq2.setFromAxisAngle(_rv.set(1,0,0),-.5));}
   if(cam.third){
-    player.visible=true;if(viewModel)viewModel.visible=false;
+    player.visible=true;if(viewModel)viewModel.visible=false;if(player.userData.head)player.userData.head.visible=true;
     sitKStep(player.userData,sitting||!!P.fly,dt);
     animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);const lk=lieK();lieApply(player,lk);
     const back=new THREE.Vector3(0,0,1).applyQuaternion(camera.quaternion);
@@ -19818,9 +19818,11 @@ function updatePlayer(dt){
       camera.position.set(player.position.x-lx*rx+lz*f.x,player.position.y+RH+HR*Math.cos(rollA),player.position.z-lx*rz+lz*f.z);}
     sitKStep(player.userData,sitting||!!P.fly,dt);
     const lk=lieK();
-    if(mirrorNear()){player.visible=true;animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);lieApply(player,lk);player.visible=false;}   /* 거울에 지금 하는 동작이 비치게 */
+    const lieSee=lk>.05&&!CCAR.ride;   /* 누우면 1인칭에서도 내 몸(목 아래)이 보이게: 머리만 감추고 몸을 그린다 */
+    if(lieSee||mirrorNear()){player.visible=true;animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);lieApply(player,lk);player.visible=lieSee;}   /* 거울에 지금 하는 동작이 비치게 */
     else player.rotation.x=-Math.PI/2*lk;
-    if(CCAR.ride)camera.position.y+=.6;else{camera.position.y+=seatLift()*.28;sitLean(camera.position,1);lieEye(camera.position,1.8,lk);}
+    if(player.userData.head)player.userData.head.visible=!lieSee;if(lieSee&&viewModel)viewModel.visible=false;
+    if(CCAR.ride)camera.position.y+=.6;else{camera.position.y+=seatLift()*.28;sitLean(camera.position,1);lieEye(camera.position,1.66,lk,.42);}
     updateViewModel(dt,moving&&jumpY===0);
   }
   camNearFit();
@@ -19848,11 +19850,12 @@ function mirrorAdd(x,y,z,w,h,ry){
     PL.setFromNormalAndCoplanarPoint(N,RP);PL.applyMatrix4(vc.matrixWorldInverse);CL.set(PL.normal.x,PL.normal.y,PL.normal.z,PL.constant);const e=vc.projectionMatrix.elements;
     Q.x=(Math.sign(CL.x)+e[8])/e[0];Q.y=(Math.sign(CL.y)+e[9])/e[5];Q.z=-1;Q.w=(1+e[10])/e[14];CL.multiplyScalar(2/CL.dot(Q));e[2]=CL.x;e[6]=CL.y;e[10]=CL.z+1-.003;e[14]=CL.w;
     const pv=player&&player.visible,vm=typeof viewModel!=='undefined'&&viewModel?viewModel.visible:null;if(player)player.visible=true;if(vm!==null)viewModel.visible=false;
+    const hd=player&&player.userData.head,hv=hd?hd.visible:true;if(hd)hd.visible=true;   /* 누워서 머리를 감췄어도 거울에는 머리까지 비치게 */
     /* 막대 인형은 몸의 좌우가 거꾸로 만들어져 있다(오른손에 든 무기가 몸 왼쪽에 붙어 있다). 1인칭 손은 오른쪽인데 거울 속에선 반대쪽 손이 움직였다.
        거울에 그릴 때만 내 몸을 좌우로 뒤집어, 오른손을 들면 거울 속에서도 오른쪽(보는 사람 쪽에서 같은 쪽) 손이 올라가게 */
     const psx=player?player.scale.x:1;if(player)player.scale.x=-psx;
     m.visible=false;const prt=renderer.getRenderTarget(),sau=renderer.shadowMap.autoUpdate;renderer.shadowMap.autoUpdate=false;renderer.setRenderTarget(rt);renderer.state.buffers.depth.setMask(true);if(renderer.autoClear===false)renderer.clear();
-    renderer.render(sc,vc);renderer.shadowMap.autoUpdate=sau;renderer.setRenderTarget(prt);m.visible=true;if(player){player.scale.x=psx;player.updateMatrix();player.updateMatrixWorld(true);player.visible=pv;}if(vm!==null)viewModel.visible=vm;};
+    renderer.render(sc,vc);renderer.shadowMap.autoUpdate=sau;renderer.setRenderTarget(prt);m.visible=true;if(player){player.scale.x=psx;player.updateMatrix();player.updateMatrixWorld(true);player.visible=pv;}if(hd)hd.visible=hv;if(vm!==null)viewModel.visible=vm;};
   return m;}
 /* 벽난로 불: 겹친 불꽃 혀(바깥 주황·가운데 노랑·속 흰빛)가 제각각 일렁이고, 불티가 솟고, 불빛이 깜빡인다. (x,y,z) 아궁이 바닥 가운데, w 너비(z 방향) */
 function hearthAdd(x,y,z,w){const g=new THREE.Group();g.position.set(x,y,z);g.userData.keepMx=true;scene.add(g);
