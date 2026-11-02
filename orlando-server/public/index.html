@@ -8479,6 +8479,9 @@ function stickNpcPose(g,pose,t){const S=g.userData.stick;if(!S)return;const AR=S
       if(tw){arm(AL,-1.08,-.01,-.41,-2.26+u,.54);S.head.rotation.set(-.1,-.15,-.04);}else{arm(AL,.42,.24,-.7,-1.6,.89);S.head.rotation.set(-.1,_sn(t*.3,2)*.3,0);}
       S.upper.rotation.x=br-.07;break;}
     /* 다가오면: 지팡이를 짚은 채 왼손을 가슴에서 바깥으로 휘두르며 허리를 깊이 숙이는 귀족식 인사 */
+    /* 산책: 오른손 지팡이를 걸음에 맞춰 앞으로 짚고, 왼손은 허리에, 가슴을 펴고 둘러보며 걷는다 */
+    case 'gnwalk':{const ph=t*4.6,s=Math.sin(ph);S.L.hip.rotation.set(s*.42,0,0);S.R.hip.rotation.set(-s*.42,0,0);S.L.knee.rotation.x=Math.max(0,-s)*.55+.05;S.R.knee.rotation.x=Math.max(0,s)*.55+.05;
+      S.body.position.set(0,Math.abs(Math.cos(ph))*.025,0);arm(AR,-.18-s*.22,0,.12,-.35-Math.max(0,s)*.15);arm(AL,.42,.24,-.7,-1.6,.89);S.upper.rotation.x=br-.08;S.head.rotation.set(-.08,_sn(t*.25,7)*.35,0);break;}
     case 'gnbow':{const k=Math.max(0,_sn(t*.45,3)),sw=Math.min(1,k*2);S.upper.rotation.x=br+k*.65-.04;S.head.rotation.set(k*.25-.06,0,0);
       arm(AR,-.15-k*.3,0,.12,-.3);arm(AL,-.04-sw*1.0,.64-sw*.64,-.39-sw*.4,-2.15+sw*1.65,.53-sw*.53);legs(.18*k,.25*k,-.12*k,.05);break;}
     /* 이야기할 때: 지팡이는 오른손에, 왼손은 가슴에 얹었다가 손가락을 세워 들어 보인다 */
@@ -15350,7 +15353,8 @@ function thWalkTick(n,t){const W=THOUSE_ST.walk;if(W.t0==null)W.t0=t;const e=t-W
 /* ---------- 귀족 가늘롱과 그의 저택 ----------
    엑시즈 귀족 구역의 남빛 지붕 저택(바깥은 buildMarcus의 ganelManor). 앞문으로 들어가면 OR.GHOUSE의 큰 응접실이다.
    가늘롱: 멋을 아는 귀족. 상아빛 연미복·남색 망토·남색 실크해트·외알 안경·말린 콧수염·은 손잡이 지팡이 */
-const GNL={g:null,fire:null,npc:null,lights:[]};
+const GNL={g:null,fire:null,npc:null,lights:[],walking:false,walk:null,lt:0};
+const GNL_WALK={cyc:540,on:200,v:1.0};   /* 산책: 9분마다 처음 200초 동안 나와 있다(한 바퀴 도중이면 마치고 들어간다), 걸음 1m/초 */
 function ganelTex(kind){const cv=document.createElement('canvas'),c=cv.getContext('2d');
   if(kind==='rope'){cv.width=512;cv.height=128;c.fillStyle='#1a2648';c.fillRect(0,0,512,128);c.strokeStyle='#d4af37';c.lineWidth=7;c.strokeRect(9,9,494,110);
     c.fillStyle='#f2e6c0';c.textAlign='center';c.textBaseline='middle';c.font='bold 54px "KMUSunggokSemiSerif","Gowun Batang",serif';c.fillText('관계자 외 출입금지',256,66);}
@@ -15592,10 +15596,45 @@ function ganelTex(kind){const cv=document.createElement('canvas'),c=cv.getContex
       ['차를 우릴 땐 서두르면 안 되오. 물이 끓고, 한숨 돌리고, 그다음에 찻잎을 넣어야 하지.','모험도 비슷하지 않겠소? 급히 뛰어들기 전에 숨 한 번 고르는 것.','…허허, 귀족이 모험가에게 잔소리를 하다니. 잊어 주시오.'],
       ['이 저택은 증조할아버님께서 지으셨소. 저 남빛 지붕돌은 북쪽 산에서 한 장 한 장 날라 온 청석이라오.','비에 젖으면 밤하늘처럼 짙어지고, 볕이 들면 바다처럼 푸르러지지. 백 년이 지나도 빛이 바래지 않았소.','그대도 오래 걸어 보시오. 세월에 바래지 않는 그대만의 빛깔이 생길 테니.']]});
   GNL.npc=n;G.updateMatrixWorld(true);
+  /* 산책: 가끔 저택에서 나와 앞뜰을 거닌다. 바깥에 나와 있는 동안 응접실의 가늘롱은 숨긴다.
+     때는 실제 시각으로 정해 (GNL_WALK.cyc초마다 앞쪽 on초) 누가 봐도 같은 때에 나와 있다. 나간 뒤에는 한 바퀴를 마치고 현관에 돌아와서야 들어간다 */
+  n.hideIf=()=>GNL.walking;
+  if(R){const sx=R.nz,sz=-R.nx,P=(o,sd)=>({x:R.x+R.nx*o+sx*sd,z:R.z+R.nz*o+sz*sd});
+    const pts=[P(.6,0),P(4.9,0),P(4.9,-8),P(4.9,8),P(4.9,0),P(.6,0)],stops={2:7,3:7};   /* 현관 → 앞뜰 끝(길가 바로 안쪽) → 왼쪽 끝(잠시 멈춰 둘러봄) → 오른쪽 끝(멈춤) → 현관. 길가 등불·나무 상자·화분은 비켜 간다 */
+    const segs=[];let L=0;for(let i=0;i+1<pts.length;i++){const a=pts[i],b=pts[i+1],l=Math.hypot(b.x-a.x,b.z-a.z);segs.push({a,b,l,s0:L,stop:stops[i+1]||0});L+=l+(stops[i+1]||0)*GNL_WALK.v;}
+    const look={...n.look};
+    const w=addNpc({id:'ganel_walk',name:'가늘롱',role:'귀족',x:pts[0].x,z:pts[0].z,y:R.y,faceX:pts[1].x,faceZ:pts[1].z,poses:{far:'gnwalk',near:'gnbow',talk:'gntalk',r:3.2},look,
+      lines:['오호, 산책길에 만나는구려. 저녁 먹기 전에 앞뜰을 한 바퀴 도는 것이 내 오랜 버릇이오.',
+        '걸을 땐 지팡이를 너무 세게 짚으면 안 되오. 지팡이는 몸을 기대는 것이 아니라, 걸음에 박자를 맞추는 것이지.',
+        '이 길의 돌은 내가 어릴 적보다 많이 닳았소. 그만큼 많은 사람이 지나갔다는 뜻이니, 나쁘지 않소.',
+        '정원수는 오늘도 단정하군. 아침마다 내가 가위를 들고 나오는 걸 이웃들은 모를 거요.',
+        '산책 중엔 생각이 맑아지오. 어제 못 정한 차 이름도 방금 떠올랐지. …비밀이오.',
+        '한 바퀴 더 돌고 들어가 차를 마실 참이오. 저택에 들르면 응접실로 오시구려.'],
+      acts:[],story:n.story});
+    w.walkN=1;w.hideIf=()=>!GNL.walking;{const k=colliders.findIndex(c=>c.npc&&c.x===w.x&&c.z===w.z);if(k>=0)colliders.splice(k,1);}const cl=null;   /* 걸어 다니는 사람은 부딪힘 없이 (부딪힘 칸 나누기가 움직임을 따라가지 못한다) */
+    const icl=colliders.find(c=>c.npc&&c.x===n.x&&c.z===n.z);
+    GNL.walk={w,segs,L,pts,cl,icl,iy:icl?[icl.y0,icl.y1]:null,s:0,face:null};ganelWalkPark();}
 })();
 /* 매 프레임: 저택 안에 있을 때만 집 안을 그리고, 벽난로 불빛이 흔들린다 */
-function ganelTick(t){if(!player||!GNL.g)return;const inH=OR.inGHouse(player.position.x,player.position.z);if(GNL.g.visible!==inH)GNL.g.visible=inH;
+function ganelTick(t){if(!player||!GNL.g)return;ganelWalkTick(t);const inH=OR.inGHouse(player.position.x,player.position.z);if(GNL.g.visible!==inH)GNL.g.visible=inH;
   if(inH&&GNL.fire)GNL.fire.intensity=1.3+Math.sin(t*8.7)*.12+Math.sin(t*21.3)*.08;}
+/* 산책하지 않을 때: 바깥 가늘롱은 멀리 치워 두고(지도·부딪힘에 안 걸리게), 응접실 가늘롱 자리를 되돌린다 */
+function ganelWalkPark(){const W=GNL.walk;if(!W)return;const w=W.w;w.x=w.z=1e6;w.mesh.position.set(1e6,0,1e6);w.mesh.visible=false;if(W.cl)W.cl.y0=W.cl.y1=-999;if(W.icl&&W.iy){W.icl.y0=W.iy[0];W.icl.y1=W.iy[1];}}
+/* 가늘롱 산책: 길을 따라 걷고, 끝에서 잠시 멈춰 둘러보고, 모험가가 다가오거나 말을 걸면 멈춰서 그쪽을 본다 */
+function ganelWalkTick(t){const W=GNL.walk;if(!W)return;const dt=Math.min(.5,Math.max(0,t-(GNL.lt||t)));GNL.lt=t;
+  const on=(Date.now()/1000)%GNL_WALK.cyc<GNL_WALK.on;
+  if(!GNL.walking){if(!on)return;GNL.walking=true;W.s=0;if(W.icl)W.icl.y0=W.icl.y1=-999;}   /* 나가 있는 동안 응접실 자리는 비운다 */
+  const w=W.w,p=player.position,dp=Math.hypot(p.x-w.x,p.z-w.z),talking=mode==='dialog'&&npcCur===w,hold=talking||(dp<3.2&&Math.abs(p.y-w.y)<2);
+  if(!hold)W.s+=dt*GNL_WALK.v;
+  if(W.s>=W.L){if(!on){GNL.walking=false;W.s=0;ganelWalkPark();return;}W.s%=W.L;}
+  let sg=W.segs[W.segs.length-1],u=1,moving=false;for(const q of W.segs){const e=q.s0+q.l+q.stop*GNL_WALK.v;if(W.s<e){sg=q;u=Math.min(1,(W.s-q.s0)/q.l);moving=W.s-q.s0<q.l;break;}}
+  const x=sg.a.x+(sg.b.x-sg.a.x)*u,z=sg.a.z+(sg.b.z-sg.a.z)*u;let y=heightAt(x,z);const f=floorAt(x,z,y+1.2);if(f>y+.02&&f<y+1.2)y=f;
+  w.x=x;w.z=z;w.y=y;w.mesh.position.set(x,y,z);if(W.cl){W.cl.x=x;W.cl.z=z;W.cl.y0=y-.6;W.cl.y1=y+2.4;}
+  w.poses.far=moving&&!hold?'gnwalk':'gnidle';
+  /* 몸 방향: 걸을 땐 가는 쪽, 멈췄을 땐 모험가 쪽(가까이 있으면) */
+  const want=hold?Math.atan2(p.x-x,p.z-z):moving?Math.atan2(sg.b.x-sg.a.x,sg.b.z-sg.a.z):(W.face??w.mesh.rotation.y);
+  facing.delete(w.mesh);w.mesh.userData.baseQ=null;   /* 말 걸 때 돌아보기는 여기서 직접 한다 (걸어간 뒤 처음 방향으로 되돌아가지 않게) */
+  let a=want-w.mesh.rotation.y;a=Math.atan2(Math.sin(a),Math.cos(a));w.mesh.rotation.set(0,w.mesh.rotation.y+a*Math.min(1,dt*5),0);if(moving)W.face=want;}
 /* 가늘롱 저택 평면도 (미니맵·큰 지도 공용): 지금 있는 층을 그린다 */
 function drawGHousePlan(c,X,Z,sc){const T=OR.GHOUSE,up=player&&player.position.y>T.f1-.8,R=(x0,z0,x1,z1,col)=>{c.fillStyle=col;c.fillRect(X(T.x+x0),Z(T.z+z0),(x1-x0)*sc,(z1-z0)*sc);};
   c.fillStyle='#1a1712';c.fillRect(-9999,-9999,99999,99999);
@@ -15604,7 +15643,7 @@ function drawGHousePlan(c,X,Z,sc){const T=OR.GHOUSE,up=player&&player.position.y
   c.strokeStyle='#d4af37';c.lineWidth=Math.max(2,.25*sc);c.strokeRect(X(T.x-T.hw),Z(T.z-T.hd),T.hw*2*sc,T.hd*2*sc);
   c.lineWidth=Math.max(1.5,.15*sc);c.beginPath();for(const sx of [-1,1]){c.moveTo(X(T.x+sx*3.5),Z(T.z-7.5));c.lineTo(X(T.x+sx*3.5),Z(T.z+(up?-6:sx>0?7.5:2.2)));if(!up&&sx<0){c.moveTo(X(T.x+sx*3.5),Z(T.z+3.9));c.lineTo(X(T.x+sx*3.5),Z(T.z+7.5));}else{c.moveTo(X(T.x+sx*3.5),Z(T.z-6));c.lineTo(X(T.x+sx*3.5),Z(T.z+7.5));}}c.stroke();
   c.fillStyle='#d4ae63';c.fillRect(X(T.x-.85),Z(T.z+T.hd)-1,1.7*sc,Math.max(3,.35*sc));
-  c.fillStyle='#f3cf6a';for(const n of NPCS)if(OR.inGHouse(n.x,n.z)&&(n.y>T.f1-.8)===up){c.beginPath();c.arc(X(n.x),Z(n.z),Math.max(3.5,.3*sc),0,7);c.fill();}
+  c.fillStyle='#f3cf6a';for(const n of NPCS)if(OR.inGHouse(n.x,n.z)&&(n.y>T.f1-.8)===up&&!(n.hideIf&&n.hideIf())){c.beginPath();c.arc(X(n.x),Z(n.z),Math.max(3.5,.3*sc),0,7);c.fill();}
   c.fillStyle='#9fd3e6';for(const o of others.values())if(OR.inGHouse(o.mesh.position.x,o.mesh.position.z)){c.beginPath();c.arc(X(o.mesh.position.x),Z(o.mesh.position.z),5,0,7);c.fill();}}
 /* 엑시즈 지도: 가늘롱 저택 자리에 남색 집 그림 (큰 지도에서는 이름도) */
 function ganelMapMark(c,X,Z,f,I,lab){const R=typeof MARCUS!=='undefined'&&MARCUS.ganel;if(!R||!I||I.id!=='marcus')return;f=f||1;const x=X(R.cx),y=Z(R.cz);
