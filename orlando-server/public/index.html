@@ -2807,16 +2807,27 @@ const colliders=[];
 /* 앉을 자리: 벤치·걸상·소파. {x,z,y:앉는 높이(세계), ry:앉아서 보는 방향} — F로 앉고, 움직이면 일어난다 */
 const SEATS=[];
 const MIRRORS=[];   /* 진짜로 비치는 거울들 (mirrorAdd) */
-function seatAdd(x,z,y,ry){SEATS.push({x,z,y,ry});}
-function seatNear(){if(!player||!P||P.seat!=null)return -1;const q=player.position;let b=-1,bd=1.7;for(let i=0;i<SEATS.length;i++){const s=SEATS[i];if(Math.abs(s.y-q.y)>2.5)continue;const d=Math.hypot(s.x-q.x,s.z-q.z);if(d<bd){bd=d;b=i;}}return b;}
-function seatSit(i){const s=SEATS[i];if(!s||!P)return;standUp=null;if(P.ride&&typeof rideOff==='function')rideOff(true);P.seat=i;sitting=true;player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;cam.yaw=s.ry+Math.PI;interactTarget=null;sfx('ui');if(typeof publishPresence==='function')publishPresence(true);}
+/* 앉을 자리. o.lie면 눕는 자리(침대): (x,z,y)는 발끝, ry는 머리 반대쪽(발 쪽)을 본다. o.px·o.pz는 '눕기'가 뜨는 기준점(침대 가운데) */
+function seatAdd(x,z,y,ry,o){SEATS.push(o?{x,z,y,ry,...o}:{x,z,y,ry});}
+function seatNear(){if(!player||!P||P.seat!=null)return -1;const q=player.position;let b=-1,bd=1.7;for(let i=0;i<SEATS.length;i++){const s=SEATS[i];if(Math.abs(s.y-q.y)>2.5)continue;const d=Math.hypot((s.px??s.x)-q.x,(s.pz??s.z)-q.z)-(s.lie?.6:0);   /* 침대는 크니 가운데에서 조금 더 멀어도 */if(d<bd){bd=d;b=i;}}return b;}
+function seatSit(i){const s=SEATS[i];if(!s||!P)return;standUp=null;if(P.ride&&typeof rideOff==='function')rideOff(true);P.seat=i;sitting=true;player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;cam.yaw=s.ry+Math.PI;if(s.lie)cam.pitch=.55;interactTarget=null;sfx('ui');if(typeof publishPresence==='function')publishPresence(true);}
 /* 일어나기: 앉은 자리에서 0.7m 앞 바닥으로 한 번에 옮기면 몸과 눈높이가 툭 떨어졌다가 다시 솟아 튕기는 느낌이 났다.
    이제 0.42초 동안 자리에서 일어선 곳까지 부드럽게 옮기고, 앉은 자세·눈높이도 같은 빠르기로 함께 푼다 (그동안은 움직이지 않는다) */
 let standUp=null;
 const sitEase=k=>k*k*(3-2*k);
 function seatLeave(){if(!P||P.seat==null)return;const s=SEATS[P.seat];P.seat=null;sitting=false;if(s){const tx=s.x+Math.sin(s.ry)*.7,tz=s.z+Math.cos(s.ry)*.7;
   const q=standSpot(s,tx,tz);
-  standUp={t:0,T:.42,fx:player.position.x,fy:player.position.y,fz:player.position.z,tx:q.x,ty:q.y,tz:q.z,ry:s.ry,u:0};}}
+  standUp={t:0,T:s.lie?.7:.42,fx:player.position.x,fy:player.position.y,fz:player.position.z,tx:q.x,ty:q.y,tz:q.z,ry:s.ry,u:0,lie:!!s.lie};}}
+/* 침대에 눕기: 앉는 정도(sitK)에 맞춰 몸을 발끝을 축으로 뒤로 눕히고(얼굴은 위), 다리는 펴고 팔은 옆에 둔다 */
+function lieK(){return (P&&P.seat!=null&&SEATS[P.seat]&&SEATS[P.seat].lie)||(standUp&&standUp.lie)?sitEase(player.userData.sitK||0):0;}
+function lieApply(mesh,k){mesh.rotation.order='YXZ';mesh.rotation.x=-Math.PI/2*k;if(k<=0)return;const S=mesh.userData.stick;if(!S)return;const L=(a,b)=>a+(b-a)*k;
+  for(const [Lg,sx] of [[S.L,-1],[S.R,1]]){Lg.hip.rotation.x=L(Lg.hip.rotation.x,0);Lg.hip.rotation.z=L(Lg.hip.rotation.z,sx*.05);Lg.knee.rotation.x=L(Lg.knee.rotation.x,.06);}
+  S.body.position.y=L(S.body.position.y,0);S.upper.rotation.x=L(S.upper.rotation.x,0);S.head.rotation.x=L(S.head.rotation.x,.3);
+  S.AR.sh.rotation.x=L(S.AR.sh.rotation.x,.05);S.AR.sh.rotation.z=L(S.AR.sh.rotation.z,.14);S.AR.el.rotation.x=L(S.AR.el.rotation.x,-.25);
+  S.AL.sh.rotation.x=L(S.AL.sh.rotation.x,.05);S.AL.sh.rotation.z=L(S.AL.sh.rotation.z,-.14);S.AL.el.rotation.x=L(S.AL.el.rotation.x,-.25);}
+/* 누운 동안 눈: 머리 자리(1인칭), 몸 가운데(3인칭)로 옮긴다 */
+const _lieV=new THREE.Vector3();
+function lieEye(v,h,k){if(k<=0)return;player.updateMatrix();player.updateMatrixWorld(true);_lieV.set(0,h,.06);player.localToWorld(_lieV);v.lerp(_lieV,k);}
 /* 앉으면 머리가 엉덩이보다 앞에 있다: 앉은 만큼 시선을 몸 앞쪽으로 내민다 (의자에 앉으면 0.32m, 바닥에 앉으면 0.2m) */
 function sitLean(v,k){if(CCAR.ride||(P&&P.fly))return;const a=sitEase(player.userData.sitK||0)*(.2+seatLift()*.12)*k;if(a<1e-3)return;const ry=player.rotation.y;v.x+=Math.sin(ry)*a;v.z+=Math.cos(ry)*a;}
 function seatLift(){return P&&P.seat!=null?1:standUp?1-sitEase(standUp.u):0;}
@@ -12586,7 +12597,8 @@ function buildGuildHallMap(K){
       P(BOX,bx,y+.65,bz+.5,1.44,.07,.22,0xf4f0e6,IP);   /* 접어 내린 홑청 */
       for(const s3 of [-1,1]){P(BOX,bx+s3*.33,y+.71,bz+.83,.58,.16,.4,0xfaf6ee,IP);P(SPH,bx+s3*.33,y+.73,bz+.83,.3,.12,.21,0xfaf6ee,IP);}   /* 베개 둘 (머리판 쪽) */
       P(BOX,bx,y+.78,bz+1.19,1.5,1.12,.12,WOOD,IP);P(BOX,bx,y+1.36,bz+1.19,1.62,.1,.18,DARKW,IP);   /* 덧댄 판자 = 머리판 */
-      P(BOX,bx,y+.45,bz-1.18,1.5,.48,.1,WOOD,IP);objC(bx,bz,1.5,2.42,y,.75);};
+      P(BOX,bx,y+.45,bz-1.18,1.5,.48,.1,WOOD,IP);objC(bx,bz,1.5,2.42,y,.75);
+      seatAdd(cx+bx,cz+bz-1.0,y+.86,PI,{lie:1,px:cx+bx,pz:cz+bz});};   /* 누울 수 있다: 머리는 베개(남쪽) */
     const nstand=(x)=>{P(BOX,x,y+.35,15.05,.55,.7,.45,DARKW,IP);objC(x,15.05,.6,.5,y,1.1);P(CYL(.06,.06,6),x,y+.83,15.05,1,.26,1,0xf0e8d8,IP);P(SPH,x,y+1.0,15.05,.05,.09,.05,0xffc860,{glow:true});P(CYL(.08,.06,8),x,y+.71,15.05,1,.03,1,GOLD,IP);halo(x,y+1.0,15.05,0);glight(x,y+1.25,14.6,.55,5.5,0xffb050);pool(x,y+1.05,HD-T-.025,1.1,.32,'z');pool(x,y+.705,15.05,.45,.3);};
     ROOMS.forEach(([x0,x1],ri)=>{const mx=(x0+x1)/2,xw=x0<=-IN?-HZ:x0+.12,xe=x1>=IN?HZ:x1-.12,bx0=xe-3,bm=(bx0+xe)/2,bz=14.05;
       const BX=ri===3?[mx-2.9,mx,mx+2.9]:[mx-1.5,mx+1.5];
@@ -14994,7 +15006,7 @@ function thTownDoor(){const cx=OR.C2.x,cz=OR.C2.z,k=3,a=Math.PI/8+k*Math.PI/4,x=
   {const L=new THREE.PointLight(0xffc880,.7,9,1.8);L.position.set(X+.5,2.4,Z-HD+1.2);G.add(L);}
   /* 가구 (GLB) — 자리는 지금 정하고 충돌체도 지금 넣는다 */
   const L=[],put=(m,x,z,ry=0,s=1,y=0)=>L.push({m,x:X+x,y,z:Z+z,ry,s});
-  put('bed_single_A',-4.35,-3.0,0,.95);colliders.push({x:X-4.35,z:Z-3.8,r:.75},{x:X-4.35,z:Z-2.6,r:.75});put('pillow_A',-4.35,-3.95,0,.9,.62);
+  put('bed_single_A',-4.35,-3.0,0,.95);colliders.push({x:X-4.35,z:Z-3.8,r:.75},{x:X-4.35,z:Z-2.6,r:.75});if(typeof seatAdd==='function')seatAdd(X-4.35,Z-1.98,.74,0,{lie:1,px:X-4.35,pz:Z-3.0});   /* 침대에 누울 수 있다: 머리는 베개(북쪽) */put('pillow_A',-4.35,-3.95,0,.9,.62);
   put('chest_gold',-4.35,-1.05,Math.PI/2,.5);colliders.push({x:X-4.35,z:Z-1.05,r:.42});
   put('shelf_B_large_decorated',-.2,-HD,0,1,1.45);put('shelf_A_big',-.2,-HD,0,1,2.75);put('book_set',-.75,-HD+.22,0,.9,2.75+.25);put('book_set',.15,-HD+.22,0,.9,2.75+.25);put('book_single',.65,-HD+.22,.15,.9,2.75+.25);
   put('cabinet_medium_decorated',3.5,-HD+.52,0,1);colliders.push({x:X+3.0,z:Z-HD+.5,r:.6},{x:X+4.0,z:Z-HD+.5,r:.6});put('cactus_small_A',4.2,-HD+.5,0,.9,1.83);
@@ -19779,9 +19791,9 @@ function updatePlayer(dt){
   if(cam.third){
     player.visible=true;if(viewModel)viewModel.visible=false;
     sitKStep(player.userData,sitting||!!P.fly,dt);
-    animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);
+    animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);const lk=lieK();lieApply(player,lk);
     const back=new THREE.Vector3(0,0,1).applyQuaternion(camera.quaternion);
-    const eye=new THREE.Vector3(player.position.x,player.position.y+1.65-sitEase(player.userData.sitK||0)*.7+seatLift()*.25,player.position.z);sitLean(eye,.8);
+    const eye=new THREE.Vector3(player.position.x,player.position.y+1.65-sitEase(player.userData.sitK||0)*.7+seatLift()*.25,player.position.z);sitLean(eye,.8);lieEye(eye,1.0,lk);
     let dist=4.2;const cp=eye.clone().addScaledVector(back,dist);
     if(CCAR.ride)cp.y+=1.3;
     const gh=heightAt(cp.x,cp.z)+.4;if(cp.y<gh)cp.y=gh;
@@ -19797,8 +19809,10 @@ function updatePlayer(dt){
     else if(rollA){const f=flatFwd(),RH=.78-rollCr*.3-rollCr*.32,HR=.84-rollCr*.42,lx=HR*Math.sin(rollPhi)*Math.sin(rollA),lz=HR*Math.cos(rollPhi)*Math.sin(rollA),rx=Math.cos(cam.yaw),rz=-Math.sin(cam.yaw);
       camera.position.set(player.position.x-lx*rx+lz*f.x,player.position.y+RH+HR*Math.cos(rollA),player.position.z-lx*rz+lz*f.z);}
     sitKStep(player.userData,sitting||!!P.fly,dt);
-    if(mirrorNear()){player.visible=true;animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);player.visible=false;}   /* 거울에 지금 하는 동작이 비치게 */
-    if(CCAR.ride)camera.position.y+=.6;else{camera.position.y+=seatLift()*.28;sitLean(camera.position,1);}
+    const lk=lieK();
+    if(mirrorNear()){player.visible=true;animPlayer(player,moving&&jumpY===0?moving:0,tAll,swingT,jumpY>.3,swingN%2===1,myMo);lieApply(player,lk);player.visible=false;}   /* 거울에 지금 하는 동작이 비치게 */
+    else player.rotation.x=-Math.PI/2*lk;
+    if(CCAR.ride)camera.position.y+=.6;else{camera.position.y+=seatLift()*.28;sitLean(camera.position,1);lieEye(camera.position,1.8,lk);}
     updateViewModel(dt,moving&&jumpY===0);
   }
   camNearFit();
@@ -19826,8 +19840,11 @@ function mirrorAdd(x,y,z,w,h,ry){
     PL.setFromNormalAndCoplanarPoint(N,RP);PL.applyMatrix4(vc.matrixWorldInverse);CL.set(PL.normal.x,PL.normal.y,PL.normal.z,PL.constant);const e=vc.projectionMatrix.elements;
     Q.x=(Math.sign(CL.x)+e[8])/e[0];Q.y=(Math.sign(CL.y)+e[9])/e[5];Q.z=-1;Q.w=(1+e[10])/e[14];CL.multiplyScalar(2/CL.dot(Q));e[2]=CL.x;e[6]=CL.y;e[10]=CL.z+1-.003;e[14]=CL.w;
     const pv=player&&player.visible,vm=typeof viewModel!=='undefined'&&viewModel?viewModel.visible:null;if(player)player.visible=true;if(vm!==null)viewModel.visible=false;
+    /* 막대 인형은 몸의 좌우가 거꾸로 만들어져 있다(오른손에 든 무기가 몸 왼쪽에 붙어 있다). 1인칭 손은 오른쪽인데 거울 속에선 반대쪽 손이 움직였다.
+       거울에 그릴 때만 내 몸을 좌우로 뒤집어, 오른손을 들면 거울 속에서도 오른쪽(보는 사람 쪽에서 같은 쪽) 손이 올라가게 */
+    const psx=player?player.scale.x:1;if(player)player.scale.x=-psx;
     m.visible=false;const prt=renderer.getRenderTarget(),sau=renderer.shadowMap.autoUpdate;renderer.shadowMap.autoUpdate=false;renderer.setRenderTarget(rt);renderer.state.buffers.depth.setMask(true);if(renderer.autoClear===false)renderer.clear();
-    renderer.render(sc,vc);renderer.shadowMap.autoUpdate=sau;renderer.setRenderTarget(prt);m.visible=true;if(player)player.visible=pv;if(vm!==null)viewModel.visible=vm;};
+    renderer.render(sc,vc);renderer.shadowMap.autoUpdate=sau;renderer.setRenderTarget(prt);m.visible=true;if(player){player.scale.x=psx;player.updateMatrix();player.updateMatrixWorld(true);player.visible=pv;}if(vm!==null)viewModel.visible=vm;};
   return m;}
 /* 벽난로 불: 겹친 불꽃 혀(바깥 주황·가운데 노랑·속 흰빛)가 제각각 일렁이고, 불티가 솟고, 불빛이 깜빡인다. (x,y,z) 아궁이 바닥 가운데, w 너비(z 방향) */
 function hearthAdd(x,y,z,w){const g=new THREE.Group();g.position.set(x,y,z);g.userData.keepMx=true;scene.add(g);
@@ -19945,7 +19962,7 @@ function updateWorld(dt){
   if(!it&&typeof chatterNear==='function'){const ci=chatterNear();if(ci>=0)it='chat:'+ci;}
   if(!it&&typeof seatNear==='function'){const si=seatNear();if(si>=0)it='seat:'+si;}
   if(it!==interactTarget||(!it&&!$('#interact').hidden)){interactTarget=it;const b=$('#interact');b.hidden=!it;   /* 다른 곳에서 대상을 비우고 단추만 남은 경우(마차에서 내림·상자를 엶)도 숨긴다 */
-    if(it)b.textContent='F · '+(it.startsWith('gq:')?gqLabel(it):it.startsWith('seat:')?'앉기':it.startsWith('chat:')?'말 걸기':it.startsWith('ccar:')?ccarLabel(it):it.startsWith('player:')?`${(others.get(bestP)||{}).name||'모험가'}에게 말 걸기`:it.startsWith('npc:')?(bestN.role?`${bestN.name} (${bestN.role})`:bestN.name):(it.startsWith('lib:')?`『${libBook(+it.slice(4)).title}』 읽기`:it.startsWith('chest:')?'상자 열기':it.startsWith('hdoor:')?(HDOORS[+it.slice(6)].open?'문 닫기':'문 열기'):it.startsWith('portal:')?(q=>it.endsWith(':x')?`${q.label} (Lv ${q.minLv})`:q.label)(PORTALS[+it.split(':')[1]]):{shop:'상인과 거래',mentor:'스승과 대화',door_in:'석문 열기',door_out:'석굴에서 나가기',gbook:'길드 명부 보기',gboard:'의뢰 게시판 보기'}[it]));}
+    if(it)b.textContent='F · '+(it.startsWith('gq:')?gqLabel(it):it.startsWith('seat:')?(SEATS[+it.slice(5)]&&SEATS[+it.slice(5)].lie?'눕기':'앉기'):it.startsWith('chat:')?'말 걸기':it.startsWith('ccar:')?ccarLabel(it):it.startsWith('player:')?`${(others.get(bestP)||{}).name||'모험가'}에게 말 걸기`:it.startsWith('npc:')?(bestN.role?`${bestN.name} (${bestN.role})`:bestN.name):(it.startsWith('lib:')?`『${libBook(+it.slice(4)).title}』 읽기`:it.startsWith('chest:')?'상자 열기':it.startsWith('hdoor:')?(HDOORS[+it.slice(6)].open?'문 닫기':'문 열기'):it.startsWith('portal:')?(q=>it.endsWith(':x')?`${q.label} (Lv ${q.minLv})`:q.label)(PORTALS[+it.split(':')[1]]):{shop:'상인과 거래',mentor:'스승과 대화',door_in:'석문 열기',door_out:'석굴에서 나가기',gbook:'길드 명부 보기',gboard:'의뢰 게시판 보기'}[it]));}
   const inCave=z==='subcus';dayLightTick(dt);targetSky.set(ZONES[z].sky).multiplyScalar((OR.SP.ZONES.includes(z)||z==='town'?.7:.76)*Math.min(1.35,OPT.bright||1));   /* 하늘·안개색도 함께 어둡게 (안개는 노출값을 거치지 않아 따로 낮춘다) */if(!(z==='dungeon'||z==='hall'||z==='thouse'||inCave)){targetSky.multiplyScalar(DEEP_DES[z]?Math.max(DL.bg,.5):DL.bg);targetSky.lerp(DL._c1.copy(targetSky).multiply(DL.bgTint),.5);}scene.background.lerp(targetSky,z==='dungeon'||(z==='hall'||z==='thouse')||inCave?1:dt*1.2);scene.fog.color.copy(scene.background);
   const inRealm=z==='marcus'||z==='milgol'||z==='fort'||z==='coachway'||z==='castle'||z==='guildhall',inMil=z==='milgol'||z==='coachway';const hi=OR.SP.ZONES.indexOf(z),inHa=hi>=0||z==='town',inMh=OR.MHUNT.includes(z);   /* 하레나 둘레 길: 앞 구역은 맑고 멀리 보이며, 뒤로 갈수록 먼지·연기로 흐려진다 */
   scene.fog.near=z==='dungeon'?14:(z==='hall'||z==='thouse')?30:inCave?18:inMil?95:inRealm?(z==='marcus'?100:70):inMh?60:inHa?(hi<0?70:82-7*hi):38;scene.fog.far=z==='dungeon'?60:(z==='hall'||z==='thouse')?95:inCave?80:inMil?370:inRealm?(z==='marcus'?320:280):inMh?240:inHa?(hi<0?300:330-18*hi):140;
