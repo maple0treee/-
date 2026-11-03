@@ -1547,11 +1547,17 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     { n: 2, gate: '북문', zones: [['m2a', 'wood'], ['m2b', 'hill'], ['m2c', 'lake'], ['m2d', 'vale'], ['m2e', 'pass']] },
     { n: 3, gate: '동문', zones: [['m3a', 'field'], ['m3b', 'river'], ['m3c', 'field'], ['m3d', 'wood'], ['m3e', 'hill']] },
     { n: 4, gate: '남문', zones: [['m4a', 'wood'], ['m4b', 'vale'], ['m4c', 'marsh'], ['m4d', 'vale'], ['m4e', 'pass']] },
+    // 고리 밖으로 뻗은 가지: 4E에서 남서쪽 산을 넘어 이어지는 새 지역 (엑시즈로 가는 문은 없다)
+    { n: 5, region: '불타는 협곡', branch: [162, 130, 100, 70, 40], zones: [['m5a', 'ash'], ['m5b', 'vale'], ['m5c', 'lava'], ['m5d', 'vale'], ['m5e', 'pass']] },
   ];
   // 사냥터 땅 스무 곳은 엑시즈를 빙 두르는 고리에 레벨 순서대로 놓는다: 서쪽(서문, Lv 60)에서 시작해 시계 방향으로 북(북문, 95) → 동(동문, 130) → 남(남문, 165) → 남서(200).
   // 마지막 땅(4E)과 첫 땅(1A) 사이만 높은 산줄기로 막혀 있다. 고리 안쪽은 엑시즈를 둘러싼 산이고, 문마다 안쪽으로 고갯길이 나 있다
   const MH = { cx: 3600, cz: 1750, RR: 1150, R: 150, neckHW: 60, gateHW: 14, gateLen: 55 };
-  MLINES.forEach((L) => L.zones.forEach(([id, kind], i) => { const k = (L.n - 1) * 5 + i, th = PI + k * PI / 10; const I = ISLES[id] || (ISLES[id] = { R: MH.R }); I.R = MH.R; I.x = MH.cx + Math.cos(th) * MH.RR; I.z = MH.cz + Math.sin(th) * MH.RR; I.kind = kind; I.line = L.n; I.seq = i; I.k = k; I.th = th; }));
+  // 가지(branch): 앞 땅에서 정한 방향(도, 지도에서 x 오른쪽 0 · z 아래 90)으로 MH.STEP씩 나아간다. th는 나아가는 방향에서 90도 뺀 값 (고리 땅처럼 th의 접선이 길 방향)
+  MH.STEP = 360;
+  MLINES.forEach((L) => L.zones.forEach(([id, kind], i) => { const k = (L.n - 1) * 5 + i; const I = ISLES[id] || (ISLES[id] = { R: MH.R }); I.R = MH.R; I.kind = kind; I.line = L.n; I.seq = i; I.k = k;
+    if (L.branch) { const prev = i ? ISLES[L.zones[i - 1][0]] : ISLES[MLINES[L.n - 2].zones[4][0]], h = L.branch[i] * PI / 180; I.x = prev.x + Math.cos(h) * MH.STEP; I.z = prev.z + Math.sin(h) * MH.STEP; I.th = h - PI / 2; I.branch = 1; }
+    else { const th = PI + k * PI / 10; I.x = MH.cx + Math.cos(th) * MH.RR; I.z = MH.cz + Math.sin(th) * MH.RR; I.th = th; } }));
   const MHUNT = MLINES.flatMap((L) => L.zones.map((q) => q[0]));
   const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle', 'guildhall', 'exmarket', 'arena', ...MHUNT];
   // 엑시즈 성벽(섬 중심 기준 m, 시계 방향)과 가장자리: 성벽에서 바깥으로 약 70m까지만 땅이 있다 (들쭉날쭉)
@@ -1562,12 +1568,14 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   ISLES.marcus.entry = { x: ISLES.marcus.x, z: ISLES.marcus.z + isleEdge(ISLES.marcus, Math.PI / 2) - 12 };   // 엑시즈: 가장자리가 성벽을 따르므로 남쪽 끝에서 잰다
   // 고리 위의 자리 (각도 th, 중심에서 거리 r)
   const ringP = (th, r) => ({ x: MH.cx + Math.cos(th) * r, z: MH.cz + Math.sin(th) * r });
-  for (const k of MHUNT) { const I = ISLES[k], dt = (I.R - 14) / MH.RR; I.entry = ringP(I.th - dt, MH.RR); I.exit = ringP(I.th + dt, MH.RR); }   // 사냥터: 레벨이 낮은 쪽(고리 반시계)에서 들어와 높은 쪽(시계)으로 나간다
+  for (const k of MHUNT) { const I = ISLES[k], dt = (I.R - 14) / MH.RR; I.entry = ringP(I.th - dt, MH.RR); I.exit = ringP(I.th + dt, MH.RR);
+    if (I.branch) { const j = MHUNT.indexOf(k), A = ISLES[MHUNT[j - 1]], B = ISLES[MHUNT[j + 1]], tw = (Q, s) => { const d = Math.hypot(Q.x - I.x, Q.z - I.z); return { x: I.x + (Q.x - I.x) / d * s, z: I.z + (Q.z - I.z) / d * s }; };
+      I.entry = tw(A, I.R - 14); I.exit = B ? tw(B, I.R - 14) : { x: I.x - Math.sin(I.th) * (I.R - 14), z: I.z + Math.cos(I.th) * (I.R - 14) }; } }   // 사냥터: 레벨이 낮은 쪽(고리 반시계)에서 들어와 높은 쪽(시계)으로 나간다
   // 걸어 다닐 수 있는 사냥터 모양: 둥근 땅들 + 이웃 땅을 잇는 넓은 목(neck) + 문마다 엑시즈 쪽(안쪽)으로 난 고갯길(gate), 밀골로 가는 바깥 고갯길
   MH.links = [];
   for (let i = 0; i + 1 < MHUNT.length; i++) { const A = ISLES[MHUNT[i]], B = ISLES[MHUNT[i + 1]]; MH.links.push({ a: A.id, b: B.id, ax: A.x, az: A.z, bx: B.x, bz: B.z, hw: MH.neckHW, k: 'neck' }); }
   // gate: 고갯길 끝의 문(엑시즈·밀골로 넘어가는 자리)과 넘어왔을 때 서는 자리(arr), 바라보는 방향(ux, uz)
-  for (const L of MLINES) { const F = ISLES[L.zones[0][0]], e = ringP(F.th, MH.RR - F.R - MH.gateLen); F.gate = { ...ringP(F.th, MH.RR - F.R - MH.gateLen + 6), arr: ringP(F.th, MH.RR - F.R - MH.gateLen + 14), ux: Math.cos(F.th), uz: Math.sin(F.th) }; MH.links.push({ a: F.id, b: null, ax: F.x, az: F.z, bx: e.x, bz: e.z, hw: MH.gateHW, k: 'gate' });
+  for (const L of MLINES) { if (!L.gate) continue; const F = ISLES[L.zones[0][0]], e = ringP(F.th, MH.RR - F.R - MH.gateLen); F.gate = { ...ringP(F.th, MH.RR - F.R - MH.gateLen + 6), arr: ringP(F.th, MH.RR - F.R - MH.gateLen + 14), ux: Math.cos(F.th), uz: Math.sin(F.th) }; MH.links.push({ a: F.id, b: null, ax: F.x, az: F.z, bx: e.x, bz: e.z, hw: MH.gateHW, k: 'gate' });
     if (L.end === 'milgol') { const E = ISLES[L.zones[L.zones.length - 1][0]], o = ringP(E.th, MH.RR + E.R + MH.gateLen); E.mgate = { ...ringP(E.th, MH.RR + E.R + MH.gateLen - 6), arr: ringP(E.th, MH.RR + E.R + MH.gateLen - 14), ux: -Math.cos(E.th), uz: -Math.sin(E.th) }; MH.links.push({ a: E.id, b: null, ax: E.x, az: E.z, bx: o.x, bz: o.z, hw: MH.gateHW, k: 'gate' }); } }
   const segQ = (L, x, z) => { const dx = L.bx - L.ax, dz = L.bz - L.az, t = clampN(((x - L.ax) * dx + (z - L.az) * dz) / (dx * dx + dz * dz), 0, 1), qx = L.ax + dx * t, qz = L.az + dz * t; return { x: qx, z: qz, t, d: Math.hypot(x - qx, z - qz) }; };
   // 걸을 수 있는 곳 경계까지의 거리 (안쪽은 음수)
@@ -1764,6 +1772,19 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     stormwolf:{ name: '폭풍 늑대', lv: 194, build: 'quad', color: 0x7a8a9a, hpM: 1.6, atkM: 1.85, scale: 1.45 },
     cloudslime:{ name: '구름 슬라임', lv: 197, build: 'slime', color: 0xf0f2f6, hpM: 2.0, atkM: 1.6, scale: 1.75, glow: 0xd8e8ff },
     peakgiant:{ name: '봉우리 거인', lv: 200, build: 'biped', color: 0x8a8a92, hpM: 3.0, atkM: 1.9, scale: 2.8, club: true },
+    // 불타는 협곡 (4E 너머, Lv 200–235)
+    cinderhound:{ name: '잿빛 사냥개', lv: 202, build: 'quad', color: 0x4a4440, hpM: 1.5, atkM: 1.85, scale: 1.4 },
+    cinderslime:{ name: '불씨 슬라임', lv: 205, build: 'slime', color: 0x3a2a26, hpM: 2.0, atkM: 1.6, scale: 1.75, glow: 0xff7a30 },
+    scorchboar:{ name: '그을린 멧돼지', lv: 209, build: 'quad', color: 0x3a2a22, hpM: 1.8, atkM: 1.85, scale: 1.65, tusk: true },
+    magmaviper:{ name: '용암 독사', lv: 214, build: 'snake', color: 0x8a2a14, hpM: 1.4, atkM: 1.95, scale: 2.1 },
+    ashbear:  { name: '잿더미 곰', lv: 216, build: 'quad', color: 0x5a524c, hpM: 2.1, atkM: 1.85, scale: 1.9 },
+    lavaslime:{ name: '용암 슬라임', lv: 220, build: 'slime', color: 0xd04a14, hpM: 2.1, atkM: 1.7, scale: 1.8, glow: 0xff9a40 },
+    lavatroll:{ name: '용암 트롤', lv: 221, build: 'biped', color: 0x5a3a2e, hpM: 2.8, atkM: 1.9, scale: 2.5, club: true },
+    flamehound:{ name: '불길 사냥개', lv: 223, build: 'quad', color: 0x9a3a1a, hpM: 1.6, atkM: 1.95, scale: 1.45 },
+    flameogre:{ name: '화염 오우거', lv: 228, build: 'biped', color: 0x7a2e1e, hpM: 2.9, atkM: 1.95, scale: 2.55, club: true },
+    firewolf: { name: '불꽃 늑대', lv: 230, build: 'quad', color: 0xb04a1e, hpM: 1.7, atkM: 2.0, scale: 1.5 },
+    smokeslime:{ name: '연기 슬라임', lv: 233, build: 'slime', color: 0x6a6662, hpM: 2.2, atkM: 1.75, scale: 1.85, glow: 0xffb070 },
+    firegiant:{ name: '불의 거인', lv: 235, build: 'biped', color: 0x6a2a1e, hpM: 3.2, atkM: 2.0, scale: 2.9, club: true },
     reddragon:{ name: '붉은 용 이그니스', lv: 100, fixed: { hp: 450000, atk: 900, def: 60, exp: 80000 }, gold: 80000, build: 'dragon', color: 0xa8231a, scale: 1, dragon: true },
   };
   const HP_MUL = 1.6, EXP_MUL = 1.25;
@@ -1788,8 +1809,9 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     m2a: ['pinewolf', 'pinewolf', 'barkslime'], m2b: ['hornboar', 'rockviper'], m2c: ['greybear', 'resinslime', 'pinetroll'], m2d: ['cragdog', 'rockogre'], m2e: ['icewolf', 'snowslime', 'frostgiant'],
     m3a: ['steppewolf', 'steppewolf', 'clayslime'], m3b: ['wildram', 'reedviper'], m3c: ['warboar', 'pollenslime', 'fieldogre'], m3d: ['ashwolf', 'brownbear'], m3e: ['hilltroll', 'stoneslime', 'hillgiant'],
     m4a: ['shadewolf', 'shadewolf', 'leafslime'], m4b: ['cliffboar', 'pitviper'], m4c: ['moonbear', 'rotslime', 'oldtroll'], m4d: ['gorgehound', 'gorgeogre'], m4e: ['stormwolf', 'cloudslime', 'peakgiant'],
+    m5a: ['cinderhound', 'cinderhound', 'cinderslime'], m5b: ['scorchboar', 'magmaviper'], m5c: ['ashbear', 'lavaslime', 'lavatroll'], m5d: ['flamehound', 'flameogre'], m5e: ['firewolf', 'smokeslime', 'firegiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 40, mhill: 42, mwood: 44, mvale: 44, mpass: 46, m2a: 32, m2b: 32, m2c: 32, m2d: 32, m2e: 32, m3a: 32, m3b: 32, m3c: 32, m3d: 32, m3e: 32, m4a: 32, m4b: 32, m4c: 32, m4d: 32, m4e: 32 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 40, mhill: 42, mwood: 44, mvale: 44, mpass: 46, m2a: 32, m2b: 32, m2c: 32, m2d: 32, m2e: 32, m3a: 32, m3b: 32, m3c: 32, m3d: 32, m3e: 32, m4a: 32, m4b: 32, m4c: 32, m4d: 32, m4e: 32, m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
     const d2 = Math.hypot(x - C2.x, z - C2.z);
@@ -1828,7 +1850,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   /* 엑시즈 모험가 길드의 큰 게시판: 등급(레벨대)별로 칸이 나뉘어 있고, 칸마다 의뢰가 고르게 붙는다 */
   BOARDS.guild = { title: '모험가 길드 의뢰 게시판', cap: 50, zones: [],
     /* 엑시즈 길드는 60레벨 이상 의뢰만: 스물여덟 레벨씩 칸을 나눈다 (사냥터의 시작 레벨로 가른다). 그 아래는 하레나 게시판 */
-    tiers: [...[[60, 88], [88, 116], [116, 144], [144, 172], [172, 200]].map(([lo, hi], i) => ({ id: 'a' + i, name: ['1급', '2급', '3급', '4급', '5급'][i], lv: [lo, hi], zones: MHUNT.filter((z) => ZONE_MON[z] && ZONE_LEVELS[z] && ZONE_LEVELS[z][0] >= lo && ZONE_LEVELS[z][0] < hi) }))].filter((t) => t.zones.length),
+    tiers: [...[[60, 88], [88, 116], [116, 144], [144, 172], [172, 200], [200, 250]].map(([lo, hi], i) => ({ id: 'a' + i, name: ['1급', '2급', '3급', '4급', '5급', '6급'][i], lv: [lo, hi], zones: MHUNT.filter((z) => ZONE_MON[z] && ZONE_LEVELS[z] && ZONE_LEVELS[z][0] >= lo && ZONE_LEVELS[z][0] < hi) }))].filter((t) => t.zones.length),
     givers: [
       G('엑시즈 상인', '상인', ['{z}를 지나는 상단이 {m}에게 번번이 털립니다. 길이 안전해지면 왕도 물가도 내려갈 거예요.', '{z}에서 들여오는 물건이 {m} 때문에 끊겼어요. 가게 선반이 비어 갑니다.']),
       G('길드 접수원', '모험가 길드', ['{z}에 나간 모험가들이 {m} 때문에 돌아오지 못하고 있어요. 수를 줄여 길을 열어 주세요.', '{z}의 {m}에 대한 신고가 길드에 쌓였어요. 처리해 주실 분을 찾습니다.']),
@@ -2523,8 +2545,8 @@ const ZONES={
   arena:{name:'투기장',diff:0,rec:'',sky:0xe8dcc4,mm:'#c8b48a'},
 };
 /* 엑시즈 문 밖 사냥터: 이름 = 마르쿠스 + 땅 생김새 + 줄 번호 + 몇 번째 (예: 마르쿠스 숲1C) */
-(function(){const KN={field:'들판',hill:'구릉',wood:'숲',vale:'계곡',pass:'고개',lake:'호숫가',river:'강가',marsh:'늪지'},KS={field:[0xd8e4ea,'#8aac52'],hill:[0xd4e0e6,'#7a9a48'],wood:[0xc4d4c8,'#4a7038'],vale:[0xc8d2d8,'#7a8268'],pass:[0xc0c8d0,'#8a8478'],lake:[0xd0e0e8,'#6a9a6a'],river:[0xcfdfe6,'#6f9a52'],marsh:[0xc4ccc4,'#6a7448']};
-  for(const L of OR.MLINES)L.zones.forEach(([id,k],i)=>{ZONES[id]={name:'마르쿠스 '+KN[k]+L.n+'ABCDE'[i],diff:6,sky:KS[k][0],mm:KS[k][1]};});})();
+(function(){const KN={field:'들판',hill:'구릉',wood:'숲',vale:'계곡',pass:'고개',lake:'호숫가',river:'강가',marsh:'늪지',ash:'잿더미',lava:'용암지'},KS={ash:[0xd4ccc6,'#5e5650'],lava:[0xe2cbbd,'#4e3a32'],field:[0xd8e4ea,'#8aac52'],hill:[0xd4e0e6,'#7a9a48'],wood:[0xc4d4c8,'#4a7038'],vale:[0xc8d2d8,'#7a8268'],pass:[0xc0c8d0,'#8a8478'],lake:[0xd0e0e8,'#6a9a6a'],river:[0xcfdfe6,'#6f9a52'],marsh:[0xc4ccc4,'#6a7448']};
+  for(const L of OR.MLINES)L.zones.forEach(([id,k],i)=>{ZONES[id]={name:(L.region||'마르쿠스')+' '+KN[k]+L.n+'ABCDE'[i],diff:6,sky:KS[k][0],mm:KS[k][1]};});})();
 for(const k in ZONES){const L=ZL[k];ZONES[k].min=L?L[0]:0;if(ZONES[k].rec==null)ZONES[k].rec=`Lv ${L[0]}–${L[1]}`;}
 const JOBS={
   warrior:{name:'전사',hp:70,atk:9,def:5,mp:30,grow:[13,2,2,3],color:0x9c3d2f,weapon:'sword',sub:'shield',crit:.08,adv:['swordsman','guardian'],intro:'검과 방패'},
@@ -5063,7 +5085,7 @@ const MONGLB={
   files:{slime:'models/mon_slime.glb.wasm?v=1',goblin:'models/mon_goblin.glb.wasm?v=1',lizard:'models/mon_lizard.glb.wasm?v=1',wolf:'models/mon_wolf.glb.wasm?v=1'},
   H:{slime:1.15,goblin:1.75,lizard:1.85,wolf:1.2},
   src:{},loading:{},wait:{}};
-function monGlbKind(t,D){if(t==='goblin')return 'goblin';if(t==='lizard')return 'lizard';if(t==='wolf'||t==='silvawolf'||t==='snowwolf'||t==='darkhound'||t==='fieldwolf'||t==='windwolf'||t==='stonehound'||t==='pinewolf'||t==='cragdog'||t==='icewolf'||t==='steppewolf'||t==='ashwolf'||t==='shadewolf'||t==='gorgehound'||t==='stormwolf')return 'wolf';return null;}   /* 슬라임·낙타는 직접 만든 모양을 쓴다 (makeJellySlime·makeCamelMesh) */
+function monGlbKind(t,D){if(t==='goblin')return 'goblin';if(t==='lizard')return 'lizard';if(t==='wolf'||t==='silvawolf'||t==='snowwolf'||t==='darkhound'||t==='fieldwolf'||t==='windwolf'||t==='stonehound'||t==='pinewolf'||t==='cragdog'||t==='icewolf'||t==='steppewolf'||t==='ashwolf'||t==='shadewolf'||t==='gorgehound'||t==='stormwolf'||t==='cinderhound'||t==='flamehound'||t==='firewolf')return 'wolf';return null;}   /* 슬라임·낙타는 직접 만든 모양을 쓴다 (makeJellySlime·makeCamelMesh) */
 function monGlbLoad(k){if(MONGLB.src[k])return Promise.resolve(MONGLB.src[k]);
   if(!MONGLB.loading[k])MONGLB.loading[k]=new Promise((ok,no)=>{if(!THREE.GLTFLoader)return no(new Error('no loader'));new THREE.GLTFLoader().load(MONGLB.files[k],g=>{
       g.scene.updateMatrixWorld(true);const bb=new THREE.Box3().setFromObject(g.scene);MONGLB.src[k]={scene:g.scene,clips:g.animations,bb};ok(MONGLB.src[k]);},undefined,e=>{console.warn('mon glb',k,e);no(e);});});
@@ -5089,7 +5111,7 @@ function glbAttach(k,S,D,g){
     const tint=m=>{m=m.clone();const n=m.name||'';
       if(k==='slime'){if(n==='Main'){m.color.setHex(c);m.roughness=.32;m.metalness=0;}else if(n==='Main_Dark'){m.color.setHex(shade(c,.62));m.roughness=.4;}
         else if(n==='Horns')m.color.setHex(D.tyKey==='rockslime'?0x5a5650:D.tyKey==='emberslime'?0x2a1a14:D.tyKey==='frostslime'?0xe8f4ff:D.boss?0xd8b040:0x9a7a48);}
-      if(k==='wolf'){const W={wolf:[0x6a665e,0x9a958a],silvawolf:[0x9aa0a8,0xd8dce2],snowwolf:[0xdfe6ea,0xffffff],darkhound:[0x221e28,0x3c3646],fieldwolf:[0x7a5e40,0xb89a74],windwolf:[0xa8b4bc,0xe8eef2],stonehound:[0x6a6660,0x9a968e],pinewolf:[0x4e3e2e,0x8a7458],cragdog:[0x58544e,0x8a8680],icewolf:[0xc8dae6,0xf4f8fc],steppewolf:[0x8a704a,0xc8b088],ashwolf:[0x5e5c5a,0x9a9894],shadewolf:[0x2a2a30,0x4a4a52],gorgehound:[0x6e523c,0xa88a6c],stormwolf:[0x6a7a8a,0xb0c0cc]}[D.tyKey]||[0x6a665e,0x9a958a];   /* 늑대: 종류마다 털빛 */
+      if(k==='wolf'){const W={wolf:[0x6a665e,0x9a958a],silvawolf:[0x9aa0a8,0xd8dce2],snowwolf:[0xdfe6ea,0xffffff],darkhound:[0x221e28,0x3c3646],fieldwolf:[0x7a5e40,0xb89a74],windwolf:[0xa8b4bc,0xe8eef2],stonehound:[0x6a6660,0x9a968e],pinewolf:[0x4e3e2e,0x8a7458],cragdog:[0x58544e,0x8a8680],icewolf:[0xc8dae6,0xf4f8fc],steppewolf:[0x8a704a,0xc8b088],ashwolf:[0x5e5c5a,0x9a9894],shadewolf:[0x2a2a30,0x4a4a52],gorgehound:[0x6e523c,0xa88a6c],stormwolf:[0x6a7a8a,0xb0c0cc],cinderhound:[0x3e3a38,0x6a6460],flamehound:[0x8a3418,0xc86a30],firewolf:[0xa8461c,0xe8a050]}[D.tyKey]||[0x6a665e,0x9a958a];   /* 늑대: 종류마다 털빛 */
         if(n==='Main')m.color.setHex(W[0]);else if(n==='Main_Light')m.color.setHex(W[1]);m.roughness=.85;}
       if(k==='goblin'){if(n==='Orc_Main')m.color.setHex(0x9c9452);else if(n==='Orc_Secondary')m.color.setHex(0x6e6636);else if(n==='Orc_Hair')m.color.setHex(0xd8ccaa);else if(n==='Belt')m.color.setHex(0x5a3a22);}
       if(m.emissive)m.emissive.setHex(0);if(D.glow&&m.emissive&&(n==='Main'||n==='Main_Dark'))m.emissive.set(D.glow).multiplyScalar(.5);
@@ -15132,19 +15154,33 @@ function ccarPresence(){return CCAR.ride?'k'+CCAR.ride.k+'s'+CCAR.ride.s:'';}
 const KAOLIS_WY=-.35;   /* 카올리스 바닷물 높이 */
 /* 엑시즈 문 밖 사냥터: 한 줄의 다섯 땅이 넓은 목으로 이어지고, 줄 끝은 좁은 산길로 다음 줄 첫 땅과 이어진다 (shared.js의 OR.MH).
    길(MHR)은 줄마다 하나로 이어지는 흙길 + 줄과 줄 사이 산길, 땅 생김새는 땅마다(mhBase), 두 땅 사이에서는 섞고(mhHeight), 걸을 수 없는 바깥은 산비탈로 솟는다 */
-const MHR=(()=>{const MH=OR.MH,ISL=OR.ISLES,Zs=OR.MHUNT.map(k=>ISL[k]),cx=MH.cx,cz=MH.cz,TAU=Math.PI*2;
+const MHR=(()=>{const MH=OR.MH,ISL=OR.ISLES,Zs=OR.MHUNT.map(k=>ISL[k]).filter(I=>!I.branch),cx=MH.cx,cz=MH.cz,TAU=Math.PI*2;
   /* 고리 길: 첫 땅(1A) 가운데부터 시계 방향으로 마지막 땅(4E) 가운데까지. 4E와 1A 사이는 산줄기라 길이 없다 */
   const th0=Zs[0].th,th1=Zs[Zs.length-1].th;
   const angN=a=>{while(a<th0-.6)a+=TAU;while(a>=th0-.6+TAU)a-=TAU;return a;};   /* 첫 땅 조금 앞부터 한 바퀴 */
   const rr=a=>MH.RR+9*Math.sin(a*7+1)+5*Math.sin(a*17+.3);
   const ringPt=a=>{const r=rr(a);return {x:cx+Math.cos(a)*r,z:cz+Math.sin(a)*r};};
   const gates=OR.MH.links.filter(l=>l.k==='gate');
+  /* 고리 밖 가지(불타는 협곡 등): 고리 마지막 땅 가운데부터 가지 땅 가운데들을 부드럽게 잇는 흙길 (점 3m 간격) */
+  const branches=[];for(const L of OR.MLINES){if(!L.branch)continue;const C=[ringPt(th1),...L.zones.map(q=>ISL[q[0]])].map(I=>({x:I.x,z:I.z}));
+    const ext=C[C.length-1],bk=C[C.length-2];C.push({x:ext.x+(ext.x-bk.x)*.3,z:ext.z+(ext.z-bk.z)*.3});C.unshift({x:C[0].x*2-C[1].x,z:C[0].z*2-C[1].z});
+    const pts=[];for(let i=1;i+2<C.length;i++){const p0=C[i-1],p1=C[i],p2=C[i+1],p3=C[i+2],n=Math.ceil(Math.hypot(p2.x-p1.x,p2.z-p1.z)/3);
+      for(let j=0;j<n;j++){const t=j/n,t2=t*t,t3=t2*t,f=(a,b,c,d)=>.5*(2*b+(-a+c)*t+(2*a-5*b+4*c-d)*t2+(-a+3*b-3*c+d)*t3);pts.push({x:f(p0.x,p1.x,p2.x,p3.x),z:f(p0.z,p1.z,p2.z,p3.z)});}}
+    pts.push(C[C.length-2]);
+    for(let i=0;i<pts.length;i++){const a=pts[Math.max(0,i-1)],b=pts[Math.min(pts.length-1,i+1)],dx=b.x-a.x,dz=b.z-a.z,d=Math.hypot(dx,dz)||1,w=(6*Math.sin(i*.021+1)+3*Math.sin(i*.067))*Math.min(1,i/20);pts[i].ox=-dz/d*w;pts[i].oz=dx/d*w;}
+    for(const q of pts){q.x+=q.ox;q.z+=q.oz;}
+    let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;for(const q of pts){x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);z0=Math.min(z0,q.z);z1=Math.max(z1,q.z);}
+    branches.push({pts,x0,x1,z0,z1});}
+  const segD=(a,b,x,z)=>{const dx=b.x-a.x,dz=b.z-a.z,l2=dx*dx+dz*dz||1,t=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/l2)),qx=a.x+dx*t,qz=a.z+dz*t;return {d:Math.hypot(x-qx,z-qz),x:qx,z:qz};};
+  const branchNear=(B,x,z)=>{const P=B.pts;let bi=0,bd=1e9;for(let i=0;i<P.length;i+=6){const d=Math.abs(P[i].x-x)+Math.abs(P[i].z-z);if(d<bd){bd=d;bi=i;}}
+    let r={d:1e9,x:0,z:0};for(let i=Math.max(0,bi-14);i<Math.min(P.length-1,bi+14);i++){const q=segD(P[i],P[i+1],x,z);if(q.d<r.d)r=q;}return r;};
   /* 가장 가까운 길 위의 자리와 거리 */
   const near=(x,z)=>{let a=angN(Math.atan2(z-cz,x-cx));a=Math.max(th0,Math.min(th1,a));const q=ringPt(a);let bd=Math.hypot(x-q.x,z-q.z),bx=q.x,bz=q.z;
     for(const g of gates){const Q=OR.MH.segQ(g,x,z);if(Q.d<bd){bd=Q.d;bx=Q.x;bz=Q.z;}}
+    for(const B of branches){if(x<B.x0-bd||x>B.x1+bd||z<B.z0-bd||z>B.z1+bd)continue;const Q=branchNear(B,x,z);if(Q.d<bd){bd=Q.d;bx=Q.x;bz=Q.z;}}
     return {d:bd,x:bx,z:bz};};
   /* 지도에 그릴 길 (점 목록) */
-  const paths=[[]];for(let a=th0;a<=th1+1e-6;a+=.004)paths[0].push(ringPt(a));for(const g of gates)paths.push([{x:g.ax,z:g.az},{x:g.bx,z:g.bz}]);
+  const paths=[[]];for(let a=th0;a<=th1+1e-6;a+=.004)paths[0].push(ringPt(a));for(const g of gates)paths.push([{x:g.ax,z:g.az},{x:g.bx,z:g.bz}]);for(const B of branches)paths.push(B.pts.filter((q,i)=>i%4===0||i===B.pts.length-1));
   /* 고리를 가로지르는 물줄기: 중심에서 바깥으로 흐른다. s = 고리 길에서 바깥으로 잰 거리, 옆으로 굽은 정도 f(s) */
   const tan=a=>({x:-Math.sin(a),z:Math.cos(a)});
   const crossD=(W,x,z)=>{const dx=x-cx,dz=z-cz,rho=Math.hypot(dx,dz);let da=Math.atan2(dz,dx)-W.th;da=((da+Math.PI)%TAU+TAU)%TAU-Math.PI;const s=rho-MH.RR,lat=rho*da;return {s,d:Math.abs(lat-W.f(s)),lat};};
@@ -15154,7 +15190,10 @@ const MHR=(()=>{const MH=OR.MH,ISL=OR.ISLES,Zs=OR.MHUNT.map(k=>ISL[k]),cx=MH.cx,
   for(const I of Zs){if(I.kind==='lake'){const sd=(I.line+I.seq)%2?1:-1,r=MH.RR+sd*76;lakes.push({I,x:cx+Math.cos(I.th)*r,z:cz+Math.sin(I.th)*r,th:I.th,rx:64,rz:40});}
     if(I.kind==='river')rivers.push({I,th:I.th,hw:6.5,len:225,f:s=>16*Math.sin(s*.027+I.th)+5*Math.sin(s*.071)});
     if(I.kind==='marsh')marshes.push({I,x:I.x,z:I.z});}
-  OR.MH.links.forEach((l,i)=>{if(l.k==='neck'&&(i%2===0)){const th=(ISL[l.a].th+ISL[l.b].th)/2;streams.push({th,hw:2.8,len:110,x:(l.ax+l.bx)/2,z:(l.az+l.bz)/2,f:s=>4*Math.sin(s*.06+th*3)+2*Math.sin(s*.17)});}});
+  OR.MH.links.forEach((l,i)=>{if(l.k==='neck'&&(i%2===0)&&!ISL[l.a].branch&&!ISL[l.b].branch){const th=(ISL[l.a].th+ISL[l.b].th)/2;streams.push({th,hw:2.8,len:110,x:(l.ax+l.bx)/2,z:(l.az+l.bz)/2,f:s=>4*Math.sin(s*.06+th*3)+2*Math.sin(s*.17)});}});
+  /* 용암지: 길에서 떨어진 둥근 용암 웅덩이 (들어갈 수 없다) */
+  const lavas=[];for(const I of OR.MHUNT.map(k=>ISL[k]))if(I.kind==='lava')for(let j=0;j<11;j++){const a=j*2.399+.7,d=34+((j*37)%90),r=7+(j%3)*3.5,x=I.x+Math.cos(a)*d,z=I.z+Math.sin(a)*d;
+    if(near(x,z).d<r+13||d+r>I.R-6||lavas.some(L=>Math.hypot(L.x-x,L.z-z)<L.r+r+10))continue;lavas.push({I,x,z,r});}
   /* 호수 안인지 (1 = 물가 테두리, 고리 방향으로 긴 타원) */
   const lakeQ=(W,x,z)=>{const dx=x-W.x,dz=z-W.z,t=-dx*Math.sin(W.th)+dz*Math.cos(W.th),r=dx*Math.cos(W.th)+dz*Math.sin(W.th);return Math.hypot(t/W.rx,r/W.rz);};
   const marshN=(x,z)=>Math.sin(x*.09+1)*Math.cos(z*.1)+.6*Math.sin(x*.031-z*.043);
@@ -15165,6 +15204,7 @@ const MHR=(()=>{const MH=OR.MH,ISL=OR.ISLES,Zs=OR.MHUNT.map(k=>ISL[k]),cx=MH.cx,
     for(const V of rivers){if(!nearW(V,x,z,260))continue;const c=crossD(V,x,z);if(Math.abs(c.s)>V.len||Math.abs(c.lat)>80)continue;h+=(-.9-h)*smooth(V.hw+4.5,V.hw-1.5,c.d)*smooth(V.len,V.len-35,Math.abs(c.s));}
     for(const M of marshes){const d=Math.hypot(x-M.x,z-M.z);if(d>140)continue;const k=smooth(.45,.8,marshN(x,z))*smooth(6,12,dr)*smooth(140,120,d);h+=(-.8-h)*k;}
     for(const S of streams){if(!nearW(S,x,z,130))continue;const c=crossD(S,x,z);if(Math.abs(c.s)>S.len||Math.abs(c.lat)>20)continue;h+=(-.7-h)*smooth(S.hw+3,S.hw-.8,c.d)*smooth(S.len,S.len-25,Math.abs(c.s));}
+    for(const L of lavas){const d=Math.abs(x-L.x)+Math.abs(z-L.z);if(d>L.r*1.5+8)continue;const e=Math.hypot(x-L.x,z-L.z);h+=(-1.2-h)*smooth(L.r+2.5,L.r-1,e);h+=.9*smooth(L.r+6,L.r+2.5,e)*smooth(L.r,L.r+2.5,e);}   /* 굳은 용암 둑 */
     return h;};
   /* 물가인지 (0~1): 진흙빛을 칠할 곳 */
   const wetK=(x,z,dr)=>{let k=0;
@@ -15175,7 +15215,7 @@ const MHR=(()=>{const MH=OR.MH,ISL=OR.ISLES,Zs=OR.MHUNT.map(k=>ISL[k]),cx=MH.cx,
     return k;};
   /* 물줄기가 고리 길을 건너는 자리와 길 방향 */
   const ford=W=>{let s=0,p=null;for(let i=0;i<30;i++){p=crossPt(W,s);s=rr(p.a)-MH.RR;}const t=tan(p.a);return {x:p.x,z:p.z,tx:t.x,tz:t.z};};
-  return {wetK,near,paths,rr,ringPt,angN,th0,th1,tan,crossD,crossPt,lakeQ,ford,lakes,rivers,marshes,streams,marshN,water};})();
+  return {wetK,near,paths,rr,ringPt,angN,th0,th1,tan,crossD,crossPt,lakeQ,ford,lakes,rivers,marshes,streams,marshN,water,lavas,branches};})();
 const MH_WY=-.35;   /* 사냥터 물 높이 */
 let MH_DECOR=0;
 function mhBase(I,x,z,dr){const mx=x-I.x,my=z-I.z,R=I.R;
@@ -15188,9 +15228,11 @@ function mhBase(I,x,z,dr){const mx=x-I.x,my=z-I.z,R=I.R;
     case 'lake':return .3+Math.sin(x*.04)*Math.cos(z*.045)*.9+Math.sin(x*.11+z*.07)*.35;
     case 'river':return .4+(Math.sin(my*.03+1)*Math.cos(mx*.05)+1)*1.3+Math.sin(x*.12+z*.09)*.3;
     case 'marsh':return .22+Math.sin(x*.07)*Math.cos(z*.08)*.22+Math.sin(x*.19+z*.13)*.08;
+    case 'ash':return .8+Math.sin(x*.035+z*.02)*1.3+Math.sin(x*.09-z*.07)*.55+Math.abs(Math.sin(x*.15)*Math.cos(z*.13))*.5;   /* 잿더미: 재가 쌓인 낮은 둔덕 */
+    case 'lava':return 6*smooth(30,95,dr)+Math.sin(x*.06)*Math.cos(z*.07)*.9+Math.abs(Math.sin(x*.2+z*.17))*.45*smooth(4,14,dr);   /* 용암지: 거친 검은 바위 */
   }return 0;}
 /* 바깥 산비탈이 솟는 세기 (땅 생김새마다) */
-const MH_SLOPE={field:.55,hill:.8,wood:.7,vale:1.25,pass:1.3,lake:.6,river:.85,marsh:.45};
+const MH_SLOPE={field:.55,hill:.8,wood:.7,vale:1.25,pass:1.3,lake:.6,river:.85,marsh:.45,ash:.7,lava:.95};
 /* 그 자리에 섞이는 땅들과 비율: 가까운 땅일수록 크게 (땅 가장자리 안은 거의 그 땅 하나, 목 한가운데는 반반). 여러 땅이 만나는 산속에서도 끊기지 않게 모두 부드럽게 섞는다 */
 const _mhW=[];
 function mhMix(x,z){let em=1e9;const L=_mhW;L.length=0;for(const k of OR.MHUNT){const I=OR.ISLES[k],e=Math.hypot(x-I.x,z-I.z)-I.R;if(e<em)em=e;L.push(I,e);}
@@ -15358,6 +15400,7 @@ const ISLE_FX={snow:null,water:null,crystals:[],gate:null,mill:null};
       inst(flowerG,mat(0xffffff),list,(t,e,sv,v)=>{e.set(0,0,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z),t.z);},(t,c)=>c.setHSL([.0,.13,.15,.75,.58][Math.floor(srand()*5)],.7,.62));};
     const reeds=(list)=>{const m=inst(reedG,mat(0xffffff),list,(t,e,sv,v)=>{e.set(sr(-.15,.15),srand()*6,sr(-.15,.15));sv.set(t.s,t.s*sr(.7,1.3),t.s);v.set(t.x,heightAt(t.x,t.z)-.1,t.z);},(t,c)=>c.setHSL(.2+sr(-.03,.04),.42,.36+sr(-.05,.06)));noSh(m);};
     const pads=(list)=>{const m=inst(padG,mat(0xffffff),list,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,1,t.s);v.set(t.x,MH_WY+.03,t.z);},(t,c)=>c.setHSL(.28+sr(-.03,.03),.45,.32+sr(-.04,.04)));noSh(m);};
+    const emberG=new THREE.DodecahedronGeometry(.32,0),embers=(list)=>noSh(inst(emberG,new THREE.MeshStandardMaterial({color:0xff7a2a,emissive:0xff4a10,emissiveIntensity:1.3,roughness:.7}),list,(t,e,sv,v)=>{e.set(srand()*3,srand()*3,0);sv.set(t.s,t.s*.6,t.s);v.set(t.x,heightAt(t.x,t.z)+.05,t.z);}));   /* 바닥에 남은 불씨 */
     const deadTrees=(list)=>{inst(deadG,mat(0x4a4238),list,(t,e,sv,v)=>{e.set(sr(-.08,.08),srand()*6,sr(-.08,.08));sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)-.2,t.z);});
       inst(deadB,mat(0x4a4238),list,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)-.2,t.z);});};
     /* 물: 한 가지 재질로 (카올리스 바다보다 조금 짙은 민물빛) */
@@ -15369,23 +15412,30 @@ const ISLE_FX={snow:null,water:null,crystals:[],gate:null,mill:null};
     for(const V of MHR.rivers)ribbon(V,V.hw+3);
     for(const S of MHR.streams)ribbon(S,S.hw+1.6);
     for(const M of MHR.marshes){const g=new THREE.CircleGeometry(141,64);g.rotateX(-Math.PI/2);g.translate(M.x,MH_WY,M.z);waterMesh(g);}
+    /* 용암 웅덩이: 스스로 빛나는 주황 (들어갈 수 없게 둘레를 막는다) */
+    {const lavaM=new THREE.MeshStandardMaterial({color:0xff6a1a,emissive:0xff4a0a,emissiveIntensity:1.1,roughness:.6});
+      for(const L of MHR.lavas){const g=new THREE.CircleGeometry(L.r+1.2,28);g.rotateX(-Math.PI/2);const pos=g.attributes.position;for(let i=0;i<pos.count;i++)pos.setY(i,Math.sin(pos.getX(i)*.9)*Math.cos(pos.getZ(i)*.8)*.06);
+        g.translate(L.x,-.45,L.z);const m=new THREE.Mesh(g,lavaM);scene.add(m);colliders.push({x:L.x,z:L.z,r:L.r-.5,h:8});}}
     /* 땅 색: 땅 생김새마다 풀빛, 줄마다 조금씩 다르게. 두 땅 사이에서는 섞는다 */
-    const GRASS={field:[.22,.42,.42],hill:[.24,.4,.36],wood:[.27,.42,.27],vale:[.24,.32,.34],pass:[.2,.2,.38],lake:[.25,.4,.36],river:[.26,.42,.34],marsh:[.2,.3,.27]},TINT=[[0,0,0],[0,0,0],[.02,-.04,-.02],[-.03,.04,.03],[.03,.02,-.03]];
+    const GRASS={field:[.22,.42,.42],hill:[.24,.4,.36],wood:[.27,.42,.27],vale:[.24,.32,.34],pass:[.2,.2,.38],lake:[.25,.4,.36],river:[.26,.42,.34],marsh:[.2,.3,.27],ash:[.25,.14,.27],lava:[.21,.2,.2]},TINT=[[0,0,0],[0,0,0],[.02,-.04,-.02],[-.03,.04,.03],[.03,.02,-.03],[-.18,-.16,-.1]];   /* 5줄(불타는 협곡): 그을린 흙빛 */
     const zoneCol=(I,x,z,h,r,c)=>{const kd=I.kind,g=GRASS[kd],t=TINT[I.line]||[0,0,0],n=Math.sin(x*.21)*Math.cos(z*.17)*.5+Math.sin(x*.05+z*.07)*.5;
       c.setHSL(g[0]+t[0]+n*.02,g[1]+t[1],g[2]+t[2]+n*.04);
       if(kd==='vale'||kd==='pass'){const rk=smooth(kd==='pass'?7:6,kd==='pass'?14:13,h-(kd==='pass'?mhBase(I,r.x,r.z,0):0));c.lerp(C2.set(kd==='pass'?0x8a8478:0x7e7a6c),rk*.6);}
       if(kd==='field'){const w=Math.sin(x*.035+z*.02);if(w>.55&&r.d>12)c.lerp(C2.set(0xc8a858),.55*smooth(.55,.75,w));}
-      if(kd==='marsh')c.lerp(C2.set(0x5a5a3a),.25+.2*Math.sin(x*.05+z*.04));};
+      if(kd==='marsh')c.lerp(C2.set(0x5a5a3a),.25+.2*Math.sin(x*.05+z*.04));
+      if(kd==='ash'){const w=Math.sin(x*.05+z*.03)*Math.cos(z*.06-x*.02);c.lerp(C2.set(w>0?0x8a8480:0x2e2a28),Math.abs(w)*.5);}   /* 흰 재와 검게 탄 땅 */
+      if(kd==='lava'){c.lerp(C2.set(0x2a2220),.45);for(const L of MHR.lavas){if(L.I!==I)continue;const e=Math.hypot(x-L.x,z-L.z)-L.r;if(e<9)c.lerp(C2.set(0x8a2e10),smooth(9,1,e)*.7);}}};
     const colAt=(x,z,h,c)=>{const {A,mix}=mhNear2(x,z),r=MHR.near(x,z),wd=OR.MH.walkD(x,z);let R=0,G=0,B=0;
       for(const o of mix){zoneCol(o.I,x,z,h,r,C3);R+=C3.r*o.w;G+=C3.g*o.w;B+=C3.b*o.w;}c.setRGB(R,G,B);
       /* 산비탈: 아래는 짙은 풀숲, 높이 오를수록 바위, 높은 고개·계곡 능선은 눈 */
-      if(wd>-3){const k=smooth(-3,30,wd);c.lerp(C2.setHSL(.29,.36,.25),k*.55);if(h>16)c.lerp(C2.set(0x6e6c62),smooth(16,36,h)*.45);
-        if(A.kind==='pass'&&h>40)c.lerp(C2.set(0xe6e8ea),smooth(40,48,h)*.85);}   /* 높은 고개 꼭대기에만 눈 */
-      if(r.d<6)c.lerp(C2.set(0x9a8462),(1-smooth(3.2,6,r.d))*.9);
+      if(wd>-3){const k=smooth(-3,30,wd);if(A.branch){c.lerp(C2.set(0x2e2826),k*.72);if(h>16)c.lerp(C2.set(0x5a504a),smooth(16,36,h)*.4);}
+        else{c.lerp(C2.setHSL(.29,.36,.25),k*.55);if(h>16)c.lerp(C2.set(0x6e6c62),smooth(16,36,h)*.45);
+        if(A.kind==='pass'&&h>40)c.lerp(C2.set(0xe6e8ea),smooth(40,48,h)*.85);}}   /* 높은 고개 꼭대기에만 눈 */
+      if(r.d<6)c.lerp(C2.set(A.branch?0x7a6a5a:0x9a8462),(1-smooth(3.2,6,r.d))*.9);
       {const wk=MHR.wetK(x,z,r.d);if(wk>0)c.lerp(C2.set(0x6a6248),wk*(.35+.5*smooth(.2,-.6,h)));}   /* 물가 진흙 (물이 있는 곳 둘레만) */
       for(const id of OR.MHUNT){const G=OR.ISLES[id].gate||OR.ISLES[id].mgate;if(!G)continue;const e2=Math.hypot(x-G.x,z-G.z);if(e2<12)c.lerp(C2.set(0x9a8462),(1-smooth(6,12,e2))*.8);}};
     /* 땅 판: 땅마다 450m 네모 (가장자리 줄·칸은 바깥으로 더 넓게). 이웃 판과 꼭짓점이 딱 맞물린다 */
-    const TS=450,TN=7,TX0=OR.MH.cx-TS*TN/2,TZ0=OR.MH.cz-TS*TN/2,TILES=[];
+    const TS=450,TN=9,TX0=OR.MH.cx-TS*TN/2,TZ0=OR.MH.cz-TS*TN/2,TILES=[];
     for(let ti=0;ti<TN;ti++)for(let tj=0;tj<TN;tj++){const x0=TX0+ti*TS,z0=TZ0+tj*TS;let m=1e9;for(let a=0;a<=8;a++)for(let b=0;b<=8;b++)m=Math.min(m,OR.MH.walkD(x0+a*TS/8,z0+b*TS/8));if(m<250)TILES.push({x0,z0,x1:x0+TS,z1:z0+TS});}
     for(const T of TILES){const {x0,x1,z0,z1}=T;
       const nx=Math.round((x1-x0)/3.6),nz=Math.round((z1-z0)/3.6),g=new THREE.PlaneGeometry(x1-x0,z1-z0,nx,nz);g.rotateX(-Math.PI/2);g.translate((x0+x1)/2,0,(z0+z1)/2);
@@ -15402,6 +15452,15 @@ const ISLE_FX={snow:null,water:null,crystals:[],gate:null,mill:null};
       if(kd==='hill'){roundTrees(P.place(38,3.2,.5,off(8),6),.25,.27);bushes(P.place(200,1.4,0,off(5)),.25,.27);rocks(P.place(46,2.6,0,off(6)),0x7e7a70);flowers(P.place(160,.5,0,off(4)));}
       if(kd==='wood'){roundTrees(P.place(330,1.9,.5,off(6),6),.28,.24);pines(P.place(80,2,.45,off(6),5),.2);bushes(P.place(160,1.2,0,off(4.5)),.28,.22);rocks(P.place(24,2.2,0,off(6)),0x6e7266);
         const logs=P.place(16,3,0,off(7));inst(logG,mat(0x5a4029),logs,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)+.3,t.z);});}
+      const burnt=!!I.branch,dark=0x4a4442;
+      /* 불타는 협곡: 그을린 계곡·고개 (마른 나무와 검은 바위), 잿더미, 용암지 */
+      if(burnt&&(kd==='vale'||kd==='pass')){deadTrees(P.place(70,2.6,.4,(x,z)=>off(9)(x,z),5));rocks(P.place(110,2.6,0,off(6)),dark);
+        const big=P.place(34,6,0,(x,z)=>dr(x,z)>24);inst(rockG,mat(0x3e3836),big,(t,e,sv,v)=>{e.set(srand()*3,srand()*3,0);sv.set(t.s*3,t.s*2.6,t.s*2.6);v.set(t.x,heightAt(t.x,t.z)+t.s*.5,t.z);});
+        embers(P.place(60,.6,0,off(4)));continue;}
+      if(kd==='ash'){deadTrees(P.place(90,3,.4,(x,z)=>off(7)(x,z),5));rocks(P.place(60,2.4,0,off(6)),dark);bushes(P.place(60,1.3,0,off(4.5)),.08,.2);embers(P.place(140,.6,0,off(4)));
+        const logs=P.place(14,3,0,off(7));inst(logG,mat(0x2a2220),logs,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)+.3,t.z);});continue;}
+      if(kd==='lava'){deadTrees(P.place(30,3,.4,(x,z)=>off(8)(x,z),5));rocks(P.place(90,2.6,0,off(6)),0x2e2826);embers(P.place(220,.6,0,off(4)));
+        const big=P.place(20,6,0,(x,z)=>dr(x,z)>20);inst(rockG,mat(0x2a2422),big,(t,e,sv,v)=>{e.set(srand()*3,srand()*3,0);sv.set(t.s*2.6,t.s*2.2,t.s*2.4);v.set(t.x,heightAt(t.x,t.z)+t.s*.4,t.z);});continue;}
       if(kd==='vale'){pines(P.place(110,2.4,.45,(x,z)=>off(10)(x,z)&&dr(x,z)>22,5),.22);rocks(P.place(90,2.8,0,off(7)),0x7a766c);bushes(P.place(120,1.4,0,off(5)),.25,.26);
         const big=P.place(26,6,0,(x,z)=>dr(x,z)>30);inst(rockG,mat(0x6e6a62),big,(t,e,sv,v)=>{e.set(srand()*3,srand()*3,0);sv.set(t.s*3.2,t.s*2.4,t.s*2.8);v.set(t.x,heightAt(t.x,t.z)+t.s*.6,t.z);});}
       if(kd==='pass'){pines(P.place(90,2.6,.45,(x,z)=>off(9)(x,z),5),.18);rocks(P.place(110,2.6,0,off(6)),0x88827a);bushes(P.place(70,1.4,0,off(5)),.22,.25);
@@ -15426,22 +15485,24 @@ const ISLE_FX={snow:null,water:null,crystals:[],gate:null,mill:null};
         const logs=P.place(10,3,0,off(7));inst(logG,mat(0x4a3a28),logs,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)+.15,t.z);});}}
     /* 목·산길 꾸밈: 길가 나무와 바위 (그 자리에서 가까운 땅의 생김새를 따른다), 개울엔 징검돌 */
     for(const l of OR.MH.links){if(l.k!=='neck')continue;const A=ISLES[l.a],B=ISLES[l.b],len=Math.hypot(l.bx-l.ax,l.bz-l.az),ux=(l.bx-l.ax)/len,uz=(l.bz-l.az)/len;
-      const pts={rt:[],pn:[],bu:[],rk:[]},tk=[];
+      const pts={rt:[],pn:[],bu:[],rk:[],dd:[]},tk=[];
       for(let k=0;k<(l.k==='neck'?90:60);k++){const t=sr(A.R-10,len-B.R+10),s=sr(-l.hw+3,l.hw-3),x=l.ax+ux*t-uz*s,z=l.az+uz*t+ux*s;
         if(OR.MH.walkD(x,z)>-2.5||dr(x,z)<7||!dry(x,z))continue;if(tk.some(q=>Math.hypot(q.x-x,q.z-z)<3.4))continue;tk.push({x,z});
         const I=mhNear2(x,z).A,kd=I.kind,o={x,z,s:sr(.8,1.3)};const r=srand();
+        if(I.branch){if(r<.35){pts.dd.push(o);colliders.push({x,z,r:.4*o.s,h:6*o.s});}else if(r<.5)pts.bu.push(o);else pts.rk.push(o);continue;}
         if(r<.4){(kd==='pass'||kd==='vale'?pts.pn:pts.rt).push(o);colliders.push({x,z,r:.5*o.s,h:6*o.s});}else if(r<.75)pts.bu.push(o);else pts.rk.push(o);}
-      roundTrees(pts.rt,.27,.27);pines(pts.pn,.2);bushes(pts.bu,.26,.27);rocks(pts.rk,0x7e7a70);}
+      const br=A.branch||B.branch;roundTrees(pts.rt,.27,.27);pines(pts.pn,.2);deadTrees(pts.dd);bushes(pts.bu,br?.08:.26,br?.2:.27);rocks(pts.rk,br?0x4a4442:0x7e7a70);}
     for(const S of MHR.streams){const F=MHR.ford(S);
       const st=[];for(let k=-1;k<=1;k++)st.push({x:F.x+F.tx*k*1.9,z:F.z+F.tz*k*1.9,s:sr(.8,.95)});
       inst(stoneG,mat(0x8a8678),st,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,1,t.s);v.set(t.x,MH_WY+.1,t.z);});for(const t of st)jumpable(t.x,t.z,.7*t.s,MH_WY+.28);
       reeds(Array.from({length:40},()=>{const s0=sr(-60,60),p=MHR.crossPt(S,s0),t=MHR.tan(p.a),sd=(srand()<.5?-1:1)*sr(S.hw-.5,S.hw+2.5);return {x:p.x+t.x*sd,z:p.z+t.z*sd,s:sr(.35,.5),s0};}).filter(o=>Math.abs(o.s0)>5&&OR.MH.walkD(o.x,o.z)<-2));}
     /* 산비탈 숲: 걸을 수 없는 바깥 비탈을 나무와 바위로 덮는다 (그림자 없이, 부딪힘 없이) */
     {const out={rt:[],pn:[],dd:[],rk:[]};
-      const DEN={field:.45,hill:.5,wood:.95,vale:.5,pass:.45,lake:.65,river:.75,marsh:.35};
+      const DEN={field:.45,hill:.5,wood:.95,vale:.5,pass:.45,lake:.65,river:.75,marsh:.35,ash:.3,lava:.25};
       for(const T of TILES)for(let gx=T.x0;gx<T.x1;gx+=7)for(let gz=T.z0;gz<T.z1;gz+=7){const x=gx+sr(0,7),z=gz+sr(0,7),wd=OR.MH.walkD(x,z);if(wd<2||wd>95)continue;
           const A=mhNear2(x,z).A,kd=A.kind;if(srand()>DEN[kd]*(1-smooth(60,95,wd)))continue;
           const h=mhHeight(x,z),o={x,z,s:sr(.9,1.5)};
+          if(A.branch){if(srand()<(h>30?.25:.45))(srand()<.5?out.rk:out.dd).push(o);continue;}   /* 불타는 협곡 비탈: 검은 바위와 마른 나무만 드문드문 */
           if(h>30&&(kd==='pass'||kd==='vale')){if(srand()<.3)out.rk.push(o);continue;}
           if(srand()<.12){out.rk.push(o);continue;}
           if(kd==='marsh')(srand()<.5?out.dd:out.rt).push(o);else if(kd==='pass'||kd==='vale'||h>16)out.pn.push(o);else if(kd==='wood'||kd==='river')(srand()<.7?out.rt:out.pn).push(o);else out.rt.push(o);}
@@ -15451,7 +15512,7 @@ const ISLE_FX={snow:null,water:null,crystals:[],gate:null,mill:null};
     {const signTex=(txt,sub)=>{const cv=document.createElement('canvas');cv.width=256;cv.height=96;const c=cv.getContext('2d');c.fillStyle='#6a4a2c';c.fillRect(0,0,256,96);c.strokeStyle='#3a2616';c.lineWidth=6;c.strokeRect(3,3,250,90);
         c.fillStyle='#f4e6c4';c.textAlign='center';c.textBaseline='middle';c.font='700 30px "KMUSunggokSemiSerif","Gowun Batang",serif';c.fillText(txt,128,36);c.font='22px "KMUSunggokSemiSerif","Gowun Batang",serif';c.fillStyle='#e8c878';c.fillText(sub,128,72);
         const t=new THREE.CanvasTexture(cv);t.anisotropy=4;return t;};
-      const postM=mat(0x5a4029),nm=k=>(ZONES[k]?ZONES[k].name:k).replace(/^마르쿠스 /,''),lv=k=>{const L=OR.ZONE_LEVELS[k];return L?`Lv ${L[0]}–${L[1]}`:'';};
+      const postM=mat(0x5a4029),nm=k=>(ZONES[k]?ZONES[k].name:k).replace(/^(마르쿠스|불타는 협곡) /,''),lv=k=>{const L=OR.ZONE_LEVELS[k];return L?`Lv ${L[0]}–${L[1]}`:'';};
       for(const l of OR.MH.links){if(l.k!=='neck')continue;const mx=(l.ax+l.bx)/2,mz=(l.az+l.bz)/2,r=MHR.near(mx,mz),len=Math.hypot(l.bx-l.ax,l.bz-l.az),ux=(l.bx-l.ax)/len,uz=(l.bz-l.az)/len;
         const px=r.x-uz*5.5+ux*(l.k==='neck'?-14:6),pz=r.z+ux*5.5+uz*(l.k==='neck'?-14:6),y=heightAt(px,pz);
         const g=new THREE.Group();g.position.set(px,y,pz);scene.add(g);
@@ -15465,7 +15526,7 @@ const ISLE_FX={snow:null,water:null,crystals:[],gate:null,mill:null};
     /* 고갯길 끝의 문: 줄(고리 방향)에 걸쳐 놓인 보이지 않는 선. 넘어오면 고리 쪽을 바라보고 선다 */
     const ryOf=G=>Math.PI/2-Math.atan2(G.uz,G.ux),arr=G=>({x:G.arr.x,z:G.arr.z,yaw:face(G.ux,G.uz)});
     const PL=marcusPlan(),M=ISLES.marcus;
-    for(const LN of OR.MLINES){const H=LN.zones.map(q=>q[0]),pre=LN.n===1?'mh_':'mh'+LN.n+'_',F=ISLES[H[0]],G=F.gate;
+    for(const LN of OR.MLINES){if(!LN.gate)continue;const H=LN.zones.map(q=>q[0]),pre=LN.n===1?'mh_':'mh'+LN.n+'_',F=ISLES[H[0]],G=F.gate;
       {const g=PL.gates.find(q=>q.name===LN.gate),ux=Math.cos(g.out),uz=Math.sin(g.out);let L=0;for(let t=0;t<400;t+=2){const qx=g.x+ux*t,qy=g.y+uz*t;if(Math.hypot(qx,qy)>OR.isleEdge(M,Math.atan2(qy,qx))-14)break;L=t;}
         const px=M.x+g.x+ux*L,pz=M.z+g.y+uz*L;
         edge(LN.n===1?'mh_from_marcus':pre+'from_marcus',px,pz,Math.PI/2-Math.atan2(uz,ux),6,`${Z(H[0])}로 가기`,arr(G));
@@ -17334,9 +17395,12 @@ function bmbSkill(S,id,pw,opt){const q0=player.position;opt={...opt,sk:id};
 /* ---------- 마르쿠스 전체 지도: 엑시즈와 둘레 고리 사냥터 ----------
    사냥터 스무 땅은 실제로 엑시즈를 빙 두르는 고리에 놓여 있어서, 지도도 실제 자리를 그대로 줄여 그린다 (사냥터 안 자리 = 지도 위 자리).
    사냥터에 있을 때 큰 지도(M)로 펴고, 설정에 따라 미니맵으로도 쓴다. */
-const MOV_KIND={field:'#a9b062',hill:'#9c9a5c',wood:'#4f7d3c',vale:'#79a06a',pass:'#8d8572',lake:'#5f9a8a',river:'#6f9e6a',marsh:'#6b7448'};
-function movLayout(W,H,mini){const MH=OR.MH,u=Math.min(W,H)/2,ringR=u*(mini?.74:.64),k=ringR/MH.RR,cx=W/2,cy=H/2,rc=ringR*.42,zones={};
-  for(const id of OR.MHUNT){const I=OR.ISLES[id];zones[id]={x:cx+(I.x-MH.cx)*k,y:cy+(I.z-MH.cz)*k,r:I.R*k,th:I.th,line:I.line,i:I.seq};}
+const MOV_KIND={field:'#a9b062',hill:'#9c9a5c',wood:'#4f7d3c',vale:'#79a06a',pass:'#8d8572',lake:'#5f9a8a',river:'#6f9e6a',marsh:'#6b7448',ash:'#6a625c',lava:'#8a3e26',bvale:'#7a5e4a',bpass:'#6e605a'};
+function movLayout(W,H,mini){const MH=OR.MH,u=Math.min(W,H)/2,zones={};
+  /* 모든 사냥터(고리 + 가지)가 들어가게 맞춘다. 이름 칸 몫으로 둘레를 더 비운다 */
+  let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;const mg=mini?60:250;for(const id of OR.MHUNT){const I=OR.ISLES[id];x0=Math.min(x0,I.x-I.R-mg);x1=Math.max(x1,I.x+I.R+mg);z0=Math.min(z0,I.z-I.R-mg*.8);z1=Math.max(z1,I.z+I.R+mg*.8);}
+  const k=Math.min(W*.98/(x1-x0),H*.98/(z1-z0)),cx=W/2+(MH.cx-(x0+x1)/2)*k,cy=H/2+(MH.cz-(z0+z1)/2)*k,ringR=MH.RR*k,rc=ringR*.42;
+  for(const id of OR.MHUNT){const I=OR.ISLES[id];zones[id]={x:cx+(I.x-MH.cx)*k,y:cy+(I.z-MH.cz)*k,r:I.R*k,th:Math.atan2(I.z-MH.cz,I.x-MH.cx),line:I.line,i:I.seq};}
   return {u,cx,cy,rc,k,ringR,zones};}
 /* 세계 좌표 → 지도 위 자리 (엑시즈 또는 사냥터에 있을 때만) */
 function movPos(Lo,x,z){if(x<800)return null;const I=OR.isleAt(x,z);if(!I)return null;
@@ -17351,10 +17415,14 @@ function drawMarcusOverview(c,W,H,o={}){const mini=!!o.mini,Lo=movLayout(W,H,min
   const mtn=(x,y,s)=>{c.fillStyle='#7d7458';c.beginPath();c.moveTo(x-s,y+s*.55);c.lineTo(x,y-s*.65);c.lineTo(x+s,y+s*.55);c.closePath();c.fill();c.fillStyle='#ece4cc';c.beginPath();c.moveTo(x-s*.3,y-s*.3);c.lineTo(x,y-s*.65);c.lineTo(x+s*.3,y-s*.3);c.closePath();c.fill();};
   {const s=(mini?4:7)*f;for(let i=0;i<64;i++){const a=i/64*Math.PI*2+.05,r=(rc+(Lo.ringR-Lo.zones.mfield.r-rc)*(.35+.4*((i*7)%5)/4));const x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;if(!mini||i%2)mtn(x,y,s);}
     const A=OR.ISLES.m4e,B=OR.ISLES.mfield;for(let t=.2;t<.85;t+=.2){const [x,y]=P2(A.x+(B.x-A.x)*t,A.z+(B.z-A.z)*t);mtn(x+(t*13%3-1)*s*.6,y,s*1.15);}}
+  /* 고리 밖 가지 지역: 그을린 바탕과 지역 이름 */
+  for(const L of OR.MLINES){if(!L.branch)continue;const Zs=L.zones.map(q=>zones[q[0]]);c.fillStyle='rgba(60,36,28,.28)';for(const Z of Zs){c.beginPath();c.arc(Z.x,Z.y,Z.r*1.45,0,7);c.fill();}
+    if(!mini){const Z1=Zs[Zs.length-1],Z0=Zs[Zs.length-2],a=Math.atan2(Z1.y-Z0.y,Z1.x-Z0.x),lx=Z1.x+Math.cos(a)*Z1.r*1.5,ly=Z1.y+Math.sin(a)*Z1.r*1.5;   /* 지역 이름은 가지 끝 너머에 */
+      c.font=`700 ${Math.round(15*f)}px "KMUSunggokSerif","Gowun Batang",serif`;c.textAlign='left';c.textBaseline='middle';c.lineWidth=4*f;c.strokeStyle='rgba(20,16,12,.9)';c.strokeText(L.region,lx,ly);c.fillStyle='#ffb07a';c.fillText(L.region,lx,ly);}}
   /* 길: 고리 길과 문마다 고갯길 */
   c.lineCap='round';c.lineJoin='round';c.strokeStyle='#d9cba0';c.lineWidth=(mini?2.5:5)*f;
   for(const pts of MHR.paths){c.beginPath();pts.forEach((p,i)=>{const [x,y]=P2(p.x,p.z);i?c.lineTo(x,y):c.moveTo(x,y);});c.stroke();}
-  for(const L of OR.MLINES){const F=OR.ISLES[L.zones[0][0]],[gx,gy]=P2(F.gate.x,F.gate.z),ux=Math.cos(F.th),uy=Math.sin(F.th);c.setLineDash([5*f,4*f]);c.beginPath();c.moveTo(cx+ux*rc,cy+uy*rc);c.lineTo(gx,gy);c.stroke();c.setLineDash([]);}
+  for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],[gx,gy]=P2(F.gate.x,F.gate.z),ux=Math.cos(F.th),uy=Math.sin(F.th);c.setLineDash([5*f,4*f]);c.beginPath();c.moveTo(cx+ux*rc,cy+uy*rc);c.lineTo(gx,gy);c.stroke();c.setLineDash([]);}
   /* 밀골 */
   {const E=OR.ISLES.mpass;if(E.mgate){const [ex,ey]=P2(E.mgate.x,E.mgate.z),ux=-E.mgate.ux,uy=-E.mgate.uz,mx=ex+ux*16*f,my=ey+uy*16*f;c.setLineDash([5*f,4*f]);c.beginPath();c.moveTo(ex,ey);c.lineTo(mx,my);c.stroke();c.setLineDash([]);
     c.fillStyle='#c8b890';c.beginPath();c.ellipse(mx,my,9*f,7*f,0,0,7);c.fill();c.fillStyle='#8a5a3a';for(let q=0;q<4;q++)c.fillRect(mx-4*f+(q%2)*5*f,my-3*f+Math.floor(q/2)*3.5*f,3*f,2.5*f);
@@ -17364,18 +17432,20 @@ function drawMarcusOverview(c,W,H,o={}){const mini=!!o.mini,Lo=movLayout(W,H,min
   c.fillStyle='#b8644a';for(let q=0;q<26;q++){const a=q*2.399,r=Math.sqrt((q+.5)/26)*rc*.8;c.fillRect(cx+Math.cos(a)*r-2.5*f,cy+Math.sin(a)*r-2*f,5*f,4*f);}
   c.strokeStyle='#5a8aa8';c.lineWidth=(mini?1.5:3)*f;c.beginPath();c.moveTo(cx-rc*.95,cy-rc*.05);c.quadraticCurveTo(cx,cy+rc*.45,cx+rc*.3,cy+rc*.95);c.stroke();
   c.textAlign='center';c.textBaseline='middle';
-  for(const L of OR.MLINES){const F=OR.ISLES[L.zones[0][0]],ux=Math.cos(F.th),uy=Math.sin(F.th);c.fillStyle='#6a5a44';c.fillRect(cx+ux*rc-4*f,cy+uy*rc-4*f,8*f,8*f);
+  for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],ux=Math.cos(F.th),uy=Math.sin(F.th);c.fillStyle='#6a5a44';c.fillRect(cx+ux*rc-4*f,cy+uy*rc-4*f,8*f,8*f);
     if(!mini){const gx=cx+ux*(rc+16*f)+(uy?14*f:0),gy=cy+uy*(rc+16*f)+(ux?-12*f:0);c.font=`700 ${Math.round(11*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*f;c.strokeStyle='rgba(20,16,12,.85)';c.strokeText(L.gate,gx,gy);c.fillStyle='#f0e2c0';c.fillText(L.gate,gx,gy);}}
   if(!mini){c.font=`700 ${Math.round(16*f)}px "KMUSunggokSerif","Gowun Batang",serif`;c.lineWidth=4*f;c.strokeStyle='rgba(20,16,12,.9)';c.strokeText(ZONES.marcus.name,cx,cy-rc*.15);c.fillStyle='#fff4dc';c.fillText(ZONES.marcus.name,cx,cy-rc*.15);
     c.font=`${Math.round(10*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*f;c.strokeText('안전 지대',cx,cy+rc*.15);c.fillStyle='#d4ae63';c.fillText('안전 지대',cx,cy+rc*.15);}
   /* 사냥터 땅 */
   for(const id in zones){const Z=zones[id],I=OR.ISLES[id],cur=here&&here.id===id,Lv=OR.ZONE_LEVELS[id]||[0,0];
-    c.fillStyle=MOV_KIND[I.kind]||'#8a9a5a';c.beginPath();c.arc(Z.x,Z.y,Z.r,0,7);c.fill();c.strokeStyle=cur?'#ffd23a':'rgba(30,24,16,.7)';c.lineWidth=(cur?3:1.5)*f;c.stroke();
-    const nm=ZONES[id]?ZONES[id].name.replace(/^마르쿠스 /,''):id,code=(nm.match(/\d[A-Z]$/)||[''])[0];
+    c.fillStyle=MOV_KIND[(I.branch&&(I.kind==='vale'||I.kind==='pass')?'b':'')+I.kind]||'#8a9a5a';c.beginPath();c.arc(Z.x,Z.y,Z.r,0,7);c.fill();c.strokeStyle=cur?'#ffd23a':'rgba(30,24,16,.7)';c.lineWidth=(cur?3:1.5)*f;c.stroke();
+    const nm=ZONES[id]?ZONES[id].name.replace(/^(마르쿠스|불타는 협곡) /,''):id,code=(nm.match(/\d[A-Z]$/)||[''])[0];
     c.textAlign='center';c.textBaseline='middle';
     if(mini){if(Z.r>9){c.font=`700 ${Math.round(Math.min(13,Z.r*.8))}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=2.5;c.strokeStyle='rgba(20,16,12,.85)';c.strokeText(code,Z.x,Z.y);c.fillStyle='#fff4dc';c.fillText(code,Z.x,Z.y);}continue;}
     /* 이름과 레벨은 고리 바깥쪽에 */
-    const ux=Math.cos(Z.th),uy=Math.sin(Z.th),lr=Z.r+8*f,lx=Z.x+ux*lr,ly=Z.y+uy*lr,danger=P&&P.lv<Lv[0]-2;
+    let ux=Math.cos(Z.th),uy=Math.sin(Z.th);const lr=Z.r+8*f;
+    for(const da of [0,.5,-.5,1,-1,Math.PI]){const vx=Math.cos(Z.th+da),vy=Math.sin(Z.th+da);if(!Object.keys(zones).some(q=>q!==id&&Math.hypot(Z.x+vx*(lr+14*f)-zones[q].x,Z.y+vy*(lr+14*f)-zones[q].y)<zones[q].r+16*f)){ux=vx;uy=vy;break;}}   /* 바깥쪽에 다른 땅이 있으면 비껴 쓴다 */
+    const lx=Z.x+ux*lr,ly=Z.y+uy*lr,danger=P&&P.lv<Lv[0]-2;
     c.textAlign=ux>.35?'left':ux<-.35?'right':'center';c.textBaseline=uy>.35?'top':uy<-.35?'bottom':'middle';const dy=c.textBaseline==='bottom'?-12*f:0;
     c.font=`700 ${Math.round(11*f)}px "KMUSunggokSerif","Gowun Batang",serif`;c.lineWidth=3.5*f;c.strokeStyle='rgba(20,16,12,.9)';c.strokeText(nm,lx,ly+dy);c.fillStyle=cur?'#ffe27a':'#fff4dc';c.fillText(nm,lx,ly+dy);
     const lt=Lv[0]?`Lv ${Lv[0]}–${Lv[1]}`:'';c.font=`${Math.round(9.5*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*f;c.strokeText(lt,lx,ly+dy+12*f);c.fillStyle=danger?'#ff8a7a':'#d4ae63';c.fillText(lt,lx,ly+dy+12*f);
@@ -18648,7 +18718,7 @@ const HUNT_MINI={};
 function huntMiniBase(I,S,VR){const k=I.id;if(HUNT_MINI[k])return HUNT_MINI[k];const cv=document.createElement('canvas');cv.width=cv.height=S;const c=cv.getContext('2d'),sc=S/(2*VR),X=v=>S/2+(v-I.x)*sc,Z=v=>S/2+(v-I.z)*sc;
   c.fillStyle='#a8a498';c.fillRect(0,0,S,S);c.strokeStyle='rgba(255,255,255,.22)';c.lineWidth=3;for(let q=-S;q<S*2;q+=9){c.beginPath();c.moveTo(q,0);c.lineTo(q-S,S);c.stroke();}
   const st=3;for(let py=0;py<S;py+=st)for(let px=0;px<S;px+=st){const x=I.x+(px+st/2-S/2)/sc,z=I.z+(py+st/2-S/2)/sc,wd=OR.MH.walkD(x,z);if(wd>0)continue;
-    const A=mhNear2(x,z).A;c.fillStyle=MHR.wetK(x,z,MHR.near(x,z).d)>.5&&mhHeight(x,z)<MH_WY-.05?'#5d93a8':(ZONES[A.id]&&ZONES[A.id].mm)||'#7f9a4e';c.globalAlpha=A===I?1:.75;c.fillRect(px,py,st,st);}
+    const A=mhNear2(x,z).A;c.fillStyle=A.kind==='lava'&&MHR.lavas.some(L=>Math.hypot(x-L.x,z-L.z)<L.r)?'#e0602a':MHR.wetK(x,z,MHR.near(x,z).d)>.5&&mhHeight(x,z)<MH_WY-.05?'#5d93a8':(ZONES[A.id]&&ZONES[A.id].mm)||'#7f9a4e';c.globalAlpha=A===I?1:.75;c.fillRect(px,py,st,st);}
   c.globalAlpha=1;
   /* 길 */
   c.strokeStyle='#d8c8a0';c.lineWidth=Math.max(3,9*sc);c.lineCap='round';c.lineJoin='round';
@@ -18664,8 +18734,8 @@ function drawHuntMini(I){const S=264,VR=235,sc=S/(2*VR),X=v=>S/2+(v-I.x)*sc,Z=v=
   c.font='700 15px "KMUSunggokSemiSerif","Gowun Batang",serif';c.textBaseline='middle';c.textAlign='center';
   const tag=(nm,x,y)=>{c.lineWidth=3.5;c.strokeStyle='rgba(28,20,12,.9)';c.strokeText(nm,x,y);c.fillStyle='#fff3dc';c.fillText(nm,x,y);};
   for(const l of OR.MH.links){if(l.k!=='neck'||(l.a!==I.id&&l.b!==I.id))continue;const o=l.a===I.id?OR.ISLES[l.b]:OR.ISLES[l.a],dx=o.x-I.x,dz=o.z-I.z,d=Math.hypot(dx,dz),t=Math.min(VR-28,I.R+55);
-    const nm=(ZONES[o.id]?ZONES[o.id].name:o.id).replace(/^마르쿠스 /,'');tag(nm,X(I.x+dx/d*t)+(dz?26:0),Z(I.z+dz/d*t)+(dz?0:-14));}
-  for(const p of PORTALS){if(!p.edge||Math.hypot(p.x-I.x,p.z-I.z)>I.R+90)continue;const nm=(p.label||'').replace(/(으)?로 (가기|돌아가기)$/,'').replace(/^마르쿠스 /,''),a=Math.atan2(p.z-I.z,p.x-I.x);
+    const nm=(ZONES[o.id]?ZONES[o.id].name:o.id).replace(/^(마르쿠스|불타는 협곡) /,'');tag(nm,X(I.x+dx/d*t)+(dz?26:0),Z(I.z+dz/d*t)+(dz?0:-14));}
+  for(const p of PORTALS){if(!p.edge||Math.hypot(p.x-I.x,p.z-I.z)>I.R+90)continue;const nm=(p.label||'').replace(/(으)?로 (가기|돌아가기)$/,'').replace(/^(마르쿠스|불타는 협곡) /,''),a=Math.atan2(p.z-I.z,p.x-I.x);
     const ax=X(p.x),ay=Z(p.z);c.save();c.translate(ax,ay);c.rotate(a);c.fillStyle='#ffe08a';c.strokeStyle='#2a1e10';c.lineWidth=2;c.beginPath();c.moveTo(9,0);c.lineTo(-3,-7);c.lineTo(-3,7);c.closePath();c.stroke();c.fill();c.restore();
     tag(nm,ax-Math.cos(a)*30,ay-Math.sin(a)*18);}
   /* 북쪽 */
@@ -21008,7 +21078,7 @@ function updateOthers(dt){
 var roomStatus='연결 중…',presErr='',pageViewers=0;
 function setRoomStatus(t){roomStatus=t;renderOnline();}
 // 자체 서버(WebSocket)용 연결: claude room과 같은 모양으로 감싼다
-const SERVER_VER=17;let srvVer=null,monsGot=0;
+const SERVER_VER=18;let srvVer=null,monsGot=0;
 function makeWsRoom(){
   const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
   let ws=null,myId=null,ok=false,retry=1000;const peers=new Map(),peerFns=[],topicFns={},connFns=[];const mine={};
