@@ -66,32 +66,37 @@
     guildhall: { x: 7100, z: 0, R: 140 }, // 길드홀: 엑시즈 시내 길드홀 정문으로 들어가면 나온다 (3층 건물과 뒤뜰)
     exmarket: { x: 7700, z: 0, R: 110 }, // 중앙 시장: 엑시즈 시내 시장 문으로 들어가면 나온다 (좌판·회랑·장비점·마구간)
     arena: { x: 8200, z: 0, R: 70 },     // 투기장: 어느 땅과도 이어지지 않는 둥근 콜로세움. 결투가 시작되면 둘이 옮겨 가고 끝나면 돌아온다
-    // 엑시즈 동문 밖 사냥터 (Lv 60–95): 서쪽 끝으로 들어와 동쪽 끝으로 나가면 다음 땅. 마지막 땅을 나가면 밀골
+    // 엑시즈 남문 밖 사냥터 (Lv 60–95): 다섯 땅을 지나 마지막 땅을 나가면 밀골
     mfield: { x: 2700, z: 900, R: 150 },   // 들판
     mhill:  { x: 3150, z: 900, R: 150 },   // 구릉
     mwood:  { x: 3600, z: 900, R: 150 },   // 숲길
     mvale:  { x: 4050, z: 900, R: 150 },   // 계곡
     mpass:  { x: 4500, z: 900, R: 150 },   // 고개
   };
-  // 엑시즈 문 밖 사냥터 줄: 숫자=줄(1 서문 · 2 북문 · 3 동문 · 4 남문 — 1줄과 3줄의 문을 서로 바꿨다), 글자=그 줄의 몇 번째 땅. 땅 생김새(kind)는 들판·구릉·숲·계곡·고개
+  // 엑시즈 문 밖 사냥터 줄: 숫자=줄, 글자=그 줄의 몇 번째 땅. 땅 생김새(kind)는 들판·구릉·숲·계곡·고개·호숫가·강가와 바닷가(모래톱·갯바위·해안 절벽·곶)
+  // 2026-11-03 원호: 엑시즈는 남문·동문 쪽이 바다, 북문·서문 쪽이 숲·들판. 사냥터도 뭍을 따라 말굽 모양으로 놓는다
+  //   1 남문(Lv 60, 바닷가에서 시작) → 2 서문 → 3 북문 → 4 동문(Lv 200, 바닷가 절벽에서 끝). 세 번째 칸 'c' = 바다에 닿은 땅(바깥쪽이 바다)
   const MLINES_ALL = [
-    { n: 1, gate: '서문', end: 'milgol', zones: [['mfield', 'field'], ['mhill', 'hill'], ['mwood', 'wood'], ['mvale', 'vale'], ['mpass', 'pass']] },
-    { n: 2, gate: '북문', zones: [['m2a', 'wood'], ['m2b', 'hill'], ['m2c', 'lake'], ['m2d', 'vale'], ['m2e', 'pass']] },
-    { n: 3, gate: '동문', zones: [['m3a', 'field'], ['m3b', 'river'], ['m3c', 'field'], ['m3d', 'wood'], ['m3e', 'hill']] },
-    { n: 4, gate: '남문', zones: [['m4a', 'wood'], ['m4b', 'vale'], ['m4c', 'marsh'], ['m4d', 'vale'], ['m4e', 'pass']] },
-    // 고리 밖으로 뻗은 가지: 4E에서 남서쪽 산을 넘어 이어지는 새 지역 (엑시즈로 가는 문은 없다)
+    { n: 1, gate: '남문', end: 'milgol', zones: [['mfield', 'beach', 'c'], ['mhill', 'field', 'c'], ['mwood', 'rocks', 'c'], ['mvale', 'field'], ['mpass', 'hill']] },
+    { n: 2, gate: '서문', zones: [['m2a', 'field'], ['m2b', 'wood'], ['m2c', 'wood'], ['m2d', 'lake'], ['m2e', 'vale']] },
+    { n: 3, gate: '북문', zones: [['m3a', 'wood'], ['m3b', 'river'], ['m3c', 'wood'], ['m3d', 'hill'], ['m3e', 'pass']] },
+    { n: 4, gate: '동문', zones: [['m4a', 'pass'], ['m4b', 'cliff', 'c'], ['m4c', 'wood', 'c'], ['m4d', 'cape', 'c'], ['m4e', 'cliff', 'c', '등대 절벽']] },
+    // 고리 밖으로 뻗은 가지: 4E에서 이어지는 새 지역 (엑시즈로 가는 문은 없다)
     // off: 게임에서 잠시 뺀 줄 (2026-11-03 원호: 몬스터가 예전과 똑같이 생겨서 다시 만들 때까지 뺀다). off를 지우면 다시 켜진다
     { n: 5, off: true, region: '불타는 협곡', branch: [162, 130, 100, 70, 40], zones: [['m5a', 'ash'], ['m5b', 'vale'], ['m5c', 'lava'], ['m5d', 'vale'], ['m5e', 'pass']] },
   ];
   const MLINES = MLINES_ALL.filter((L) => !L.off);
-  // 사냥터 땅 스무 곳은 엑시즈를 빙 두르는 고리에 레벨 순서대로 놓는다: 서쪽(서문, Lv 60)에서 시작해 시계 방향으로 북(북문, 95) → 동(동문, 130) → 남(남문, 165) → 남서(200).
-  // 마지막 땅(4E)과 첫 땅(1A) 사이만 높은 산줄기로 막혀 있다. 고리 안쪽은 엑시즈를 둘러싼 산이고, 문마다 안쪽으로 고갯길이 나 있다
-  const MH = { cx: 3600, cz: 1750, RR: 1150, R: 150, neckHW: 60, gateHW: 14, gateLen: 55 };
+  // 사냥터 땅 스무 곳은 엑시즈를 둘러싼 말굽(고리의 일부)에 레벨 순서대로 놓는다: 남(남문, Lv 60)에서 시작해 시계 방향으로 서(서문, 95) → 북(북문, 130) → 동(동문, 165) → 동쪽 바닷가 절벽(200).
+  // 말굽이 트인 남동쪽(4E와 1A 사이)은 바다다. 고리 안쪽은 엑시즈를 둘러싼 산이고, 문마다 안쪽으로 고갯길이 나 있다
+  const MH = { cx: 3600, cz: 2200, RR: 1600, R: 150, neckHW: 60, gateHW: 14, gateLen: 55 };
+  MH.DTH = 2 * Math.asin(180 / MH.RR);   // 이웃 땅 사이 각 (가운데 사이 360m)
+  MH.TH0 = 102.5 * PI / 180;             // 1A 자리 (남쪽 조금 서쪽). 마지막 땅 4E는 TH0 + 19·DTH (동쪽 조금 북쪽)
+  MH.SEA = 45 * PI / 180;                // 바다가 트인 쪽 (남동)
   // 가지(branch): 앞 땅에서 정한 방향(도, 지도에서 x 오른쪽 0 · z 아래 90)으로 MH.STEP씩 나아간다. th는 나아가는 방향에서 90도 뺀 값 (고리 땅처럼 th의 접선이 길 방향)
   MH.STEP = 360;
-  MLINES.forEach((L) => L.zones.forEach(([id, kind], i) => { const k = (L.n - 1) * 5 + i; const I = ISLES[id] || (ISLES[id] = { R: MH.R }); I.R = MH.R; I.kind = kind; I.line = L.n; I.seq = i; I.k = k;
+  MLINES.forEach((L) => L.zones.forEach(([id, kind, cst], i) => { const k = (L.n - 1) * 5 + i; const I = ISLES[id] || (ISLES[id] = { R: MH.R }); I.R = MH.R; I.kind = kind; I.coast = cst === 'c' ? 1 : 0; I.line = L.n; I.seq = i; I.k = k;
     if (L.branch) { const prev = i ? ISLES[L.zones[i - 1][0]] : ISLES[MLINES[L.n - 2].zones[4][0]], h = L.branch[i] * PI / 180; I.x = prev.x + Math.cos(h) * MH.STEP; I.z = prev.z + Math.sin(h) * MH.STEP; I.th = h - PI / 2; I.branch = 1; }
-    else { const th = PI + k * PI / 10; I.x = MH.cx + Math.cos(th) * MH.RR; I.z = MH.cz + Math.sin(th) * MH.RR; I.th = th; } }));
+    else { const th = MH.TH0 + k * MH.DTH; I.x = MH.cx + Math.cos(th) * MH.RR; I.z = MH.cz + Math.sin(th) * MH.RR; I.th = th; } }));
   const MHUNT = MLINES.flatMap((L) => L.zones.map((q) => q[0]));
   const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle', 'guildhall', 'exmarket', 'arena', ...MHUNT];
   // 엑시즈 성벽(섬 중심 기준 m, 시계 방향)과 가장자리: 성벽에서 바깥으로 약 70m까지만 땅이 있다 (들쭉날쭉)
@@ -99,7 +104,7 @@
   const MARCUS_EDGE_GAP = 70;
   function polyRay(P, a) { const ux = Math.cos(a), uz = Math.sin(a); let best = 0; for (let i = 0; i < P.length; i++) { const A = P[i], B = P[(i + 1) % P.length], dx = B[0] - A[0], dz = B[1] - A[1], den = ux * dz - uz * dx; if (Math.abs(den) < 1e-9) continue; const t = (A[0] * dz - A[1] * dx) / den, s = (A[0] * uz - A[1] * ux) / den; if (t > best && s >= 0 && s <= 1) best = t; } return best; }
   for (const k of ISLE_ORDER) { const I = ISLES[k]; I.id = k; I.entry = { x: I.x, z: I.z + I.R - 12 }; }   // 들어오는 자리 (남쪽 가장자리)
-  ISLES.marcus.entry = { x: ISLES.marcus.x, z: ISLES.marcus.z + isleEdge(ISLES.marcus, Math.PI / 2) - 12 };   // 엑시즈: 가장자리가 성벽을 따르므로 남쪽 끝에서 잰다
+  ISLES.marcus.entry = { x: ISLES.marcus.x - 62.7, z: ISLES.marcus.z + 284 };   // 엑시즈: 남쪽은 바다라서 남문 바로 앞 돌둑 길 위
   // 고리 위의 자리 (각도 th, 중심에서 거리 r)
   const ringP = (th, r) => ({ x: MH.cx + Math.cos(th) * r, z: MH.cz + Math.sin(th) * r });
   for (const k of MHUNT) { const I = ISLES[k], dt = (I.R - 14) / MH.RR; I.entry = ringP(I.th - dt, MH.RR); I.exit = ringP(I.th + dt, MH.RR);
@@ -254,7 +259,7 @@
     darkhound:{ name: '어둠 사냥개', lv: 93, build: 'quad', color: 0x2a2630, hpM: 1.1, atkM: 1.3, scale: 1.2 },
     crystalslime:{ name: '수정 슬라임', lv: 96, build: 'slime', color: 0x9a60e0, hpM: 1.5, atkM: 1.15, scale: 1.5, glow: 0xb070ff },
     cavetroll:{ name: '동굴 트롤', lv: 99, build: 'biped', color: 0x5a5a62, hpM: 2.1, atkM: 1.45, scale: 2.2, club: true },
-    // 엑시즈 동문 밖 사냥터 (Lv 60–95)
+    // 엑시즈 남문 밖 사냥터 (Lv 60–95)
     fieldwolf:{ name: '들늑대', lv: 61, build: 'quad', color: 0x8a6e4e, hpM: 1.1, atkM: 1.25, scale: 1.2 },
     mudslime: { name: '진흙 슬라임', lv: 66, build: 'slime', color: 0x7a5e3e, hpM: 1.5, atkM: 1.15, scale: 1.55 },
     hillboar: { name: '큰 멧돼지', lv: 68, build: 'quad', color: 0x4e3626, hpM: 1.4, atkM: 1.35, scale: 1.45, tusk: true },
@@ -267,7 +272,7 @@
     windwolf: { name: '바람 늑대', lv: 89, build: 'quad', color: 0xb8c4cc, hpM: 1.3, atkM: 1.5, scale: 1.3 },
     mistslime:{ name: '안개 슬라임', lv: 92, build: 'slime', color: 0xc8d4dc, hpM: 1.6, atkM: 1.3, scale: 1.6, glow: 0xa0c8e8 },
     cliffgiant:{ name: '벼랑 거인', lv: 95, build: 'biped', color: 0x6a6662, hpM: 2.5, atkM: 1.6, scale: 2.5, club: true },
-    // 엑시즈 북문 밖 (Lv 95–130)
+    // 엑시즈 서문 밖 (Lv 95–130)
     pinewolf: { name: '솔늑대', lv: 96, build: 'quad', color: 0x5a4a3a, hpM: 1.2, atkM: 1.4, scale: 1.25 },
     barkslime:{ name: '나무껍질 슬라임', lv: 99, build: 'slime', color: 0x6a4e32, hpM: 1.6, atkM: 1.3, scale: 1.6 },
     hornboar: { name: '뿔멧돼지', lv: 103, build: 'quad', color: 0x3e2e22, hpM: 1.5, atkM: 1.45, scale: 1.5, tusk: true },
@@ -280,7 +285,7 @@
     icewolf:  { name: '얼음 늑대', lv: 124, build: 'quad', color: 0xd0e0ea, hpM: 1.35, atkM: 1.6, scale: 1.35 },
     snowslime:{ name: '눈 슬라임', lv: 127, build: 'slime', color: 0xeef4f8, hpM: 1.7, atkM: 1.4, scale: 1.65, glow: 0xc0e0ff },
     frostgiant:{ name: '서리 거인', lv: 130, build: 'biped', color: 0x9ab0c0, hpM: 2.6, atkM: 1.7, scale: 2.6, club: true },
-    // 엑시즈 서문 밖 (Lv 130–165)
+    // 엑시즈 북문 밖 (Lv 130–165)
     steppewolf:{ name: '초원 늑대', lv: 131, build: 'quad', color: 0x9a8058, hpM: 1.25, atkM: 1.5, scale: 1.3 },
     clayslime:{ name: '점토 슬라임', lv: 136, build: 'slime', color: 0xa86a48, hpM: 1.7, atkM: 1.35, scale: 1.65 },
     wildram:  { name: '들양', lv: 138, build: 'quad', color: 0xd8ccb0, hpM: 1.5, atkM: 1.5, scale: 1.4, tusk: true },
@@ -293,7 +298,7 @@
     hilltroll:{ name: '언덕 트롤', lv: 159, build: 'biped', color: 0x6a7a4a, hpM: 2.5, atkM: 1.7, scale: 2.35, club: true },
     stoneslime:{ name: '돌 슬라임', lv: 162, build: 'slime', color: 0x8a8680, hpM: 1.9, atkM: 1.45, scale: 1.7 },
     hillgiant:{ name: '언덕 거인', lv: 165, build: 'biped', color: 0x8a7a62, hpM: 2.7, atkM: 1.75, scale: 2.65, club: true },
-    // 엑시즈 남문 밖 (Lv 165–200)
+    // 엑시즈 동문 밖 (Lv 165–200)
     shadewolf:{ name: '그늘 늑대', lv: 166, build: 'quad', color: 0x3a3a3e, hpM: 1.4, atkM: 1.7, scale: 1.35 },
     leafslime:{ name: '잎 슬라임', lv: 169, build: 'slime', color: 0x4a8a3a, hpM: 1.8, atkM: 1.5, scale: 1.7, glow: 0x80e060 },
     cliffboar:{ name: '벼랑 멧돼지', lv: 173, build: 'quad', color: 0x4a3a30, hpM: 1.7, atkM: 1.7, scale: 1.6, tusk: true },
