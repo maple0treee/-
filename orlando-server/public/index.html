@@ -8051,7 +8051,7 @@ function bgmTick(dt){const step=dt/BGM.fade,hid=document.hidden;
     if(!on&&a._v<=0&&!a.paused){a.pause();}}}
 /* 자동 재생이 막혔으면 다음 클릭·키에서 다시 */
 for(const ev of ['pointerdown','keydown','touchstart'])addEventListener(ev,()=>{const a=BGM.want&&BGM.els[BGM.want];if(a&&a.paused&&!document.hidden)a.play().catch(()=>{});},true);
-{let last=performance.now();setInterval(()=>{const n=performance.now();bgmTick(Math.min(2,(n-last)/1000));last=n;if(typeof fireAmbTick==='function')try{fireAmbTick();}catch(e){}},100);}
+{let last=performance.now();setInterval(()=>{const n=performance.now();bgmTick(Math.min(2,(n-last)/1000));last=n;if(typeof fireAmbTick==='function')try{fireAmbTick();}catch(e){}if(typeof seaAmbTick==='function')try{seaAmbTick();}catch(e){}},100);}
 
 /* ---------- 화려한 효과: 불꽃 입자, 베기 궤적, 충격파, 빛기둥 ----------
    입자는 점 두 묶음(작은 불티, 큰 빛)으로 한 번에 그려서 가볍다. */
@@ -10387,6 +10387,85 @@ vec3 nw=normalize(vec3(-hx*.35,1.,-hz*.35));normal=normalize((viewMatrix*vec4(nw
       .replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
 {vec3 V=normalize(cameraPosition-vWPw);float fr=pow(1.-max(dot(V,vec3(0.,1.,0.)),0.),3.);totalEmissiveRadiance+=uSkyW*fr*.55;diffuseColor.rgb*=1.-fr*.4;}`);};
   m.customProgramCacheKey=()=>'mwater';return m;}
+/* ---------- 바다: 너울·잔물결, 하늘 비침(비스듬히 볼수록 많이), 햇빛 반짝임, 얕은 곳은 맑은 옥빛, 바닷가엔 밀려드는 물거품.
+   멀리 갈수록 하늘의 지평선 빛으로 녹아들어 수평선이 하늘과 이어진다 (안개색은 노출값 때문에 하늘보다 어둡다).
+   물 깊이는 땅 높이를 미리 재어 그림(SEA.bake)에 담는다: R = 깊이, G = 바다다움(강·해자는 0) ---------- */
+const SEA={list:[],amb:{}};
+function seaMat(o){o=o||{};
+  const U={uT:{value:0},uDep:{value:null},uBox:{value:new THREE.Vector4(0,0,1,0)},uLift:{value:0},uFogN:{value:60},uFogF:{value:240},uExp:{value:.64},uSunI:{value:1},
+    uDeep:{value:new THREE.Color(o.deep??0x245e72)},uShal:{value:new THREE.Color(o.shal??0x5ab4aa)},uRiv:{value:new THREE.Color(o.riv??0x4e7a6c)},uWave:{value:o.wave??1},uDepK:{value:o.depK??1}};
+  const m=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.14,metalness:.02,transparent:true,opacity:1,side:THREE.DoubleSide,fog:false});
+  m.userData.U=U;m.userData.t=U.uT;
+  m.onBeforeCompile=s=>{Object.assign(s.uniforms,U,{uHor:SKY.hor,uZen:SKY.zen,uSun:SKY.sun,uGlow:SKY.glow});
+    s.vertexShader='varying vec3 vSW;\n'+s.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\nvSW=(modelMatrix*vec4(transformed,1.)).xyz;');
+    s.fragmentShader=`uniform float uDepK,uT,uLift,uFogN,uFogF,uExp,uSunI,uWave,uGlow;uniform sampler2D uDep;uniform vec4 uBox;uniform vec3 uDeep,uShal,uRiv,uHor,uZen,uSun;varying vec3 vSW;
+float sh1(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float sn1(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(sh1(i),sh1(i+vec2(1,0)),f.x),mix(sh1(i+vec2(0,1)),sh1(i+vec2(1,1)),f.x),f.y);}
+vec3 seaSky(vec3 d){float h=d.y;vec3 c=mix(uHor,uZen,pow(smoothstep(-.02,.75,h),.8));c=mix(c,uHor*1.04,smoothstep(.12,-.05,h)*.6);
+  float sd=max(dot(d,normalize(uSun)),0.);c+=vec3(1.,.93,.78)*(pow(sd,60.)*.35*uGlow+pow(sd,6.)*.12*uGlow);return c*.86;}
+/* 물결 하나: 방향 d, 파장 l, 높이 a. 기울기를 더한다 (깊은 물 파도 빠르기) */
+void sW(inout vec3 g,vec2 p,vec2 d,float l,float a,float ph){float k=6.2832/l,w=sqrt(9.8*k)*.55,q=dot(d,p)*k-uT*w+ph;g.xy+=d*(a*k*cos(q));g.z+=a*sin(q);}
+`+s.fragmentShader
+    .replace('#include <color_fragment>',`#include <color_fragment>
+vec2 sP=vSW.xz-uBox.xy;float sDist=length(cameraPosition-vSW);
+vec4 sD=uBox.w>.5?texture2D(uDep,sP/uBox.z):vec4(1.);if(sP.x<0.||sP.y<0.||sP.x>uBox.z||sP.y>uBox.z)sD=vec4(1.);
+float sDep=(sD.r*10.-2.)*uDepK+uLift,sSea=sD.g,sReady=uBox.w;
+float sNear=1.-smoothstep(30.,130.,sDist),sNear2=1.-smoothstep(8.,36.,sDist);
+vec3 sG=vec3(0.);float wv=uWave*mix(.3,1.,sSea),sMid=1.-smoothstep(60.,240.,sDist);
+sW(sG,sP,vec2(.8,.6),34.,.45*wv,0.);sW(sG,sP,vec2(-.45,.89),21.,.3*wv,1.7);sW(sG,sP,vec2(.96,-.28),13.,.16*wv,4.1);
+sW(sG,sP,vec2(.2,.98),7.3,.09*wv*(.3+.7*sMid),2.3);sW(sG,sP,vec2(-.9,.42),4.6,.05*wv*(.2+.8*sMid),5.2);
+sW(sG,sP,vec2(.6,-.8),2.4,.016*sNear,.9);sW(sG,sP,vec2(-.3,-.95),1.3,.008*sNear2,3.3);sW(sG,sP,vec2(.97,.24),.8,.005*sNear2,1.1);
+float sN1=sn1(sP*.21+vec2(uT*.06,uT*.035)),sN2=sn1(sP*1.1-vec2(uT*.13,-uT*.07)),sN3=sn1(sP*3.1+vec2(uT*.3,uT*.21));
+/* 얕은 곳: 물결이 바닥에 걸려 잦아든다 */
+sG.xy*=mix(.35,1.,smoothstep(0.,2.,sDep));
+vec3 sNw=normalize(vec3(-sG.x,1.,-sG.y));float sCrest=clamp(sG.z/(.9*wv+.01),-1.,1.);
+/* 물거품: 물가 가장자리 + 얕은 곳으로 밀려드는 하얀 물결 줄 (바다에서만) */
+float sFoam=0.;
+{float wl=1.-smoothstep(0.,.22+.3*max(uLift,0.)*5.+.25*sN1,sDep);
+ float ph=fract(sDep*.75+uT*.13+sN1*.45);float br=smoothstep(.74,.93,ph)*smoothstep(1.,.95,ph)*smoothstep(3.4,.5,sDep)*smoothstep(-.05,.25,sDep);br*=smoothstep(.32,.62,sN2);
+ float wc=smoothstep(.8,.9,sN1*sn1(sP*.045+uT*.01))*smoothstep(.55,.8,sN2)*.6*sNear;   /* 먼 바다 흰 물마루 */
+ sFoam=clamp(wl*(.5+.5*sN2)+br*.85+wc*smoothstep(4.,8.,sDep),0.,1.)*sSea*sReady;
+ sFoam*=mix(1.,.45,smoothstep(70.,220.,sDist));sFoam=mix(sFoam,smoothstep(.35,.75,sFoam),.5)*(.82+.18*sN3);}
+vec3 sCol=mix(uShal,uDeep,smoothstep(.15,4.,sDep));sCol=mix(uRiv,sCol,sSea);
+sCol*=(.92+.16*sN1)*(1.+.14*sCrest*sSea);   /* 물마루는 밝고 골은 어둡게 */
+diffuseColor.rgb=mix(sCol,vec3(.86,.9,.9),sFoam);
+diffuseColor.a=max(mix(mix(.42,.95,smoothstep(0.,2.6,sDep)),1.,smoothstep(60.,200.,sDist)),sFoam*.95);`)
+    .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,.85,sFoam);')
+    .replace('#include <normal_fragment_begin>','#include <normal_fragment_begin>\nnormal=normalize((viewMatrix*vec4(sNw,0.)).xyz);')
+    .replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+{vec3 V=normalize(cameraPosition-vSW),R=reflect(-V,sNw);R.y=max(R.y,.01);float fr=.02+.98*pow(1.-max(dot(V,sNw),0.),5.);
+ vec3 sk=seaSky(normalize(R))/uExp;float nf=1.-sFoam;
+ totalEmissiveRadiance+=sk*vec3(.86,.96,1.06)*fr*nf*.6;diffuseColor.rgb*=1.-fr*.5*nf;
+ totalEmissiveRadiance+=sCol*(.16+.22*(1.-smoothstep(0.,4.,sDep)))*nf*min(uSunI,1.)*(1.-fr);   /* 물속에서 퍼져 나오는 빛: 얕을수록 밝은 옥빛 */
+ float sd=max(dot(R,normalize(uSun)),0.);totalEmissiveRadiance+=vec3(1.,.95,.84)*(pow(sd,260.)*5.+pow(sd,1800.)*22.*sN3)*uSunI*nf;}`)
+    .replace('#include <dithering_fragment>',`#include <dithering_fragment>
+{vec3 dV=normalize(vSW-cameraPosition);float f=smoothstep(uFogN,min(uFogF*1.6,385.),sDist);gl_FragColor.rgb=mix(gl_FragColor.rgb,linearToOutputTexel(vec4(seaSky(dV),1.)).rgb,f);gl_FragColor.a=mix(gl_FragColor.a,1.,f);}`);};
+  m.customProgramCacheKey=()=>'seaw3';return m;}
+/* 물 깊이 그림: 땅 높이 hFn을 재어 물높이 wl 아래 깊이를 담는다. 먼저 성긴 칸(4칸마다)을 재고, 물가가 지나는 칸만 촘촘히 잰다.
+   inFn(x,z)이 false인 곳은 재지 않는다(바다 판이 없는 곳). 여러 장면에 나눠 잰다 (step이 true를 돌려주면 끝) */
+function seaBake(x0,z0,S,N,wl,hFn,inFn,seaFn){const data=new Uint8Array(N*N*4).fill(255),C=4,M=N/C,cd=new Float32Array((M+1)*(M+1)),tex=new THREE.DataTexture(data,N,N,THREE.RGBAFormat);
+  tex.magFilter=tex.minFilter=THREE.LinearFilter;tex.wrapS=tex.wrapT=THREE.ClampToEdgeWrapping;tex.needsUpdate=true;
+  const px=i=>x0+(i+.5)*S/N,enc=d=>Math.max(0,Math.min(255,Math.round((d+2)/10*255)));
+  const B={tex,box:[x0,z0,S],done:false,data,N,S,x0,z0,ci:0,fi:0,
+    depthAt(x,z){const i=Math.floor((x-x0)/S*N),j=Math.floor((z-z0)/S*N);if(i<0||j<0||i>=N||j>=N)return 8;return data[(j*N+i)*4]/255*10-2;},
+    seaAt(x,z){if(!inFn(x,z))return 0;const i=Math.floor((x-x0)/S*N),j=Math.floor((z-z0)/S*N);if(i<0||j<0||i>=N||j>=N)return 1;return data[(j*N+i)*4+1]/255;},
+    step(ms){const t0=performance.now(),T=M+1;let n=0;const more=()=>(++n&31)||performance.now()-t0<ms;
+      while(B.ci<T*T&&more()){const k=B.ci++,ci=k%T,cj=(k/T)|0,x=x0+ci*C*S/N,z=z0+cj*C*S/N;cd[k]=inFn(x,z)?wl-hFn(x,z):NaN;}
+      if(B.ci<T*T)return false;
+      while(B.fi<M*M&&more()){const k=B.fi++,ci=k%M,cj=(k/M)|0,q=[cd[cj*T+ci],cd[cj*T+ci+1],cd[(cj+1)*T+ci],cd[(cj+1)*T+ci+1]];
+        let mn=1e9,mx=-1e9,nan=false;for(const v of q){if(v!==v)nan=true;else{if(v<mn)mn=v;if(v>mx)mx=v;}}
+        if(nan&&mx<-1e8)continue;const fine=nan||(mn<4.5&&mx>-2.5);
+        for(let b=0;b<C;b++)for(let a=0;a<C;a++){const i=ci*C+a,j=cj*C+b,x=px(i),z=z0+(j+.5)*S/N;let d;
+          if(fine){if(!inFn(x,z))continue;d=wl-hFn(x,z);}else{const u=(a+.5)/C,v=(b+.5)/C;d=(q[0]*(1-u)+q[1]*u)*(1-v)+(q[2]*(1-u)+q[3]*u)*v;}
+          const o=(j*N+i)*4;data[o]=enc(d);data[o+1]=Math.round(255*Math.max(0,Math.min(1,seaFn?seaFn(x,z):1)));}}
+      if(B.fi<M*M)return false;tex.needsUpdate=true;B.done=true;return true;}};
+  return B;}
+/* 바다 하나를 SEA에 올린다: mesh, 재질, 깊이 그림(나중에 잰다), 너울(물높이 오르내림) 세기 */
+function seaAdd(mesh,mat,bake,o){const e={mesh,mat,bake,baseY:mesh.position.y,swell:o&&o.swell||0};SEA.list.push(e);return e;}
+function seaTick(dt){for(const e of SEA.list){if(!e.mesh.visible)continue;const U=e.mat.userData.U;U.uT.value+=dt;
+    if(e.bake){if(!e.bake.done)e.bake.step(5);const b=e.bake.box,w=e.bake.done?1:0;if(!U.uDep.value||U.uBox.value.w!==w){U.uDep.value=e.bake.tex;U.uBox.value.set(b[0],b[1],b[2],w);}}   /* 깊이 그림은 처음 볼 때 조금씩 나눠 잰다 */
+    if(e.swell){const t=U.uT.value,l=e.swell*(Math.sin(t*.62)*.7+Math.sin(t*1.31+1.3)*.3);e.mesh.position.y=e.baseY+l;U.uLift.value=l;}
+    if(scene.fog){U.uFogN.value=scene.fog.near;U.uFogF.value=scene.fog.far;}U.uExp.value=renderer.toneMappingExposure;U.uSunI.value=Math.min(1.2,sun.intensity/.88);}}
 /* ---------- 마르쿠스 왕국의 수도 엑시즈: 설계도 ----------
    그림 지도(1536×1024)를 그대로 옮긴다. 그림 1px = 0.615m, 그림 (882,475)가 도시 가운데(게임 섬 중심).
    게임 좌표: mx = 동쪽(+), my = 남쪽(+). 모든 자리는 그림 픽셀로 적고 G()로 바꾼다.
@@ -10724,7 +10803,8 @@ function buildMarcus(H){
     for(let i=0;i<=48;i++){const a=A0+(A1-A0)*i/48;pts.push([Math.cos(a)*FAR,Math.sin(a)*FAR]);}
     pts.push(sqAt(A1));for(const ca of [PI*.75,PI*1.25,PI*1.75,PI*2.25])if(ca>A1&&ca<A0+PI*2)pts.push(sqAt(ca));pts.push(sqAt(A0+PI*2));
     const sh=new THREE.Shape(pts.map(p=>new THREE.Vector2(p[0],p[1])));const geo=new THREE.ShapeGeometry(sh);geo.rotateX(PI/2);
-    const wm=new THREE.Mesh(geo,marcusWaterMat());wm.position.set(cx,-1.4,cz);wm.receiveShadow=true;scene.add(wm);MARCUS.water=wm;}
+    const mt=seaMat({depK:3,shal:0x3f9396}),wm=new THREE.Mesh(geo,mt);wm.position.set(cx,-1.4,cz);wm.receiveShadow=true;wm.renderOrder=1;scene.add(wm);MARCUS.water=wm;
+    const S2=2*(SQ+30);MARCUS.sea=seaAdd(wm,mt,seaBake(cx-S2/2,cz-S2/2,S2,512,-1.4,heightAt,()=>true,(x,z)=>PL.seaW(x-cx,z-cz)*smooth(-4,14,PL.wallDist(x-cx,z-cz))));}   /* 강·해자는 잔잔한 민물, 남동쪽은 바다 (물거품·너울빛) */
   /* ===== 길: 돌을 깐 바닥 (평지에만; 언덕 위는 땅 색으로) ===== */
   /* 길은 짧은 토막으로 깔고, 토막마다 양옆이 물 위로 나가면 그만큼 폭을 줄인다 (강가 길 가장자리가 물 위에 떠 있지 않게). 꺾이는 마디에는 둥근 판을 깔아 이음매를 메운다 */
   {const dry=(x,y)=>PL.waterDepth(x,y)<=0||PL.bridgeAt(x,y);
@@ -11879,7 +11959,7 @@ function marcusTick(dt){if(!MARCUS.ready||!player)return;if(typeof coachTick==='
   /* 바다에는 걸어 들어가지 못한다: 깊은 바다(둑 너머)로 들어서면 마지막 뭍 자리로 되돌린다 */
   if(inM&&OR.isleAt(p.x,p.z).id==='marcus'){const PL=marcusPlan(),I=OR.ISLES.marcus,lx=p.x-I.x,lz=p.z-I.z;
     if(PL.moatDepth(lx,lz)>.9){const L=MARCUS.lastDry;if(L){p.x=L.x;p.z=L.z;}else{p.x=I.entry.x;p.z=I.entry.z;}}else{if(!MARCUS.lastDry)MARCUS.lastDry={x:0,z:0};MARCUS.lastDry.x=p.x;MARCUS.lastDry.z=p.z;}}
-  if(MARCUS.water){MARCUS.water.visible=inM&&OR.isleAt(p.x,p.z).id==='marcus';MARCUS.water.material.userData.t.value+=dt;}if(MARCUS.wheatMat)MARCUS.wheatMat.userData.t.value+=dt;if(typeof GFX!=='undefined'&&GFX.tuftMaterial)GFX.tuftMaterial().userData.t.value+=dt;
+  if(MARCUS.water){MARCUS.water.visible=inM&&OR.isleAt(p.x,p.z).id==='marcus';}if(MARCUS.wheatMat)MARCUS.wheatMat.userData.t.value+=dt;if(typeof GFX!=='undefined'&&GFX.tuftMaterial)GFX.tuftMaterial().userData.t.value+=dt;
   crowdTick(dt,p,inM);if(typeof lifeTick==='function')lifeTick(dt,p,inM);}
 /* ---------- 엑시즈 거리 생활: 화분·빨랫줄·떠돌이 개·고양이·비둘기·거리 예술가 ----------
    큰 길 가장자리에 화분을 늘어놓고, 주거·장인 지구 골목에는 빨랫줄을 건다.
@@ -15715,14 +15795,22 @@ const ISLE_FX={snow:null,water:null,crystals:[],gate:null,mill:null,mhTiles:[]};
     for(const V of MHR.rivers)ribbon(V,V.hw+3);
     for(const S of MHR.streams)ribbon(S,S.hw+1.6);
     for(const M of MHR.marshes){const g=new THREE.CircleGeometry(141,64);g.rotateX(-Math.PI/2);g.translate(M.x,MH_WY,M.z);waterMesh(g);}
-    /* 바다: 고리 둘레를 도는 띠. 바다가 있는 각도에서만 안쪽 끝(바닷가 땅 바깥 또는 트인 쪽은 고리 안 깊숙이)부터 수평선까지 */
-    {const MH=OR.MH,N=720,RO=MH.RR+2600,pos=[],idx=[];let prev=-1;
+    /* 바다: 고리 둘레를 도는 띠. 바닷가 땅·트인 쪽은 안쪽 끝(바닷가 땅 밑 또는 고리 안 깊숙이)부터, 다른 땅은 산자락이 물에 닿는 곳(없으면 땅 판 너머)부터 수평선까지.
+       어디서나 이어지게 깔아 두면 물보다 높은 땅이 가려 주므로, 바다가 산자락 앞에서 일자로 끊기지 않는다 */
+    {const MH=OR.MH,N=720,NA=360,RO=MH.RR+2600,RMAX=MH.RR+MH.R+300,pos=[],idx=[],ri0=new Float32Array(N+1),riA=new Float32Array(N+1);
       for(let i=0;i<=N;i++){const a=i/N*Math.PI*2,rp=MHR.ringPt(a),gk=MHR.gapK(rp.x,rp.z);let c=0;for(const o of mhMix(rp.x,rp.z))if(o.I.coast)c+=o.w;
-        const has=gk>.02||c>.05,ri=has?MH.RR*.45+(MH.RR+MH.R*.8-MH.RR*.45)*(1-gk):RO;
-        pos.push(MH.cx+Math.cos(a)*ri,MH_WY-.03,MH.cz+Math.sin(a)*ri,MH.cx+Math.cos(a)*RO,MH_WY-.03,MH.cz+Math.sin(a)*RO);
+        ri0[i]=gk>.02?MH.RR*.45+(MH.RR+MH.R*.8-MH.RR*.45)*(1-gk):-1;}
+      for(let i=0;i<=N;i+=N/NA){if(ri0[i]>0)continue;const a=i/N*Math.PI*2,ca=Math.cos(a),sa=Math.sin(a);let r=MH.RR,hit=RMAX;   /* 고리 길에서 바깥으로 가며 땅이 물에 닿는 곳을 찾는다 (걷는 땅 안의 호수·강은 빼고) */
+        for(;r<RMAX;r+=6){const x=MH.cx+ca*r,z=MH.cz+sa*r;if(mhHeight(x,z)<MH_WY+.25&&OR.MH.walkD(x,z)>-25){hit=r-10;break;}}
+        for(let k=0;k<N/NA&&i+k<=N;k++)ri0[i+k]=ri0[i+k]>0?ri0[i+k]:hit;}
+      for(let i=0;i<=N;i++){let m=1e9;for(let k=-5;k<=5;k++){const v=ri0[((i+k)%N+N)%N];if(v>0&&v<m)m=v;}riA[i]=m;}   /* 이웃 각도 중 가장 안쪽까지 (사이가 벌어지지 않게) */
+      for(let i=0;i<=N;i++){const a=i/N*Math.PI*2,ri=riA[i];pos.push(MH.cx+Math.cos(a)*ri,0,MH.cz+Math.sin(a)*ri,MH.cx+Math.cos(a)*RO,0,MH.cz+Math.sin(a)*RO);
         if(i){const k=i*2;idx.push(k-2,k-1,k,k,k-1,k+1);}}
       const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();
-      const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0x35707e,roughness:.18,metalness:.12,side:THREE.DoubleSide}));m.receiveShadow=true;scene.add(m);ISLE_FX.mhTiles.push(m);}
+      const riAt=a=>{const u=(((a/(Math.PI*2))%1+1)%1)*N,i=Math.floor(u);return riA[i]+(riA[Math.min(N,i+1)]-riA[i])*(u-i);};
+      const mt=seaMat({}),m=new THREE.Mesh(g,mt);m.position.y=MH_WY-.05;m.renderOrder=1;m.receiveShadow=true;scene.add(m);ISLE_FX.mhTiles.push(m);
+      const S=2*(RMAX+30),bake=seaBake(MH.cx-S/2,MH.cz-S/2,S,1024,MH_WY-.05,mhHeight,(x,z)=>{const dx=x-MH.cx,dz=z-MH.cz,r=Math.hypot(dx,dz);return r<=RMAX+30&&r>=riAt(Math.atan2(dz,dx))-12;});
+      MHR.sea=seaAdd(m,mt,bake,{swell:.09});MHR.sea.riAt=riAt;MHR.sea.rmax=RMAX;}
     /* 등대 절벽(4E): 바다 쪽 끝의 흰 등대 (붉은 띠, 밤에도 빛나는 등롱) */
     for(const id of OR.MHUNT){const I=ISLES[id];if(!/등대/.test((ZONES[id]||{}).name||''))continue;
       const MH=OR.MH,r=MH.RR+I.R-26,x=MH.cx+Math.cos(I.th+.012)*r,z=MH.cz+Math.sin(I.th+.012)*r,y=heightAt(x,z),g=new THREE.Group();g.position.set(x,y-.3,z);scene.add(g);
@@ -15943,17 +16031,19 @@ function edgeMistTex(){if(edgeMistTex.t)return edgeMistTex.t;const c=document.cr
   const t=new THREE.CanvasTexture(c);return edgeMistTex.t=t;}
 (function buildEdgeFog(){
   const U={uT:{value:0},uC:{value:scene.fog.color}};
-  const vs='varying vec2 vU;varying vec3 vW;void main(){vU=uv;vec4 w=modelMatrix*vec4(position,1.);vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}';
-  const fs='uniform float uT,uA,uH;uniform vec3 uC;varying vec2 vU;varying vec3 vW;'+
+  const vs='attribute float sk;varying float vSk;varying vec2 vU;varying vec3 vW;void main(){vU=uv;vSk=sk;vec4 w=modelMatrix*vec4(position,1.);vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}';
+  const fs='uniform float uT,uA,uH;uniform vec3 uC;varying float vSk;varying vec2 vU;varying vec3 vW;'+
     'float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}'+
     'float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}'+
     'void main(){float t=vU.y;vec2 q=vec2(vU.x*70.+uT*.04,t*2.2-uT*.015);float m=n(q)*.5+n(q*2.1+vec2(7.,uT*.03))*.3+n(q*4.7-3.)*.2;'+
-    'float a=uA*(1.-smoothstep(.2+.35*m,.95,t))*smoothstep(.15,.75,m+.25*(1.-t));float dc=distance(cameraPosition,vW);a*=smoothstep(2.,14.,dc);'+
+    'float a=uA*(1.-smoothstep(.2+.35*m,.95,t))*smoothstep(.15,.75,m+.25*(1.-t));float dc=distance(cameraPosition,vW);a*=smoothstep(2.,14.,dc)*(1.-.88*vSk);'+
     'gl_FragColor=linearToOutputTexel(vec4(mix(uC,vec3(1.),.06),clamp(a,0.,1.)));}'   /* 다른 물체의 안개와 같은 색이 되게 출력 색 공간으로 바꾼다 */;
   for(const k of ['silva','arbus','kaolis','subcus','marcus','milgol','fort','castle']){const I=OR.ISLES[k];if(!I)continue;const set=[];   /* 사냥터는 안개 벽 대신 산비탈로 둘러싸인다 */
     for(const [off,H,A] of [[5,28,.55],[18,50,.78],[38,90,.97]]){
-      const N=k==='marcus'?160:96,geo=new THREE.CylinderGeometry(1,1,1,N,1,true),P=geo.attributes.position;
-      for(let i=0;i<P.count;i++){const x=P.getX(i),z=P.getZ(i),y=P.getY(i),a=Math.atan2(z,x),r=OR.isleEdge(I,a)+off;P.setXYZ(i,Math.cos(a)*r,(y+.5)*H-12,Math.sin(a)*r);}
+      const N=k==='marcus'?160:96,geo=new THREE.CylinderGeometry(1,1,1,N,1,true),P=geo.attributes.position,sk=new Float32Array(P.count);
+      for(let i=0;i<P.count;i++){const x=P.getX(i),z=P.getZ(i),y=P.getY(i),a=Math.atan2(z,x),r=OR.isleEdge(I,a)+off;P.setXYZ(i,Math.cos(a)*r,(y+.5)*H-12,Math.sin(a)*r);
+        sk[i]=k==='marcus'&&typeof marcusPlan==='function'?marcusPlan().seaW(Math.cos(a),Math.sin(a)):0;}   /* 엑시즈 바다 쪽: 안개 막을 엷게 해 바다가 수평선까지 이어 보이게 */
+      geo.setAttribute('sk',new THREE.BufferAttribute(sk,1));
       geo.computeBoundingSphere();
       const m=new THREE.ShaderMaterial({uniforms:{...U,uA:{value:A},uH:{value:H}},vertexShader:vs,fragmentShader:fs,transparent:true,depthWrite:false,side:THREE.DoubleSide,fog:false});
       const mesh=new THREE.Mesh(geo,m);mesh.position.set(I.x,0,I.z);mesh.renderOrder=4;mesh.frustumCulled=false;mesh.visible=false;scene.add(mesh);set.push(mesh);}
@@ -21895,6 +21985,20 @@ function fireAmbTick(){let F=typeof MARCUS!=='undefined'&&MARCUS.guildFire;{cons
   const el=FIRE_AMB.el;if(!el)return;FIRE_AMB.v+=(want-FIRE_AMB.v)*.25;const v=Math.min(1,FIRE_AMB.v);if(Math.abs(el.volume-v)>.003)el.volume=v;
   if(v>.003&&el.paused&&!el._try){el._try=1;el.play().then(()=>{el._try=0;}).catch(()=>{el._try=0;});}else if(v<=.003&&!el.paused)el.pause();}
 for(const ev of ['pointerdown','keydown'])addEventListener(ev,()=>{const el=FIRE_AMB.el;if(el&&el.paused&&FIRE_AMB.v>.003)el.play().catch(()=>{});},true);
+/* 파도 소리 (원호가 준 잔잔한 바다 소리 두 가지): 바닷물이 가까울수록 크게. 사냥터 바닷가는 자갈에 부딪는 소리, 엑시즈는 돌둑에 부딪는 소리 */
+const SEA_AMB={els:{},v:{stones:0,cement:0}};
+function seaNearD(B,x,z,dep){if(!B||!B.done)return 1e9;const ok=(qx,qz)=>B.seaAt(qx,qz)>.5&&B.depthAt(qx,qz)>dep;if(ok(x,z))return 0;
+  for(let r=5;r<=65;r+=5){const n=Math.max(8,Math.round(r*.9));for(let k=0;k<n;k++){const a=k/n*Math.PI*2+r;if(ok(x+Math.cos(a)*r,z+Math.sin(a)*r))return r;}}return 1e9;}
+function seaAmbTick(){if(typeof player==='undefined'||!player||typeof mode==='undefined')return;const p=player.position,want={stones:0,cement:0};
+  if(mode!=='title'&&!document.hidden){const I=OR.isleAt(p.x,p.z),id=I&&I.id;let d=1e9,k=null;
+    if(id==='marcus'&&MARCUS.sea&&MARCUS.water&&MARCUS.water.visible){d=seaNearD(MARCUS.sea.bake,p.x,p.z,.8);k='cement';}
+    else if(id&&OR.MHUNT.includes(id)&&MHR.sea){d=seaNearD(MHR.sea.bake,p.x,p.z,.5);k='stones';}
+    if(k&&d<65)want[k]=Math.pow(1-d/65,1.6)*.85*(OPT.sfx??.7)*Math.max(0,Math.min(1,1-(p.y-(k==='cement'?-1.4:MH_WY)-12)/30));}   /* 높이 올라가면 작아진다 */
+  for(const k of ['stones','cement']){let el=SEA_AMB.els[k];
+    if(want[k]>0&&!el){const src='music/sea_'+k+'.mp3?v=1',c=typeof cdnURL==='function'?cdnURL(src):src;el=SEA_AMB.els[k]=new Audio(c);if(c!==src)el.addEventListener('error',()=>{if(!el._fb){el._fb=1;el.src=src;}});el.loop=true;el.volume=0;}
+    if(!el)continue;SEA_AMB.v[k]+=(want[k]-SEA_AMB.v[k])*.12;const v=Math.min(1,SEA_AMB.v[k]);if(Math.abs(el.volume-v)>.003)el.volume=v;
+    if(v>.003&&el.paused&&!el._try){el._try=1;el.play().then(()=>{el._try=0;}).catch(()=>{el._try=0;});}else if(v<=.003&&!el.paused)el.pause();}}
+for(const ev of ['pointerdown','keydown'])addEventListener(ev,()=>{for(const k in SEA_AMB.els){const el=SEA_AMB.els[k];if(el&&el.paused&&SEA_AMB.v[k]>.003)el.play().catch(()=>{});}},true);
 /* 여닫는 문짝 (길드홀 3층 방 문): 경첩(hx,hz)에서 닫히면 서쪽(-x)으로 뻗는 문. sd: 열리는 쪽(+1 남쪽, -1 북쪽). F로 열고 닫는다.
    부딪힘은 닫힌 자리·열린 자리 둘을 미리 넣고 y범위로 켜고 끈다 (부딪힘 격자를 다시 만들지 않게) */
 function hdoorAdd(hx,y,hz,w,h,sd,open,dir=1){const g=new THREE.Group();g.position.set(hx,y,hz);scene.add(g);   /* dir: +1 닫히면 서쪽으로 뻗는 문, -1 동쪽으로 뻗는 문 (두 짝 문의 왼쪽 짝) */
@@ -23076,7 +23180,7 @@ function loopBody(){
     if(P&&player&&!P.fly&&P.hp>0&&P.seat==null&&!CCAR.ride){const pos=player.position,ground=floorAt(pos.x,pos.z,pos.y);if(pos.y>ground+.001||vy>0){const y0=pos.y;vy-=26*dt;let py=pos.y+vy*dt;if(py<=ground){py=ground;vy=0;}pos.y=py;jumpY=Math.max(0,py-ground);camera.position.y+=py-y0;}}
     if(P&&P.bowDraw)bowCancel();if(P&&P.ray)rayEnd();if(P&&P.flame){P.flame=null;sfxStop('mg_fire');if(myMoId==='flame'){swingT=1;myMo=null;myMoId='';}}updateViewModel(dt,0);updateNetMonsters(dt);for(const m of monsters)m.tag.hidden=true;
     if(npcCur&&npcCur.poses&&npcCur.mesh){npcCur.mesh.userData.pose=npcCur.poses.talk;animNpc(npcCur.mesh,tAll,dt);}}   /* 말하는 동안에도 몸짓을 이어 간다 (버키: 손짓하며 설명) */
-  updateFx(dt);VFX.update(dt);updateAmbient(dt);if(typeof questMarkTick==='function')questMarkTick(dt);zoneMotes(dt);updateOthers(dt);animateDungeonLights(tAll);updatePortals(tAll);
+  updateFx(dt);VFX.update(dt);updateAmbient(dt);seaTick(dt);if(typeof questMarkTick==='function')questMarkTick(dt);zoneMotes(dt);updateOthers(dt);animateDungeonLights(tAll);updatePortals(tAll);
   if(mode!=='title'){const pp=player?player.position:camera.position;LightPool.update(dt,pp);InstChunks.update(camera.position);mapSplitTick(dt);for(const m of monsters)if(m.mesh)setFarHidden(m.mesh,m.mesh.position.distanceToSquared(camera.position)>95*95);}
   Perf.tick();fpsTick();Rebase.tick(dt);
   updateHazards(dt);updateTeles(dt);for(const f of lairFlames)f.scale.set(1+Math.sin(tAll*11+f.position.z)*.12,1+Math.sin(tAll*7+f.position.z)*.2,1);renderMirror(dt);
@@ -23265,6 +23369,7 @@ const LIB_BOOKS={
     '글꼴 — 국민대학교 성곡 세리프 · 국민대학교 성곡 세미세리프. 저작권: ⓒ 국민대학교 (CC BY-ND 라이선스).',
     '효과음 — 일부 효과음은 ZapSplat(zapsplat.com)에서 받았다.',
     '효과음 — 폭약이 터지는 소리는 Epic Stock Media의 「Stealth Game」 효과음 모음에서 왔다.',
+    '효과음 — 바닷가 파도 소리는 Zenhiser(zenhiser.com)의 「Calm Sea Wash」 소리에서 왔다.',
     '이 세계의 글자와 소리 가운데 많은 것이 이들의 손에서 왔다. 고마운 마음을 여기 남긴다.']},
 };
 Object.assign(BOOKS,LIB_BOOKS);
