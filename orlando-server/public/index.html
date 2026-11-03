@@ -15661,17 +15661,30 @@ const ISLE_FX={snow:null,water:null,crystals:[],gate:null,mill:null,mhTiles:[]};
       roundTrees(out.rt,.27,.25,false);pines(out.pn,.19,false);deadTrees(out.dd);MH_DECOR=out.rt.length+out.pn.length+out.dd.length+out.rk.length;
       noSh(inst(rockG,mat(0x7a766c),out.rk,(t,e,sv,v)=>{e.set(srand()*3,srand()*3,0);sv.set(t.s*2.2,t.s*1.6,t.s*2);v.set(t.x,heightAt(t.x,t.z)+t.s*.3,t.z);}));}
     /* 이정표: 목과 산길 한가운데 길가에, 양쪽으로 가는 땅 이름과 레벨 */
-    {const signTex=(txt,sub)=>{const cv=document.createElement('canvas');cv.width=256;cv.height=96;const c=cv.getContext('2d');c.fillStyle='#6a4a2c';c.fillRect(0,0,256,96);c.strokeStyle='#3a2616';c.lineWidth=6;c.strokeRect(3,3,250,90);
-        c.fillStyle='#f4e6c4';c.textAlign='center';c.textBaseline='middle';c.font='700 30px "KMUSunggokSemiSerif","Gowun Batang",serif';c.fillText(txt,128,36);c.font='22px "KMUSunggokSemiSerif","Gowun Batang",serif';c.fillStyle='#e8c878';c.fillText(sub,128,72);
-        const t=new THREE.CanvasTexture(cv);t.anisotropy=4;return t;};
-      const postM=mat(0x5a4029),nm=k=>(ZONES[k]?ZONES[k].name:k).replace(/^(마르쿠스|불타는 협곡) /,''),lv=k=>{const L=OR.ZONE_LEVELS[k];return L?`Lv ${L[0]}–${L[1]}`:'';};
+    /* 갈림길 표지판: 길가 기둥 하나에 화살표 판 두 개. 판은 기둥 옆으로 뻗어 가는 땅 쪽을 가리키고(위 = 다음 땅, 아래 = 앞 땅),
+       앞뒤 두 면 모두 글씨가 있다 (어느 쪽에서 봐도 읽힌다). 밝은 나무판에 짙은 글씨, 밤에도 읽히게 판이 살짝 빛난다 */
+    {const signTex=(txt,sub,right)=>{const cv=document.createElement('canvas');cv.width=512;cv.height=160;const c=cv.getContext('2d'),T=56;
+        c.save();if(!right){c.translate(512,0);c.scale(-1,1);}   /* 화살촉은 가리키는 쪽 끝 */
+        c.fillStyle='#c79a5e';c.beginPath();c.moveTo(6,10);c.lineTo(512-T,10);c.lineTo(506,80);c.lineTo(512-T,150);c.lineTo(6,150);c.closePath();c.fill();
+        c.strokeStyle='rgba(120,80,40,.35)';c.lineWidth=2;for(let y=30;y<150;y+=22){c.beginPath();c.moveTo(10,y+Math.sin(y)*3);c.lineTo(512-T-8,y+Math.cos(y)*3);c.stroke();}   /* 나뭇결 */
+        c.strokeStyle='#5a3a1c';c.lineWidth=8;c.beginPath();c.moveTo(6,10);c.lineTo(512-T,10);c.lineTo(506,80);c.lineTo(512-T,150);c.lineTo(6,150);c.closePath();c.stroke();c.restore();
+        const cx=right?(512-T)/2+6:256+T/2-3;c.textAlign='center';c.textBaseline='middle';
+        let fs=50;c.font=`700 ${fs}px "KMUSunggokSemiSerif","Gowun Batang",serif`;while(c.measureText(txt).width>400&&fs>30){fs-=2;c.font=`700 ${fs}px "KMUSunggokSemiSerif","Gowun Batang",serif`;}
+        c.fillStyle='#2a1a0c';c.fillText(txt,cx,60);c.font='600 34px "KMUSunggokSemiSerif","Gowun Batang",serif';c.fillStyle='#6a2a12';c.fillText(sub,cx,118);
+        const t=new THREE.CanvasTexture(cv);t.anisotropy=8;t.encoding=THREE.sRGBEncoding;return t;};
+      const postM=mat(0x4e3622),nm=k=>(ZONES[k]?ZONES[k].name:k).replace(/^(마르쿠스|불타는 협곡) /,''),lv=k=>{const L=OR.ZONE_LEVELS[k];return L?`Lv ${L[0]}–${L[1]}`:'';};
+      const AW=2.4,AH=.75;
       for(const l of OR.MH.links){if(l.k!=='neck')continue;const mx=(l.ax+l.bx)/2,mz=(l.az+l.bz)/2,r=MHR.near(mx,mz),len=Math.hypot(l.bx-l.ax,l.bz-l.az),ux=(l.bx-l.ax)/len,uz=(l.bz-l.az)/len;
         const px=r.x-uz*5.5+ux*(l.k==='neck'?-14:6),pz=r.z+ux*5.5+uz*(l.k==='neck'?-14:6),y=heightAt(px,pz);
         const g=new THREE.Group();g.position.set(px,y,pz);scene.add(g);
-        const post=new THREE.Mesh(new THREE.CylinderGeometry(.12,.15,3.2,6),postM);post.position.y=1.6;g.add(post);colliders.push({x:px,z:pz,r:.3,h:3});
-        for(const [to,sg,yy] of [[l.b,1,2.6],[l.a,-1,1.85]]){const ry=Math.atan2(-ux*sg,-uz*sg),fx=Math.sin(ry),fz=Math.cos(ry);
-          const wood=new THREE.Mesh(new THREE.BoxGeometry(1.95,.76,.07),postM);wood.position.set(-fx*.06,yy,-fz*.06);wood.rotation.y=ry;g.add(wood);
-          const bd=new THREE.Mesh(new THREE.PlaneGeometry(1.9,.72),new THREE.MeshStandardMaterial({map:signTex(nm(to),lv(to)),roughness:.9}));bd.position.set(fx*.0,yy,fz*.0);bd.rotation.y=ry;g.add(bd);}}}
+        const post=new THREE.Mesh(new THREE.CylinderGeometry(.11,.14,3.4,8),postM);post.position.y=1.7;post.castShadow=true;g.add(post);
+        const cap=new THREE.Mesh(new THREE.ConeGeometry(.17,.25,8),postM);cap.position.y=3.5;g.add(cap);colliders.push({x:px,z:pz,r:.3,h:3});
+        for(const [to,sg,yy] of [[l.b,1,2.75],[l.a,-1,1.9]]){const dx=ux*sg,dz=uz*sg,th=Math.atan2(-dz,dx),nx=Math.sin(th),nz=Math.cos(th),ox=dx*(AW/2+.12),oz=dz*(AW/2+.12);
+          const arm=new THREE.Group();arm.position.set(ox,yy,oz);arm.rotation.y=th;g.add(arm);   /* 판의 +x = 가리키는 쪽 */
+          const body=new THREE.Mesh(new THREE.BoxGeometry(AW*.88,AW*.27,.06),postM);body.position.x=-AW*.055;body.castShadow=true;arm.add(body);
+          const nail=new THREE.Mesh(new THREE.BoxGeometry(.26,.12,.14),postM);nail.position.set(-AW/2-.02,0,0);arm.add(nail);   /* 기둥에 박은 쇠띠 */
+          for(const side of [1,-1]){const m=new THREE.MeshStandardMaterial({map:signTex(nm(to),lv(to),side>0),roughness:.85,transparent:true,alphaTest:.5,emissive:0x3a2a18,emissiveIntensity:.35});
+            const bd=new THREE.Mesh(new THREE.PlaneGeometry(AW,AW*160/512),m);bd.position.z=side*.035;if(side<0)bd.rotation.y=Math.PI;arm.add(bd);}}}}
     /* 엑시즈 문과 사냥터 끝 (밀골): 가장자리 보이지 않는 문 */
     const face=(dx,dz)=>Math.atan2(-dx,-dz),Z=k=>ZONES[k].name;
     const edge=(id,x,z,ry,hw,label,to)=>{const g=new THREE.Group();g.position.set(x,heightAt(x,z),z);scene.add(g);PORTALS.push({id,x,z,ry,hw,minLv:0,label,to,msg:null,color:0x9ad06a,door:1,edge:1,fx:{g,cols:[]}});};
