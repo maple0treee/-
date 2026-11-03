@@ -15225,7 +15225,7 @@ function isleHeight(x,z){
   else if(I.id==='subcus'&&d>R-6)h+=Math.min(30,Math.pow(d-(R-6),1.4)*.6);   /* 동굴만 가장자리가 벽. 나머지는 땅이 그대로 이어진다 */
   return h;
 }
-const ISLE_FX={snow:null,water:null,crystals:[],gate:null,mill:null};
+const ISLE_FX={snow:null,water:null,crystals:[],gate:null,mill:null,mhTiles:[]};   /* mhTiles: 사냥터 땅 판 (사냥터에 있을 때만 그린다) */
 (function buildIsles(){
   const ISLES=OR.ISLES;
   const add=(m,cast=true)=>{m.castShadow=cast;m.receiveShadow=true;scene.add(m);return m;};
@@ -15392,7 +15392,7 @@ const ISLE_FX={snow:null,water:null,crystals:[],gate:null,mill:null};
       const pos=g.attributes.position,cols=[],tmp=new THREE.Color();
       for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i),h=mhHeight(x,z);pos.setY(i,h);colAt(x,z,h,tmp);const vv=(Math.sin(x*.7)*Math.cos(z*.6)+Math.sin(x*.21+z*.33))*.035;tmp.offsetHSL(0,0,vv);cols.push(tmp.r,tmp.g,tmp.b);}
       g.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));g.computeVertexNormals();
-      const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,flatShading:true}));m.receiveShadow=true;scene.add(m);}
+      const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,flatShading:true}));m.receiveShadow=true;scene.add(m);ISLE_FX.mhTiles.push(m);}
     /* 땅 안 꾸밈 (예전 그대로 + 새 땅). 길·물·나가는 자리는 피한다 */
     const dr=(x,z)=>MHR.near(x,z).d,dry=(x,z)=>heightAt(x,z)>-.15;
     for(const id of OR.MHUNT){const I=ISLES[id],kd=I.kind,P=placer(I);
@@ -15606,6 +15606,9 @@ function updateIsles(t,dt){
     if(on){const pp=S.pp,c=camera.position;for(let i=0;i<pp.length;i+=3){pp[i+1]-=dt*(1.6+(i%7)*.12);pp[i]+=Math.sin(t*.8+i)*dt*.3;if(pp[i+1]<c.y-6){pp[i+1]=c.y+18;pp[i]=c.x+(Math.random()-.5)*60;pp[i+2]=c.z+(Math.random()-.5)*60;}
         if(Math.abs(pp[i]-c.x)>32)pp[i]=c.x+(Math.random()-.5)*60;if(Math.abs(pp[i+2]-c.z)>32)pp[i+2]=c.z+(Math.random()-.5)*60;}
       S.pts.geometry.attributes.position.needsUpdate=true;}}
+  /* 사냥터 땅 판은 엑시즈 바로 남쪽까지 넓게 깔려 있어서, 엑시즈에서 보면 바깥 산비탈 능선 꼭대기만 안개 위로 떠올라 하늘에 회색 띠처럼 보였다.
+     그래서 사냥터 안에 있을 때만 그린다 */
+  {const I=x>=800?OR.isleAt(x,player.position.z):null,on=!!(I&&OR.MHUNT.includes(I.id));for(const m of ISLE_FX.mhTiles)if(m.visible!==on)m.visible=on;}
   if(ISLE_FX.edgeFog){ISLE_FX.edgeFogU.uT.value=t;const here=x>=800?OR.isleAt(x,player.position.z).id:null;for(const F of ISLE_FX.edgeFog){const v=F.id===here;if(F.set[0].visible!==v)for(const m of F.set)m.visible=v;
       if(v)for(const m of F.set){const M=m.userData.mist;if(!M)continue;m.material.color.copy(scene.fog.color).lerp(_whiteC,.25);
         const P=M.pp,S=M.seed;for(let i=0;i<S.length/3;i++){const a=S[i*3]+t*.004*(1+(i%3)*.4),r=S[i*3+1]+Math.sin(t*.07+S[i*3+2])*5;P[i*3]=M.I.x+Math.cos(a)*r;P[i*3+2]=M.I.z+Math.sin(a)*r;}
