@@ -8823,7 +8823,7 @@ function makeNpcStick(o){const G0=o.gear,g=makeStickPlayer('warrior',G0?{helm:G0
   const mk=new THREE.Mesh(new THREE.OctahedronGeometry(.16,0),mat(0xf0c95f,{emissive:0xb08a20,emissiveIntensity:.8}));mk.position.y=(o.small?2.2:2.6)/(o.small?.7:1);mk.userData.marker=true;g.add(mk);u.marker=mk;
   if(o.cloth||(typeof NPC_CLOTHES!=='undefined'&&NPC_CLOTHES))npcClothes(g,o);
   if(o.gear)npcGearOn(g,o);
-  if(o.fine){npcFine(g,o);npcFineMerge(g);}
+  if(o.fine){npcFine(g,o);npcRoundBoxes(g);npcFineMerge(g);}
   g.traverse(m=>{if(m.isMesh)m.castShadow=true;});u.ph=Math.random()*6;return g;}
 /* ---------- NPC 옷: 바지·치마·긴 옷·소매·앞치마·망토·신발 (사진으로 먼저 보여 드리는 중: NPC_CLOTHES) ----------
    o.cloth로 정할 수 있고, 없으면 생김새로 고른다: 긴 머리 → 치마, 지팡이·두건 → 긴 옷, 그 밖 → 바지 */
@@ -8911,10 +8911,19 @@ function npcClothes(g,o){const S=g.userData.stick;if(!S)return;const C=o.cloth||
 
 /* ---------- 이름 있는 NPC를 정교하게: 얼굴(눈썹·코·입·귀·주름)·머리 모양·수염·몸집·옷 마감 (look.fine, 사람마다 NPC_FINE) ----------
    막대 인형 위에 덧붙이기만 한다. 주민(이름 없는 사람)은 그대로 */
+/* 모서리를 둥글린 상자 (모서리마다 축별 반지름: 얇은 판도 넓은 면 모서리는 둥글게) */
+const _rbox=new Map();
+function npcRBox(w,h,d){const k=[w,h,d].map(v=>v.toFixed(4)).join(',');let g=_rbox.get(k);if(g)return g;
+  g=new THREE.BoxGeometry(w,h,d,6,6,6);const P=g.attributes.position,hw=[w/2,h/2,d/2],R=hw.map(v=>Math.min(v*.9,.04)),v=new THREE.Vector3();
+  for(let i=0;i<P.count;i++){const p=[P.getX(i),P.getY(i),P.getZ(i)],c=p.map((x,a)=>Math.max(-(hw[a]-R[a]),Math.min(hw[a]-R[a],x)));v.set((p[0]-c[0])/R[0],(p[1]-c[1])/R[1],(p[2]-c[2])/R[2]);if(v.lengthSq()>1e-9)v.normalize();P.setXYZ(i,c[0]+v.x*R[0],c[1]+v.y*R[1],c[2]+v.z*R[2]);}
+  g.computeVertexNormals();_rbox.set(k,g);return g;}
+/* 정교한 NPC 몸에 남은 네모 상자(신발·앞치마·책 같은)를 모두 둥근 모서리 상자로 바꾼다 */
+function npcRoundBoxes(g){g.traverse(o=>{if(o.isMesh&&o.geometry&&o.geometry.type==='BoxGeometry'){const p=o.geometry.parameters;o.geometry=npcRBox(p.width,p.height,p.depth);}});}
 function npcFine(g,o){const S=g.userData.stick,F=o.fine;if(!S||!F)return;const u=g.userData,H=S.head,R0=.22;
   const m=(c,x)=>mat(c,Object.assign({flatShading:false,roughness:.75},x||{}));
   const P=(par,geo,c,x,y,z,r,s)=>{const q=new THREE.Mesh(geo,c&&c.isMaterial?c:m(c));q.position.set(x,y,z);if(r){q.rotation.order='YXZ';q.rotation.set(r[0],r[1],r[2]||0);}if(s)q.scale.set(s[0],s[1],s[2]);par.add(q);return q;};
-  const sph=(r,a=12,b=8)=>new THREE.SphereGeometry(r,a,b),box=(a,b,c)=>new THREE.BoxGeometry(a,b,c),cyl=(r0,r1,h,n=10)=>new THREE.CylinderGeometry(r0,r1,h,n);
+  const sph=(r,a=12,b=8)=>new THREE.SphereGeometry(r,a,b),box=(a,b,c)=>npcRBox(a,b,c),cyl=(r0,r1,h,n=10)=>new THREE.CylinderGeometry(r0,r1,h,n);
+  const U=new THREE.SphereGeometry(1,16,10),el=(c,x,y,z,sx,sy,sz,r)=>P(H,U,c,x,y,z,r,[sx,sy,sz]);   /* 둥근 알 모양 (네모 상자 대신) */
   /* 얼굴 겉면 위 한 점: 자리와 겉면을 따라 눕힌 각도 */
   const surf=(x,y,d=0)=>{const z=Math.sqrt(Math.max(0,R0*R0-x*x-y*y));const n=new THREE.Vector3(x,y,z).normalize();return{p:[x+n.x*d,y+n.y*d,z+n.z*d],r:[-Math.asin(n.y),Math.atan2(n.x,n.z),0]};};
   const onFace=(geo,c,x,y,d,s,rz=0)=>{const q=surf(x,y,d);return P(H,geo,c,q.p[0],q.p[1],q.p[2],[q.r[0],q.r[1],rz],s);};
@@ -8934,7 +8943,7 @@ function npcFine(g,o){const S=g.userData.stick,F=o.fine;if(!S||!F)return;const u
   if(F.ears!==false)for(const sx of [-1,1]){P(H,sph(.048,10,8),skin,sx*.214,-.005,-.01,null,[.42,1,.72]);if(F.earring)P(H,sph(.014,6,4),m(F.earring,{metalness:.7,roughness:.3}),sx*.218,-.06,0);}
   /* 눈썹: 색·굵기·기울기 (+는 안쪽이 내려간 매서운 눈썹, -는 순한 눈썹) */
   if(F.brow!==false){const B=F.brow||{},bc=B.c??hairC,th=B.th??.018,tl=B.t??0;
-    for(const sx of [-1,1]){const b=onFace(box(B.w??.07,th,.02),bc,sx*.078,.098+(B.y??0),.002,null,sx*tl);if(B.bushy)b.scale.set(1.15,1.6,1.2);if(B.arch){b.rotation.z+=sx*.2;}}}
+    for(const sx of [-1,1]){const w=(B.w??.07)*.56,b=onFace(U,bc,sx*.078,.098+(B.y??0),-.002,[w,th*.45,.009],sx*tl);if(B.bushy)b.scale.multiply(new THREE.Vector3(1.1,1.3,1.3));if(B.arch){b.rotation.z+=sx*.2;}}}   /* 끝이 가늘어지는 눈썹 */
   /* 코 */
   {const nc=shade2(sk,.94),n=F.nose||'button';
     if(n==='button')onFace(sph(.026,10,8),nc,0,-.02,-.004);
@@ -8942,30 +8951,34 @@ function npcFine(g,o){const S=g.userData.stick,F=o.fine;if(!S||!F)return;const u
     else if(n==='long'){const q=surf(0,-.005,0);P(H,new THREE.ConeGeometry(.024,.085,8),nc,0,-.03,q.p[2]+.025,[1.75,0,0]);}
     else if(n==='hook'){onFace(sph(.03,10,8),nc,0,-.01,-.004,[.8,1.3,1]);onFace(sph(.022,8,6),nc,0,-.045,.006);}}
   /* 입 */
-  if(F.mouth!==false){const lc=F.lipC??0x7a3a30,mo=F.mouth||'smile',y=F.beard?-.082:-.075;
-    if(mo==='smile'||mo==='grin'||mo==='frown'||mo==='smirk'){const w=mo==='grin'?.05:.036;const q=onFace(new THREE.TorusGeometry(w,.009,5,12,Math.PI),lc,mo==='smirk'?.018:0,y,.004,[1,.75,1]);q.rotation.z=mo==='frown'?0:Math.PI+(mo==='smirk'?.35:0);
-      if(mo==='grin'){const t=onFace(new THREE.CircleGeometry(w*.92,14,Math.PI,Math.PI),0xf4f0ea,0,y+.002,.003,[1,.7,1]);t.material.side=THREE.DoubleSide;}}
-    else if(mo==='flat')onFace(box(.05,.01,.012),lc,0,y,.003);
-    else if(mo==='o')onFace(sph(.016,8,6),0x4a2020,0,y,.001,[1,1.2,.5]);}
+  if(F.mouth!==false){const lc=F.lipC??0x6a2a26,mo=F.mouth||'smile',y=F.beard?-.085:-.077,dm=m(lc,{side:THREE.DoubleSide,roughness:.6});
+    /* 입: 양 끝이 가늘어지는 초승달 모양 (위 곡선 u, 아래 곡선 d로 입 벌림 정도를 정한다) */
+    const lip=(w,u,d,ox=0,tilt=0)=>{const sh=new THREE.Shape();sh.moveTo(-w,0);sh.quadraticCurveTo(0,u*2,w,0);sh.quadraticCurveTo(0,d*2,-w,0);const q=onFace(new THREE.ShapeGeometry(sh,14),dm,ox,y,.0025);q.rotation.z=tilt;return q;};
+    if(mo==='smile')lip(.036,-.008,-.019);
+    else if(mo==='grin'){lip(.042,-.005,-.042);const sh=new THREE.Shape();sh.moveTo(-.03,-.006);sh.quadraticCurveTo(0,-.02,.03,-.006);sh.quadraticCurveTo(0,-.013,-.03,-.006);const t=onFace(new THREE.ShapeGeometry(sh,10),m(0xf6f2ea,{side:THREE.DoubleSide}),0,y,.0035);}   /* 이 */
+    else if(mo==='frown')lip(.03,.013,.004);
+    else if(mo==='flat')lip(.03,-.002,-.008);
+    else if(mo==='smirk')lip(.031,-.003,-.013,.012,.22);
+    else if(mo==='o')onFace(sph(.016,10,8),0x4a2020,0,y,.001,[1,1.2,.5]);}
   /* 볼 홍조·주근깨·주름·흉터·안경·덧댄 붕대 */
   if(F.blush)for(const sx of [-1,1]){const b=onFace(sph(.034,10,6),m(F.blush,{transparent:true,opacity:.42}),sx*.115,-.045,-.012,[1,.7,.4]);b.renderOrder=1;}
   if(F.freck){const fc=F.freck===true?shade2(sk,.62):F.freck;for(const sx of [-1,1])for(const [dx,dy] of [[.1,-.02],[.13,-.035],[.115,-.055],[.085,-.045],[.145,-.015]])onFace(sph(.0065,5,4),fc,sx*dx,dy,-.002);}
   if(F.age){const wc=shade2(sk,.72);
-    for(let k=0;k<Math.min(3,F.age+1);k++)onFace(box(.12-k*.02,.005,.006),wc,0,.15+k*.022,0);   /* 이마 주름 */
-    for(const sx of [-1,1]){onFace(box(.03,.005,.006),wc,sx*.13,.035,0,null,sx*.5);if(F.age>1){onFace(box(.03,.005,.006),wc,sx*.132,.015,0,null,-sx*.35);onFace(box(.04,.005,.006),wc,sx*.072,-.005,0,null,0);}   /* 눈가·눈 밑 */
-      if(F.age>1)onFace(box(.006,.05,.006),wc,sx*.05,-.06,0,null,sx*.35);}}   /* 팔자 주름 */
-  if(F.scar){const sx=F.scar==='r'?1:-1;onFace(box(.008,.11,.008),0xb86a5a,sx*.085,.04,0,null,sx*.35);}
-  if(F.cheekScar)onFace(box(.006,.05,.007),0xb86a5a,.13,-.04,0,null,.6);
+    for(let k=0;k<Math.min(3,F.age+1);k++)onFace(U,wc,0,.15+k*.022,0,[.06-k*.01,.0028,.003]);   /* 이마 주름 */
+    for(const sx of [-1,1]){onFace(U,wc,sx*.13,.035,0,[.015,.0026,.003],sx*.5);if(F.age>1){onFace(U,wc,sx*.132,.015,0,[.015,.0026,.003],-sx*.35);onFace(U,wc,sx*.072,-.005,0,[.02,.0026,.003],0);}   /* 눈가·눈 밑 */
+      if(F.age>1)onFace(U,wc,sx*.05,-.06,0,[.0028,.025,.003],sx*.35);}}   /* 팔자 주름 */
+  if(F.scar){const sx=F.scar==='r'?1:-1;onFace(U,0xb86a5a,sx*.085,.04,0,[.004,.055,.004],sx*.35);}
+  if(F.cheekScar)onFace(U,0xb86a5a,.13,-.04,0,[.0035,.025,.004],.6);
   if(F.glasses){const gm=m(F.glasses,{metalness:.7,roughness:.3});for(const e of eyes){const q=surf(e.position.x,e.position.y,.012);P(H,new THREE.TorusGeometry(.042,.006,6,18),gm,q.p[0],q.p[1],q.p[2],q.r);}
     onFace(box(.05,.006,.006),gm,0,.04,.012);for(const sx of [-1,1])P(H,box(.006,.006,.17),gm,sx*.19,.04,.07);}
   if(F.bandage){const bm=m(0xf2eee4);P(H,new THREE.TorusGeometry(.222,.024,6,22),bm,0,.1,0,[Math.PI/2+.12,0,0]);onFace(box(.045,.03,.008),bm,-.12,-.03,0,null,.3);}
   /* 수염: 짧게 다듬은·텁수룩한·길게 늘어진·염소·콧수염만 */
   if(F.beard){const bc=F.beardC??o.beard??hairC,bm=m(bc,{roughness:.9}),st=F.beard;
-    const mous=()=>{for(const sx of [-1,1]){const q=surf(sx*.032,-.05,.004);const c=P(H,cyl(.017,.023,.06,8),bm,q.p[0],q.p[1],q.p[2],[0,q.r[1],sx*(Math.PI/2-.35)]);c.rotation.order='YXZ';}};
+    const mous=()=>{for(const sx of [-1,1]){const q=surf(sx*.033,-.052,.002);P(H,U,bm,q.p[0],q.p[1],q.p[2],[q.r[0],q.r[1],-sx*.32],[.036,.013,.016]);}};   /* 콧수염: 둥글게 처진 두 가닥 */
     if(st!=='mous'&&st!=='goatee'){const full=st!=='short';
       P(H,sph(.13,14,10),bm,0,-.135,.095,null,full?[1.28,1.1,.78]:[1.18,.92,.72]);   /* 턱 */
       for(const sx of [-1,1])P(H,sph(.06,10,8),bm,sx*.15,-.075,.06,null,full?[.9,1.25,1]:[.7,1,.8]);   /* 뺨 */
-      for(const sx of [-1,1])P(H,box(.03,.1,.06),bm,sx*.205,-.01,.02);   /* 구레나룻 */
+      for(const sx of [-1,1])el(bm,sx*.203,-.015,.02,.018,.06,.035);   /* 구레나룻 */
       if(st==='long'){P(H,new THREE.ConeGeometry(.1,.26,10),bm,0,-.31,.11,[Math.PI+.15,0,0],[1.1,1,.7]);}}
     if(st==='goatee')P(H,new THREE.ConeGeometry(.045,.1,8),bm,0,-.2,.15,[Math.PI+.35,0,0]);
     mous();}
@@ -8974,14 +8987,14 @@ function npcFine(g,o){const S=g.userData.stick,F=o.fine;if(!S||!F)return;const u
     const cap=(cov=.46,rx=-.25,r=.236,s=null)=>{if(hood)return;P(H,new THREE.SphereGeometry(r,18,10,0,Math.PI*2,0,Math.PI*cov),hm,0,.02,0,[rx,0,0],s);};
     const back=(len,r1=.2,r2=.235,y=-.18,arc=1)=>P(H,new THREE.CylinderGeometry(r1,r2,len,16,1,true,Math.PI*(1-arc)/2+Math.PI*.5,Math.PI*arc),hd,0,y,-.03);
     const bangs=(w=.8)=>{P(H,new THREE.SphereGeometry(.238,18,8,Math.PI/2-Math.PI*w/2,Math.PI*w,0,Math.PI*.33),hm,0,.012,.004);};   /* 이마를 덮는 앞머리: 눈썹 바로 위까지 */
-    const side=(len=.14)=>{for(const sx of [-1,1])P(H,box(.04,len,.07),hm,sx*.205,-.01-len/2+.08,.03);};
+    const side=(len=.14)=>{for(const sx of [-1,1])P(H,U,hm,sx*.205,-.01-len/2+.08,.025,[0,0,sx*.06],[.024,len*.55,.045]);};   /* 귀 앞으로 내려오는 옆머리 */
     switch(F.hair){
       case 'crop':cap(.4,-.2,.229);side(.1);break;
       case 'short':cap(.46);side(.13);break;
       case 'slick':cap(.44,-.4,.232);side(.12);P(H,sph(.06,10,8),hm,.07,.19,.09,null,[1.4,.5,1]);break;
       case 'messy':cap(.48,-.2,.24);side(.12);for(let i=0;i<7;i++){const a=i*.95;P(H,new THREE.ConeGeometry(.045,.12,5),hm,Math.cos(a)*.13,.18+(i%2)*.03,Math.sin(a)*.12-.03,[Math.sin(a)*.7,0,-Math.cos(a)*.7]);}break;
       case 'curly':cap(.47);for(let i=0;i<14;i++){const a=i/14*Math.PI*2,b=(i%3)*.2+.3;P(H,sph(.055,8,6),hm,Math.cos(a)*.2*Math.sin(b+.6),.1+Math.cos(b+.6)*.13,Math.sin(a)*.19*Math.sin(b+.6)-.03);}side(.1);break;
-      case 'balding':for(const sx of [-1,1])P(H,box(.05,.11,.16),hm,sx*.2,.0,-.05);P(H,new THREE.CylinderGeometry(.226,.224,.12,16,1,true,Math.PI*.6,Math.PI*.8),hd,0,.0,0);break;
+      case 'balding':for(const sx of [-1,1])P(H,U,hm,sx*.2,.0,-.05,null,[.03,.065,.09]);P(H,new THREE.CylinderGeometry(.226,.224,.12,16,1,true,Math.PI*.6,Math.PI*.8),hd,0,.0,0);break;
       case 'bob':cap(.5,-.15,.248);back(.26,.236,.256,-.07,1.35);bangs(.7);break;
       case 'long':cap(.47);bangs(.55);back(.56,.205,.245,-.24);side(.3);break;
       case 'wild':cap(.5,-.15,.25);back(.5,.22,.29,-.21);side(.3);break;   /* 길고 부스스한 머리 (늙은 마법사) */
