@@ -8841,7 +8841,7 @@ function makeNpcStick(o){const G0=o.gear,g=makeStickPlayer('warrior',G0?{helm:G0
   const mk=new THREE.Mesh(new THREE.OctahedronGeometry(.16,0),mat(0xf0c95f,{emissive:0xb08a20,emissiveIntensity:.8}));mk.position.y=(o.small?2.2:2.6)/(o.small?.7:1);mk.userData.marker=true;g.add(mk);u.marker=mk;
   if(o.cloth||(typeof NPC_CLOTHES!=='undefined'&&NPC_CLOTHES))npcClothes(g,o);
   if(o.gear)npcGearOn(g,o);
-  if(o.fine){npcFine(g,o);npcRoundBoxes(g);npcFineMerge(g);}
+  if(o.fine){npcFine(g,o);npcRoundBoxes(g);if(!o.lhelm)npcSculptMerge(g,o);npcFineMerge(g);}
   if(o.lhelm)lDress(g,o);
   g.traverse(m=>{if(m.isMesh)m.castShadow=true;});u.ph=Math.random()*6;return g;}
 /* ---------- NPC 옷: 바지·치마·긴 옷·소매·앞치마·망토·신발 (사진으로 먼저 보여 드리는 중: NPC_CLOTHES) ----------
@@ -9149,6 +9149,111 @@ function lDress(g,o){const S=g.userData.stick;if(!S)return;const H=S.head,U=S.up
     for(const sx of [-1,1]){dot(U,trim,sx*.12,.56,.175,.03,.45);dot(U,steelD,sx*.12,.56,.18,.016,.4);}
     const ch=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-.12,.56,.18),new THREE.Vector3(0,.52,.2),new THREE.Vector3(.12,.56,.18)]),12,.005,5,false),trim);U.add(ch);}   /* 망토 걸쇠와 은 사슬 */
 }
+/* ---------- 이름 있는 NPC: 지금 조각들을 모양·자리·색 그대로 한 덩어리로 매끈하게 이어 빚기 ----------
+   마디(머리·윗몸·팔·다리·치마)마다 같은 색 조각을 거리 함수로 바꿔 부드럽게 잇고, 겉면 하나로 다시 만든다.
+   얇은 천(머리 덮개·자락)은 두께와 둥글게 말린 단을, 머리카락·수염은 결을, 옷은 잔주름을 넣는다.
+   눈·눈썹·볼 홍조·주름 같은 얼굴 그림 조각, 반짝이는 쇠붙이, 빛나는 것은 따로 둔다.
+   빚는 일은 일꾼 스레드에서 하고, 다 되면 옛 조각과 바꿔 낀다 (그 전까지는 지금 모습 그대로). 입은 그리지 않는다 */
+const NSM={T:.024,done:new Map(),wait:new Map(),w:null,id:0};
+function _nsmWorkerMain(){
+  const TAU=Math.PI*2;
+  const smin=(a,b,k)=>{const h=Math.max(k-Math.abs(a-b),0)/k;return Math.min(a,b)-h*h*k*.25;};
+  const edge=(d,c,T)=>{d-=T*.3*Math.max(0,1-Math.abs(c)/T);return -smin(-d,-c,T*.6);};   /* 얇은 천 가장자리: 둥글게 말린 단 (천 두께는 원래 겉면에서 안쪽으로) */
+  const arcOut=(a,a0,len)=>{if(len>=TAU-1e-3)return 0;const d=((a-a0)%TAU+TAU)%TAU;if(d<=len)return -Math.min(d,len-d);return Math.min(d-len,TAU-d);};
+  function primF(q){const p=q.p,t=q.t,T=q.T/q.sMin,e=q.e;let f=null;
+    if(t==='SphereGeometry'){const r=p.radius,full=p.phiLength>=TAU-1e-3&&p.thetaStart<=1e-3&&p.thetaStart+p.thetaLength>=Math.PI-1e-3;
+      f=full?(x,y,z)=>Math.hypot(x,y,z)-r:(x,y,z)=>{const l=Math.hypot(x,y,z)||1e-6,th=Math.acos(Math.max(-1,Math.min(1,y/l))),ph=Math.atan2(z,-x);
+        const dt=Math.max(p.thetaStart-th,th-(p.thetaStart+p.thetaLength))*r,dp=arcOut(ph,p.phiStart,p.phiLength)*r*Math.sin(th);return edge(Math.abs(l-r+T/2)-T/2,Math.max(dt,dp),T);};}
+    else if(t==='CylinderGeometry'||t==='ConeGeometry'){const rT=t==='ConeGeometry'?0:p.radiusTop,rB=t==='ConeGeometry'?p.radius:p.radiusBottom,h=p.height,h2=h/2,sl=(rT-rB)/h,ca=1/Math.sqrt(1+sl*sl),open=p.openEnded||p.thetaLength<TAU-1e-3;
+      f=(x,y,z)=>{const r=rB+(rT-rB)*(y/h+.5),ds=(Math.hypot(x,z)-r)*ca,dc=Math.abs(y)-h2;
+        if(open)return edge(Math.abs(ds+T/2)-T/2,Math.max(dc,arcOut(Math.atan2(x,z),p.thetaStart,p.thetaLength)*Math.max(r,.01)),T);
+        return ds>0&&dc>0?Math.hypot(ds,dc):Math.max(ds,dc);};}
+    else if(t==='TorusGeometry'){const R=p.radius,tb=p.tube,arc=p.arc;f=(x,y,z)=>{let a=Math.atan2(y,x);if(a<0)a+=TAU;if(arc<TAU-1e-3&&a>arc)a=(a-arc<TAU-a)?arc:0;return Math.hypot(x-R*Math.cos(a),y-R*Math.sin(a),z)-tb;};}
+    else if(t==='BoxGeometry'){const hw=[p.width/2,p.height/2,p.depth/2],rr=Math.min(...hw.map(v=>Math.min(v*.9,.04)));f=(x,y,z)=>{const qx=Math.abs(x)-hw[0]+rr,qy=Math.abs(y)-hw[1]+rr,qz=Math.abs(z)-hw[2]+rr;return Math.hypot(Math.max(qx,0),Math.max(qy,0),Math.max(qz,0))+Math.min(Math.max(qx,qy,qz),0)-rr;};}
+    else if(t==='LatheGeometry'){const P=p.points,y0=P[0][1],y1=P[P.length-1][1];f=(x,y,z)=>{let r=P[0][0];if(y>=y1)r=P[P.length-1][0];else for(let i=1;i<P.length;i++)if(y<=P[i][1]){const u=(y-P[i-1][1])/((P[i][1]-P[i-1][1])||1e-6);r=P[i-1][0]+(P[i][0]-P[i-1][0])*u;break;}return Math.max(Math.hypot(x,z)-r,y0-y,y-y1);};}
+    if(!f)return null;const s=q.sMin;
+    return (X,Y,Z)=>f(e[0]*X+e[4]*Y+e[8]*Z+e[12],e[1]*X+e[5]*Y+e[9]*Z+e[13],e[2]*X+e[6]*Y+e[10]*Z+e[14])*s;}
+  const DET={hair:(x,y,z)=>.0006-.0012*Math.pow(Math.abs(Math.sin(Math.atan2(x,z)*16+y*4)),.6),
+    beard:(x,y,z)=>.0012-.0032*Math.pow(Math.abs(Math.sin(Math.atan2(x,z)*20+y*5+Math.sin(y*40)*.4)),.5),
+    cloth:(x,y,z)=>-.0022*Math.sin(Math.atan2(x,z)*7+y*6)*Math.sin(y*9+x*4)};
+  /* 겉면 그물: 성긴 격자로 먼저 훑고, 겉면 가까운 칸만 촘촘히 잰다 */
+  function net(f,b0,b1,h){const nx=Math.ceil((b1[0]-b0[0])/h)+1,ny=Math.ceil((b1[1]-b0[1])/h)+1,nz=Math.ceil((b1[2]-b0[2])/h)+1,idx=(i,j,k)=>i+nx*(j+ny*k);
+    const V=new Float32Array(nx*ny*nz),C=4,cx=Math.ceil((nx-1)/C)+1,cy=Math.ceil((ny-1)/C)+1,cz=Math.ceil((nz-1)/C)+1,CV=new Float32Array(cx*cy*cz);
+    for(let k=0;k<cz;k++)for(let j=0;j<cy;j++)for(let i=0;i<cx;i++)CV[i+cx*(j+cy*k)]=f(b0[0]+Math.min(i*C,nx-1)*h,b0[1]+Math.min(j*C,ny-1)*h,b0[2]+Math.min(k*C,nz-1)*h);
+    const need=new Uint8Array(nx*ny*nz),band=C*h*2;
+    for(let k=0;k<cz-1;k++)for(let j=0;j<cy-1;j++)for(let i=0;i<cx-1;i++){let lo=1e9;for(let c=0;c<8;c++)lo=Math.min(lo,Math.abs(CV[(i+(c&1))+cx*((j+(c>>1&1))+cy*(k+(c>>2&1)))]));
+      if(lo>band)continue;for(let kk=k*C;kk<=Math.min((k+1)*C,nz-1);kk++)for(let jj=j*C;jj<=Math.min((j+1)*C,ny-1);jj++)for(let ii=i*C;ii<=Math.min((i+1)*C,nx-1);ii++)need[idx(ii,jj,kk)]=1;}
+    for(let k=0;k<nz;k++)for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const q=idx(i,j,k);V[q]=need[q]?f(b0[0]+i*h,b0[1]+j*h,b0[2]+k*h):CV[Math.round(i/C)+cx*(Math.round(j/C)+cy*Math.round(k/C))];}
+    const cid=(i,j,k)=>i+(nx-1)*(j+(ny-1)*k),cellV=new Int32Array((nx-1)*(ny-1)*(nz-1)).fill(-1),P=[],N=[],I=[],v=new Float32Array(8);
+    const corners=[[0,0,0],[1,0,0],[0,1,0],[1,1,0],[0,0,1],[1,0,1],[0,1,1],[1,1,1]],edges=[[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],[0,4],[1,5],[2,6],[3,7]];
+    for(let k=0;k<nz-1;k++)for(let j=0;j<ny-1;j++)for(let i=0;i<nx-1;i++){let mask=0;for(let c=0;c<8;c++){const o=corners[c];v[c]=V[idx(i+o[0],j+o[1],k+o[2])];if(v[c]<0)mask|=1<<c;}
+      if(mask===0||mask===255)continue;let sx=0,sy=0,sz=0,n=0;
+      for(const [a,b] of edges){if((v[a]<0)===(v[b]<0))continue;const t=v[a]/(v[a]-v[b]),oa=corners[a],ob=corners[b];sx+=oa[0]+(ob[0]-oa[0])*t;sy+=oa[1]+(ob[1]-oa[1])*t;sz+=oa[2]+(ob[2]-oa[2])*t;n++;}
+      const x=b0[0]+(i+sx/n)*h,y=b0[1]+(j+sy/n)*h,z=b0[2]+(k+sz/n)*h;cellV[cid(i,j,k)]=P.length/3;P.push(x,y,z);
+      const e=h*.5,gx=f(x+e,y,z)-f(x-e,y,z),gy=f(x,y+e,z)-f(x,y-e,z),gz=f(x,y,z+e)-f(x,y,z-e),gl=Math.hypot(gx,gy,gz)||1;N.push(gx/gl,gy/gl,gz/gl);}
+    for(let k=1;k<nz-1;k++)for(let j=1;j<ny-1;j++)for(let i=1;i<nx-1;i++){const a=V[idx(i,j,k)]<0;
+      if(a!==(V[idx(i+1,j,k)]<0)){const q=[cellV[cid(i,j-1,k-1)],cellV[cid(i,j,k-1)],cellV[cid(i,j,k)],cellV[cid(i,j-1,k)]];if(q.every(x=>x>=0)){if(a)I.push(q[0],q[1],q[2],q[0],q[2],q[3]);else I.push(q[0],q[2],q[1],q[0],q[3],q[2]);}}
+      if(a!==(V[idx(i,j+1,k)]<0)){const q=[cellV[cid(i-1,j,k-1)],cellV[cid(i,j,k-1)],cellV[cid(i,j,k)],cellV[cid(i-1,j,k)]];if(q.every(x=>x>=0)){if(a)I.push(q[0],q[2],q[1],q[0],q[3],q[2]);else I.push(q[0],q[1],q[2],q[0],q[2],q[3]);}}
+      if(a!==(V[idx(i,j,k+1)]<0)){const q=[cellV[cid(i-1,j-1,k)],cellV[cid(i,j-1,k)],cellV[cid(i,j,k)],cellV[cid(i-1,j,k)]];if(q.every(x=>x>=0)){if(a)I.push(q[0],q[1],q[2],q[0],q[2],q[3]);else I.push(q[0],q[2],q[1],q[0],q[3],q[2]);}}}
+    return {P:new Float32Array(P),N:new Float32Array(N),I:new Uint32Array(I)};}
+  self.onmessage=ev=>{const {id,groups}=ev.data,out=[],tr=[];
+    for(const G of groups){const ps=G.prims.map(q=>({c:q.c,R:q.R,d:primF(q)})).filter(q=>q.d),K=G.K,det=DET[G.role];
+      const f=(x,y,z)=>{let d=1e9;for(const q of ps){const bx=x-q.c[0],by=y-q.c[1],bz=z-q.c[2],bd=Math.sqrt(bx*bx+by*by+bz*bz)-q.R;if(bd>d+K)continue;d=smin(d,q.d(x,y,z),K);}if(det&&d<.02)d+=det(x,y,z);return d;};
+      const r=net(f,G.b0,G.b1,G.h);out.push(r);tr.push(r.P.buffer,r.N.buffer,r.I.buffer);}
+    self.postMessage({id,out},tr);};
+}
+function _nsmWorker(){if(NSM.w!==null)return NSM.w;
+  try{NSM.w=new Worker(URL.createObjectURL(new Blob(['('+_nsmWorkerMain.toString()+')()'],{type:'text/javascript'})));
+    NSM.w.onmessage=e=>{const {id,out}=e.data,key=NSM.ids.get(id);NSM.ids.delete(id);
+      const geos=out.map(r=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(r.P,3));g.setAttribute('normal',new THREE.BufferAttribute(r.N,3));g.setIndex(new THREE.BufferAttribute(r.I,1));g.computeBoundingSphere();return g;});
+      NSM.done.set(key,geos);const cbs=NSM.wait.get(key)||[];NSM.wait.delete(key);for(const cb of cbs)cb(geos);};
+    NSM.w.onerror=()=>{NSM.w=false;};NSM.ids=new Map();}catch(e){NSM.w=false;}
+  return NSM.w;}
+/* 조각 하나 → 일꾼에게 보낼 거리 함수 설명 (마디 기준) */
+function _nsmSpec(m,par){const G=m.geometry,p=G.parameters,t=G.type;if(!p)return null;
+  const M=m===par?new THREE.Matrix4():(m.updateMatrix(),m.matrix.clone()),s=new THREE.Vector3();M.decompose(new THREE.Vector3(),new THREE.Quaternion(),s);
+  if(!G.boundingSphere)G.computeBoundingSphere();const c=G.boundingSphere.center.clone().applyMatrix4(M),R=G.boundingSphere.radius*Math.max(s.x,s.y,s.z);
+  const q={t,e:Array.from(new THREE.Matrix4().copy(M).invert().elements),sMin:Math.min(s.x,s.y,s.z),T:NSM.T,c:[c.x,c.y,c.z],R};
+  if(t==='LatheGeometry'){if(!p.points)return null;q.p={points:p.points.map(v=>[v.x,v.y])};}
+  else q.p=Object.assign({},p);
+  return q;}
+function _nsmOk(m,H,eyes){if(!m.isMesh||!m.visible||!m.material||Array.isArray(m.material))return false;const mt=m.material;
+  if(!mt.isMeshStandardMaterial||mt.map||mt.transparent||mt.metalness>=.5||(mt.emissive&&mt.emissive.getHex()&&mt.emissiveIntensity>0)||mt.visible===false)return false;
+  if(!['SphereGeometry','CylinderGeometry','ConeGeometry','TorusGeometry','BoxGeometry','LatheGeometry'].includes(m.geometry.type))return false;
+  if(eyes.has(m))return false;
+  if(m.parent===H||m===H){const s=m.scale,G=m.geometry;if(!G.boundingSphere)G.computeBoundingSphere();if(Math.min(s.x,s.y,s.z)*G.boundingSphere.radius<.012&&G.type!=='CylinderGeometry'&&G.type!=='TorusGeometry')return false;}   /* 얼굴에 그린 듯 얇은 조각 */
+  return true;}
+function npcSculptMerge(g,o){const S=g.userData.stick;if(!S)return;const H=S.head,F=(o&&o.fine)||{},u=g.userData;
+  const skinHex=u.mats[1].color.getHex(),skinC=u.mats[1].color,hairHex=F.hairC??o.hatC,beardHex=F.beardC??o.beard??hairHex;
+  const eyes=new Set(H.children.filter(e=>{if(!e.isMesh||!e.material.color)return false;if(e.material.color.getHex()===0x14110e)return true;const G=e.geometry;if(!G.boundingSphere)G.computeBoundingSphere();
+    const r=G.boundingSphere.radius*Math.max(e.scale.x,e.scale.y,e.scale.z),c=e.material.color,dc=Math.abs(c.r-skinC.r)+Math.abs(c.g-skinC.g)+Math.abs(c.b-skinC.b);return r<.04&&e.position.z>.12&&e.position.y>-.04&&dc>.25;}));
+  /* 입은 그리지 않는다 (입술·이) */
+  for(const c of H.children)if(c.isMesh&&c.geometry.type==='ShapeGeometry'&&c.position.z>.15&&c.position.y<-.05)c.visible=false;
+  /* 코: 따로 붙은 공 대신 작고 낮게, 살빛으로 얼굴에 녹여 붙인다 */
+  let nose=null;for(const c of H.children)if(c.isMesh&&c.geometry.type==='SphereGeometry'&&Math.abs(c.position.x)<.02&&c.position.z>.15&&c.position.y<.01&&c.position.y>-.08&&!eyes.has(c)){nose=c;break;}
+  if(nose){const r=nose.geometry.parameters.radius*Math.max(nose.scale.x,nose.scale.y,nose.scale.z),k=.72;nose.scale.multiplyScalar(k);nose.scale.z*=.8;
+    nose.position.addScaledVector(nose.position.clone().normalize(),-r*(1-k)*.4);nose.position.y+=.014;if(!F.noseC){nose.material=nose.material.clone();nose.material.color.setHex(skinHex);}}
+  const W=_nsmWorker();if(!W)return;
+  const joints=[];g.traverse(J=>{if(J!==g&&J.children.some(c=>c.isMesh))joints.push(J);});
+  const groups=[],slots=[];
+  for(const J of joints){const list=J.children.filter(c=>c.children.length===0&&_nsmOk(c,H,eyes)),self=J.isMesh&&_nsmOk(J,H,eyes);if(!list.length&&!self)continue;
+    const items=[];for(const m of list){const q=_nsmSpec(m,J);if(q)items.push([m,q]);}if(self){const q=_nsmSpec(J,J);if(q)items.push([J,q]);}if(!items.length)continue;
+    const isHead=J===H,inHead=(()=>{for(let p=J;p;p=p.parent)if(p===H)return true;return false;})(),h=isHead?.0055:.0075,K=isHead?.016:.01;
+    const by=new Map();for(const it of items){const hex=it[0].material.color.getHex();(by.get(hex)||by.set(hex,[]).get(hex)).push(it);}
+    /* 옛 조각은 한 묶음 아래로 옮겨 두었다가, 빚은 것이 오면 감춘다 (뒤에 오는 같은 재질 합치기와 섞이지 않게) */
+    for(const [hex,its] of by){const role=hex===skinHex?'skin':(F.beard&&hex===beardHex&&inHead)?'beard':(hairHex!=null&&hex===hairHex&&inHead)?'hair':'cloth';
+      const b0=[1e9,1e9,1e9],b1=[-1e9,-1e9,-1e9];for(const [,q] of its)for(let a=0;a<3;a++){b0[a]=Math.min(b0[a],q.c[a]-q.R-.02);b1[a]=Math.max(b1[a],q.c[a]+q.R+.02);}
+      let rough=0;for(const [m] of its)rough+=m.material.roughness;rough/=its.length;
+      const old=new THREE.Group();old.userData.nsmOld=1;J.add(old);
+      groups.push({role,h,K,b0,b1,prims:its.map(it=>it[1])});slots.push({J,hex,rough,old});
+      for(const [m] of its){if(m===J)old.userData.self=J;else old.add(m);}}}
+  if(!groups.length)return;
+  const key=JSON.stringify(groups);
+  const apply=geos=>{const olds=new Set();geos.forEach((geo,i)=>{const s=slots[i];if(!geo.index||!geo.index.count)return;const m=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:s.hex,roughness:Math.min(.9,s.rough)}));m.castShadow=true;m.userData.sculpted=1;s.J.add(m);olds.add(s.old);});
+    for(const old of olds){old.visible=false;if(old.userData.self)old.userData.self.material=new THREE.MeshBasicMaterial({visible:false});}};
+  if(NSM.done.has(key)){apply(NSM.done.get(key));return;}
+  if(NSM.wait.has(key)){NSM.wait.get(key).push(apply);return;}
+  NSM.wait.set(key,[apply]);const id=++NSM.id;NSM.ids.set(id,key);W.postMessage({id,groups});}
 /* 사람마다: look 덧입힘(look), 옷(cloth), 정교한 생김새(fine) */
 const NPC_FINE={
   /* ── 엑시즈 길드홀 ── */
@@ -9180,7 +9285,7 @@ const NPC_FINE={
     cl:{buttons:{n:4,c:0xc8ccd4},gloves:0xf2f2ee}}},
   farmer:{cloth:{sleeve:'long',skirtC:0x6a4a3a,shoes:0x4a3020},fine:{hair:'braids',hairC:0x8a5a2a,tie:0xc84a3a,body:{bust:1,w:1.1},skin:0xe8c8a4,brow:{t:-.05},nose:'button',mouth:'grin',freck:true,blush:0xe08a7a,
     cl:{kerchief:0xc84a3a,rolled:0xd8c8a0,apronPockets:1},props:['basket']}},
-  turpin:{look:{hat:'hood'},fine:{hood:1,hoodC:0xb8a888,hair:'none',hairC:0xf0f0f0,skin:0xf0d8bc,body:{hunch:.16,h:.97},brow:{c:0xf6f6f6,bushy:1,th:.024,t:-.12},nose:'big',mouth:'smile',beard:'long',beardC:0xf4f4f4,age:2,eye:'sleepy',
+  turpin:{look:{hat:'bald'},fine:{hair:'balding',hairC:0xf0f0f0,skin:0xf0d8bc,body:{hunch:.16,h:.97},brow:{c:0xf6f6f6,bushy:1,th:.024,t:-.12},nose:'big',mouth:'smile',beard:'long',beardC:0xf4f4f4,age:2,eye:'sleepy',
     cl:{rope:0x8a6a3a,pendant:0xfff0a0},props:['book']}},
   /* ── 하레나 ── */
   mina:{cloth:{sleeve:'long',skirtC:0x2e5a4a},fine:{body:{bust:1},hair:'bob',hairC:0x8a3a1a,brow:{t:-.06},nose:'button',mouth:'grin',freck:true,blush:0xe8a090,lash:1,
