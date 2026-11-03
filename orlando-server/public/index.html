@@ -9073,35 +9073,81 @@ function npcFineMerge(g){const S=g.userData.stick;if(!S)return;const keep=new Se
       const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));geo.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));geo.computeBoundingSphere();
       const m=new THREE.Mesh(geo,list[0].material);m.castShadow=true;m.renderOrder=list[0].renderOrder;G.add(m);}}}
 /* L: 머리를 통째로 덮은 검은 강철 투구(눈 틈 하나, 오른뺨 숨구멍), 어깨 덮개와 등 뒤로 늘어진 긴 망토. 얼굴은 보이지 않는다 */
-function lDress(g,o){const S=g.userData.stick;if(!S)return;const H=S.head,U=S.upper;
-  if(g.userData.mats[1])g.userData.mats[1].color.setHex(0x1a1a1f);   /* 살이 드러나는 곳이 없다: 손은 검은 장갑 */
-  const V=(a)=>a.map(p=>new THREE.Vector2(p[0],p[1]));
-  const steel=mat(o.helmC??0x23262c,{metalness:.6,roughness:.34,flatShading:false}),trim=mat(0x8b9099,{metalness:.8,roughness:.28,flatShading:false}),
-    dark=mat(0x050608,{flatShading:false,side:THREE.DoubleSide,roughness:1}),cloth=mat(o.cloak??0x17181d,{flatShading:false,side:THREE.DoubleSide,roughness:.95});
+function lDress(g,o){const S=g.userData.stick;if(!S)return;const H=S.head,U=S.upper,u=g.userData;
+  if(u.mats[1])u.mats[1].color.setHex(0x1a1a1f);   /* 살이 드러나는 곳이 없다: 손은 검은 장갑 */
+  const V=a=>a.map(p=>new THREE.Vector2(p[0],p[1]));
+  const steel=mat(o.helmC??0x23262c,{metalness:.62,roughness:.32,flatShading:false}),steelD=mat(0x16181c,{metalness:.55,roughness:.42,flatShading:false}),
+    trim=mat(0x8b9099,{metalness:.82,roughness:.26,flatShading:false}),dark=mat(0x050608,{flatShading:false,side:THREE.DoubleSide,roughness:1}),
+    cloth=mat(o.cloak??0x17181d,{flatShading:false,side:THREE.DoubleSide,roughness:.95}),clothIn=mat(0x2a1c22,{flatShading:false,side:THREE.DoubleSide,roughness:.9}),
+    leather=mat(0x2a211b,{flatShading:false,roughness:.75});
+  /* 회전체 하나: 점은 아래→위 순서여야 겉면이 바깥을 본다 */
+  const lathe=(pts,seg,m,par,a0,al,zs)=>{const q=new THREE.Mesh(new THREE.LatheGeometry(V(pts),seg,a0??0,al??Math.PI*2),m);if(zs)q.scale.z=zs;par.add(q);return q;};
+  /* 천 주름: 아래로 갈수록 깊어지는 세로 물결 */
+  const folds=(mesh,amp,n,yTop,yBot,ph=0)=>{const P=mesh.geometry.attributes.position;for(let i=0;i<P.count;i++){const x=P.getX(i),y=P.getY(i),z=P.getZ(i),a=Math.atan2(x,z),k=Math.min(1,Math.max(0,(yTop-y)/(yTop-yBot)));
+      const f=1+amp*k*(Math.sin(a*n+ph)*.75+Math.sin(a*n*2.3+ph*1.7)*.25);P.setX(i,x*f);P.setZ(i,z*f);}mesh.geometry.computeVertexNormals();};
+  const dot=(par,m,x,y,z,r,sz=1)=>{const q=new THREE.Mesh(new THREE.SphereGeometry(1,10,7),m);q.position.set(x,y,z);q.scale.set(r,r,r*sz);q.rotation.y=Math.atan2(x,z);par.add(q);return q;};
   for(const c of [...H.children])if(c.isMesh)c.visible=false;   /* 눈·입 같은 얼굴 조각은 투구 속이라 숨긴다 */
-  const prof=[[0,.345],[.07,.34],[.135,.32],[.19,.285],[.233,.228],[.259,.157],[.271,.076],[.273,0],[.269,-.08],[.259,-.155],[.242,-.214],[.224,-.254],[.214,-.276],[.205,-.282]];
-  const ZS=1.07,rAt=y=>{for(let i=1;i<prof.length;i++){const a=prof[i-1],b=prof[i];if(y<=a[1]&&y>=b[1]){const t=(a[1]-y)/(a[1]-b[1]||1);return a[0]+(b[0]-a[0])*t;}}return .2;};
-  const helm=new THREE.Mesh(new THREE.LatheGeometry(V([...prof].reverse()),40),steel);   /* 아래→위 순서여야 겉면이 바깥을 본다 */helm.scale.z=ZS;H.add(helm);
-  /* 아래 테: 은빛 띠 두 줄 */
-  for(const y of [-.232,-.262]){const r=rAt(y)+.004,b=new THREE.Mesh(new THREE.LatheGeometry(V([[r,y-.009],[r+.006,y],[r,y+.009]]),40),trim);b.scale.z=ZS;H.add(b);}
-  /* 눈 틈: 앞쪽만 가로로 길게 판 검은 틈. 그 속에 아주 희미한 푸른 빛 둘 */
-  {const y0=.03,y1=.058,r=rAt(.044)+.003,sl=new THREE.Mesh(new THREE.LatheGeometry(V([[r,y0],[r+.002,(y0+y1)/2],[r,y1]]),24,-.66,1.32),dark);sl.scale.z=ZS;H.add(sl);
-    const lip=new THREE.Mesh(new THREE.LatheGeometry(V([[r,y1],[r+.014,y1+.006],[r+.004,y1+.016]]),24,-.7,1.4),steel);lip.scale.z=ZS;H.add(lip);   /* 틈 위 눈썹 턱 */
-    const gl=mat(0xcfeaff,{emissive:0x7fc4ff,emissiveIntensity:1.6,flatShading:false});
-    for(const sx of [-1,1]){const x=sx*.072,z=Math.sqrt(Math.max(0,r*r-x*x))*ZS-.004,e=new THREE.Mesh(new THREE.SphereGeometry(1,10,6),gl);e.position.set(x,.044,z);e.scale.set(.013,.0055,.004);e.rotation.y=Math.atan2(x,z);H.add(e);}}
+  /* ── 투구: 매끈한 통투구, 앞은 살짝 뾰족한 이물(앞날) ── */
+  const prof=[[.205,-.282],[.214,-.276],[.224,-.254],[.242,-.214],[.259,-.155],[.269,-.08],[.273,0],[.271,.076],[.259,.157],[.233,.228],[.19,.285],[.135,.32],[.07,.34],[0,.345]];
+  const ZS=1.07,rAt=y=>{for(let i=1;i<prof.length;i++){const a=prof[i-1],b=prof[i];if(y>=a[1]&&y<=b[1]){const t=(y-a[1])/(b[1]-a[1]||1);return a[0]+(b[0]-a[0])*t;}}return .2;};
+  const surf=(x,y,d=0)=>{const r=rAt(y)+d;return Math.sqrt(Math.max(0,r*r-x*x))*ZS;};
+  {const h=lathe(prof,64,steel,H,0,Math.PI*2,ZS);const P=h.geometry.attributes.position;   /* 앞 가운데를 살짝 세워 콧날 같은 이물 */
+    for(let i=0;i<P.count;i++){const x=P.getX(i),z=P.getZ(i),y=P.getY(i);if(z<=0)continue;const a=Math.abs(Math.atan2(x,z)),k=Math.max(0,1-a/.5)*Math.max(0,1-Math.abs(y+.04)/.26);P.setZ(i,z*(1+.07*k*k));}h.geometry.computeVertexNormals();}
+  /* 얼굴판: 앞쪽에 한 겹 덧댄 판, 가장자리는 은빛 테 */
+  {const fp=[[.262,-.2],[.272,-.12],[.278,-.03],[.279,.05],[.276,.1]];const a0=-.95,al=1.9;const f=lathe(fp,32,steelD,H,a0,al,ZS);
+    const P=f.geometry.attributes.position;for(let i=0;i<P.count;i++){const x=P.getX(i),z=P.getZ(i),y=P.getY(i);if(z<=0)continue;const a=Math.abs(Math.atan2(x,z)),k=Math.max(0,1-a/.5)*Math.max(0,1-Math.abs(y+.04)/.26);P.setZ(i,z*(1+.07*k*k));}f.geometry.computeVertexNormals();
+    for(const s of [-1,1]){const pts=[];for(let k=0;k<=14;k++){const y=-.2+k/14*.3,x=s*Math.sin(.95)*(rAt(y)+.009),z=Math.cos(.95)*(rAt(y)+.009)*ZS;pts.push(new THREE.Vector3(x,y,z));}
+      H.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),16,.006,6,false),trim));}}
+  /* 아래 테: 은빛 띠 두 줄과 그 사이 징 */
+  for(const y of [-.232,-.262]){const r=rAt(y)+.004;lathe([[r,y-.009],[r+.006,y],[r,y+.009]],64,trim,H,0,Math.PI*2,ZS);}
+  for(let k=0;k<16;k++){const a=k/16*Math.PI*2,y=-.247,r=rAt(y)+.008;dot(H,trim,Math.sin(a)*r,y,Math.cos(a)*r*ZS,.008,.6);}
+  /* 눈 틈 두 개: 가운데 쇠 기둥으로 나뉜 가로 틈, 위에 눈썹 턱. 속에 아주 희미한 푸른 빛 */
+  {const y0=.03,y1=.058,r=rAt(.044)+.012,gl=mat(0xcfeaff,{emissive:0x7fc4ff,emissiveIntensity:1.6,flatShading:false});
+    for(const s of [-1,1]){lathe([[r,y0],[r+.002,(y0+y1)/2],[r,y1]],20,dark,H,s>0?.06:-.7,.64,ZS);
+      const x=s*.075;dot(H,gl,x,.044,surf(x,.044,.01)-.003,.012,.35).scale.y=.0055;}
+    lathe([[r,y1],[r+.016,y1+.006],[r+.005,y1+.018]],40,steel,H,-.75,1.5,ZS);   /* 눈썹 턱 */
+    lathe([[r,y0-.016],[r+.012,y0-.006],[r,y0]],40,steel,H,-.72,1.44,ZS);   /* 아래 턱 */
+    const bar=new THREE.Mesh(new THREE.CylinderGeometry(.009,.009,.034,10),trim);bar.position.set(0,.044,surf(0,.044,.012)+.004);H.add(bar);}
   /* 가운데 능선: 이마에서 정수리를 넘어 뒤통수까지 */
-  {const piv=new THREE.Group();piv.rotation.y=-Math.PI/2;piv.position.y=.02;const t=new THREE.Mesh(new THREE.TorusGeometry(.318,.011,6,40,2.2),steel);t.rotation.z=.35;piv.add(t);piv.scale.set(.943,1.053,1);H.add(piv);}
-  /* 오른뺨 숨구멍 (작은 구멍 여섯) */
-  for(const [x,y] of [[.075,-.085],[.11,-.08],[.07,-.125],[.105,-.12],[.065,-.165],[.098,-.16]]){const r=rAt(y),z=Math.sqrt(Math.max(0,r*r-x*x))*ZS,h=new THREE.Mesh(new THREE.SphereGeometry(1,8,6),dark);h.position.set(x,y,z);h.scale.set(.008,.008,.004);h.rotation.y=Math.atan2(x,z);H.add(h);}
-  /* 목가리개: 투구 밑에서 어깨로 퍼지는 쇠 깃 */
-  const gor=new THREE.Mesh(new THREE.LatheGeometry(V([[.255,-.35],[.225,-.33],[.205,-.3],[.2,-.27]]),36),steel);H.add(gor);
-  /* 어깨 덮개 (짧은 망토) */
-  const cap=new THREE.Mesh(new THREE.LatheGeometry(V([[.3,.36],[.318,.43],[.3,.5],[.255,.56],[.19,.61],[.13,.64]]),36),cloth);U.add(cap);
-  /* 등 뒤 긴 망토: 어깨에서 무릎 아래까지, 앞은 트여 있다 */
-  const ck=new THREE.Mesh(new THREE.LatheGeometry(V([[.39,-.86],[.37,-.6],[.33,-.25],[.29,.05],[.275,.3],[.285,.45],[.3,.52]]),30,Math.PI/2+.22,Math.PI-.44),cloth);U.add(ck);
-  const hem=new THREE.Mesh(new THREE.LatheGeometry(V([[.392,-.875],[.395,-.85]]),30,Math.PI/2+.22,Math.PI-.44),trim);U.add(hem);
-  /* 망토 고리: 가슴 위 은빛 걸쇠 둘 */
-  for(const sx of [-1,1]){const k=new THREE.Mesh(new THREE.SphereGeometry(1,12,8),trim);k.position.set(sx*.11,.56,.17);k.scale.set(.028,.028,.012);U.add(k);}
+  {const piv=new THREE.Group();piv.rotation.y=-Math.PI/2;piv.position.y=.02;const t=new THREE.Mesh(new THREE.TorusGeometry(.318,.011,8,64,2.2),steel);t.rotation.z=.35;piv.add(t);piv.scale.set(.943,1.053,1);H.add(piv);}
+  /* 숨구멍: 양 뺨에 십자 모양으로 여섯씩 */
+  for(const s of [-1,1])for(const [x,y] of [[.09,-.06],[.09,-.1],[.09,-.14],[.065,-.1],[.115,-.1],[.09,-.18]]){const X=s*x;dot(H,dark,X,y,surf(X,y,.02)-.002,.0075,.4);}
+  /* 귀 자리 둥근 고리판 (돌쩌귀) */
+  for(const s of [-1,1]){const d=lathe([[0,-.006],[.03,-.004],[.036,0],[.03,.004],[0,.006]],24,steelD,H);d.rotation.z=Math.PI/2;d.position.set(s*(rAt(-.02)+.004),-.02,.01);
+    dot(H,trim,s*(rAt(-.02)+.01),-.02,.01,.011);}
+  /* 목가리개: 세 겹 쇠 띠가 어깨로 퍼진다 */
+  [[.2,-.27,.215,-.3],[.212,-.3,.235,-.325],[.228,-.322,.262,-.348]].forEach(([r0,y0,r1,y1],i)=>{lathe([[r1,y1],[(r0+r1)/2+.004,(y0+y1)/2],[r0,y0]],48,i%2?steelD:steel,H);
+    lathe([[r1+.002,y1-.003],[r1+.004,y1+.003]],48,trim,H);});
+  /* ── 어깨: 겹친 쇠 견갑 ── */
+  for(const A of [S.AL,S.AR]){const sx=Math.sign(A.sh.position.x)||1;
+    for(let k=0;k<3;k++){const p=lathe([[.105-k*.012,-.01],[.1-k*.012,.03],[.075-k*.01,.065],[.04,.08-k*.008],[0,.083-k*.008]],32,k%2?steelD:steel,A.sh);p.position.set(sx*.01,-.02-k*.045,0);p.scale.set(1,.8,1.05);p.rotation.z=-sx*(.25+k*.08);
+      lathe([[.106-k*.012,-.014],[.108-k*.012,-.006]],32,trim,A.sh).position.copy(p.position),A.sh.children[A.sh.children.length-1].rotation.copy(p.rotation),A.sh.children[A.sh.children.length-1].scale.copy(p.scale);}
+    /* 팔뚝 쇠 토시와 장갑 손목 */
+    lathe([[.055,-.3],[.06,-.24],[.058,-.12],[.05,-.05]],24,steel,A.el);lathe([[.062,-.245],[.064,-.235]],24,trim,A.el);lathe([[.052,-.06],[.054,-.05]],24,trim,A.el);
+    lathe([[.07,-.33],[.064,-.3],[.05,-.28]],20,leather,A.el);}
+  /* ── 몸: 가죽 멜빵(오른어깨→왼허리), 허리띠와 은 버클, 왼허리 단검집 ── */
+  {const pts=[[.17,.55,.08],[.12,.45,.2],[0,.3,.215],[-.12,.15,.2],[-.17,.04,.12]].map(p=>new THREE.Vector3(...p));U.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),24,.018,6,false),leather));
+    lathe([[.172,-.015],[.176,.02],[.172,.055]],40,leather,U);dot(U,trim,0,.02,.18,.026,.4);dot(U,dark,0,.02,.185,.012,.4);
+    const sh=new THREE.Group();sh.position.set(-.17,-.02,.08);sh.rotation.set(.15,0,.35);U.add(sh);lathe([[0,-.26],[.022,-.22],[.026,-.05],[.024,0]],16,leather,sh);
+    lathe([[.026,-.01],[.03,.01]],16,trim,sh);const hilt=new THREE.Mesh(new THREE.CylinderGeometry(.012,.014,.09,10),dark);hilt.position.y=.055;sh.add(hilt);dot(sh,trim,0,.105,0,.018);
+    const gd=new THREE.Mesh(new THREE.CylinderGeometry(.008,.008,.09,8),trim);gd.rotation.z=Math.PI/2;gd.position.y=.012;sh.add(gd);}
+  /* ── 두건 달린 어깨 덮개: 목을 감싸고 어깨로 흘러내리며 주름이 진다 ── */
+  {const cap=lathe([[.3,.3],[.312,.38],[.31,.45],[.285,.51],[.245,.56],[.19,.6],[.15,.63],[.135,.66]],64,cloth,U);folds(cap,.035,14,.55,.3);
+    lathe([[.315,.29],[.322,.305]],56,trim,U);
+    const hood=lathe([[.17,.6],[.2,.66],[.22,.72],[.21,.76]],40,cloth,U,Math.PI*.55,Math.PI*.9);folds(hood,.08,6,.76,.6,1);}   /* 뒤로 넘긴 두건이 목 뒤에 접혀 있다 */
+  /* ── 긴 웃옷: 밋밋한 원뿔을 주름진 검은 천으로, 앞섶에 은빛 단 ── */
+  S.body.traverse(c=>{if(!c.isMesh||c.geometry.type!=='CylinderGeometry')return;const pr=c.geometry.parameters;
+    if(Math.abs(pr.height-.86)<.01&&pr.radiusBottom>.35){c.geometry=new THREE.CylinderGeometry(pr.radiusTop,pr.radiusBottom,pr.height,64,14,true);c.material=mat(0x101115,{flatShading:false,side:THREE.DoubleSide,roughness:.92});folds(c,.06,9,.3,-.43,.4);
+      const pts=[];for(let k=0;k<=12;k++){const t=k/12,y=.43-t*.86,r=pr.radiusTop+(pr.radiusBottom-pr.radiusTop)*t+.006;pts.push(new THREE.Vector3(0,y,r));}c.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),24,.007,6,false),trim));
+      const h=lathe([[pr.radiusBottom+.004,-.432],[pr.radiusBottom+.008,-.41]],64,trim,c);folds(h,.06,9,1,0,.4);}
+    else if(Math.abs(pr.height-.05)<.01&&pr.radiusBottom>.35)c.visible=false;});
+  /* ── 등 뒤 긴 망토: 어깨에서 무릎 아래까지 깊게 주름지고, 안감은 검붉다 ── */
+  {const pr=[[.4,-.88],[.38,-.6],[.34,-.25],[.3,.05],[.285,.3],[.295,.45],[.305,.52]],a0=Math.PI/2+.2,al=Math.PI-.4;
+    const ck=lathe(pr,64,cloth,U,a0,al);folds(ck,.1,13,.45,-.88);
+    const ci=lathe(pr.map(([r,y])=>[r-.012,y+.002]),64,clothIn,U,a0+.02,al-.04);folds(ci,.1,13,.45,-.88);
+    const hem=lathe([[.4,-.9],[.405,-.875]],64,trim,U,a0,al);folds(hem,.1,13,-.6,-.88);
+    for(const sx of [-1,1]){dot(U,trim,sx*.12,.56,.175,.03,.45);dot(U,steelD,sx*.12,.56,.18,.016,.4);}
+    const ch=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-.12,.56,.18),new THREE.Vector3(0,.52,.2),new THREE.Vector3(.12,.56,.18)]),12,.005,5,false),trim);U.add(ch);}   /* 망토 걸쇠와 은 사슬 */
 }
 /* 사람마다: look 덧입힘(look), 옷(cloth), 정교한 생김새(fine) */
 const NPC_FINE={
@@ -23805,7 +23851,7 @@ for(const k of ['ganel','ganel_walk','farmer']){const g=NPCS.find(n=>n.id===k);i
 /* ---------- L의 시험: 장인 지구 성벽 옆 골목 끝에 선 얼굴 없는 사람 L ----------
    세 번의 시험(사냥 → 벌꿀술을 사서 대장장이에게 → 가늘롱에게서 폭풍의 밤 이야기)을 넘기면 특수 스킬 연쇄번개를 가르쳐 준다.
    단계마다 L에게 돌아가 다음 지시를 받는다. 한 번만 할 수 있다 */
-GENQ.lq={title:'L의 시험',npc:'lman',minLv:60,maxLv:999,where:'엑시즈 장인 지구 · 성벽 옆 골목',veil:1,reward:'특수 스킬 연쇄번개',
+GENQ.lq={title:'L의 시험',npc:'lman',minLv:80,maxLv:999,where:'엑시즈 장인 지구 · 성벽 옆 골목',veil:1,reward:'특수 스킬 연쇄번개',
   steps:[{key:'hunt',talk:1,need:20,goal:'성문 밖 짐승 처치'},{key:'b1',talk:1,need:1,one:1,goal:'L에게 돌아가기'},
     {key:'buy',talk:1,need:1,one:1,goal:'브람의 술집에서 벌꿀술 사기'},{key:'give',talk:1,need:1,one:1,goal:'대장장이 그레고르에게 벌꿀술 건네기'},
     {key:'b2',talk:1,need:1,one:1,goal:'L에게 돌아가기'},{key:'info',talk:1,need:1,one:1,goal:'가늘롱에게 폭풍의 밤 이야기 듣기'}],
