@@ -74,14 +74,16 @@
     mpass:  { x: 4500, z: 900, R: 150 },   // 고개
   };
   // 엑시즈 문 밖 사냥터 줄: 숫자=줄(1 서문 · 2 북문 · 3 동문 · 4 남문 — 1줄과 3줄의 문을 서로 바꿨다), 글자=그 줄의 몇 번째 땅. 땅 생김새(kind)는 들판·구릉·숲·계곡·고개
-  const MLINES = [
+  const MLINES_ALL = [
     { n: 1, gate: '서문', end: 'milgol', zones: [['mfield', 'field'], ['mhill', 'hill'], ['mwood', 'wood'], ['mvale', 'vale'], ['mpass', 'pass']] },
     { n: 2, gate: '북문', zones: [['m2a', 'wood'], ['m2b', 'hill'], ['m2c', 'lake'], ['m2d', 'vale'], ['m2e', 'pass']] },
     { n: 3, gate: '동문', zones: [['m3a', 'field'], ['m3b', 'river'], ['m3c', 'field'], ['m3d', 'wood'], ['m3e', 'hill']] },
     { n: 4, gate: '남문', zones: [['m4a', 'wood'], ['m4b', 'vale'], ['m4c', 'marsh'], ['m4d', 'vale'], ['m4e', 'pass']] },
     // 고리 밖으로 뻗은 가지: 4E에서 남서쪽 산을 넘어 이어지는 새 지역 (엑시즈로 가는 문은 없다)
-    { n: 5, region: '불타는 협곡', branch: [162, 130, 100, 70, 40], zones: [['m5a', 'ash'], ['m5b', 'vale'], ['m5c', 'lava'], ['m5d', 'vale'], ['m5e', 'pass']] },
+    // off: 게임에서 잠시 뺀 줄 (2026-11-03 원호: 몬스터가 예전과 똑같이 생겨서 다시 만들 때까지 뺀다). off를 지우면 다시 켜진다
+    { n: 5, off: true, region: '불타는 협곡', branch: [162, 130, 100, 70, 40], zones: [['m5a', 'ash'], ['m5b', 'vale'], ['m5c', 'lava'], ['m5d', 'vale'], ['m5e', 'pass']] },
   ];
+  const MLINES = MLINES_ALL.filter((L) => !L.off);
   // 사냥터 땅 스무 곳은 엑시즈를 빙 두르는 고리에 레벨 순서대로 놓는다: 서쪽(서문, Lv 60)에서 시작해 시계 방향으로 북(북문, 95) → 동(동문, 130) → 남(남문, 165) → 남서(200).
   // 마지막 땅(4E)과 첫 땅(1A) 사이만 높은 산줄기로 막혀 있다. 고리 안쪽은 엑시즈를 둘러싼 산이고, 문마다 안쪽으로 고갯길이 나 있다
   const MH = { cx: 3600, cz: 1750, RR: 1150, R: 150, neckHW: 60, gateHW: 14, gateLen: 55 };
@@ -344,6 +346,7 @@
     m5a: ['cinderhound', 'cinderhound', 'cinderslime'], m5b: ['scorchboar', 'magmaviper'], m5c: ['ashbear', 'lavaslime', 'lavatroll'], m5d: ['flamehound', 'flameogre'], m5e: ['firewolf', 'smokeslime', 'firegiant'],
   };
   const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 40, mhill: 42, mwood: 44, mvale: 44, mpass: 46, m2a: 32, m2b: 32, m2c: 32, m2d: 32, m2e: 32, m3a: 32, m3b: 32, m3c: 32, m3d: 32, m3e: 32, m4a: 32, m4b: 32, m4c: 32, m4d: 32, m4e: 32, m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
+  for (const L of MLINES_ALL) if (L.off) for (const [id] of L.zones) { delete ZONE_COUNT[id]; delete ZONE_MON[id]; }   // 꺼 둔 땅에는 몬스터가 나오지 않는다
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
     const d2 = Math.hypot(x - C2.x, z - C2.z);
