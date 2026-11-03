@@ -20169,7 +20169,7 @@ function renderQuestWin(){const body=$('#qwBody');body.innerHTML='';if(!P)return
   const M=typeof MAINQ!=='undefined'&&P.mq&&MAINQ[P.mq];
   if(M){const np=qwNpc(M.npc),at=M.at&&M.at(),done=P.mqDone?Object.keys(P.mqDone).length:0;
     body.appendChild(qwCard('메인','main',M.title,{steps:[{t:M.goal,st:'now'}],
-      info:[['찾아갈 사람',np?qwWho(np):''],['곳',np?qwPlace(np.x,np.z):at?qwPlace(at.x,at.z):''],['길잡이',np||at?'지도(M)와 화면에 금빛 느낌표로 표시돼요':''],['지금까지',done?`메인 퀘스트 ${done}개 끝냄`:'']]}));n++;}
+      info:[['찾아갈 사람',np?qwWho(np):''],['곳',np?qwPlace(np.x,np.z):at?qwPlace(at.x,at.z):''],['길잡이',np||at?'지도(M)와 화면에 금빛 팔면체로 표시돼요':''],['지금까지',done?`메인 퀘스트 ${done}개 끝냄`:'']]}));n++;}
   /* 일반 · 일일 퀘스트 */
   if(typeof GENQ!=='undefined'&&P.gq)for(const id in P.gq){const G=GENQ[id];if(!G)continue;const q=P.gq[id],np=qwNpc(G.npc);
     const steps=G.steps.map((st,i)=>i<q.s?{t:st.goal,n:st.one?'':`${st.need}/${st.need}`,st:'done'}:i===q.s?(st.one?{t:st.goal,st:'now'}:{t:st.goal,n:`${Math.min(q.h|0,st.need)}/${st.need}`,st:'now',p:(q.h|0)/st.need}):G.veil?{t:'???'}:{t:st.goal,n:`0/${st.need}`});
@@ -23478,12 +23478,14 @@ function mqAdvSync(){if(!mqAdvSync.ok||!P||!P.job||!JOBS[P.job])return;
   if(!P.mq&&P.lv>=60&&(JOBS[P.job].tier|0)>=2&&!(P.mqDone&&P.mqDone.messenger100))mqStart('messenger100');
   else if(!P.mq&&P.mqDone&&P.mqDone.messenger100&&!P.mqDone.bucky100)mqStart('bucky100');   /* 전달자를 만난 뒤 → 버키 */
   else if(!P.mq&&P.mqDone&&P.mqDone.bucky100&&!P.mqDone.home100){if(typeof myHomeAssign==='function')myHomeAssign();mqStart('home100');}}   /* 버키를 만난 뒤 → 새 집 */
-/* 메인 퀘스트의 주요 인물: 머리 위에 큰 금빛 느낌표가 뜬다. 안개 속에서도 멀리서 보인다 */
+/* 메인 퀘스트의 주요 인물: 머리 위에 큰 금빛 정팔면체가 천천히 돌며 떠 있다. 안개 속에서도 멀리서 보인다 */
 const QMARK={g:null,n:null};
 function qmarkMake(col=0xffd34a,edgeC=0x3a2608){const g=new THREE.Group();g.userData.noMap=1;
-  const gold=new THREE.MeshBasicMaterial({color:col,fog:false,depthTest:false,depthWrite:false,transparent:true}),edge=new THREE.MeshBasicMaterial({color:edgeC,fog:false,side:THREE.BackSide,depthTest:false,depthWrite:false,transparent:true});   /* 벽·분수 뒤에 있어도 보이게 */
-  const bar=new THREE.CylinderGeometry(.085,.05,.4,12),dot=new THREE.SphereGeometry(.065,14,10);
-  for(const [geo,y] of [[bar,.25],[dot,-.05]]){const a=new THREE.Mesh(geo,gold);a.position.y=y;const b=new THREE.Mesh(geo,edge);b.position.y=y;b.scale.setScalar(1.28);a.renderOrder=999;b.renderOrder=998;g.add(b,a);}
+  const geo=new THREE.OctahedronGeometry(.2,0),base=new THREE.Color(col),nrm=geo.attributes.normal,L=new THREE.Vector3(.45,.75,.5).normalize(),cs=[];
+  for(let i=0;i<nrm.count;i++){const k=.55+.6*Math.max(0,nrm.getX(i)*L.x+nrm.getY(i)*L.y+nrm.getZ(i)*L.z);const c=base.clone().multiplyScalar(k);c.lerp(new THREE.Color(0xffffff),Math.max(0,k-1)*.8);cs.push(c.r,c.g,c.b);}   /* 면마다 밝기가 달라 보석처럼 각이 보인다 */
+  geo.setAttribute('color',new THREE.Float32BufferAttribute(cs,3));
+  const gold=new THREE.MeshBasicMaterial({vertexColors:true,fog:false,depthTest:false,depthWrite:false,transparent:true}),edge=new THREE.MeshBasicMaterial({color:edgeC,fog:false,side:THREE.BackSide,depthTest:false,depthWrite:false,transparent:true});   /* 벽·분수 뒤에 있어도 보이게 */
+  const gem=new THREE.Group(),a=new THREE.Mesh(geo,gold),b=new THREE.Mesh(geo,edge);b.scale.setScalar(1.18);a.renderOrder=999;b.renderOrder=998;gem.add(b,a);gem.position.y=.12;g.add(gem);g.userData.gem=gem;
   const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d'),rg=x.createRadialGradient(32,32,0,32,32,32);rg.addColorStop(0,'rgba(255,220,120,.85)');rg.addColorStop(.45,'rgba(255,190,70,.3)');rg.addColorStop(1,'rgba(255,170,40,0)');x.fillStyle=rg;x.fillRect(0,0,64,64);
   const halo=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,fog:false}));halo.scale.setScalar(1.1);halo.position.y=.12;halo.renderOrder=997;halo.material.depthTest=false;g.add(halo);g.userData.halo=halo;
   g.visible=false;scene.add(g);return g;}
@@ -23491,13 +23493,13 @@ function questMarkTick(dt){if(!questMarkTick.ok)return;if(!QMARK.g)QMARK.g=qmark
   const M=P&&P.mq&&MAINQ[P.mq],n=M&&M.npc?NPCS.find(q=>q.id===M.npc):null,ok=n&&!(n.hideIf&&n.hideIf())&&n.mesh&&player;
   if(QMARK.n&&QMARK.n!==n&&QMARK.n.mesh.userData.marker)QMARK.n.mesh.userData.marker.visible=true;   /* 끝난 퀘스트 인물은 원래 작은 표시로 */
   {const at=M&&M.at&&M.at();if(at){QMARK.n=null;const d=Math.hypot(camera.position.x-at.x,camera.position.z-at.z);g.visible=!!player&&d<160&&mode!=='title';if(!g.visible)return;   /* 사람이 아닌 곳(내 집 문)을 가리키는 퀘스트 */
-    g.position.set(at.x,at.y+Math.sin(tAll*2.4)*.07,at.z);g.scale.setScalar(1.2*(1+Math.sin(tAll*4)*.04));g.rotation.y=Math.atan2(camera.position.x-at.x,camera.position.z-at.z);g.userData.halo.material.opacity=.75+Math.sin(tAll*3)*.2;return;}}
+    g.position.set(at.x,at.y+Math.sin(tAll*2.4)*.07,at.z);g.scale.setScalar(1.2*(1+Math.sin(tAll*4)*.04));g.userData.gem.rotation.y=tAll*1.4;g.userData.halo.material.opacity=.75+Math.sin(tAll*3)*.2;return;}}
   QMARK.n=n;const d=ok?Math.hypot(camera.position.x-n.mesh.position.x,camera.position.z-n.mesh.position.z):1e9;
   g.visible=!!ok&&d<160&&mode!=='title';if(!g.visible)return;
   if(n.mesh.userData.marker)n.mesh.userData.marker.visible=false;
   const t=tAll,s=1   /* 원래 팔면체 표시처럼 크기는 늘 같다 (멀면 작게 보인다) */,p=n.mesh.position,hy=(n.mesh.userData.markerY??(n.look&&n.look.small?2.2:2.6))+.25;
   g.position.set(p.x,p.y+hy+(s-1)*.25+Math.sin(t*2.4)*.07,p.z);g.scale.setScalar(s*1.2*(1+Math.sin(t*4)*.04));
-  g.rotation.y=Math.atan2(camera.position.x-p.x,camera.position.z-p.z);g.userData.halo.material.opacity=.75+Math.sin(t*3)*.2;}
+  g.userData.gem.rotation.y=t*1.4;g.userData.halo.material.opacity=.75+Math.sin(t*3)*.2;}
 questMarkTick.ok=1;mqAdvSync.ok=1;   /* 이 파일이 읽힌 뒤부터 돈다 */
 const BASE_BOOK={warrior:'전사의 서',mage:'마법사의 서',rogue:'도적의 서',archer:'궁수의 서'};
 const OLD_BOOK={warrior:'book_jerier',mage:'book_ansei',rogue:'book_jaerang',archer:'book_olivier'};
@@ -23846,7 +23848,7 @@ function gqAct(id){const G=GENQ[id],n=npcCur;if(!G||!P)return;if(G.talk)return G
       npcBtn(box,'도와 드릴게요',()=>{(P.gq=P.gq||{})[id]={s:0,h:0};gqPlaceSpots(id);updateQuestHud();save();log(`${gqTag(id)} 퀘스트: ${G.title} — ${G.steps[0].goal}`,'sys');
         npcEndLine('고마워! 초록 빛이 떠 있는 데가 일할 자리야. 거기 가서 손을 보태 주면 돼.');gqFx(id);},'pri wide');
       npcBtn(box,'다음에요',()=>renderNpc('그래, 시간 될 때 와 줘.'),'wide');});});}
-/* 퀘스트 주는 사람 머리 위: 받을 수 있거나 보고할 때 초록 느낌표 */
+/* 퀘스트 주는 사람 머리 위: 받을 수 있거나 보고할 때 초록 정팔면체 */
 function gqMarkTick(){if(!gqTick.ok||!player)return;const want=[];
   for(const id in GENQ){const G=GENQ[id];
     {const who=G.markWho&&gqOf(id)&&!gqDoneQ(id)?G.markWho(id):null;if(who){const n=who.map(i=>NPCS.find(q=>q.id===i)).find(n=>n&&n.mesh&&!(n.hideIf&&n.hideIf()));if(n&&!want.includes(n))want.push(n);continue;}}
@@ -23858,7 +23860,7 @@ function gqMarkTick(){if(!gqTick.ok||!player)return;const want=[];
     const ok=n&&!(QMARK.n===n&&QMARK.g&&QMARK.g.visible),d=ok?Math.hypot(camera.position.x-n.mesh.position.x,camera.position.z-n.mesh.position.z):1e9;
     g.visible=!!ok&&d<160&&mode!=='title';if(!g.visible)continue;if(n.mesh.userData.marker)n.mesh.userData.marker.visible=false;
     const p=n.mesh.position,hy=(n.mesh.userData.markerY??2.6)+.25;g.position.set(p.x,p.y+hy+Math.sin(tAll*2.4)*.07,p.z);g.scale.setScalar(1.1);
-    g.rotation.y=Math.atan2(camera.position.x-p.x,camera.position.z-p.z);g.userData.halo.material.opacity=.7+Math.sin(tAll*3)*.2;}}
+    g.userData.gem.rotation.y=tAll*1.4+i;g.userData.halo.material.opacity=.7+Math.sin(tAll*3)*.2;}}
 /* 농부 베르타: 엑시즈 북쪽 농장의 가운데 농가 앞 */
 (function(){const H=MARCUS.farmHouse;if(!H||NPCS.some(n=>n.id==='farmer'))return;NPC_POSE.farmer='hips';
   addNpc({id:'farmer',name:'베르타',role:'농부',x:H.stand.x,z:H.stand.z,faceX:H.face.x,faceZ:H.face.z,look:{robe:0x7a5a3a,robe2:0xd8c8a0,hat:'wide',hatC:0xc8a860,long:1,cloth:{apron:0x6a5a3a}},
