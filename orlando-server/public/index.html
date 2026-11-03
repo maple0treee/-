@@ -12486,9 +12486,33 @@ function _marcusLife(cx,cz){
   /* 달아나는 고양이가 집·성벽·물로 뛰어들지 않게: 앞이 막혔는지 본다 */
   LIFE.catBlocked=(x,z)=>{const lx=x-cx,lz=z-cz;return PL.wallDist(lx,lz)>-3||PL.waterDepth(lx,lz)>0||PL.riverDist(lx,lz)<MARCUS_RIVER_W/2+1||blocked(x,z,.22);};
   LIFE.cx=cx;LIFE.cz=cz;LIFE.ready=true;}
+/* 강아지 쓰다듬기: 가까이 가서 F. 개는 앉아 고개를 들고 꼬리를 세차게 흔들고, 나는 허리를 숙여 머리를 쓰다듬는다 */
+function dogNear(){if(!LIFE.ready||!LIFE.g.visible||!player||mode!=='world'||(LIFE.pet&&LIFE.pet.t<2.6))return -1;const p=player.position;let bi=-1,bd=1.8;
+  LIFE.dogs.forEach((D,i)=>{if(!D.D.visible)return;const d=Math.hypot(p.x-D.x,p.z-D.z);if(d<bd&&Math.abs(p.y-heightAt(D.x,D.z))<1.5){bd=d;bi=i;}});return bi;}
+function petDog(i){const D=LIFE.dogs[i];if(!D||!player)return;interactTarget=null;$('#interact').hidden=true;
+  if(D.st==='walk'){D.st='rest';D.s1=D.s;}D.pose='sit';D.stT=Math.max(D.stT,7);D.pet=3.2;
+  const p=player.position;D.yaw=Math.atan2(p.x-D.x,p.z-D.z);   /* 나를 바라보고 앉는다 */
+  const k=D.D.scale.x,hx=D.x+Math.sin(D.yaw)*.5*k,hz=D.z+Math.cos(D.yaw)*.5*k,dd=Math.hypot(p.x-hx,p.z-hz)||1;
+  LIFE.pet={D,t:0,fx:p.x,fz:p.z,tx:hx+(p.x-hx)/dd*.55,tz:hz+(p.z-hz)/dd*.55,hx,hz,ht:0,hy:heightAt(D.x,D.z)+.95*k};
+  cam.yaw=Math.atan2(-(hx-p.x),-(hz-p.z));if(!cam.third)cam.pitch=-.5;}
+let _heartTex=null;
+function petTick(dt){const u=player&&player.userData;if(!u)return;const L=LIFE.pet;
+  if(L){L.t+=dt;const p=player.position;
+    if(L.t<.35){const k=Math.min(1,L.t/.35),e=k*k*(3-2*k);p.x=L.fx+(L.tx-L.fx)*e;p.z=L.fz+(L.tz-L.fz)*e;}   /* 손이 닿도록 한 걸음 다가선다 */
+    else if(Math.hypot(p.x-L.tx,p.z-L.tz)>.25||mode!=='world')L.t=Math.max(L.t,3);   /* 움직이면 그만둔다 */
+    if((L.ht-=dt)<=0&&L.t<3){L.ht=.5;if(!_heartTex){const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');x.fillStyle='#ff5a78';x.font='54px serif';x.textAlign='center';x.textBaseline='middle';x.fillText('♥',32,36);_heartTex=new THREE.CanvasTexture(c);}
+      const h=new THREE.Sprite(new THREE.SpriteMaterial({map:_heartTex,transparent:true,depthWrite:false}));h.scale.setScalar(.22);h.position.set(L.hx+(Math.random()-.5)*.2,L.hy+.1,L.hz+(Math.random()-.5)*.2);h.userData.life=1.3;LIFE.g.add(h);(LIFE.hearts||(LIFE.hearts=[])).push(h);}
+    if(L.t>=3){L.D.pet=0;LIFE.pet=null;}}
+  u.petK=Math.max(0,Math.min(1,(u.petK||0)+(LIFE.pet&&LIFE.pet.t<2.8?dt*5:-dt*4)));u.petT=(u.petT||0)+dt;
+  if(LIFE.hearts)for(let i=LIFE.hearts.length-1;i>=0;i--){const h=LIFE.hearts[i];h.userData.life-=dt;h.position.y+=dt*.45;h.material.opacity=Math.min(1,h.userData.life*1.5);if(h.userData.life<=0){LIFE.g.remove(h);h.material.dispose();LIFE.hearts.splice(i,1);}}}
+/* 쓰다듬는 몸짓: 허리를 숙이고 빈 왼손을 앞으로 내려 머리를 쓸어 준다 (오른손에는 무기를 들고 있다) */
+function petPose(S,k,t){if(!S||!S.upper||!S.AL)return;const st=Math.sin(t*5.5);S.upper.rotation.x+=(.35-S.upper.rotation.x)*k;
+  S.AL.sh.rotation.x+=(-1.25+st*.14-S.AL.sh.rotation.x)*k;S.AL.sh.rotation.z+=(-.1-S.AL.sh.rotation.z)*k;S.AL.el.rotation.x+=(-.1-st*.12-S.AL.el.rotation.x)*k;
+  S.AR.sh.rotation.x+=.9*k;   /* 무기 든 손은 숙인 만큼 뒤로 젖혀 아래로 늘어뜨린다 */
+  if(S.head)S.head.rotation.x+=(.35-S.head.rotation.x)*k;}
 /* 매 프레임 */
 const _lv=new THREE.Vector3(),_lq=new THREE.Quaternion(),_ls=new THREE.Vector3(1,1,1),_lm=new THREE.Matrix4(),_le=new THREE.Euler(),_lY=new THREE.Vector3(0,1,0);
-function lifeTick(dt,p,inM){if(!LIFE.ready)return;const G=LIFE.g;inM=inM&&Math.hypot(p.x-LIFE.cx,p.z-LIFE.cz)<500;   /* 엑시즈 안에서만 (성·길드홀 맵에서는 그리지 않는다) */if(G.visible!==inM)G.visible=inM;if(!inM)return;const t=(LIFE.t+=dt);
+function lifeTick(dt,p,inM){if(!LIFE.ready)return;petTick(dt);const G=LIFE.g;inM=inM&&Math.hypot(p.x-LIFE.cx,p.z-LIFE.cz)<500;   /* 엑시즈 안에서만 (성·길드홀 맵에서는 그리지 않는다) */if(G.visible!==inM)G.visible=inM;if(!inM)return;const t=(LIFE.t+=dt);
   const far=(x,z,d)=>Math.abs(x-p.x)>d||Math.abs(z-p.z)>d;
   /* 개 */
   for(const D of LIFE.dogs){const vis=!far(D.x,D.z,60);if(D.D.visible!==vis)D.D.visible=vis;
@@ -12504,7 +12528,8 @@ function lifeTick(dt,p,inM){if(!LIFE.ready)return;const G=LIFE.g;inM=inM&&Math.h
     else if(D.pose==='lie'){B.position.y=-.3;B.rotation.x=0;L[0].rotation.x=-1.35;L[1].rotation.x=-1.35;L[2].rotation.x=-1.4;L[3].rotation.x=-1.4;D.H.rotation.set(.25+Math.sin(t*.3+D.ph)*.05,Math.sin(t*.25+D.ph)*.3,0);}
     else if(D.pose==='sniff'){B.position.y=0;B.rotation.x=.12;for(const l of L)l.rotation.x=0;D.H.rotation.set(.8+Math.sin(t*6)*.06,Math.sin(t*1.3+D.ph)*.25,0);}
     else{B.position.y=0;B.rotation.x=0;for(const l of L)l.rotation.x=0;D.H.rotation.set(Math.sin(t*.5+D.ph)*.1,Math.sin(t*.35+D.ph)*.5,0);}
-    D.T.rotation.z=Math.sin(t*(D.wag>.1||walk?14:3)+D.ph)*(D.wag>.1?.7:walk?.35:.2);D.T.rotation.x=D.pose==='lie'&&!walk?.9:-.2;}
+    if(D.pet>0){D.pet-=dt;D.H.rotation.set(-.2+Math.sin(t*4)*.07,Math.sin(t*2.2)*.12,Math.sin(t*3.1)*.14);}   /* 쓰다듬으면 고개를 들어 손에 머리를 비빈다 */
+    D.T.rotation.z=D.pet>0?Math.sin(t*19+D.ph)*.9:Math.sin(t*(D.wag>.1||walk?14:3)+D.ph)*(D.wag>.1?.7:walk?.35:.2);D.T.rotation.x=D.pose==='lie'&&!walk?.9:-.2;}
   /* 고양이 */
   for(const C of LIFE.cats){const vis=!far(C.x,C.z,45);if(C.D.visible!==vis)C.D.visible=vis;if(!vis)continue;const dp=Math.hypot(p.x-C.x,p.z-C.z);
     const running=C.run>0;if(C.R.visible!==running){C.R.visible=running;C.S.visible=!running;C.H.position.set(0,running?.3:.36,running?.27:.09);C.H.rotation.set(0,0,0);}
@@ -18592,7 +18617,7 @@ let myMo=null,myMoId=''; // 지금 쓰는 스킬 동작 (기본 공격이면 nul
 let sitting=false; // Ctrl로 앉기
 function animPlayer(mesh,speed,t,swing,air,alt,mo){mesh.userData.uprightOn=swing>=1&&!mo&&!mesh.userData.ride;
   if(mesh.userData.stick){animStick(mesh,speed,t,swing,air,alt,mo);
-    const u=mesh.userData;if(!OLD_LOOK&&!u.anime&&u.ap&&PM.data[u.ap.g])pmAttach(mesh,u.job,u.gear,u.ap);
+    const u=mesh.userData;if(u.petK>0&&typeof petPose==='function')petPose(u.stick,u.petK,u.petT||t);if(!OLD_LOOK&&!u.anime&&u.ap&&PM.data[u.ap.g])pmAttach(mesh,u.job,u.gear,u.ap);
     if(u.anime&&mesh.visible){const dt=Math.min(.1,Math.max(0,t-(u.lastT||t)));u.lastT=t;pmPose(mesh,u.anime,dt);}
     if(u.stick.style==='bow'&&mesh.visible)bowStringSync(u.stick.w.children[0],u.stick.nock,u.stick.bowDrawOn);return;}
   animBiped(mesh,speed,t);if(swing<1&&mesh.userData.armR)mesh.userData.armR.rotation.x=-Math.sin(swing*Math.PI)*2;
@@ -19768,7 +19793,7 @@ function faceMe(obj){if(!obj||!player)return;if(!obj.userData.baseQ)obj.userData
 function easeFacing(dt){for(const o of facing){const talking=mode==='dialog';o.userData.faceT+=dt;
   const target=talking?o.userData.faceQ:o.userData.baseQ;o.quaternion.slerp(target,Math.min(1,dt*(talking?8:2.5)));
   if(!talking&&o.quaternion.angleTo(o.userData.baseQ)<.01){o.quaternion.copy(o.userData.baseQ);facing.delete(o);}}}
-function doInteract(){if(performance.now()<npcQuietUntil)return;if(interactTarget&&interactTarget.startsWith('gq:')){gqWork(interactTarget);return;}if(interactTarget&&interactTarget.startsWith('hdoor:')){hdoorToggle(+interactTarget.slice(6));return;}if(interactTarget==='gbook'){openGuild();return;}if(interactTarget==='gboard'){npcCur=null;openBoard('guild');boardGiver={id:'guild',name:'마리엘'};return;}if(interactTarget&&interactTarget.startsWith('ccar:')){ccarAct(interactTarget);return;}if(interactTarget&&interactTarget.startsWith('seat:')){seatSit(+interactTarget.slice(5));return;}if(interactTarget&&interactTarget.startsWith('chat:')){chatterTalk(+interactTarget.slice(5));return;}if(interactTarget&&interactTarget.startsWith('portal:')){usePortal(+interactTarget.split(':')[1]);return;}if(interactTarget&&interactTarget.startsWith('lib:')){const id=LIB_LIST[+interactTarget.slice(4)%LIB_LIST.length];interactTarget=null;$('#interact').hidden=true;openBook(id);return;}if(interactTarget&&interactTarget.startsWith('chest:')){openBossChest(+interactTarget.slice(6));interactTarget=null;return;}if(interactTarget&&interactTarget.startsWith('player:')){openPlayerMenu(interactTarget.slice(7));return;}if(interactTarget&&interactTarget.startsWith('npc:')){const n=NPCS.find(q=>q.id===interactTarget.slice(4));if(n){faceMe(n.mesh);openNpc(n);}return;}if(interactTarget==='shop'){faceMe(merchant.userData.npc);openShop('village');}else if(interactTarget==='mentor'){faceMe(mentor);openMentor();}else if(interactTarget==='door_in')enterDungeon();else if(interactTarget==='door_out')leaveDungeon();}
+function doInteract(){if(performance.now()<npcQuietUntil)return;if(interactTarget&&interactTarget.startsWith('gq:')){gqWork(interactTarget);return;}if(interactTarget&&interactTarget.startsWith('hdoor:')){hdoorToggle(+interactTarget.slice(6));return;}if(interactTarget==='gbook'){openGuild();return;}if(interactTarget==='gboard'){npcCur=null;openBoard('guild');boardGiver={id:'guild',name:'마리엘'};return;}if(interactTarget&&interactTarget.startsWith('ccar:')){ccarAct(interactTarget);return;}if(interactTarget&&interactTarget.startsWith('seat:')){seatSit(+interactTarget.slice(5));return;}if(interactTarget&&interactTarget.startsWith('dog:')){petDog(+interactTarget.slice(4));return;}if(interactTarget&&interactTarget.startsWith('chat:')){chatterTalk(+interactTarget.slice(5));return;}if(interactTarget&&interactTarget.startsWith('portal:')){usePortal(+interactTarget.split(':')[1]);return;}if(interactTarget&&interactTarget.startsWith('lib:')){const id=LIB_LIST[+interactTarget.slice(4)%LIB_LIST.length];interactTarget=null;$('#interact').hidden=true;openBook(id);return;}if(interactTarget&&interactTarget.startsWith('chest:')){openBossChest(+interactTarget.slice(6));interactTarget=null;return;}if(interactTarget&&interactTarget.startsWith('player:')){openPlayerMenu(interactTarget.slice(7));return;}if(interactTarget&&interactTarget.startsWith('npc:')){const n=NPCS.find(q=>q.id===interactTarget.slice(4));if(n){faceMe(n.mesh);openNpc(n);}return;}if(interactTarget==='shop'){faceMe(merchant.userData.npc);openShop('village');}else if(interactTarget==='mentor'){faceMe(mentor);openMentor();}else if(interactTarget==='door_in')enterDungeon();else if(interactTarget==='door_out')leaveDungeon();}
 let warping=false;
 /* 필름이 끊긴다: 캄캄해졌다가 잠시 뒤 근처 엉뚱한 자리에서 깨어난다. 취기는 많이 가신다 */
 function drunkBlackout(){if(!P||!player||warping)return;const f=$('#fade');f.classList.add('on');mode==='world'&&(P.blackout=true);sfx('potion');
@@ -22388,10 +22413,11 @@ function updateWorld(dt){
   let bestP=null;
   if(!it&&room){let pd=3;for(const [k,o] of others){if(!o.mesh.visible)continue;const d=Math.hypot(player.position.x-o.mesh.position.x,player.position.z-o.mesh.position.z);if(d<pd&&Math.abs(player.position.y-o.mesh.position.y)<3){pd=d;bestP=k;}}if(bestP)it='player:'+bestP;}
   {const q=ccarNear();if(q&&(CCAR.ride||!it))it=q;}
+  if(!it&&typeof dogNear==='function'){const di=dogNear();if(di>=0)it='dog:'+di;}
   if(!it&&typeof chatterNear==='function'){const ci=chatterNear();if(ci>=0)it='chat:'+ci;}
   if(!it&&typeof seatNear==='function'){const si=seatNear();if(si>=0)it='seat:'+si;}
   if(it!==interactTarget||(!it&&!$('#interact').hidden)){interactTarget=it;const b=$('#interact');b.hidden=!it;   /* 다른 곳에서 대상을 비우고 단추만 남은 경우(마차에서 내림·상자를 엶)도 숨긴다 */
-    if(it)b.textContent='F · '+(it.startsWith('gq:')?gqLabel(it):it.startsWith('seat:')?(SEATS[+it.slice(5)]&&SEATS[+it.slice(5)].lie?'눕기':'앉기'):it.startsWith('chat:')?'말 걸기':it.startsWith('ccar:')?ccarLabel(it):it.startsWith('player:')?`${(others.get(bestP)||{}).name||'모험가'}에게 말 걸기`:it.startsWith('npc:')?(bestN.role?`${bestN.name} (${bestN.role})`:bestN.name):(it.startsWith('lib:')?`『${libBook(+it.slice(4)).title}』 읽기`:it.startsWith('chest:')?'상자 열기':it.startsWith('hdoor:')?(HDOORS[+it.slice(6)].open?'문 닫기':'문 열기'):it.startsWith('portal:')?(q=>it.endsWith(':x')?`${q.label} (Lv ${q.minLv})`:q.label)(PORTALS[+it.split(':')[1]]):{shop:'상인과 거래',mentor:'스승과 대화',door_in:'석문 열기',door_out:'석굴에서 나가기',gbook:'길드 명부 보기',gboard:'의뢰 게시판 보기'}[it]));}
+    if(it)b.textContent='F · '+(it.startsWith('gq:')?gqLabel(it):it.startsWith('seat:')?(SEATS[+it.slice(5)]&&SEATS[+it.slice(5)].lie?'눕기':'앉기'):it.startsWith('chat:')?'말 걸기':it.startsWith('dog:')?'쓰다듬기':it.startsWith('ccar:')?ccarLabel(it):it.startsWith('player:')?`${(others.get(bestP)||{}).name||'모험가'}에게 말 걸기`:it.startsWith('npc:')?(bestN.role?`${bestN.name} (${bestN.role})`:bestN.name):(it.startsWith('lib:')?`『${libBook(+it.slice(4)).title}』 읽기`:it.startsWith('chest:')?'상자 열기':it.startsWith('hdoor:')?(HDOORS[+it.slice(6)].open?'문 닫기':'문 열기'):it.startsWith('portal:')?(q=>it.endsWith(':x')?`${q.label} (Lv ${q.minLv})`:q.label)(PORTALS[+it.split(':')[1]]):{shop:'상인과 거래',mentor:'스승과 대화',door_in:'석문 열기',door_out:'석굴에서 나가기',gbook:'길드 명부 보기',gboard:'의뢰 게시판 보기'}[it]));}
   const inCave=z==='subcus';dayLightTick(dt);targetSky.set(ZONES[z].sky).multiplyScalar((OR.SP.ZONES.includes(z)||z==='town'?.7:.76)*Math.min(1.35,OPT.bright||1));   /* 하늘·안개색도 함께 어둡게 (안개는 노출값을 거치지 않아 따로 낮춘다) */if(!(z==='dungeon'||z==='hall'||z==='thouse'||inCave)){targetSky.multiplyScalar(DEEP_DES[z]?Math.max(DL.bg,.5):DL.bg);targetSky.lerp(DL._c1.copy(targetSky).multiply(DL.bgTint),.5);}scene.background.lerp(targetSky,z==='dungeon'||(z==='hall'||z==='thouse')||inCave?1:dt*1.2);scene.fog.color.copy(scene.background);
   const inRealm=z==='marcus'||z==='milgol'||z==='fort'||z==='coachway'||z==='castle'||z==='guildhall',inMil=z==='milgol'||z==='coachway';const hi=OR.SP.ZONES.indexOf(z),inHa=hi>=0||z==='town',inMh=OR.MHUNT.includes(z);   /* 하레나 둘레 길: 앞 구역은 맑고 멀리 보이며, 뒤로 갈수록 먼지·연기로 흐려진다 */
   scene.fog.near=z==='dungeon'?14:(z==='hall'||z==='thouse'||z==='myhome'||z==='ghouse')?30:inCave?18:inMil?95:inRealm?(z==='marcus'?100:70):inMh?60:inHa?(hi<0?70:82-7*hi):38;scene.fog.far=z==='dungeon'?60:(z==='hall'||z==='thouse'||z==='myhome'||z==='ghouse')?95:inCave?80:inMil?370:inRealm?(z==='marcus'?320:280):inMh?240:inHa?(hi<0?300:330-18*hi):140;
