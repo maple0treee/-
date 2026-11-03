@@ -1440,6 +1440,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="qwin" class="overlay" hidden>
     <div class="card panel" role="dialog" aria-label="퀘스트 창">
       <header><h2>퀘스트</h2><span class="qwn" id="qwCount"></span></header>
+      <div class="sktabs" id="qwTabs" role="tablist"><button type="button" data-t="now" aria-pressed="true"><small>지금</small><b>진행 중</b></button><button type="button" data-t="daily" aria-pressed="false"><small>하루 한 번</small><b>일일 퀘스트</b></button></div>
       <div id="qwBody"></div>
       <button class="ghost" id="qwClose">닫기 (Q)</button>
     </div>
@@ -19553,7 +19554,11 @@ function qwCard(tag,cls,title,o={}){const c=document.createElement('section');c.
       if(st.p!=null&&st.st==='now'){const bar=document.createElement('i');bar.style.setProperty('--p',Math.round(clamp(st.p,0,1)*100)+'%');li.appendChild(bar);}ol.appendChild(li);}c.appendChild(ol);}
   if(o.info&&o.info.length){const dl=document.createElement('dl');for(const [k,v] of o.info){if(!v)continue;const dt=document.createElement('dt');dt.textContent=k;const dd=document.createElement('dd');dd.textContent=v;dl.append(dt,dd);}c.appendChild(dl);}
   return c;}
+/* 창은 탭 두 개: '진행 중'(받은 퀘스트) · '일일 퀘스트'(일일 퀘스트를 모두 보여 주고 여기서 고정한다) */
+let qwTab='now';
 function renderQuestWin(){const body=$('#qwBody');body.innerHTML='';if(!P)return;if(typeof mqAdvSync==='function')mqAdvSync();let n=0;
+  for(const b of $('#qwTabs').children)b.setAttribute('aria-pressed',b.dataset.t===qwTab?'true':'false');
+  if(qwTab==='daily'){renderDailyTab(body);return;}
   /* 메인 퀘스트 */
   const M=typeof MAINQ!=='undefined'&&P.mq&&MAINQ[P.mq];
   if(M){const np=qwNpc(M.npc),at=M.at&&M.at(),done=P.mqDone?Object.keys(P.mqDone).length:0;
@@ -19563,8 +19568,8 @@ function renderQuestWin(){const body=$('#qwBody');body.innerHTML='';if(!P)return
   if(typeof GENQ!=='undefined'&&P.gq)for(const id in P.gq){const G=GENQ[id];if(!G)continue;const q=P.gq[id],np=qwNpc(G.npc);
     const steps=G.steps.map((st,i)=>i<q.s?{t:st.goal,n:`${st.need}/${st.need}`,st:'done'}:i===q.s?{t:st.goal,n:`${Math.min(q.h|0,st.need)}/${st.need}`,st:'now',p:(q.h|0)/st.need}:{t:st.goal,n:`0/${st.need}`});
     const fin=q.s>=G.steps.length;steps.push({t:G.report,st:fin?'now':''});
-    body.appendChild(qwCard(gqTag(id),'gen',G.title,{ok:fin?'보고만 남았어요':'',steps,pin:G.daily?gqPinBtn(id):null,
-      info:[['맡긴 사람',qwWho(np)],['곳',G.where||(np?qwPlace(np.x,np.z):'')],['알맞은 레벨',`Lv ${G.minLv}~${G.maxLv}`],
+    body.appendChild(qwCard(gqTag(id),'gen',G.title,{ok:fin?'보고만 남았어요':'',steps,
+      info:[['맡긴 사람',qwWho(np)],['곳',G.where||(np?qwPlace(np.x,np.z):'')],['적정레벨',`Lv ${G.minLv}~${G.maxLv}`],
         ['보상',`경험치 ${qwNum(needExp(P.lv)*G.exp)} · ${qwNum(P.lv*G.gold)} 골드`],['다시 하기',G.daily?'하루에 한 번 (자정이 지나면 다시)':'한 번만 할 수 있어요']]}));n++;}
   /* 게시판 의뢰 */
   const q=P.quest;
@@ -19576,17 +19581,22 @@ function renderQuestWin(){const body=$('#qwBody');body.innerHTML='';if(!P)return
     body.appendChild(qwCard('퀘스트','sub',q.special?'길 끝 포탈 조사':`${q.giver||from}의 부탁`,{ok:fin?'보고만 남았어요':'',why:why?`“${why}”`:'',steps,
       info:[['맡긴 사람',q.giver?(q.role?`${q.giver} (${q.role})`:q.giver):''],['받은 곳',`${from}의 게시판`],['사냥터',Z?`${Z.name}${Z.rec?` · 권장 ${Z.rec}`:''}`:''],
         ['보상',`경험치 ${qwNum(q.exp*(typeof expMul==='function'?expMul():1))} · ${qwNum(q.gold)} 골드 · 장비 하나 · 물약${q.rare?' · 특별 의뢰':''}`]]}));n++;}
-  /* 일일 퀘스트: 받지 않았거나 오늘 끝낸 것도 늘 보여 주고, 고정하면 왼쪽 퀘스트 칸에 계속 뜬다 */
-  const daily=typeof GENQ!=='undefined'?Object.keys(GENQ).filter(id=>GENQ[id].daily&&!(P.gq&&P.gq[id])):[];
-  if(daily.length){const hd=document.createElement('div');hd.className='qwsub';hd.textContent='오늘의 일일 퀘스트';body.appendChild(hd);
-    for(const id of daily){const G=GENQ[id],np=qwNpc(G.npc),st=gqDailyState(id);
-      body.appendChild(qwCard('일일','gen idle',G.title,{ok:st==='done'?'오늘 끝냄 ✓':'',pin:gqPinBtn(id),
-        steps:[{t:st==='done'?`자정이 지나면 다시 받을 수 있다 (${gqUntilMidnight()} 남음)`:st==='open'?`${np?np.name:'맡긴 사람'}에게 찾아가 퀘스트 받기`:gqDailyLine(id,st,np),st:st==='open'?'now':''}],
-        info:[['맡긴 사람',qwWho(np)],['곳',G.where||(np?qwPlace(np.x,np.z):'')],['알맞은 레벨',`Lv ${G.minLv}~${G.maxLv}`],
-          ['보상',`경험치 ${qwNum(needExp(P.lv)*G.exp)} · ${qwNum(P.lv*G.gold)} 골드`]]}));}}
-  if(!n&&!daily.length){const e=document.createElement('div');e.className='qwempty';e.textContent='지금 진행 중인 퀘스트가 없어요.\n하레나 광장 카일의 게시판에서 의뢰를 받을 수 있어요.';e.style.whiteSpace='pre-line';body.appendChild(e);}
+  if(!n){const e=document.createElement('div');e.className='qwempty';e.textContent='지금 진행 중인 퀘스트가 없어요.\n하레나 광장 카일의 게시판에서 의뢰를 받을 수 있어요.';e.style.whiteSpace='pre-line';body.appendChild(e);}
   $('#qwCount').textContent=n?`진행 중 ${n}개`:'';}
-function openQuestWin(){if(mode!=='world'||!P)return;mode='dialog';attackHeld=false;unlockPointer();syncLockTip();renderQuestWin();$('#qwin').hidden=false;}
+/* 일일 퀘스트 탭: 받기 전·진행 중·오늘 끝낸 것 모두. '고정하기'를 누르면 왼쪽 퀘스트 칸에 계속 뜬다 */
+function renderDailyTab(body){const ids=typeof GENQ!=='undefined'?Object.keys(GENQ).filter(id=>GENQ[id].daily):[];
+  const tip=document.createElement('div');tip.className='qwsub';tip.textContent='고정한 일일 퀘스트는 왼쪽 퀘스트 칸에 늘 보여요';body.appendChild(tip);
+  for(const id of ids){const G=GENQ[id],np=qwNpc(G.npc),q=P.gq&&P.gq[id];let steps,ok='';
+    if(q){steps=G.steps.map((st,i)=>i<q.s?{t:st.goal,n:`${st.need}/${st.need}`,st:'done'}:i===q.s?{t:st.goal,n:`${Math.min(q.h|0,st.need)}/${st.need}`,st:'now',p:(q.h|0)/st.need}:{t:st.goal,n:`0/${st.need}`});
+      const fin=q.s>=G.steps.length;steps.push({t:G.report,st:fin?'now':''});ok=fin?'보고만 남았어요':'진행 중';}
+    else{const st=gqDailyState(id);ok=st==='done'?'오늘 끝냄 ✓':'';
+      steps=[{t:st==='done'?`자정이 지나면 다시 받을 수 있다 (${gqUntilMidnight()} 남음)`:st==='open'?`${np?np.name:'맡긴 사람'}에게 찾아가 퀘스트 받기`:gqDailyLine(id,st,np),st:st==='open'?'now':''}];}
+    body.appendChild(qwCard('일일',q?'gen':'gen idle',G.title,{ok,pin:gqPinBtn(id),steps,
+      info:[['맡긴 사람',qwWho(np)],['곳',G.where||(np?qwPlace(np.x,np.z):'')],['적정레벨',`Lv ${G.minLv}~${G.maxLv}`],
+        ['보상',`경험치 ${qwNum(needExp(P.lv)*G.exp)} · ${qwNum(P.lv*G.gold)} 골드`]]}));}
+  const pins=ids.filter(gqPinned).length;$('#qwCount').textContent=`일일 ${ids.length}개${pins?` · 고정 ${pins}개`:''}`;}
+$('#qwTabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||!b.dataset.t||b.dataset.t===qwTab)return;qwTab=b.dataset.t;sfx('ui');renderQuestWin();});
+function openQuestWin(){if(mode!=='world'||!P)return;mode='dialog';attackHeld=false;unlockPointer();syncLockTip();qwTab='now';renderQuestWin();$('#qwin').hidden=false;}
 function closeQuestWin(){if($('#qwin').hidden)return;$('#qwin').hidden=true;mode='world';syncLockTip();focusGame();relock();}
 $('#qwClose').onclick=closeQuestWin;
 $('#qwin').addEventListener('pointerdown',e=>{if(e.target.id==='qwin')closeQuestWin();});   /* 창 바깥을 누르면 닫힌다 */
