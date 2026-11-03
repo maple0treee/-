@@ -379,6 +379,7 @@
     }
     function resolveSkill(m, sk, ts) {
       const S = sk.S, dmg = Math.round(m.atk * S.mul);
+      m.lastAtk = Date.now();
       const hit = ts.filter((t) => (m.zone === 'dungeon' ? t.rot : !t.dun) && inShape(sk, t.x, t.z, 1.0)).map((t) => t.id);
       const out = { ...sk.msg, t: 'mskr', dmg, lv: m.lv, hit };
       if (S.pool) { out.pool = S.pool[0]; out.dps = Math.round(m.atk * S.pool[1]); }
@@ -460,12 +461,21 @@
           m.atkCd -= TICK;
           const S = !m.summon && SK[m.ty];
           if (S) m.skCd = (m.skCd ?? rnd(2, 4)) - TICK;
-          if (S && m.windup <= 0 && m.skCd <= 0 && dist >= S.range[0] && dist <= S.range[1] && !(m.detour && m.detour.t > 0)) startSkill(m, S, tgt, dist);
+          // 첫 평타: 한동안(3초) 때리지 않은 몬스터는 곁에 오는 순간 선딜레이 없이 바로 친다
+          //  (그래서 높은 레벨 몬스터 곁을 그냥 지나가기만 해도 맞는다. 이어지는 평타는 0.4초 준비한 뒤에 친다)
+          const fresh = m.windup <= 0 && Date.now() - (m.lastAtk || 0) > 3000;
+          if (fresh && dist < reach + 0.5) {
+            turn(m, Math.atan2(dx, dz), 1);
+            m.atkCd = 1.0; m.lastAtk = Date.now();
+            send(tgt.id, { t: 'matk', i: m.i, to: tgt.id, atk: m.atk, f: 1 });   // f: 첫 평타 (달려서 스쳐 가도 맞게 게임 쪽에서 조금 더 넓게 본다)
+            broadcast({ t: 'matk', i: m.i, to: null }, tgt.id);
+          }
+          else if (S && m.windup <= 0 && m.skCd <= 0 && dist >= S.range[0] && dist <= S.range[1] && !(m.detour && m.detour.t > 0)) startSkill(m, S, tgt, dist);
           else if (m.windup > 0) {
             turn(m, Math.atan2(dx, dz), 0.6);
             m.windup -= TICK;
             if (m.windup <= 0) {
-              m.atkCd = 1.0;   /* 공격 사이 쉬는 시간 1.6 → 1.0초 */
+              m.atkCd = 1.0; m.lastAtk = Date.now();   /* 공격 사이 쉬는 시간 1.6 → 1.0초 */
               if (dist < reach + 0.9) send(tgt.id, { t: 'matk', i: m.i, to: tgt.id, atk: m.atk });
               broadcast({ t: 'matk', i: m.i, to: null }, tgt.id);
             }
