@@ -1440,6 +1440,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   <div id="qwin" class="overlay" hidden>
     <div class="card panel" role="dialog" aria-label="퀘스트 창">
       <header><h2>퀘스트</h2><span class="qwn" id="qwCount"></span></header>
+      <div class="sktabs" id="qwTabs" role="tablist"><button type="button" data-t="now" aria-pressed="true"><b>진행 중</b></button><button type="button" data-t="daily" aria-pressed="false"><b>일일 퀘스트</b></button></div>
       <div id="qwBody"></div>
       <button class="ghost" id="qwClose">닫기 (Q)</button>
     </div>
@@ -14057,8 +14058,8 @@ const CHAT_ASK=[
 const CHAT_VOICE={kid:'kid',youth:'youth',elder:'elder',oldknight:'elder',chess:'elder',noble:'noble',lady:'noble',rich:'noble',guard:'armed',knight:'armed',merc:'armed',archer:'armed',squire:'armed',hunter:'armed'};
 const CHAT_ROUGH={smith:1,farmer:1,shepherd:1,sailor:1,fisher:1,dock:1,worker:1,beggar:1};   /* 반말로 말하는 일꾼들: 그 사람만의 사정도 반말로 */
 function chatVoice(c){return CHAT_VOICE[c&&c.kind]||'adult';}
-/* 아이·젊은이가 플레이어를 부르는 말: 남자면 아저씨, 여자면 누나 */
-function chatTx(s){if(typeof s!=='string')return s;const f=typeof P!=='undefined'&&P&&P.ap&&P.ap.g==='f';return s.replace(/\{아저씨\}/g,f?'누나':'아저씨');}
+/* 아이·젊은이가 플레이어를 부르는 말: 플레이어가 남자면 아저씨, 여자면 남자아이는 누나·여자아이는 언니 (who: 말하는 사람) */
+function chatTx(s,who){if(typeof s!=='string')return s;const f=typeof P!=='undefined'&&P&&P.ap&&P.ap.g==='f';return s.replace(/\{아저씨\}/g,!f?'아저씨':who&&who.fem?'언니':'누나');}
 /* 엑시즈 시내에만 있는 것(광장·분수·시청·길드홀·시장·항구…)을 말하는 줄은 엑시즈 밖에서는 하지 않는다 */
 const CHAT_EXIS_RE=/광장|분수|시청|길드홀|시장|항구|부두|의사당|도서관|등대|브람|선착장|기사단 본부|하레나까지/;
 const CHAT_IN_EXIS={exis:1,plaza:1,market:1,port:1,farm:1,armed:1,palace:1,nobles:1,homes:1,inns:1,crafts:1,guildhall:1};
@@ -14470,7 +14471,7 @@ function chatterTalk(i){const c=CHATTER[i];if(!c||mode!=='world')return;const p=
     M.until=now+CHAT_KEEP;if(M.type==='group')for(const k of M.grp)CHATTER[k].memo=M;else c.memo=M;}
   if(M.type==='ask')people[0].onOpen=()=>{chatAsk(M.D,people);return true;};
   else if(M.type==='group')people[0].onOpen=()=>{chatPages(M.D.d,0,people);return true;};
-  else people[0].lines=[chatTx(M.line)];
+  else people[0].lines=[chatTx(M.line,people[0])];
   openNpc(people[0]);
   for(const k of grp){const o=CHATTER[k];if(o.face)o.face(player.position);if(o.cit&&mode==='dialog'&&typeof CROWD!=='undefined'){o.cit.hold=1.2;CROWD.held.add(o.cit);}}}   /* 돌아다니던 주민은 멈춰 서서 플레이어를 본다 */
 function chatKind(type){if(!type)return 'common';
@@ -14484,13 +14485,13 @@ function poseKind(pose){const P=String(pose||'');const T=[['hammer','smith'],['c
 function chatterNear(){if(!player)return -1;const q=player.position;let b=-1,bd=2.6;for(let i=0;i<CHATTER.length;i++){const c=CHATTER[i];if(c.visible&&!c.visible())continue;const p=c.pos();if(!p||Math.abs(p.y-q.y)>2.5)continue;const d=Math.hypot(p.x-q.x,p.z-q.z);if(d<bd){bd=d;b=i;}}return b;}
 const CHAT_ROLE={server:'서빙 직원',guild:'길드 손님',merchant:'상인',vendor:'장사꾼',baker:'빵집 주인',flower:'꽃 파는 이',weaver:'직조공',apothecary:'약사',herbalist:'약초꾼',innkeeper:'여관 주인',cook:'요리사',butcher:'정육점 주인',guard:'경비병',knight:'기사',merc:'용병',archer:'궁수',squire:'종자',hunter:'사냥꾼',noble:'귀족',lady:'귀부인',rich:'부자',clerk:'서기',scribe:'필경사',scholar:'학자',nurse:'간호사',maid:'하녀',laundress:'세탁부',wife:'아낙',fishwife:'생선 장수',milkmaid:'우유 짜는 처녀',seamstress:'재봉사',tailor:'재단사',cooper:'통장이',mason:'석공',carpenter:'목수',smith:'대장장이',stablehand:'마부',farmer:'농부',shepherd:'양치기',sailor:'뱃사람',fisher:'어부',dock:'부두 일꾼',porter:'짐꾼',courier:'전령',lamplighter:'등불지기',worker:'일꾼',bard:'음유시인',beggar:'거지',elder:'노인',oldknight:'늙은 기사',kid:'아이',youth:'젊은이',common:'주민',chess:'체스 두는 노인',painter:'화가',musician:'악사',juggler:'곡예사',sculptor:'조각가',chalk:'분필 화가'};
 /* 대화창에 쓸 임시 인물: 이름은 역할, 초상화는 그 사람의 막대 인형 */
-function chatPerson(c,k){const p=c.pos();return {id:'chat'+k,voice:citVoice(c),name:c.name||CHAT_ROLE[c.kind]||'주민',role:c.role||'',x:p.x,z:p.z,look:c.look||{},lines:[],acts:[],noTalk:true,stickPortrait:true,pose:c.pose};}
+function chatPerson(c,k){const p=c.pos();return {id:'chat'+k,voice:citVoice(c),name:c.name||CHAT_ROLE[c.kind]||'주민',role:c.role||'',x:p.x,z:p.z,look:c.look||{},lines:[],acts:[],noTalk:true,stickPortrait:true,pose:c.pose,fem:typeof citFem==='function'&&citFem(c)};}
 function chatPick(c,pool){const n=pool.length;c.n=(c.n||0)+1;const seed=Math.floor((c.seed||0)*7919+c.n*104729);return pool[((seed%n)+n)%n]||pool[0];}
 /* 플레이어가 고르는 대화: 묻는 말이 첫 장이고, 고르면 그 갈래가 이어진다 */
 function chatAsk(D,people){chatPages([[D.open[0],D.open[1],D.ask]],0,people);}
 /* 여러 장으로 이어지는 이야기: 장마다 말하는 사람(이름·초상화)이 바뀐다. F·클릭으로 다음 장.
    장의 세 번째 칸에 고를 것이 있으면 그 장에서 멈추고, 고른 갈래의 장들을 이어 간 뒤 남은 장으로 돌아온다 */
-function chatPages(seq,i,people){const l=seq[i],who=people[l[0]%people.length],text=chatTx(l[1]);npcCur=who;drawPortrait(who);
+function chatPages(seq,i,people){const l=seq[i],who=people[l[0]%people.length],text=chatTx(l[1],who);npcCur=who;drawPortrait(who);
   if(l[2]){renderNpc(text,box=>{box.dataset.noskip='1';for(const [label,next] of l[2])npcBtn(box,chatTx(label),()=>{$('#npcChoices').hidden=true;const rest=next.concat(seq.slice(i+1));if(rest.length)chatPages(rest,0,people);else closeNpc();},'wide');});return;}
   if(i>=seq.length-1){renderNpc(text);return;}
   $('#npcName').textContent=who.name;$('#npcRole').hidden=true;$('#npcBody').innerHTML='';$('#npcActs').innerHTML='';$('#npcChoices').hidden=true;npcPageNext=null;
@@ -19640,7 +19641,11 @@ function qwCard(tag,cls,title,o={}){const c=document.createElement('section');c.
       if(st.p!=null&&st.st==='now'){const bar=document.createElement('i');bar.style.setProperty('--p',Math.round(clamp(st.p,0,1)*100)+'%');li.appendChild(bar);}ol.appendChild(li);}c.appendChild(ol);}
   if(o.info&&o.info.length){const dl=document.createElement('dl');for(const [k,v] of o.info){if(!v)continue;const dt=document.createElement('dt');dt.textContent=k;const dd=document.createElement('dd');dd.textContent=v;dl.append(dt,dd);}c.appendChild(dl);}
   return c;}
+/* 창은 탭 두 개: '진행 중'(받은 퀘스트) · '일일 퀘스트'(일일 퀘스트를 모두 보여 주고 여기서 고정한다) */
+let qwTab='now';
 function renderQuestWin(){const body=$('#qwBody');body.innerHTML='';if(!P)return;if(typeof mqAdvSync==='function')mqAdvSync();let n=0;
+  for(const b of $('#qwTabs').children)b.setAttribute('aria-pressed',b.dataset.t===qwTab?'true':'false');
+  if(qwTab==='daily'){renderDailyTab(body);return;}
   /* 메인 퀘스트 */
   const M=typeof MAINQ!=='undefined'&&P.mq&&MAINQ[P.mq];
   if(M){const np=qwNpc(M.npc),at=M.at&&M.at(),done=P.mqDone?Object.keys(P.mqDone).length:0;
@@ -19650,8 +19655,8 @@ function renderQuestWin(){const body=$('#qwBody');body.innerHTML='';if(!P)return
   if(typeof GENQ!=='undefined'&&P.gq)for(const id in P.gq){const G=GENQ[id];if(!G)continue;const q=P.gq[id],np=qwNpc(G.npc);
     const steps=G.steps.map((st,i)=>i<q.s?{t:st.goal,n:`${st.need}/${st.need}`,st:'done'}:i===q.s?{t:st.goal,n:`${Math.min(q.h|0,st.need)}/${st.need}`,st:'now',p:(q.h|0)/st.need}:{t:st.goal,n:`0/${st.need}`});
     const fin=q.s>=G.steps.length;steps.push({t:G.report,st:fin?'now':''});
-    body.appendChild(qwCard(gqTag(id),'gen',G.title,{ok:fin?'보고만 남았어요':'',steps,pin:G.daily?gqPinBtn(id):null,
-      info:[['맡긴 사람',qwWho(np)],['곳',G.where||(np?qwPlace(np.x,np.z):'')],['알맞은 레벨',`Lv ${G.minLv}~${G.maxLv}`],
+    body.appendChild(qwCard(gqTag(id),'gen',G.title,{ok:fin?'보고만 남았어요':'',steps,
+      info:[['맡긴 사람',qwWho(np)],['곳',G.where||(np?qwPlace(np.x,np.z):'')],['적정레벨',`Lv ${G.minLv}~${G.maxLv}`],
         ['보상',`경험치 ${qwNum(needExp(P.lv)*G.exp)} · ${qwNum(P.lv*G.gold)} 골드`],['다시 하기',G.daily?'하루에 한 번 (자정이 지나면 다시)':'한 번만 할 수 있어요']]}));n++;}
   /* 게시판 의뢰 */
   const q=P.quest;
@@ -19663,17 +19668,21 @@ function renderQuestWin(){const body=$('#qwBody');body.innerHTML='';if(!P)return
     body.appendChild(qwCard('퀘스트','sub',q.special?'길 끝 포탈 조사':`${q.giver||from}의 부탁`,{ok:fin?'보고만 남았어요':'',why:why?`“${why}”`:'',steps,
       info:[['맡긴 사람',q.giver?(q.role?`${q.giver} (${q.role})`:q.giver):''],['받은 곳',`${from}의 게시판`],['사냥터',Z?`${Z.name}${Z.rec?` · 권장 ${Z.rec}`:''}`:''],
         ['보상',`경험치 ${qwNum(q.exp*(typeof expMul==='function'?expMul():1))} · ${qwNum(q.gold)} 골드 · 장비 하나 · 물약${q.rare?' · 특별 의뢰':''}`]]}));n++;}
-  /* 일일 퀘스트: 받지 않았거나 오늘 끝낸 것도 늘 보여 주고, 고정하면 왼쪽 퀘스트 칸에 계속 뜬다 */
-  const daily=typeof GENQ!=='undefined'?Object.keys(GENQ).filter(id=>GENQ[id].daily&&!(P.gq&&P.gq[id])):[];
-  if(daily.length){const hd=document.createElement('div');hd.className='qwsub';hd.textContent='오늘의 일일 퀘스트';body.appendChild(hd);
-    for(const id of daily){const G=GENQ[id],np=qwNpc(G.npc),st=gqDailyState(id);
-      body.appendChild(qwCard('일일','gen idle',G.title,{ok:st==='done'?'오늘 끝냄 ✓':'',pin:gqPinBtn(id),
-        steps:[{t:st==='done'?`자정이 지나면 다시 받을 수 있다 (${gqUntilMidnight()} 남음)`:st==='open'?`${np?np.name:'맡긴 사람'}에게 찾아가 퀘스트 받기`:gqDailyLine(id,st,np),st:st==='open'?'now':''}],
-        info:[['맡긴 사람',qwWho(np)],['곳',G.where||(np?qwPlace(np.x,np.z):'')],['알맞은 레벨',`Lv ${G.minLv}~${G.maxLv}`],
-          ['보상',`경험치 ${qwNum(needExp(P.lv)*G.exp)} · ${qwNum(P.lv*G.gold)} 골드`]]}));}}
-  if(!n&&!daily.length){const e=document.createElement('div');e.className='qwempty';e.textContent='지금 진행 중인 퀘스트가 없어요.\n하레나 광장 카일의 게시판에서 의뢰를 받을 수 있어요.';e.style.whiteSpace='pre-line';body.appendChild(e);}
+  if(!n){const e=document.createElement('div');e.className='qwempty';e.textContent='지금 진행 중인 퀘스트가 없어요.\n하레나 광장 카일의 게시판에서 의뢰를 받을 수 있어요.';e.style.whiteSpace='pre-line';body.appendChild(e);}
   $('#qwCount').textContent=n?`진행 중 ${n}개`:'';}
-function openQuestWin(){if(mode!=='world'||!P)return;mode='dialog';attackHeld=false;unlockPointer();syncLockTip();renderQuestWin();$('#qwin').hidden=false;}
+/* 일일 퀘스트 탭: 받기 전·진행 중·오늘 끝낸 것 모두. '고정하기'를 누르면 왼쪽 퀘스트 칸에 계속 뜬다 */
+function renderDailyTab(body){const ids=typeof GENQ!=='undefined'?Object.keys(GENQ).filter(id=>GENQ[id].daily):[];
+  for(const id of ids){const G=GENQ[id],np=qwNpc(G.npc),q=P.gq&&P.gq[id];let steps,ok='';
+    if(q){steps=G.steps.map((st,i)=>i<q.s?{t:st.goal,n:`${st.need}/${st.need}`,st:'done'}:i===q.s?{t:st.goal,n:`${Math.min(q.h|0,st.need)}/${st.need}`,st:'now',p:(q.h|0)/st.need}:{t:st.goal,n:`0/${st.need}`});
+      const fin=q.s>=G.steps.length;steps.push({t:G.report,st:fin?'now':''});ok=fin?'보고만 남았어요':'진행 중';}
+    else{const st=gqDailyState(id);ok=st==='done'?'오늘 끝냄 ✓':'';
+      steps=[{t:st==='done'?`자정이 지나면 다시 받을 수 있다 (${gqUntilMidnight()} 남음)`:st==='open'?`${np?np.name:'맡긴 사람'}에게 찾아가 퀘스트 받기`:gqDailyLine(id,st,np),st:st==='open'?'now':''}];}
+    body.appendChild(qwCard('일일',q?'gen':'gen idle',G.title,{ok,pin:gqPinBtn(id),steps,
+      info:[['맡긴 사람',qwWho(np)],['곳',G.where||(np?qwPlace(np.x,np.z):'')],['적정레벨',`Lv ${G.minLv}~${G.maxLv}`],
+        ['보상',`경험치 ${qwNum(needExp(P.lv)*G.exp)} · ${qwNum(P.lv*G.gold)} 골드`]]}));}
+  const pins=ids.filter(gqPinned).length;$('#qwCount').textContent=`일일 ${ids.length}개${pins?` · 고정 ${pins}개`:''}`;}
+$('#qwTabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||!b.dataset.t||b.dataset.t===qwTab)return;qwTab=b.dataset.t;sfx('ui');renderQuestWin();});
+function openQuestWin(){if(mode!=='world'||!P)return;mode='dialog';attackHeld=false;unlockPointer();syncLockTip();qwTab='now';renderQuestWin();$('#qwin').hidden=false;}
 function closeQuestWin(){if($('#qwin').hidden)return;$('#qwin').hidden=true;mode='world';syncLockTip();focusGame();relock();}
 $('#qwClose').onclick=closeQuestWin;
 $('#qwin').addEventListener('pointerdown',e=>{if(e.target.id==='qwin')closeQuestWin();});   /* 창 바깥을 누르면 닫힌다 */
