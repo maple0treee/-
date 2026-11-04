@@ -18500,11 +18500,10 @@ function bmbSkill(S,id,pw,opt){const q0=player.position;opt={...opt,sk:id};
    사냥터에 있을 때 큰 지도(M)로 펴고, 설정에 따라 미니맵으로도 쓴다. */
 /* 하레나: 왕국 서쪽 끝, 사막 너머의 도시 (실제로는 포탈로만 이어져 있어 지도 위 자리만 정해 둔다) */
 const MOV_HARENA={x:OR.MH.cx-OR.MH.RR-1300,z:OR.MH.cz+300,R:170};
-const MOV_KIND={beach:'#d8c890',rocks:'#8a8478',cliff:'#7c9058',cape:'#93a05c',field:'#a9b062',hill:'#9c9a5c',wood:'#4f7d3c',vale:'#79a06a',pass:'#8d8572',lake:'#5f9a8a',river:'#6f9e6a',marsh:'#6b7448',ash:'#6a625c',lava:'#8a3e26',bvale:'#7a5e4a',bpass:'#6e605a'};
 function movLayout(W,H,mini){const MH=OR.MH,u=Math.min(W,H)/2,zones={};
   /* 모든 사냥터(고리 + 가지)가 들어가게 맞춘다. 이름 칸 몫으로 둘레를 더 비운다 */
   let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;const mg=mini?60:250;for(const id of OR.MHUNT){const I=OR.ISLES[id];x0=Math.min(x0,I.x-I.R-mg);x1=Math.max(x1,I.x+I.R+mg);z0=Math.min(z0,I.z-I.R-mg*.8);z1=Math.max(z1,I.z+I.R+mg*.8);}
-  if(!mini){const h=MOV_HARENA;x0=Math.min(x0,h.x-h.R*3.2);}   /* 큰 지도엔 서쪽 사막 너머 하레나까지 */
+  if(!mini){const h=MOV_HARENA;x0=Math.min(x0,h.x-h.R*3.2);z0-=120;z1+=60;}   /* 큰 지도엔 서쪽 사막 너머 하레나까지 */
   const k=Math.min(W*.98/(x1-x0),H*.98/(z1-z0)),cx=W/2+(MH.cx-(x0+x1)/2)*k,cy=H/2+(MH.cz-(z0+z1)/2)*k,ringR=MH.RR*k,rc=ringR*.42;
   for(const id of OR.MHUNT){const I=OR.ISLES[id];zones[id]={x:cx+(I.x-MH.cx)*k,y:cy+(I.z-MH.cz)*k,r:I.R*k,th:Math.atan2(I.z-MH.cz,I.x-MH.cx),line:I.line,i:I.seq};}
   return {u,cx,cy,rc,k,ringR,zones};}
@@ -18512,77 +18511,180 @@ function movLayout(W,H,mini){const MH=OR.MH,u=Math.min(W,H)/2,zones={};
 function movPos(Lo,x,z){if(x<800)return null;const I=OR.isleAt(x,z);if(!I)return null;
   if(I.id==='marcus'){const k=Lo.rc/350;return {x:Lo.cx+(x-I.x)*k,y:Lo.cy+(z-I.z)*k,rot:0};}
   if(!Lo.zones[I.id])return null;return {x:Lo.cx+(x-OR.MH.cx)*Lo.k,y:Lo.cy+(z-OR.MH.cz)*Lo.k,rot:0,id:I.id};}
-function drawMarcusOverview(c,W,H,o={}){const mini=!!o.mini,Lo=movLayout(W,H,mini),{u,cx,cy,rc,k,zones}=Lo,f=mini?1:Math.max(1,u/300),MH=OR.MH,P2=(wx,wz)=>[cx+(wx-MH.cx)*k,cy+(wz-MH.cz)*k];
-  /* 바탕: 들판색 양피지 */
-  c.fillStyle='#8f9c58';c.fillRect(0,0,W,H);
-  const g=c.createRadialGradient(cx,cy,u*.2,cx,cy,Math.max(W,H)*.7);g.addColorStop(0,'rgba(240,226,180,.25)');g.addColorStop(1,'rgba(40,30,20,.35)');c.fillStyle=g;c.fillRect(0,0,W,H);
-  const here=player?movPos(Lo,player.position.x,player.position.z):null;
-  /* 바다: 말굽이 트인 남동쪽(엑시즈 바로 앞까지)과 바닷가 땅 바깥 */
-  {const N=360,RO=MH.RR*3,rcW=rc/k,inner=[];let a0=null,a1=null;
-    for(let i=0;i<N;i++){const a=i/N*Math.PI*2,rp=MHR.ringPt(a),gk=MHR.gapK(rp.x,rp.z);let cs=0;for(const q of mhMix(rp.x,rp.z))if(q.I.coast)cs+=q.w;inner.push({a,has:gk>.02||cs>.05,r:MH.RR*.45+(MH.RR+MH.R*.95-MH.RR*.45)*(1-gk),gk});}
+/* 옛 지도 느낌: 양피지 바탕 위에 잉크 선과 옅은 물감. 도형이 드러나지 않게 땅·물가는 들쭉날쭉, 사냥터는 숲·언덕 같은 그림으로 */
+const MOV_TINT={beach:'#e6d29c',rocks:'#c4b9a0',cliff:'#b3bb84',cape:'#bcc088',field:'#cfcf90',hill:'#c9bd86',wood:'#9fb87e',vale:'#b4c592',pass:'#c0b294',lake:'#b2c7a0',river:'#b2c897',marsh:'#a9b086',ash:'#b0a69c',lava:'#bf8e74',bvale:'#b9a084',bpass:'#b3a395'};
+const MOV_INK='#4a3622',MOV_INK2='#6b5236',MOV_SEA='#a9c3bd',MOV_SEA2='#7fa3a0';
+/* 같은 자리에 늘 같은 값 (지도가 다시 그려져도 흔들리지 않게) */
+const movRnd=s=>{const x=Math.sin(s*127.1+311.7)*43758.5453;return x-Math.floor(x);};
+const movWob=(a,s)=>Math.sin(a*3+s)*.5+Math.sin(a*7+s*2.3)*.3+Math.sin(a*13+s*.7)*.2;   /* 둘레를 따라 부드럽게 들쭉날쭉 */
+function movBlob(c,x,y,r,s,amp){c.beginPath();for(let i=0;i<=48;i++){const a=i/48*Math.PI*2,rr=r*(1+amp*movWob(a,s));i?c.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr):c.moveTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr);}c.closePath();}
+/* 양피지 무늬 한 장 (한 번만 만든다) */
+function movPaper(){if(movPaper.p)return movPaper.p;const S=256,cv=document.createElement('canvas');cv.width=cv.height=S;const g=cv.getContext('2d'),im=g.createImageData(S,S);
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){const n=(movRnd(x*1.3+y*7.1)-.5)*16+Math.sin(x*.05+y*.02)*4+Math.sin(y*.09-x*.03)*3,i=(y*S+x)*4;im.data[i]=233+n;im.data[i+1]=219+n;im.data[i+2]=184+n*.8;im.data[i+3]=255;}
+  g.putImageData(im,0,0);g.strokeStyle='rgba(120,90,50,.06)';g.lineWidth=1;for(let i=0;i<40;i++){const x=movRnd(i)*S,y=movRnd(i+50)*S;g.beginPath();g.moveTo(x,y);g.lineTo(x+(movRnd(i+9)-.5)*60,y+(movRnd(i+19)-.5)*14);g.stroke();}   /* 섬유 결 */
+  return movPaper.p=cv;}
+/* 그림 기호: 산·나무·언덕·풀·바위·물결 */
+const movGlyph={
+  mtn(c,x,y,s,sd){const h=s*(1+.25*movRnd(sd)),w=s*(1.1+.3*movRnd(sd+1)),px=x+(movRnd(sd+2)-.5)*s*.25;
+    c.fillStyle='#eadcb6';c.beginPath();c.moveTo(x-w,y);c.lineTo(px-w*.2,y-h*.7);c.lineTo(px,y-h);c.lineTo(px+w*.3,y-h*.62);c.lineTo(x+w,y);c.closePath();c.fill();
+    c.fillStyle='rgba(120,95,60,.45)';c.beginPath();c.moveTo(px,y-h);c.lineTo(px+w*.3,y-h*.62);c.lineTo(x+w,y);c.lineTo(px+w*.05,y);c.closePath();c.fill();   /* 그늘진 쪽 */
+    c.strokeStyle=MOV_INK;c.lineWidth=Math.max(.8,s*.1);c.beginPath();c.moveTo(x-w,y);c.lineTo(px-w*.2,y-h*.7);c.lineTo(px,y-h);c.lineTo(px+w*.3,y-h*.62);c.lineTo(x+w,y);c.stroke();
+    c.lineWidth=Math.max(.5,s*.06);c.beginPath();for(let q=1;q<4;q++){const t=q/4;c.moveTo(px+w*.12*t+w*.1,y-h*(1-t)*.9);c.lineTo(px+w*.12*t+w*.22,y-h*(1-t)*.9+h*.18);}c.stroke();},
+  tree(c,x,y,s,sd){const r=s*(.42+.12*movRnd(sd));c.strokeStyle=MOV_INK;c.lineWidth=Math.max(.6,s*.09);c.beginPath();c.moveTo(x,y);c.lineTo(x,y-s*.45);c.stroke();
+    c.fillStyle=movRnd(sd+3)<.5?'#7e9b5c':'#6f8f52';c.beginPath();c.arc(x,y-s*.45-r*.8,r,0,7);c.fill();c.stroke();
+    c.fillStyle='rgba(40,50,20,.25)';c.beginPath();c.arc(x+r*.3,y-s*.45-r*.6,r*.6,-.6,2.2);c.fill();},
+  pine(c,x,y,s){c.fillStyle='#5f8250';c.strokeStyle=MOV_INK;c.lineWidth=Math.max(.6,s*.09);c.beginPath();c.moveTo(x,y-s*1.25);c.lineTo(x+s*.38,y-s*.15);c.lineTo(x-s*.38,y-s*.15);c.closePath();c.fill();c.stroke();c.beginPath();c.moveTo(x,y-s*.15);c.lineTo(x,y);c.stroke();},
+  hill(c,x,y,s){c.strokeStyle=MOV_INK2;c.lineWidth=Math.max(.7,s*.09);c.beginPath();c.moveTo(x-s,y);c.quadraticCurveTo(x-s*.1,y-s*.95,x+s,y);c.stroke();
+    c.lineWidth=Math.max(.5,s*.05);c.beginPath();for(let q=0;q<3;q++){const t=.25+q*.2;c.moveTo(x+s*t,y-s*.42*(1-t)-s*.05);c.lineTo(x+s*t+s*.08,y-s*.02);}c.stroke();},
+  grass(c,x,y,s){c.strokeStyle='rgba(90,100,50,.75)';c.lineWidth=Math.max(.5,s*.07);c.beginPath();c.moveTo(x-s*.3,y-s*.3);c.lineTo(x-s*.1,y);c.moveTo(x,y-s*.45);c.lineTo(x,y);c.moveTo(x+s*.3,y-s*.3);c.lineTo(x+s*.1,y);c.stroke();},
+  rock(c,x,y,s,sd){c.fillStyle='#bdb3a0';c.strokeStyle=MOV_INK;c.lineWidth=Math.max(.6,s*.08);c.beginPath();c.moveTo(x-s*.5,y);c.lineTo(x-s*.35,y-s*.35);c.lineTo(x+s*(.05+.1*movRnd(sd)),y-s*.5);c.lineTo(x+s*.45,y-s*.2);c.lineTo(x+s*.5,y);c.closePath();c.fill();c.stroke();},
+  wave(c,x,y,s){c.beginPath();c.arc(x-s*.5,y,s*.5,Math.PI*1.15,Math.PI*1.85);c.arc(x+s*.5,y,s*.5,Math.PI*1.15,Math.PI*1.85);c.stroke();},
+  house(c,x,y,s,col){c.fillStyle='#efe3c4';c.strokeStyle=MOV_INK;c.lineWidth=Math.max(.5,s*.12);c.fillRect(x-s*.5,y-s*.45,s,s*.45);c.strokeRect(x-s*.5,y-s*.45,s,s*.45);
+    c.fillStyle=col||'#b6603f';c.beginPath();c.moveTo(x-s*.62,y-s*.42);c.lineTo(x,y-s*.95);c.lineTo(x+s*.62,y-s*.42);c.closePath();c.fill();c.stroke();},
+  tower(c,x,y,s){c.fillStyle='#e8dab4';c.strokeStyle=MOV_INK;c.lineWidth=Math.max(.6,s*.1);c.fillRect(x-s*.3,y-s,s*.6,s);c.strokeRect(x-s*.3,y-s,s*.6,s);
+    c.beginPath();for(let q=0;q<3;q++){c.rect(x-s*.3+q*s*.24,y-s-s*.16,s*.12,s*.16);}c.fill();c.stroke();},
+};
+/* 성벽 도시: 들쭉날쭉한 성벽·탑·집 */
+function movTown(c,x,y,r,f,o){const sd=o.seed||1;
+  movBlob(c,x,y,r,sd,.05);c.fillStyle=o.ground||'#efe2bf';c.fill();
+  if(o.water){c.save();movBlob(c,x,y,r,sd,.05);c.clip();o.water();c.restore();}
+  const n=o.houses||30;const hs=[];for(let q=0;q<n;q++){const a=q*2.399+sd,rr=Math.sqrt((q+.5)/n)*r*.78;hs.push([x+Math.cos(a)*rr,y+Math.sin(a)*rr]);}
+  hs.sort((A,B)=>A[1]-B[1]);for(const [hx,hy] of hs)movGlyph.house(c,hx,hy+r*.05,Math.max(3*f,r*.11),o.roof);
+  if(o.keep)o.keep();
+  movBlob(c,x,y,r,sd,.05);c.strokeStyle=MOV_INK;c.lineWidth=Math.max(1.5,r*.05);c.stroke();c.strokeStyle='rgba(74,54,34,.35)';c.lineWidth=Math.max(.8,r*.02);movBlob(c,x,y,r*1.06,sd,.05);c.stroke();
+  const T=o.towers||10;for(let q=0;q<T;q++){const a=q/T*Math.PI*2+.2,rr=r*(1+.05*movWob(a,sd));movGlyph.tower(c,x+Math.cos(a)*rr,y+Math.sin(a)*rr+r*.06,Math.max(3.5*f,r*.12));}}
+/* 땅·바다·산·도시처럼 움직이지 않는 그림: 화면 크기·확대가 같으면 한 번 그린 것을 다시 쓴다 */
+function movStatic(c,W,H,mini,Lo){const {u,cx,cy,rc,k,zones}=Lo,f=mini?1:Math.max(1,u/300),MH=OR.MH,P2=(wx,wz)=>[cx+(wx-MH.cx)*k,cy+(wz-MH.cz)*k];
+  /* 바탕: 양피지 */
+  c.fillStyle=c.createPattern(movPaper(),'repeat');c.fillRect(-W,-H,W*3,H*3);
+  /* 바다: 말굽이 트인 남동쪽과 바닷가 땅 바깥. 물가는 들쭉날쭉하게 */
+  const sea=new Path2D(),coast=[];
+  {const N=360,RO=MH.RR*3,rcW=rc/k,inner=[];
+    for(let i=0;i<N;i++){const a=i/N*Math.PI*2,rp=MHR.ringPt(a),gk=MHR.gapK(rp.x,rp.z);let cs=0;for(const q of mhMix(rp.x,rp.z))if(q.I.coast)cs+=q.w;inner.push({a,has:gk>.02||cs>.05,r:MH.RR*.45+(MH.RR+MH.R*.95-MH.RR*.45)*(1-gk)});}
     let st=inner.findIndex((q,i)=>q.has&&!inner[(i+N-1)%N].has);if(st<0)st=0;const run=[];for(let j=0;j<N;j++){const q=inner[(st+j)%N];if(!q.has)break;run.push(q);}
-    if(run.length){const pt=(a,r)=>[cx+Math.cos(a)*r*k,cy+Math.sin(a)*r*k];c.fillStyle='#4f7d8c';c.beginPath();run.forEach((q,i)=>{const [x,y]=pt(q.a,Math.max(q.r,rcW*.9));i?c.lineTo(x,y):c.moveTo(x,y);});
-      for(let j=run.length-1;j>=0;j--){const [x,y]=pt(run[j].a,RO);c.lineTo(x,y);}c.closePath();c.fill();
-      c.strokeStyle='#e0d0a0';c.lineWidth=(mini?2:4)*f;c.beginPath();run.forEach((q,i)=>{const [x,y]=pt(q.a,Math.max(q.r,rcW*.9));i?c.lineTo(x,y):c.moveTo(x,y);});c.stroke();   /* 모래 물가 */
-      if(!mini){c.strokeStyle='rgba(220,236,240,.35)';c.lineWidth=1.2*f;for(let w=0;w<26;w++){const q=run[Math.floor((w*.618%1)*run.length)],rr2=q.r+(MH.R*1.2+((w*37)%5)*90),[x,y]=pt(q.a,rr2);c.beginPath();c.arc(x,y,5*f,Math.PI*1.1,Math.PI*1.9);c.stroke();c.beginPath();c.arc(x+9*f,y,5*f,Math.PI*1.1,Math.PI*1.9);c.stroke();}
-        const qm=run[Math.floor(run.length*.5)],[lx,ly]=pt(qm.a,MH.RR*1.05);c.font=`700 ${Math.round(15*f)}px "KMUSunggokSerif","Gowun Batang",serif`;c.textAlign='center';c.textBaseline='middle';c.lineWidth=4*f;c.strokeStyle='rgba(20,30,40,.7)';c.strokeText('바다',lx,ly);c.fillStyle='#dceef2';c.fillText('바다',lx,ly);}}}
-  /* 하레나: 서쪽 끝 사막과 성벽 도시 */
-  if(!mini){const h=MOV_HARENA,[hx,hy]=P2(h.x,h.z),hr=h.R*k,dr=hr*3.4;
-    for(const [ox,oy,rr] of [[0,0,1],[-.55,-.35,.8],[-.5,.45,.75],[.35,.5,.6],[.3,-.55,.6],[-1,.05,.7]]){const bx=hx+ox*dr,by=hy+oy*dr,br=rr*dr,sg=c.createRadialGradient(bx,by,br*.2,bx,by,br);   /* 사막: 모래 덩이 몇 개를 겹쳐 들쭉날쭉하게 */
-      sg.addColorStop(0,'rgba(220,194,138,.95)');sg.addColorStop(.6,'rgba(214,184,124,.8)');sg.addColorStop(1,'rgba(200,170,110,0)');c.fillStyle=sg;c.beginPath();c.arc(bx,by,br,0,7);c.fill();}
-    c.strokeStyle='rgba(150,112,62,.55)';c.lineWidth=1.4*f;for(let i=0;i<40;i++){const a=i*2.399,r=hr*(1.3+(i*.618%1)*2.2),x=hx+Math.cos(a)*r*1.1,y=hy+Math.sin(a)*r;   /* 모래 언덕 결 */
-      c.beginPath();c.moveTo(x-9*f,y);c.quadraticCurveTo(x-3*f,y-5*f,x+2*f,y-1*f);c.quadraticCurveTo(x+6*f,y+2*f,x+10*f,y-2*f);c.stroke();}
-    c.fillStyle='#e6d2a2';c.beginPath();c.arc(hx,hy,hr,0,7);c.fill();c.strokeStyle='#9a7a4e';c.lineWidth=(3.5)*f;c.stroke();   /* 성벽 */
-    c.fillStyle='#9a7a4e';for(let q=0;q<8;q++){const a=q/8*Math.PI*2;c.beginPath();c.arc(hx+Math.cos(a)*hr,hy+Math.sin(a)*hr,3.2*f,0,7);c.fill();}
-    c.fillStyle='#c08a56';for(let q=0;q<18;q++){const a=q*2.399,r=Math.sqrt((q+.5)/18)*hr*.78;c.fillRect(hx+Math.cos(a)*r-2.5*f,hy+Math.sin(a)*r-2*f,5*f,4*f);}   /* 흙집 */
-    c.fillStyle='#5f9aa8';c.beginPath();c.ellipse(hx+hr*.12,hy-hr*.05,hr*.16,hr*.11,0,0,7);c.fill();   /* 오아시스 */
-    c.textAlign='center';c.textBaseline='bottom';c.font=`700 ${Math.round(16*f)}px "KMUSunggokSerif","Gowun Batang",serif`;c.lineWidth=4*f;c.strokeStyle='rgba(20,16,12,.9)';
-    const hn=ZONES.town?ZONES.town.name:'하레나';c.strokeText(hn,hx,hy-hr-8*f);c.fillStyle='#fff4dc';c.fillText(hn,hx,hy-hr-8*f);}
-  /* 산: 엑시즈와 고리 사이 (바다 쪽은 비운다) */
-  const mtn=(x,y,s)=>{c.fillStyle='#7d7458';c.beginPath();c.moveTo(x-s,y+s*.55);c.lineTo(x,y-s*.65);c.lineTo(x+s,y+s*.55);c.closePath();c.fill();c.fillStyle='#ece4cc';c.beginPath();c.moveTo(x-s*.3,y-s*.3);c.lineTo(x,y-s*.65);c.lineTo(x+s*.3,y-s*.3);c.closePath();c.fill();};
-  {const s=(mini?4:7)*f;for(let i=0;i<64;i++){const a=i/64*Math.PI*2+.05,rp=MHR.ringPt(a);if(MHR.gapK(rp.x,rp.z)>0)continue;const r=(rc+(Lo.ringR-Lo.zones.mfield.r-rc)*(.35+.4*((i*7)%5)/4));const x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;if(!mini||i%2)mtn(x,y,s);}}
-  /* 고리 밖 가지 지역: 그을린 바탕과 지역 이름 */
-  for(const L of OR.MLINES){if(!L.branch)continue;const Zs=L.zones.map(q=>zones[q[0]]);c.fillStyle='rgba(60,36,28,.28)';for(const Z of Zs){c.beginPath();c.arc(Z.x,Z.y,Z.r*1.45,0,7);c.fill();}
-    if(!mini){const Z1=Zs[Zs.length-1],Z0=Zs[Zs.length-2],a=Math.atan2(Z1.y-Z0.y,Z1.x-Z0.x),lx=Z1.x+Math.cos(a)*Z1.r*1.5,ly=Z1.y+Math.sin(a)*Z1.r*1.5;   /* 지역 이름은 가지 끝 너머에 */
-      c.font=`700 ${Math.round(15*f)}px "KMUSunggokSerif","Gowun Batang",serif`;c.textAlign='left';c.textBaseline='middle';c.lineWidth=4*f;c.strokeStyle='rgba(20,16,12,.9)';c.strokeText(L.region,lx,ly);c.fillStyle='#ffb07a';c.fillText(L.region,lx,ly);}}
-  /* 길: 고리 길과 문마다 고갯길 */
-  c.lineCap='round';c.lineJoin='round';c.strokeStyle='#d9cba0';c.lineWidth=(mini?2.5:5)*f;
-  for(const pts of MHR.paths){c.beginPath();pts.forEach((p,i)=>{const [x,y]=P2(p.x,p.z);i?c.lineTo(x,y):c.moveTo(x,y);});c.stroke();}
-  for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],[gx,gy]=P2(F.gate.x,F.gate.z),ux=Math.cos(F.th),uy=Math.sin(F.th);c.setLineDash([5*f,4*f]);c.beginPath();c.moveTo(cx+ux*rc,cy+uy*rc);c.lineTo(gx,gy);c.stroke();c.setLineDash([]);}
+    if(run.length){const pt=(a,r)=>[cx+Math.cos(a)*r*k,cy+Math.sin(a)*r*k];
+      const cr=q=>Math.max(q.r,rcW*.9)+38*Math.sin(q.a*23+1)+22*Math.sin(q.a*57+2)+12*Math.sin(q.a*131);
+      /* 물가 양 끝은 곧게 뻗지 않고 바다 쪽으로 휘며 멀어진다 */
+      const tail=(q,dir)=>{const out=[],r0=cr(q);for(let i=0;i<=40;i++){const t=i/40;out.push(pt(q.a+dir*(.07*t*t+.012*Math.sin(t*11)),r0+(RO-r0)*Math.pow(t,1.6)));}return out;};
+      const A=run[0],B=run[run.length-1];coast.push(...tail(A,1).reverse());run.forEach(q=>coast.push(pt(q.a,cr(q))));coast.push(...tail(B,-1));
+      coast.forEach((p,i)=>i?sea.lineTo(p[0],p[1]):sea.moveTo(p[0],p[1]));
+      for(let j=run.length-1;j>=0;j--){const [x,y]=pt(run[j].a,RO*1.2);sea.lineTo(x,y);}sea.closePath();
+      c.fillStyle=MOV_SEA;c.fill(sea);
+      c.save();c.clip(sea);   /* 물가를 따라 겹겹이 옅어지는 물결선 (옛 지도 바닷가) */
+      const cl=()=>{c.beginPath();coast.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));};
+      c.strokeStyle=MOV_SEA2;
+      for(let q=5;q>=1;q--){c.globalAlpha=.12+.1*(5-q);c.lineWidth=(mini?2:5)*f*q;cl();c.stroke();}c.globalAlpha=1;
+      if(!mini){c.strokeStyle='rgba(60,95,100,.45)';c.lineWidth=1*f;for(let w=0;w<70;w++){const q=run[Math.floor(movRnd(w+3)*run.length)],rr=Math.max(q.r,rcW*.9)+MH.R*(1.1+movRnd(w+7)*4.2),[x,y]=pt(q.a+(movRnd(w+11)-.5)*.05,rr);movGlyph.wave(c,x,y,(5+movRnd(w)*3)*f);}}
+      c.restore();
+      c.strokeStyle=MOV_INK;c.lineWidth=(mini?1.2:2)*f;c.beginPath();coast.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));c.stroke();}}
+  const T0=c.getTransform(),onSea=(x,y)=>{const q=T0.transformPoint(new DOMPoint(x,y));return c.isPointInPath(sea,q.x,q.y);};
+  /* 하레나: 서쪽 끝 사막 */
+  if(!mini){const h=MOV_HARENA,[hx,hy]=P2(h.x,h.z),hr=h.R*k,dr=hr*3.2;
+    c.save();c.globalAlpha=.8;movBlob(c,hx-dr*.15,hy,dr,7,.18);const sg=c.createRadialGradient(hx,hy,dr*.2,hx,hy,dr*1.1);sg.addColorStop(0,'#e3c78e');sg.addColorStop(.75,'rgba(226,196,140,.85)');sg.addColorStop(1,'rgba(226,196,140,0)');c.fillStyle=sg;c.fill();c.restore();
+    c.fillStyle='rgba(140,105,60,.5)';for(let i=0;i<260;i++){const a=movRnd(i+400)*Math.PI*2,r=Math.sqrt(movRnd(i+700))*dr*.95;if(r<hr*1.1)continue;c.fillRect(hx-dr*.15+Math.cos(a)*r,hy+Math.sin(a)*r,1.2*f,1.2*f);}   /* 모래 점 */
+    c.strokeStyle='rgba(120,88,50,.6)';c.lineWidth=1.1*f;for(let i=0;i<26;i++){const a=movRnd(i+90)*Math.PI*2,r=hr*(1.35+movRnd(i+60)*1.6),x=hx-dr*.1+Math.cos(a)*r,y=hy+Math.sin(a)*r*.85,s=(7+movRnd(i)*6)*f;   /* 모래 언덕 */
+      c.beginPath();c.moveTo(x-s,y);c.quadraticCurveTo(x-s*.2,y-s*.55,x+s,y-s*.05);c.stroke();}
+    movTown(c,hx,hy,hr,f,{seed:3,houses:16,towers:8,ground:'#f1e2bd',roof:'#c48a58',water:()=>{c.fillStyle='#8fb7b5';movBlob(c,hx+hr*.1,hy-hr*.05,hr*.17,5,.2);c.fill();c.strokeStyle=MOV_INK2;c.lineWidth=1*f;c.stroke();}});}
+  /* 고리 밖 뭍: 옅은 숲과 들 (바다·사냥터·사막은 비운다) */
+  if(!mini){for(let i=0;i<520;i++){const a=movRnd(i+1000)*Math.PI*2,rr=MH.RR+MH.R*(1.5+movRnd(i+2000)*5),wx=MH.cx+Math.cos(a)*rr,wz=MH.cz+Math.sin(a)*rr,[x,y]=P2(wx,wz);
+      if(x<-20||y<-20||x>W+20||y>H+20||onSea(x,y)||onSea(x,y+8*f))continue;if(Object.values(zones).some(Z=>Math.hypot(Z.x-x,Z.y-y)<Z.r*1.35))continue;
+      const h=MOV_HARENA,[hx,hy]=P2(h.x,h.z);if(Math.hypot(hx-x,hy-y)<h.R*k*3.6)continue;
+      c.globalAlpha=.55;const s=(5+movRnd(i)*2.5)*f;movRnd(i+5)<.62?movGlyph.tree(c,x,y,s,i):movRnd(i+6)<.5?movGlyph.hill(c,x,y,s*1.2):movGlyph.grass(c,x,y,s);c.globalAlpha=1;}}
+  /* 산: 엑시즈와 고리 사이 (바다 쪽은 비운다). 뒤(위)에 있는 것부터 */
+  {const ms=[];const s0=(mini?3.5:8)*f;for(let i=0;i<(mini?60:150);i++){const a=movRnd(i+3000)*Math.PI*2,rp=MHR.ringPt(a);if(MHR.gapK(rp.x,rp.z)>0)continue;const t=.25+movRnd(i+3100)*.6,r=rc+(Lo.ringR-Lo.zones.mfield.r*1.05-rc)*t,x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;
+      if(onSea(x,y))continue;ms.push([x,y,s0*(.75+movRnd(i)*.6),i]);}
+    ms.sort((A,B)=>A[1]-B[1]);for(const [x,y,s,i] of ms)movGlyph.mtn(c,x,y,s,i);}
+  /* 사냥터: 물감 번진 땅 + 그 땅 생김새 그림 + 점선 경계 */
+  for(const id in zones){const Z=zones[id],I=OR.ISLES[id],kd=(I.branch&&(I.kind==='vale'||I.kind==='pass')?'b':'')+I.kind,sd=I.k*3.1+1;
+    c.save();movBlob(c,Z.x,Z.y,Z.r*1.12,sd,.1);c.globalAlpha=.75;const g=c.createRadialGradient(Z.x,Z.y,Z.r*.3,Z.x,Z.y,Z.r*1.25);g.addColorStop(0,MOV_TINT[kd]||'#c4c48c');g.addColorStop(.8,MOV_TINT[kd]||'#c4c48c');g.addColorStop(1,'rgba(200,200,140,0)');c.fillStyle=g;c.fill();c.restore();
+    if(I.kind==='lake'){c.fillStyle=MOV_SEA;movBlob(c,Z.x+Math.cos(Z.th)*Z.r*.35,Z.y+Math.sin(Z.th)*Z.r*.35,Z.r*.42,sd,.18);c.fill();c.strokeStyle=MOV_INK2;c.lineWidth=1*f;c.stroke();}
+    if(I.kind==='river'){c.strokeStyle=MOV_SEA2;c.lineWidth=Math.max(1.5,Z.r*.07);c.beginPath();for(let q=-10;q<=10;q++){const s=q/10*Z.r*1.5,lat=Math.sin(q*.6+sd)*Z.r*.12,ux=Math.cos(Z.th),uy=Math.sin(Z.th),x=Z.x+ux*s-uy*lat,y=Z.y+uy*s+ux*lat;q>-10?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();}
+    if(mini){if(I.kind==='wood'||I.kind==='cape'){for(let q=0;q<5;q++){const a=q*1.3+sd,r=Z.r*.5*movRnd(q+sd);movGlyph.tree(c,Z.x+Math.cos(a)*r,Z.y+Math.sin(a)*r+Z.r*.2,Z.r*.3,q);}}continue;}
+    const N=I.kind==='wood'?26:I.kind==='beach'||I.kind==='lake'||I.kind==='river'?10:14,gl=[];
+    for(let q=0;q<N;q++){const a=movRnd(q*7+sd)*Math.PI*2,r=Math.sqrt(movRnd(q*11+sd))*Z.r*.86,x=Z.x+Math.cos(a)*r,y=Z.y+Math.sin(a)*r;
+      if(I.kind==='lake'&&Math.hypot(x-(Z.x+Math.cos(Z.th)*Z.r*.35),y-(Z.y+Math.sin(Z.th)*Z.r*.35))<Z.r*.5)continue;gl.push([x,y,q]);}
+    gl.sort((A,B)=>A[1]-B[1]);const s=Math.max(4*f,Z.r*.13);
+    for(const [x,y,q] of gl){switch(I.kind){
+      case 'wood':case 'cape':movRnd(q+sd)<.35?movGlyph.pine(c,x,y,s*1.1):movGlyph.tree(c,x,y,s,q+sd);break;
+      case 'hill':case 'cliff':movGlyph.hill(c,x,y,s*1.3);break;
+      case 'pass':case 'bpass':case 'vale':q%2?movGlyph.mtn(c,x,y,s*.9,q+sd):movGlyph.hill(c,x,y,s*1.2);break;
+      case 'rocks':case 'ash':movGlyph.rock(c,x,y,s*.9,q+sd);break;
+      case 'lava':q%3?movGlyph.rock(c,x,y,s*.9,q+sd):(c.fillStyle='#c4502c',movBlob(c,x,y,s*.4,q,.2),c.fill());break;
+      case 'beach':c.fillStyle='rgba(140,110,60,.55)';for(let d=0;d<6;d++)c.fillRect(x+(movRnd(q*9+d)-.5)*s*1.6,y+(movRnd(q*13+d)-.5)*s,1.2*f,1.2*f);break;
+      case 'marsh':movGlyph.grass(c,x,y,s);break;
+      default:q%3?movGlyph.grass(c,x,y,s):movGlyph.tree(c,x,y,s*.85,q+sd);}}
+    c.setLineDash([2*f,3*f]);c.strokeStyle='rgba(110,60,40,.55)';c.lineWidth=1.1*f;movBlob(c,Z.x,Z.y,Z.r,sd,.07);c.stroke();c.setLineDash([]);}
+  /* 길: 흙길은 잉크 점선 */
+  c.lineCap='round';c.lineJoin='round';
+  const road=(pts,dash)=>{c.beginPath();pts.forEach((p,i)=>{const [x,y]=P2(p.x,p.z);i?c.lineTo(x,y):c.moveTo(x,y);});c.strokeStyle='rgba(239,226,191,.9)';c.lineWidth=(mini?2.5:5)*f;c.setLineDash([]);c.stroke();c.strokeStyle='#7a5532';c.lineWidth=(mini?1:1.6)*f;c.setLineDash(dash);c.stroke();c.setLineDash([]);};
+  for(const pts of MHR.paths)road(pts,[6*f,4*f]);
+  for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],ux=Math.cos(F.th),uz=Math.sin(F.th);
+    road([{x:MH.cx+ux*rc/k,z:MH.cz+uz*rc/k},F.gate],[3*f,4*f]);}
   /* 밀골 */
-  {const E=OR.ISLES.mpass;if(E.mgate){const [ex,ey]=P2(E.mgate.x,E.mgate.z),ux=-E.mgate.ux,uy=-E.mgate.uz,mx=ex+ux*16*f,my=ey+uy*16*f;c.setLineDash([5*f,4*f]);c.beginPath();c.moveTo(ex,ey);c.lineTo(mx,my);c.stroke();c.setLineDash([]);
-    c.fillStyle='#c8b890';c.beginPath();c.ellipse(mx,my,9*f,7*f,0,0,7);c.fill();c.fillStyle='#8a5a3a';for(let q=0;q<4;q++)c.fillRect(mx-4*f+(q%2)*5*f,my-3*f+Math.floor(q/2)*3.5*f,3*f,2.5*f);
-    if(!mini){c.font=`700 ${Math.round(11*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.textAlign='center';c.textBaseline='bottom';c.lineWidth=3*f;c.strokeStyle='rgba(20,16,12,.85)';const nm=ZONES.milgol?ZONES.milgol.name:'밀골';c.strokeText(nm,mx,my-8*f);c.fillStyle='#f4ecd8';c.fillText(nm,mx,my-8*f);}}}
-  /* 엑시즈 */
-  c.fillStyle='#d6c69c';c.beginPath();c.arc(cx,cy,rc,0,7);c.fill();c.strokeStyle='#8a7a5a';c.lineWidth=(mini?2:4)*f;c.stroke();
-  c.fillStyle='#b8644a';for(let q=0;q<26;q++){const a=q*2.399,r=Math.sqrt((q+.5)/26)*rc*.8;c.fillRect(cx+Math.cos(a)*r-2.5*f,cy+Math.sin(a)*r-2*f,5*f,4*f);}
-  c.strokeStyle='#5a8aa8';c.lineWidth=(mini?1.5:3)*f;c.beginPath();c.moveTo(cx-rc*.95,cy-rc*.05);c.quadraticCurveTo(cx,cy+rc*.45,cx+rc*.3,cy+rc*.95);c.stroke();
-  c.textAlign='center';c.textBaseline='middle';
-  for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],ux=Math.cos(F.th),uy=Math.sin(F.th);c.fillStyle='#6a5a44';c.fillRect(cx+ux*rc-4*f,cy+uy*rc-4*f,8*f,8*f);
-    if(!mini){const gx=cx+ux*(rc+16*f)+(uy?14*f:0),gy=cy+uy*(rc+16*f)+(ux?-12*f:0);c.font=`700 ${Math.round(11*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*f;c.strokeStyle='rgba(20,16,12,.85)';c.strokeText(L.gate,gx,gy);c.fillStyle='#f0e2c0';c.fillText(L.gate,gx,gy);}}
-  if(!mini){c.font=`700 ${Math.round(16*f)}px "KMUSunggokSerif","Gowun Batang",serif`;c.lineWidth=4*f;c.strokeStyle='rgba(20,16,12,.9)';c.strokeText(ZONES.marcus.name,cx,cy-rc*.15);c.fillStyle='#fff4dc';c.fillText(ZONES.marcus.name,cx,cy-rc*.15);
-    c.font=`${Math.round(10*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*f;c.strokeText('안전 지대',cx,cy+rc*.15);c.fillStyle='#d4ae63';c.fillText('안전 지대',cx,cy+rc*.15);}
-  /* 사냥터 땅 */
+  {const E=OR.ISLES.mpass;if(E.mgate){const [ex,ey]=P2(E.mgate.x,E.mgate.z),ux=-E.mgate.ux,uy=-E.mgate.uz,mx=ex+ux*34*f,my=ey+uy*34*f;
+    c.strokeStyle='#7a5532';c.lineWidth=1.4*f;c.setLineDash([3*f,4*f]);c.beginPath();c.moveTo(ex,ey);c.lineTo(mx,my);c.stroke();c.setLineDash([]);
+    c.fillStyle='rgba(214,190,110,.6)';movBlob(c,mx,my,11*f,9,.2);c.fill();for(let q=0;q<4;q++)movGlyph.house(c,mx-6*f+(q%2)*8*f+(q>1?3*f:0),my-1*f+Math.floor(q/2)*6*f,5*f,'#a8603e');}}
+  /* 엑시즈: 성벽 도시, 북쪽에 성, 가운데로 흐르는 강 */
+  movTown(c,cx,cy,rc,f,{seed:1,houses:mini?14:46,towers:mini?8:14,
+    water:()=>{c.strokeStyle='#8fb3b3';c.lineWidth=(mini?2.5:5)*f;c.beginPath();c.moveTo(cx-rc*1.05,cy-rc*.05);c.quadraticCurveTo(cx,cy+rc*.45,cx+rc*.3,cy+rc*1.05);c.stroke();c.strokeStyle=MOV_INK2;c.lineWidth=.8*f;c.stroke();},
+    keep:()=>{const s=rc*.2,x=cx+rc*.05,y=cy-rc*.42;c.fillStyle='#e8dab4';c.strokeStyle=MOV_INK;c.lineWidth=Math.max(1,s*.06);c.fillRect(x-s*.8,y-s*.6,s*1.6,s*.6);c.strokeRect(x-s*.8,y-s*.6,s*1.6,s*.6);
+      movGlyph.tower(c,x-s*.75,y,s*1.1);movGlyph.tower(c,x+s*.75,y,s*1.1);movGlyph.tower(c,x,y-s*.2,s*1.4);
+      c.beginPath();c.moveTo(x,y-s*1.75);c.lineTo(x,y-s*2.2);c.stroke();c.fillStyle='#a8473a';c.beginPath();c.moveTo(x,y-s*2.2);c.lineTo(x+s*.4,y-s*2.08);c.lineTo(x,y-s*1.96);c.closePath();c.fill();}});
+  for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],ux=Math.cos(F.th),uy=Math.sin(F.th);c.fillStyle='#5a4028';c.beginPath();c.arc(cx+ux*rc,cy+uy*rc,(mini?2.5:4.5)*f,0,7);c.fill();}
+  if(mini)return;
+  /* 나침반: 바다 위 오른쪽 아래 */
+  {const R=34*f,x=W-R-26*f,y=H-R-30*f;c.save();c.translate(x,y);c.strokeStyle=MOV_INK;c.lineWidth=1*f;c.beginPath();c.arc(0,0,R*.62,0,7);c.stroke();c.beginPath();c.arc(0,0,R*.55,0,7);c.stroke();
+    for(let q=0;q<8;q++){const a=q*Math.PI/4-Math.PI/2,L=q%2?R*.55:R,w=q%2?R*.1:R*.16;for(const sd of [-1,1]){c.fillStyle=sd<0?MOV_INK:'#efe2bf';c.beginPath();c.moveTo(0,0);c.lineTo(Math.cos(a)*L,Math.sin(a)*L);c.lineTo(Math.cos(a+sd*Math.PI/2)*w,Math.sin(a+sd*Math.PI/2)*w);c.closePath();c.fill();c.stroke();}}
+    c.font=`700 ${Math.round(12*f)}px "KMUSunggokSerif","Gowun Batang",serif`;c.textAlign='center';c.textBaseline='bottom';c.fillStyle=MOV_INK;c.fillText('북',0,-R-2*f);c.restore();}
+  /* 가장자리: 그을린 양피지와 두 줄 테두리 */
+  {const g=c.createRadialGradient(W/2,H/2,Math.min(W,H)*.35,W/2,H/2,Math.hypot(W,H)*.6);g.addColorStop(0,'rgba(90,60,30,0)');g.addColorStop(1,'rgba(90,60,30,.35)');c.fillStyle=g;c.fillRect(0,0,W,H);
+    c.strokeStyle=MOV_INK;c.lineWidth=2.2*f;c.strokeRect(7*f,7*f,W-14*f,H-14*f);c.lineWidth=.8*f;c.strokeRect(11*f,11*f,W-22*f,H-22*f);}}
+const MOV_CACHE={};
+function drawMarcusOverview(c,W,H,o={}){const mini=!!o.mini,Lo=movLayout(W,H,mini),{u,cx,cy,rc,k,zones}=Lo,f=mini?1:Math.max(1,u/300),MH=OR.MH,P2=(wx,wz)=>[cx+(wx-MH.cx)*k,cy+(wz-MH.cz)*k];
+  /* 움직이지 않는 그림은 따로 그려 두고 붙인다 (지도는 1초에 몇 번씩 다시 그려진다) */
+  {const T=c.getTransform(),cw=c.canvas.width,ch=c.canvas.height,key=[mini,W,H,cw,ch,T.a,T.d,T.e,T.f].map(v=>typeof v==='number'?v.toFixed(2):v).join(',');let C=MOV_CACHE[mini?'m':'b'];
+    if(!C||C.key!==key){if(!C){C=MOV_CACHE[mini?'m':'b']={cv:document.createElement('canvas')};}C.key=key;C.cv.width=cw;C.cv.height=ch;const g=C.cv.getContext('2d');g.setTransform(T);movStatic(g,W,H,mini,Lo);}
+    c.save();c.setTransform(1,0,0,1,0,0);c.drawImage(C.cv,0,0);c.restore();}
+  const here=player?movPos(Lo,player.position.x,player.position.z):null;
+  const ink=(t,x,y,font,col,halo)=>{c.font=font;c.lineJoin='round';c.lineWidth=(halo||3)*f;c.strokeStyle='rgba(241,229,198,.9)';c.strokeText(t,x,y);c.fillStyle=col||MOV_INK;c.fillText(t,x,y);};
+  const SER=`"KMUSunggokSerif","Gowun Batang",serif`,SEMI=`"KMUSunggokSemiSerif","Gowun Batang",serif`;
+  if(!mini){c.textAlign='center';c.textBaseline='middle';
+    /* 바다 이름 */
+    {const N=360;let best=null;for(let i=0;i<N;i++){const a=i/N*Math.PI*2,rp=MHR.ringPt(a);if(MHR.gapK(rp.x,rp.z)>.9){best=a;break;}}
+      if(best!=null){const a=best+.18,x=cx+Math.cos(a)*Lo.ringR*.95,y=cy+Math.sin(a)*Lo.ringR*.95;c.save();c.font=`italic 700 ${Math.round(17*f)}px ${SER}`;c.fillStyle='#3f6468';c.translate(x,y);c.rotate(-.12);c.fillText('바 다',0,0);c.restore();}}
+    /* 가지 지역 이름 */
+    for(const L of OR.MLINES){if(!L.branch)continue;const Zs=L.zones.map(q=>zones[q[0]]),Z1=Zs[Zs.length-1],Z0=Zs[Zs.length-2],a=Math.atan2(Z1.y-Z0.y,Z1.x-Z0.x);c.textAlign='left';ink(L.region,Z1.x+Math.cos(a)*Z1.r*1.5,Z1.y+Math.sin(a)*Z1.r*1.5,`700 ${Math.round(15*f)}px ${SER}`,'#8a3a22',4);c.textAlign='center';}
+    /* 문 이름 */
+    for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],ux=Math.cos(F.th),uy=Math.sin(F.th),gx=cx+ux*(rc+16*f)+(uy?14*f:0),gy=cy+uy*(rc+16*f)+(ux?-12*f:0);ink(L.gate,gx,gy,`700 ${Math.round(11*f)}px ${SEMI}`,MOV_INK2);}
+    /* 밀골 */
+    {const E=OR.ISLES.mpass;if(E.mgate){const [ex,ey]=P2(E.mgate.x,E.mgate.z),mx=ex-E.mgate.ux*34*f,my=ey-E.mgate.uz*34*f;c.textAlign='right';ink(ZONES.milgol?ZONES.milgol.name:'밀골',mx-15*f,my+2*f,`700 ${Math.round(11*f)}px ${SEMI}`);c.textAlign='center';}}
+    /* 도시 이름 */
+    c.textBaseline='bottom';ink(ZONES.marcus.name,cx,cy-rc-14*f,`700 ${Math.round(20*f)}px ${SER}`,MOV_INK,4);
+    {const h=MOV_HARENA,[hx,hy]=P2(h.x,h.z);ink(ZONES.town?ZONES.town.name:'하레나',hx,hy-h.R*k-12*f,`700 ${Math.round(17*f)}px ${SER}`,MOV_INK,4);}
+    c.textBaseline='middle';}
+  /* 사냥터 이름·레벨, 지금 있는 땅 */
   for(const id in zones){const Z=zones[id],I=OR.ISLES[id],cur=here&&here.id===id,Lv=OR.ZONE_LEVELS[id]||[0,0];
-    c.fillStyle=MOV_KIND[(I.branch&&(I.kind==='vale'||I.kind==='pass')?'b':'')+I.kind]||'#8a9a5a';c.beginPath();c.arc(Z.x,Z.y,Z.r,0,7);c.fill();c.strokeStyle=cur?'#ffd23a':'rgba(30,24,16,.7)';c.lineWidth=(cur?3:1.5)*f;c.stroke();
+    if(cur){c.save();c.strokeStyle='#b0302a';c.lineWidth=(mini?2:2.6)*f;c.setLineDash([5*f,3*f]);movBlob(c,Z.x,Z.y,Z.r*1.04,I.k*3.1+1,.07);c.stroke();c.restore();}
     const nm=ZONES[id]?ZONES[id].name.replace(/^(마르쿠스|불타는 협곡) /,''):id,code=(nm.match(/\d[A-Z]$/)||[''])[0];
     c.textAlign='center';c.textBaseline='middle';
-    if(mini){if(Z.r>9){c.font=`700 ${Math.round(Math.min(13,Z.r*.8))}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=2.5;c.strokeStyle='rgba(20,16,12,.85)';c.strokeText(code,Z.x,Z.y);c.fillStyle='#fff4dc';c.fillText(code,Z.x,Z.y);}continue;}
+    if(mini){if(Z.r>9)ink(code,Z.x,Z.y,`700 ${Math.round(Math.min(13,Z.r*.8))}px ${SEMI}`,MOV_INK,2.5);continue;}
     /* 이름과 레벨은 고리 바깥쪽에 */
     let ux=Math.cos(Z.th),uy=Math.sin(Z.th);const lr=Z.r+8*f;
-    for(const da of [0,.5,-.5,1,-1,Math.PI]){const vx=Math.cos(Z.th+da),vy=Math.sin(Z.th+da);if(!Object.keys(zones).some(q=>q!==id&&Math.hypot(Z.x+vx*(lr+14*f)-zones[q].x,Z.y+vy*(lr+14*f)-zones[q].y)<zones[q].r+16*f)){ux=vx;uy=vy;break;}}   /* 바깥쪽에 다른 땅이 있으면 비껴 쓴다 */
+    for(const da of (I.mgate?[.65,-.65,1,-1]:[0,.5,-.5,1,-1,Math.PI])){const vx=Math.cos(Z.th+da),vy=Math.sin(Z.th+da);if(!Object.keys(zones).some(q=>q!==id&&Math.hypot(Z.x+vx*(lr+14*f)-zones[q].x,Z.y+vy*(lr+14*f)-zones[q].y)<zones[q].r+16*f)){ux=vx;uy=vy;break;}}
     const lx=Z.x+ux*lr,ly=Z.y+uy*lr,danger=P&&P.lv<Lv[0]-2;
     c.textAlign=ux>.35?'left':ux<-.35?'right':'center';c.textBaseline=uy>.35?'top':uy<-.35?'bottom':'middle';const dy=c.textBaseline==='bottom'?-12*f:0;
-    c.font=`700 ${Math.round(11*f)}px "KMUSunggokSerif","Gowun Batang",serif`;c.lineWidth=3.5*f;c.strokeStyle='rgba(20,16,12,.9)';c.strokeText(nm,lx,ly+dy);c.fillStyle=cur?'#ffe27a':'#fff4dc';c.fillText(nm,lx,ly+dy);
-    const lt=Lv[0]?`Lv ${Lv[0]}–${Lv[1]}`:'';c.font=`${Math.round(9.5*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*f;c.strokeText(lt,lx,ly+dy+12*f);c.fillStyle=danger?'#ff8a7a':'#d4ae63';c.fillText(lt,lx,ly+dy+12*f);
-    c.textAlign='center';c.textBaseline='middle';c.font=`700 ${Math.round(Math.min(14,Z.r*.5))}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*f;c.strokeText(code,Z.x,Z.y);c.fillStyle='rgba(255,244,220,.9)';c.fillText(code,Z.x,Z.y);}
+    ink(nm,lx,ly+dy,`700 ${Math.round(11.5*f)}px ${SER}`,cur?'#9a2a20':MOV_INK);
+    if(Lv[0])ink(`Lv ${Lv[0]}–${Lv[1]}`,lx,ly+dy+12.5*f,`${Math.round(9.5*f)}px ${SEMI}`,danger?'#b0302a':'#7a5a32',2.5);}
   /* 다른 사람 (파티원은 초록) */
-  if(typeof others!=='undefined')for(const [k,ob] of others){const q=movPos(Lo,ob.mesh.position.x,ob.mesh.position.z);if(!q)continue;const pty=typeof party!=='undefined'&&party&&party.members.some(m=>m.id===k);
-    c.fillStyle=pty?'#9be39b':'#9fd3e6';c.beginPath();c.arc(q.x,q.y,(mini?3:4)*f,0,7);c.fill();}
+  if(typeof others!=='undefined')for(const [kk,ob] of others){const q=movPos(Lo,ob.mesh.position.x,ob.mesh.position.z);if(!q)continue;const pty=typeof party!=='undefined'&&party&&party.members.some(m=>m.id===kk);
+    c.fillStyle=pty?'#3f9a4a':'#3a7fa0';c.strokeStyle='#f1e5c6';c.lineWidth=1.2*f;c.beginPath();c.arc(q.x,q.y,(mini?3:4)*f,0,7);c.fill();c.stroke();}
   /* 나 */
   if(here){const s=(mini?1:1.2)*f;c.save();c.translate(here.x,here.y);c.rotate(-player.rotation.y+here.rot);c.scale(s,s);c.fillStyle='#fff';c.strokeStyle='#c4493b';c.lineWidth=2;
     c.beginPath();c.moveTo(0,10);c.lineTo(-7,-7);c.lineTo(0,-3);c.lineTo(7,-7);c.closePath();c.stroke();c.fill();c.restore();}
-  if(!mini){c.textAlign='left';c.textBaseline='middle';c.font=`700 ${Math.round(13*f)}px "KMUSunggokSerif","Gowun Batang",serif`;c.fillStyle='rgba(28,20,12,.55)';const t='마르쿠스 왕국';const tw=c.measureText(t).width;c.fillRect(10*f,10*f,tw+16*f,24*f);c.fillStyle='#f4ecd8';c.fillText(t,18*f,22*f);}}
+  /* 제목: 두루마리 띠 */
+  if(!mini){const t='마르쿠스 왕국';c.font=`700 ${Math.round(15*f)}px ${SER}`;const tw=c.measureText(t).width,x=22*f,y=22*f,w=tw+34*f,h=28*f;
+    c.fillStyle='#efe2bf';c.strokeStyle=MOV_INK;c.lineWidth=1.4*f;c.beginPath();c.moveTo(x,y);c.lineTo(x+w,y);c.lineTo(x+w-8*f,y+h/2);c.lineTo(x+w,y+h);c.lineTo(x,y+h);c.lineTo(x+8*f,y+h/2);c.closePath();c.fill();c.stroke();
+    c.textAlign='center';c.textBaseline='middle';c.fillStyle=MOV_INK;c.fillText(t,x+w/2,y+h/2+1*f);}}
 /* ---------- 이레네: 호감도와 갈래 대화 ----------
    호감도(-50~100)에 따라 말투와 할 수 있는 이야기가 달라진다. 선택지에 따라 호감도가 오르내리고, 몇몇 선택은 기억되어 뒤의 대화에 이어진다. */
 const IR_TIERS=[[-999,'냉담'],[-15,'경계'],[15,'서먹함'],[35,'편안함'],[60,'신뢰'],[85,'전우']];
