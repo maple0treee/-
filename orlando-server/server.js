@@ -172,6 +172,7 @@ function cleanPresence(d) {
     mt: typeof d.mt === 'string' && /^[a-z]{0,8}$/.test(d.mt) ? d.mt : '',
     cr: typeof d.cr === 'string' && /^k\d{1,2}s\d$/.test(d.cr) ? d.cr : '',
     gd: typeof d.gd === 'string' && /^[a-z0-9]{8}\|[\uac00-\ud7a3A-Za-z0-9 ]{2,12}\|[mn]\|\d{1,7}\|[0-9a-f]{6}$/.test(d.gd) ? d.gd : null,
+    pd: Array.isArray(d.pd) && d.pd.length === 3 && d.pd.every((v) => typeof v === 'number' && isFinite(v)) && d.pd[0] >= 0 && d.pd[0] < 100 ? [Math.floor(d.pd[0]), n(d.pd[1]), n(d.pd[2])] : 0,   // 쓰다듬는 개: [번호, 길 위 자리, 옆 자리]
     ap: typeof d.ap === 'string' && /^[mf],[0-9a-f]{6},[0-9a-f]{6}(,\d(,\d,\d,[0-9a-f]{6},[0-9a-f]{6}(,\d)?)?)?$/.test(d.ap) ? d.ap : '',
   };
 }
