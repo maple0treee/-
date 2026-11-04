@@ -118,9 +118,10 @@
     if (L.end === 'milgol') { const E = ISLES[L.zones[L.zones.length - 1][0]], o = ringP(E.th, MH.RR + E.R + MH.gateLen); E.mgate = { ...ringP(E.th, MH.RR + E.R + MH.gateLen - 6), arr: ringP(E.th, MH.RR + E.R + MH.gateLen - 14), ux: -Math.cos(E.th), uz: -Math.sin(E.th) }; MH.links.push({ a: E.id, b: null, ax: E.x, az: E.z, bx: o.x, bz: o.z, hw: MH.gateHW, k: 'gate' }); } }
   const segQ = (L, x, z) => { const dx = L.bx - L.ax, dz = L.bz - L.az, t = clampN(((x - L.ax) * dx + (z - L.az) * dz) / (dx * dx + dz * dz), 0, 1), qx = L.ax + dx * t, qz = L.az + dz * t; return { x: qx, z: qz, t, d: Math.hypot(x - qx, z - qz) }; };
   // 걸을 수 있는 곳 경계까지의 거리 (안쪽은 음수)
+  // (빠르게: 가장 가까울 수 없는 땅은 Math.hypot 없이 건너뛴다. hypot(a,b) >= max(|a|,|b|) 이라 결과는 똑같다. 목 거리는 segQ와 같은 계산을 객체 없이)
   function mhWalkD(x, z) { let e = 1e9;
-    for (const k of MHUNT) { const I = ISLES[k]; const d = Math.hypot(x - I.x, z - I.z) - I.R; if (d < e) e = d; }
-    for (const L of MH.links) { const d = segQ(L, x, z).d - L.hw; if (d < e) e = d; }
+    for (const k of MHUNT) { const I = ISLES[k], ax = Math.abs(x - I.x), az = Math.abs(z - I.z); if ((ax > az ? ax : az) - I.R >= e) continue; const d = Math.hypot(x - I.x, z - I.z) - I.R; if (d < e) e = d; }
+    for (const L of MH.links) { const dx = L.bx - L.ax, dz = L.bz - L.az, t = clampN(((x - L.ax) * dx + (z - L.az) * dz) / (dx * dx + dz * dz), 0, 1), d = Math.hypot(x - (L.ax + dx * t), z - (L.az + dz * t)) - L.hw; if (d < e) e = d; }
     return e; }
   function mhClamp(p, rad) {
     if (mhWalkD(p.x, p.z) <= -rad) return;
@@ -132,7 +133,7 @@
   MH.walkD = mhWalkD; MH.clamp = mhClamp; MH.segQ = segQ; MH.ringP = ringP;
   // 섬 가장자리 반지름 (엑시즈는 둥글지 않게 들쭉날쭉: 언덕 너머로 이어지는 땅처럼 보이게)
   function isleEdge(I, a) { if (I.id !== 'marcus') return I.R; return polyRay(MARCUS_WALL_M, a) + MARCUS_EDGE_GAP + 6 * Math.sin(3 * a + 1.3) + 4 * Math.sin(7 * a + 0.4) + 2 * Math.sin(13 * a + 2.1); }
-  function isleAt(x, z) { let b = null, bd = 1e9; for (const k of ISLE_ORDER) { const I = ISLES[k]; const d = Math.hypot(x - I.x, z - I.z) - I.R; if (d < bd) { bd = d; b = I; } } return b; }
+  function isleAt(x, z) { let b = null, bd = 1e9; for (const k of ISLE_ORDER) { const I = ISLES[k], ax = Math.abs(x - I.x), az = Math.abs(z - I.z); if ((ax > az ? ax : az) - I.R >= bd) continue; const d = Math.hypot(x - I.x, z - I.z) - I.R; if (d < bd) { bd = d; b = I; } } return b; }   // 위와 같이 먼 땅은 건너뛴다
   // 지하실 위층의 작은 방 (계단을 올라가면 나온다)
   const HALL_ROOM = { x: 0, z0: -500 - 24 - 8.3 - 10, z1: -500 - 24 - 8.3, hw: 4.5, y: 4.5, corHw: 1.8, stHw: 1.5, stLen: 16, stRise: 9, stLand: 3.4 };
   // 계단 꼭대기 너머: 길드홀 지하 창고 (북쪽 벽의 짧은 계단 위 문으로 길드홀 1층에 오른다)
