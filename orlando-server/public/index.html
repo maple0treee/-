@@ -20068,12 +20068,12 @@ const BANK_KEY='orlando3d.bank';
 function bankRead(){try{const o=JSON.parse(localStorage.getItem(BANK_KEY)||'{}');const v=Math.max(0,Number(o.gold)||0);return {gold:Math.floor(v),v,t:Number(o.t)||0};}catch(e){return {gold:0,t:0};}}
 function bankGold(){return bankRead().gold;}
 function bankSet(g,t){g=Math.max(0,Math.floor(g));try{localStorage.setItem(BANK_KEY,JSON.stringify({gold:g,t:t??(bankRead().t||Date.now())}));return bankGold()===g;}catch(e){return false;}}
-/* 이자: 맡긴 골드에 하루(24시간)마다 0.3%씩 붙는다(복리, 한도 없음). 붙은 이자 골드를 돌려준다 */
-const BANK_RATE=.003,BANK_DAY=864e5;
+/* 이자: 맡긴 골드에 하루(24시간)마다 2%씩 붙는다(복리). 오래 쉬다 돌아오면 크게 불어 있게 하되, 한 번에 BANK_MAXDAYS일치까지만 쌓인다. 붙은 이자 골드를 돌려준다 */
+const BANK_RATE=.02,BANK_DAY=864e5,BANK_MAXDAYS=90;
 function bankAccrue(){const b=bankRead(),now=Date.now();
   if(!b.t||b.t>now){bankSet(b.gold,now);return 0;}   /* 처음이거나 기기 시계가 뒤로 갔으면 지금부터 센다 */
   const days=Math.floor((now-b.t)/BANK_DAY);if(days<1)return 0;
-  const v=Math.min(Number.MAX_SAFE_INTEGER,b.v*Math.pow(1+BANK_RATE,days)),add=Math.floor(v)-b.gold;   /* 1골드가 안 되는 이자도 장부에 남겨 쌓는다 */
+  const v=Math.min(Number.MAX_SAFE_INTEGER,b.v*Math.pow(1+BANK_RATE,Math.min(days,BANK_MAXDAYS))),add=Math.floor(v)-b.gold;   /* 1골드가 안 되는 이자도 장부에 남겨 쌓는다 */
   try{localStorage.setItem(BANK_KEY,JSON.stringify({gold:v,t:b.t+days*BANK_DAY}));}catch(e){return 0;}return add;}
 /* n>0 맡기기, n<0 찾기. 캐릭터 저장이 막힌 창(다른 창에서 같은 캐릭터 접속)에서는 골드가 불어나지 않게 못 쓰게 한다 */
 function bankMove(n){
