@@ -12903,8 +12903,8 @@ function petDog(i){const D=LIFE.dogs[i];if(!D||!player)return;interactTarget=nul
   if(D.st==='walk'){D.st='rest';D.s1=D.s;}D.pose='sit';D.stT=Math.max(D.stT,7);D.pet=3.2;
   const p=player.position;D.yaw=Math.atan2(p.x-D.x,p.z-D.z);   /* 나를 바라보고 앉는다 */
   const k=D.D.scale.x,hx=D.x+Math.sin(D.yaw)*.5*k,hz=D.z+Math.cos(D.yaw)*.5*k,dd=Math.hypot(p.x-hx,p.z-hz)||1;
-  LIFE.pet={D,t:0,fx:p.x,fz:p.z,tx:hx+(p.x-hx)/dd*.55,tz:hz+(p.z-hz)/dd*.55,hx,hz,ht:0,hy:heightAt(D.x,D.z)+.95*k};
-  cam.yaw=Math.atan2(-(hx-p.x),-(hz-p.z));if(!cam.third)cam.pitch=-.5;}
+  LIFE.pet={D,t:0,fx:p.x,fz:p.z,tx:hx+(p.x-hx)/dd*(cam.third?.55:.62),tz:hz+(p.z-hz)/dd*(cam.third?.55:.62),hx,hz,ht:0,hy:heightAt(D.x,D.z)+.95*k};
+  cam.yaw=Math.atan2(-(hx-p.x),-(hz-p.z));if(!cam.third)cam.pitch=-.62;}   /* 1인칭: 개 머리와 손이 보이게 내려다본다 */
 let _heartTex=null;
 function petHeart(x,y,z){if(!_heartTex){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');g.fillStyle='#ff5a78';g.font='54px serif';g.textAlign='center';g.textBaseline='middle';g.fillText('♥',32,36);_heartTex=new THREE.CanvasTexture(c);}
   const h=new THREE.Sprite(new THREE.SpriteMaterial({map:_heartTex,transparent:true,depthWrite:false}));h.scale.setScalar(.22);h.position.set(x+(Math.random()-.5)*.2,y+.1,z+(Math.random()-.5)*.2);h.userData.life=1.3;LIFE.g.add(h);(LIFE.hearts||(LIFE.hearts=[])).push(h);}
@@ -12917,12 +12917,25 @@ function petRemote(o,dt){const m=o.mesh,u=m&&m.userData;if(!u)return;const pd=o.
   if(D.D.visible&&(o.petHt=(o.petHt||0)-dt)<=0){o.petHt=.5;const k=D.D.scale.x;petHeart(D.x+Math.sin(D.yaw)*.5*k,heightAt(D.x,D.z)+.95*k,D.z+Math.cos(D.yaw)*.5*k);}}
 function petTick(dt){const u=player&&player.userData;if(!u)return;const L=LIFE.pet;
   if(L){L.t+=dt;const p=player.position;
-    if(L.t<.35){const k=Math.min(1,L.t/.35),e=k*k*(3-2*k);p.x=L.fx+(L.tx-L.fx)*e;p.z=L.fz+(L.tz-L.fz)*e;}   /* 손이 닿도록 한 걸음 다가선다 */
+    if(L.t<.35){L.D.H.getWorldPosition(_petW);const dx=L.fx-_petW.x,dz=L.fz-_petW.z,dd=Math.hypot(dx,dz)||1,r=cam.third?.55:.62;L.hx=_petW.x;L.hz=_petW.z;L.tx=_petW.x+dx/dd*r;L.tz=_petW.z+dz/dd*r;   /* 개 머리가 실제로 있는 곳 앞에 선다 */
+      const k=Math.min(1,L.t/.35),e=k*k*(3-2*k);p.x=L.fx+(L.tx-L.fx)*e;p.z=L.fz+(L.tz-L.fz)*e;}   /* 손이 닿도록 한 걸음 다가선다 */
     else if(Math.hypot(p.x-L.tx,p.z-L.tz)>.25||mode!=='world')L.t=Math.max(L.t,3);   /* 움직이면 그만둔다 */
     if((L.ht-=dt)<=0&&L.t<3){L.ht=.5;petHeart(L.hx,L.hy,L.hz);}
     if(L.t>=3){L.D.pet=0;LIFE.pet=null;}}
   u.petK=Math.max(0,Math.min(1,(u.petK||0)+(LIFE.pet&&LIFE.pet.t<2.8?dt*5:-dt*4)));u.petT=(u.petT||0)+dt;
   if(LIFE.hearts)for(let i=LIFE.hearts.length-1;i>=0;i--){const h=LIFE.hearts[i];h.userData.life-=dt;h.position.y+=dt*.45;h.material.opacity=Math.min(1,h.userData.life*1.5);if(h.userData.life<=0){LIFE.g.remove(h);h.material.dispose();LIFE.hearts.splice(i,1);}}}
+/* 1인칭 쓰다듬는 손: 왼손을 펴서 개 머리 위에 얹고 앞뒤로 쓸어 준다. 원래 왼손(방패·활 등)은 그동안 감춘다 */
+const _petW=new THREE.Vector3();let _petH=null;
+function petFP(){if(!player)return;const vm=viewModel,u=vm&&vm.userData,k=player.userData.petK||0,L=LIFE.pet;let H=_petH;
+  if(k<=0||!LIFE.ready||cam.third){if(H){H.visible=false;H.userData.arm.visible=false;}return;}
+  if(!H){const sk=u&&u.L?u.L.userData.skin[0].material.color.getHex():0xf6dccb,sl=u&&u.L?u.L.userData.arm.material.color.getHex():0x6a5a48;
+    H=_petH=fpHand(-1,camera,sk,sl);camera.add(H);   /* 카메라에 바로 단다: 직업을 고르기 전(손 화면이 꺼져 있을 때)에도 보이게 */
+    const f=H.userData.skin[0];f.scale.set(1.25,.45,1.5);H.userData.skin[1].position.set(.06,-.005,-.03);H.userData.skin[1].scale.set(1,.8,1.6);   /* 주먹 대신 편 손바닥과 손가락 */
+    for(let i=0;i<4;i++){const fg=new THREE.Mesh(new THREE.SphereGeometry(1,8,6),f.material);fg.scale.set(.012,.01,.042);fg.position.set(-.03+i*.02,-.004,-.085+Math.abs(i-1.5)*.008);H.add(fg);}}
+  if(u&&u.L){u.L.visible=false;u.L.userData.arm.visible=false;}H.visible=true;
+  const D=L?L.D:null,st=Math.sin((player.userData.petT||0)*5.5);let tx=-.3,ty=-.55,tz=-.5;
+  if(D){const kk=D.D.scale.x,a=D.yaw;D.H.getWorldPosition(_petW);const sw=st*.06-.06;_petW.x+=Math.sin(a)*sw*kk;_petW.z+=Math.cos(a)*sw*kk;_petW.y+=.21*kk;   /* 개 머리 꼭대기에서 앞뒤로 */camera.updateMatrixWorld();camera.worldToLocal(_petW);tx=_petW.x;ty=_petW.y;tz=_petW.z;}
+  H.position.set(-.3+(tx+.3)*k,-.55+(ty+.55)*k,-.5+(tz+.5)*k);H.rotation.set(-cam.pitch-.1,0,.1);fpArm(H);   /* 손바닥이 땅과 나란하게 머리에 얹힌다 */H.userData.arm.scale.x=H.userData.arm.scale.z=.75;}
 /* 쓰다듬는 몸짓: 허리를 숙이고 빈 왼손을 앞으로 내려 머리를 쓸어 준다 (오른손에는 무기를 들고 있다) */
 function petPose(S,k,t){if(!S||!S.upper||!S.AL)return;const st=Math.sin(t*5.5);S.upper.rotation.x+=(.35-S.upper.rotation.x)*k;
   S.AL.sh.rotation.x+=(-1.25+st*.14-S.AL.sh.rotation.x)*k;S.AL.sh.rotation.z+=(-.1-S.AL.sh.rotation.z)*k;S.AL.el.rotation.x+=(-.1-st*.12-S.AL.el.rotation.x)*k;
@@ -22816,7 +22829,7 @@ function updatePlayer(dt){
     cp.x+=Math.cos(cam.yaw)*.55;cp.z-=Math.sin(cam.yaw)*.55;
     if(hallCeil(player.position.x,player.position.z)!=null)hallCamFit(eye,cp);   /* 지하실(둥근 방·위층 방·계단·창고): 카메라가 벽·천장 밖으로 나가지 않게 */
     else camFitIndoor(eye,cp);   /* 다른 건물 안(길드홀·집·회관 등): 천장과 벽을 뚫고 나가지 않게 */
-    camera.position.copy(cp);
+    camera.position.copy(cp);if(typeof petFP==='function')petFP();
     swingT=Math.min(swingCap(),swingT+dt*(myMo?1/myMo.dur:swingSpd(P.job)));
   }else{
     player.visible=false;if(viewModel)viewModel.visible=true;
@@ -22832,7 +22845,7 @@ function updatePlayer(dt){
     else player.rotation.x=-Math.PI/2*lk;
     if(player.userData.head)player.userData.head.visible=!lieSee;if(lieSee&&viewModel)viewModel.visible=false;
     if(CCAR.ride)camera.position.y+=.6;else{camera.position.y+=seatLift()*.28;sitLean(camera.position,1);lieEye(camera.position,1.78,lk,.3);}
-    updateViewModel(dt,moving&&jumpY===0);
+    updateViewModel(dt,moving&&jumpY===0);if(typeof petFP==='function')petFP();
   }
   camNearFit();
   return moving;
