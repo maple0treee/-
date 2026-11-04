@@ -8760,7 +8760,7 @@ function stickNpcPose(g,pose,t){const S=g.userData.stick;if(!S)return;const AR=S
     case 'belly':{const u=Math.abs(Math.sin(t*4))*.12;arm(AR,-.35,.5,-.1,-1.35+u);arm(AL,-.35,-.5,.1,-1.35+u);S.upper.rotation.x=br-.06;S.head.rotation.set(-.1,0,0);break;}
     case 'back':arm(AR,.5,0,.4,-1.4);arm(AL,.5,0,-.4,-1.4);S.upper.rotation.x=br+.25+Math.sin(t*1.5)*.05;S.head.rotation.set(.05,0,0);break;
     default:arm(AR,.05,0,.1,-.15);arm(AL,.05,0,-.1,-.15);look();}
-  if(g.userData.cloth)clothSit(g,S.body.position.y<-.3||pose==='ride');}
+  if(g.userData.cloth){clothSit(g,S.body.position.y<-.3||pose==='ride');clothFollow(g,null,0);}}
 /* 마시기: 오른손에 나무 잔 (처음 쓸 때 만든다). 마시는 동안은 잔을 기울여 입에 댄다 */
 function stickCup(S,up){if(!S.cup){const c=new THREE.Group(),wd=mat(0x7a4a26,{roughness:.8,flatShading:false}),bd=mat(0x4a2c16,{roughness:.8});
     const body=new THREE.Mesh(new THREE.CylinderGeometry(.05,.042,.12,12),wd);c.add(body);
@@ -8787,7 +8787,7 @@ function stickWalkPose(g,ph,w,t,pp){const S=g.userData.stick;if(!S)return;const 
     if(pp.stumble&&_sn(t*.2,5)>.72){S.body.rotation.z+=Math.sin(t*13)*.09*w;S.upper.rotation.x+=.1*w;}
     if(pp.fid==='nod')S.head.rotation.x+=Math.max(0,_sn(t*.2,2)-.2)*.8*w;
     if(pp.fid==='tilt')S.head.rotation.z=_sn(t*.3,6)*.18*w;}
-  if(g.userData.cloth)clothSit(g,false);}
+  if(g.userData.cloth){clothSit(g,false);clothFollow(g,ph,w);}}
 /* 장비를 갖춘 NPC: 플레이어가 끼는 것과 같은 투구·갑옷·신발 모습 + 무기는 허리·등에 찬다 (o.gear={helm,armor,boots,weapon,wjob}) */
 function npcGearOn(g,o){const S=g.userData.stick,G=o.gear;if(!S||!G||(G.weapon??-1)<0||!G.wjob)return;const kind=JOBS[G.wjob].weapon;
   const w=stickWeapon(kind==='shield'?'sword':kind,G.wjob,G.weapon),h=new THREE.Group();h.add(w);
@@ -8861,6 +8861,21 @@ function makeNpcStick(o){const G0=o.gear,g=makeStickPlayer('warrior',G0?{helm:G0
    o.cloth로 정할 수 있고, 없으면 생김새로 고른다: 긴 머리 → 치마, 지팡이·두건 → 긴 옷, 그 밖 → 바지 */
 var NPC_CLOTHES=false;
 /* 앉았는지에 따라 치마 ↔ 무릎 덮개 */
+/* 종 모양 천 (치마·긴 옷·앞치마): 허리 반지름 rt → 단 반지름 rb, 길이 len. 주름 n개·깊이 fold. t0~t1 구간만, dr만큼 바깥에. 앞(+z)을 가운데로 ph0부터 phL 만큼 */
+function clothBell(rt,rb,len,n,fold,t0,t1,dr,seg,ph0,phL){const key=[rt,rb,len,n,fold,t0,t1,dr,seg,ph0,phL].join(',');const C=clothBell.c||(clothBell.c={});if(C[key])return C[key];
+  const R=t=>rt+(rb-rt)*(.5*t+.5*(1-(1-t)*(1-t))),pts=[],N=16;
+  for(let i=0;i<=N;i++){const t=t0+(Math.min(t1,1)-t0)*i/N;pts.push(new THREE.Vector2(R(t)+dr,-len*t));}
+  if(t1>1){pts.push(new THREE.Vector2(rb+dr+.004,-len-.012),new THREE.Vector2(rb+dr-.03,-len-.014));}   /* 단: 살짝 말려 들어간 끝 */
+  const ge=new THREE.LatheGeometry(pts,seg,ph0??0,phL??Math.PI*2),p=ge.attributes.position;
+  for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),a=Math.atan2(x,z),tt=Math.max(0,Math.min(1,-y/len));
+    const k=1+fold*Math.pow(tt,1.4)*(Math.sin(a*n)+.35*Math.sin(a*(2*n+3)+1));p.setX(i,x*k);p.setZ(i,z*k*(1-.08*(1-tt)));}
+  ge.computeVertexNormals();return C[key]=ge;}
+/* 치마가 다리를 따라 움직인다: 다리가 앞으로 가면 치마 자락도 앞으로, 걸을 땐 엉덩이 따라 살랑 */
+function clothFollow(g,walkPh,w){const c=g.userData.cloth,S=g.userData.stick;if(!c||!S)return;const L=S.L.hip.rotation,R=S.R.hip.rotation;
+  const fx=(L.x+R.x)/2,fz=(L.z+R.z)/2,sp=Math.abs(L.x-R.x);
+  if(walkPh!=null){c.skG.rotation.set(.035*w+fx*.5,Math.sin(walkPh)*.07*w,Math.sin(walkPh)*.03*w);}
+  else c.skG.rotation.set(Math.max(-.5,Math.min(.3,fx*.55)),0,Math.max(-.3,Math.min(.3,fz*.5)));
+  const fl=1+Math.min(.18,sp*.12);c.skG.scale.set(c.sit?1e-4:fl,c.sit?1e-4:1,c.sit?1e-4:fl);}   /* 다리를 크게 벌리면 자락이 퍼진다 */
 function clothSit(g,sit){const c=g.userData.cloth;if(!c||c.sit===sit)return;c.sit=sit;c.skG.scale.setScalar(sit?1e-4:1);c.lap.scale.setScalar(sit?1:1e-4);}   /* 보이기 대신 크기로 (한 덩어리로 합친 뒤에도 뼈대 크기로 바뀐다) */
 /* 손에 드는 것·메는 것 */
 function npcProp(S,k,m){const R=S.AR.hand,L=S.AL.hand,W=0x7a5232,DW=0x4a3020,ME=0xa8aab0;
@@ -8921,19 +8936,30 @@ function npcClothes(g,o){const S=g.userData.stick;if(!S)return;const C=o.cloth||
   if(!skirt&&!long){const pm=m(pantsC);for(const L of [S.L,S.R]){L.hip.add(tube(.078,.068,.47,pm,-.225));L.knee.add(new THREE.Mesh(new THREE.SphereGeometry(.07,10,8),pm),tube(.066,.058,.36,pm,-.18));
       const cuff=tube(.062,.062,.05,m(shade2(pantsC,.75)),-.36);L.knee.add(cuff);}
     const band=new THREE.Mesh(new THREE.CylinderGeometry(.172,.172,.12,14),m(pantsC));band.position.y=.93;S.body.add(band);}
-  else{const sm=m(skirt?(C.skirtC??pick([robe,robe2,0x6a3a4a,0x3a4a6a,0x7a6a4a],5)):(C.longC??robe));
-    const len=skirt?.52:.86,bot=skirt?.36:.4;const skG=new THREE.Group();S.body.add(skG);const sk=new THREE.Mesh(new THREE.CylinderGeometry(.17,bot,len,16),sm);sk.position.y=.97-len/2;skG.add(sk);
-    const hem=new THREE.Mesh(new THREE.CylinderGeometry(bot+.005,bot+.01,.05,16),m(skirt?shade2(sm.color.getHex(),.72):robe2));hem.position.y=.97-len+.025;skG.add(hem);
-    /* 앉으면 치마 대신 무릎 위로 덮인 천 (다리가 치마를 뚫지 않게) */
-    const lap=new THREE.Group();lap.scale.setScalar(1e-4);S.body.add(lap);{const a=new THREE.Mesh(new THREE.BoxGeometry(.38,.14,.58),sm);a.position.set(0,.95,.24);const f=new THREE.Mesh(new THREE.BoxGeometry(.38,skirt?.34:.62,.08),sm);f.position.set(0,skirt?.8:.65,.52);const r=new THREE.Mesh(new THREE.CylinderGeometry(.17,.22,.2,14),sm);r.position.y=.9;lap.add(a,f,r);}
-    g.userData.cloth={skG,lap};
+  else{const sm=m(skirt?(C.skirtC??pick([robe,robe2,0x6a3a4a,0x3a4a6a,0x7a6a4a],5)):(C.longC??robe),{side:THREE.DoubleSide});
+    /* 치마·긴 옷: 허리에 붙어 종처럼 퍼지고, 아래로 갈수록 세로 주름이 깊어지는 천. 허리를 축으로 걸음·자세에 따라 흔들린다 */
+    const len=skirt?.52:.86,bot=skirt?.36:.4,top=.172;const skG=new THREE.Group();skG.position.y=.97;S.body.add(skG);
+    const sk=new THREE.Mesh(clothBell(top,bot,len,skirt?9:8,skirt?.075:.06,0,1,0,40),sm);skG.add(sk);
+    const hem=new THREE.Mesh(clothBell(top,bot,len,skirt?9:8,skirt?.075:.06,.93,1.02,.006,40),m(skirt?shade2(sm.color.getHex(),.72):robe2,{side:THREE.DoubleSide}));skG.add(hem);
+    /* 앉으면 치마 대신 허벅지를 덮고 무릎에서 흘러내리는 천 (다리가 치마를 뚫지 않게) */
+    const lap=new THREE.Group();lap.scale.setScalar(1e-4);S.body.add(lap);const dh=skirt?.42:.68;
+    {const a=new THREE.Mesh(new THREE.CylinderGeometry(.2,.21,.56,24,1,false),sm);a.rotation.x=Math.PI/2;a.scale.set(1,1,.48);a.position.set(0,.93,.25);
+      const f=new THREE.Mesh(new THREE.CylinderGeometry(.205,.25,dh,24,1,true,-Math.PI/2,Math.PI),sm);f.scale.set(1,1,.55);f.position.set(0,1.02-dh/2,.5);
+      const kn=new THREE.Mesh(new THREE.SphereGeometry(.205,24,12,0,Math.PI*2,0,Math.PI/2),sm);kn.rotation.x=Math.PI/2;kn.scale.set(1,.55,.48);kn.position.set(0,.93,.47);
+      const r=new THREE.Mesh(new THREE.CylinderGeometry(.172,.22,.2,20),sm);r.position.y=.9;lap.add(a,f,kn,r);}
+    lap.children.forEach(c=>c.userData.noSculpt=1);sk.userData.noSculpt=hem.userData.noSculpt=1;
+    g.userData.cloth={skG,lap,len,bot,dh};
     if(skirt){const lm=m(C.stock??0xe8e0d0);for(const L of [S.L,S.R])L.knee.add(tube(.05,.045,.38,lm,-.19));}}
   /* 소매 */
   if(sl!=='none'){const am=m(slC);for(const A of [S.AL,S.AR]){A.sh.add(new THREE.Mesh(new THREE.SphereGeometry(.072,10,8),am),tube(.066,.058,sl==='short'?.2:.36,am,sl==='short'?-.1:-.18));
       if(sl==='long'){A.el.add(new THREE.Mesh(new THREE.SphereGeometry(.058,10,8),am),tube(.058,.064,.3,am,-.15));A.el.add(tube(.07,.07,.05,m(robe2),-.3));}
       else A.sh.add(tube(.07,.07,.04,m(robe2),-.2));}}
   /* 앞치마 */
-  if(C.apron){const ap=new THREE.Mesh(new THREE.BoxGeometry(.3,.62,.02),m(C.apron));ap.position.set(0,.66,skirt?.3:.2);ap.rotation.x=skirt?-.32:-.12;S.body.add(ap);const tp=new THREE.Mesh(new THREE.BoxGeometry(.24,.24,.02),m(C.apron));tp.position.set(0,.32,.19);S.upper.add(tp);}
+  if(C.apron){const am=m(C.apron,{side:THREE.DoubleSide}),cl=g.userData.cloth;
+    if(cl){const ap=new THREE.Mesh(clothBell(.172,cl.bot,cl.len,skirt?9:8,skirt?.075:.06,.02,skirt?.86:.7,.012,12,-.5,1),am);ap.userData.noSculpt=1;cl.skG.add(ap);
+      const lh=cl.dh*.8,la=new THREE.Mesh(new THREE.CylinderGeometry(.215,.25,lh,10,1,true,-.55,1.1),am);la.scale.set(1,1,.56);la.position.set(0,1.02-lh/2,.5);la.userData.noSculpt=1;cl.lap.add(la);}   /* 앉았을 때 무릎 위 앞치마 */   /* 치마 위에 그대로 얹힌 앞치마 */
+    else{const ap=new THREE.Mesh(new THREE.BoxGeometry(.3,.62,.02),am);ap.position.set(0,.66,.2);ap.rotation.x=-.12;S.body.add(ap);}
+    const tp=new THREE.Mesh(new THREE.CylinderGeometry(.19,.179,.24,10,1,true,-.62,1.24),am);tp.position.set(0,.32,0);tp.userData.noSculpt=1;S.upper.add(tp);}   /* 가슴받이: 몸통을 감싼다 */
   /* 망토 */
   if(C.cape){const cp=new THREE.Mesh(new THREE.BoxGeometry(.48,1.0,.03),m(C.cape,{side:THREE.DoubleSide}));cp.position.set(0,-.02,-.2);cp.rotation.x=.08;S.upper.add(cp);
     const cl=new THREE.Mesh(new THREE.TorusGeometry(.16,.025,6,14,Math.PI),m(C.capeTrim??0xd4af37));cl.position.set(0,.58,-.02);cl.rotation.set(Math.PI/2,0,0);S.upper.add(cl);}
@@ -9256,7 +9282,7 @@ function _nsmSpec(m,par){const G=m.geometry,p=G.parameters,t=G.type;if(!p)return
 function _nsmOk(m,H,eyes){if(!m.isMesh||!m.visible||!m.material||Array.isArray(m.material))return false;const mt=m.material;
   if(!mt.isMeshStandardMaterial||mt.map||mt.transparent||mt.metalness>=.5||(mt.emissive&&mt.emissive.getHex()&&mt.emissiveIntensity>0)||mt.visible===false)return false;
   if(!['SphereGeometry','CylinderGeometry','ConeGeometry','TorusGeometry','BoxGeometry','LatheGeometry'].includes(m.geometry.type))return false;
-  if(eyes.has(m))return false;
+  if(eyes.has(m)||m.userData.noSculpt)return false;   /* 치마·앞치마처럼 이미 매끈하게 빚은 천은 그대로 */
   if(m.parent===H||m===H){const s=m.scale,G=m.geometry;if(!G.boundingSphere)G.computeBoundingSphere();if(Math.min(s.x,s.y,s.z)*G.boundingSphere.radius<.012&&G.type!=='CylinderGeometry'&&G.type!=='TorusGeometry')return false;}   /* 얼굴에 그린 듯 얇은 조각 */
   return true;}
 function npcSculptMerge(g,o){const S=g.userData.stick;if(!S)return;const H=S.head,F=(o&&o.fine)||{},u=g.userData;
