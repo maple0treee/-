@@ -2785,7 +2785,9 @@ const ITEMS={
     boots:{n:i=>['가죽 신발','강철 장화','미스릴 장화','고대 장화','룬 장화','서리 장화','화염 장화','망령 장화','심연 장화','전설의 장화'][i],st:i=>({def:[1,2,4,6,9,13,17,22,28,36][i],spd:[.02,.03,.04,.05,.06,.07,.08,.09,.1,.12][i]})},
   };
   const key={weapon:'w',armor:'a',acc:'r',helm:'h',boots:'b'};
-  for(const slot in T)for(let i=0;i<10;i++){const st=T[slot].st(i);for(const k in st)if(!st[k])delete st[k];ITEMS[key[slot]+(i+1)]={name:T[slot].n(i),slot,tier:i,req:TIER_REQ[i],st};}
+  for(const slot in T)for(let i=0;i<10;i++){if(slot==='weapon'&&i%2===0)continue;   /* 기본 무기는 5등급 (강철·고대의·서리·망령·전설의) */
+    const st=T[slot].st(i);for(const k in st)if(!st[k])delete st[k];ITEMS[key[slot]+(i+1)]={name:T[slot].n(i),slot,tier:i,req:TIER_REQ[i],st};if(slot==='weapon')ITEMS[key[slot]+(i+1)].g=(i+1)/2;}
+  ITEMS.w2.req=1;   /* 처음 받는 무기 */
   ITEMS.dfang={name:'용의 송곳니',slot:'weapon',tier:10,req:90,st:{atk:150,crit:.15},desc:'붉은 용 이그니스에게서만 얻을 수 있다'};
   ITEMS.dscale={name:'붉은 용비늘 갑옷',slot:'armor',tier:10,req:90,st:{def:110,hp:800},desc:'붉은 용 이그니스에게서만 얻을 수 있다'};
   ITEMS.dheart={name:'용의 심장',slot:'acc',tier:10,req:90,st:{atk:60,hp:400,crit:.08},desc:'붉은 용 이그니스에게서만 얻을 수 있다'};
@@ -2822,7 +2824,18 @@ const ITEMS={
   ITEMS.crown={name:'킹 슬라임의 왕관',slot:'helm',tier:10,req:18,st:{def:16,hp:220,atk:8},desc:'석굴의 킹 슬라임에게서만 얻을 수 있다'};
 })();
 Object.values(ITEMS).forEach(I=>{if(!I.kind)I.kind='gear';if(I.kind==='gear'&&!I.req)I.req=1;});
-const GEAR_BY_TIER=[...Array(10)].map((_,t)=>Object.keys(ITEMS).filter(k=>ITEMS[k].kind==='gear'&&ITEMS[k].tier===t&&!ITEMS[k].jobs&&ITEMS[k].slot!=='sub'&&ITEMS[k].slot!=='mount'));
+/* 무기 등급: 기본 무기도 전직 무기도 5등급. 예전 기본 무기(홀수 번호)는 바로 위 등급으로 바뀐다 */
+const WPN_ALIAS={w1:'w2',w3:'w4',w5:'w6',w7:'w8',w9:'w10'};
+const GRADE_ROMAN=['','Ⅱ','Ⅲ','Ⅳ','Ⅴ'],GRADE_MUL=[1,1.45,2,2.7,3.6],GRADE_REQ=[0,20,45,80,120];
+const JW_T0={};   // 전직 무기 류 → 1등급의 등급(tier). 무기 모습에서 몇 등급인지 알아낼 때 쓴다
+for(const id of Object.keys(ITEMS)){const I=ITEMS[id];if(I.slot!=='weapon'||!I.cls||I.cls==='basic'||I.g)continue;
+  I.g=1;I.gbase=id;if(JW_T0[I.cls]==null)JW_T0[I.cls]=I.tier;
+  for(let k=1;k<5;k++){const st={};for(const s2 in I.st)st[s2]=s2==='crit'?+(I.st[s2]+.015*k).toFixed(3):Math.round(I.st[s2]*GRADE_MUL[k]);
+    const tier=Math.min(10,I.tier+k);
+    ITEMS[id+'_'+(k+1)]={...I,name:I.name+' '+GRADE_ROMAN[k],tier,req:I.req+GRADE_REQ[k],st,g:k+1,gbase:id,desc:`${I.name}을(를) 더 단단히 벼린 ${k+1}등급. 사냥에서 얻거나 장비점에서 산다`,...(tier>=10?{price:72000}:{})};}}
+function wpnMigrate(d){const f=id=>WPN_ALIAS[id]||id;if(d.equip)for(const k in d.equip)if(d.equip[k])d.equip[k]=f(d.equip[k]);if(Array.isArray(d.bag))for(const e of d.bag)if(e&&e.id)e.id=f(e.id);if(Array.isArray(d.quick))d.quick=d.quick.map(q=>q&&f(q));}
+function wpnGradeOf(id){const I=ITEMS[id];return I&&I.g||0;}
+const GEAR_BY_TIER=[...Array(10)].map((_,t)=>Object.keys(ITEMS).filter(k=>ITEMS[k].kind==='gear'&&(ITEMS[k].slot==='weapon'&&!ITEMS[k].jobs?k==='w'+(2*Math.floor(t/2)+2):ITEMS[k].tier===t)&&!ITEMS[k].jobs&&ITEMS[k].slot!=='sub'&&ITEMS[k].slot!=='mount'));
 function tierForLevel(lv){let t=0;for(let i=0;i<10;i++)if(TIER_REQ[i]<=lv+2)t=i;return t;}
 const BAG_SIZE=30;
 function itemName(id,job){const I=ITEMS[id];if(!I)return '?';return I.slot==='weapon'&&!I.fixed?`${I.name} ${WEAPON_NOUN[JOBS[baseOf(job)].weapon]}`:I.name;}
@@ -6236,10 +6249,26 @@ function stickWeapon(kind,job,tier=-1){
       g.userData.string={g:sg,up:seg(),dn:seg(),half,d:-1};g.add(sg);setBowDraw(g,0);}
     if(sniper){add(rbox(.022,.06,.1,dark,.007),0,.08,.02);add(cyl(.018,.018,.18,dark,6),0,.13,.04,Math.PI/2,0,0);add(sph(.02,mat(0x60c0ff,{emissive:0x2080c0,emissiveIntensity:1})),0,.13,.13);}
   }
+  // 전직 무기 등급 (2~5등급): 쇠붙이에 등급 빛이 돌고, 3등급부터 머리 쪽에 빛 조각이 떠 있고, 5등급은 빛 고리까지 두른다
+  if(!basic&&JW_T0[job]!=null&&tier>=0){const gr=Math.max(0,Math.min(4,tier-JW_T0[job]));if(gr>0)wpnGrade(g,gr);}
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   wpnMerge(g);
   return g;
 }
+const GRADE_GLOW=[0,0xcfe4ff,0x7fd8ff,0xb27bff,0xffc24a],GRADE_TINT=[0,0xffffff,0x8fc8ff,0xa888e8,0xfff0c0];
+function wpnGrade(g,gr){const c=GRADE_GLOW[gr],seen=new Set();
+  g.traverse(o=>{if(!o.isMesh)return;for(const m of [].concat(o.material)){if(seen.has(m)||!m.isMeshStandardMaterial)continue;seen.add(m);
+    if(m.metalness>=.5){m.metalness*=1-.06*gr;m.color.lerp(new THREE.Color(GRADE_TINT[gr]),[0,.3,.32,.34,.48][gr]);   /* 등급마다 쇠 빛깔: 2 밝은 은 · 3 푸른 강철 · 4 보랏빛 · 5 흰 금 */
+      if(!(m.emissiveIntensity>.3&&m.emissive&&m.emissive.getHex())){m.emissive=new THREE.Color(c);m.emissiveIntensity=[0,.06,.12,.18,.22][gr];}}
+    else if(m.emissiveIntensity>.3)m.emissiveIntensity*=1+.15*gr;}});   /* 보석·룬처럼 빛나던 곳은 등급마다 더 밝게 */
+  if(gr<2)return;
+  g.updateMatrixWorld(true);const bx=new THREE.Box3().setFromObject(g),sz=new THREE.Vector3();bx.getSize(sz);
+  const ax=sz.y>=sz.x&&sz.y>=sz.z?'y':sz.z>=sz.x?'z':'x',hi=Math.abs(bx.max[ax])>=Math.abs(bx.min[ax]),end=hi?bx.max[ax]:bx.min[ax],L=sz[ax];
+  const at=new THREE.Vector3((bx.min.x+bx.max.x)/2,(bx.min.y+bx.max.y)/2,(bx.min.z+bx.max.z)/2);at[ax]=end-(hi?1:-1)*L*.18;
+  const sm=mat(c,{emissive:c,emissiveIntensity:1.5}),R=Math.max(.06,Math.min(.14,L*.09)),n=gr;   // 3등급 2개, 4등급 3개, 5등급 4개
+  const other=['x','y','z'].filter(a=>a!==ax);
+  for(let k=0;k<n;k++){const a=k/n*Math.PI*2+.4,sp=new THREE.Mesh(new THREE.OctahedronGeometry(.011+.003*gr,0),sm);sp.position.copy(at);sp.position[other[0]]+=Math.cos(a)*R;sp.position[other[1]]+=Math.sin(a)*R;sp.position[ax]+=Math.sin(a*2)*R*.3;sp.scale[ax]=1.6;g.add(sp);}
+  if(gr>=4){const rg=new THREE.Mesh(new THREE.TorusGeometry(R*.9,.004,6,40),sm);rg.position.copy(at);if(ax==='y')rg.rotation.x=Math.PI/2;else if(ax==='x')rg.rotation.y=Math.PI/2;g.add(rg);}}
 // 방패: 'buckler' 전사의 나무 방패(판자 + 쇠테 + 가운데 혹), 'tower' 방패병의 큰 방패(강철판 + 금테 + 문장)
 // 앞면이 +z, 손잡이가 원점 근처. tier가 높으면 보석이 빛난다.
 function makeShield(kind='buckler',tier=0){
@@ -20171,12 +20200,12 @@ function startGame(data){const ap=apParse(data.ap)||(data.ap&&data.ap.g?data.ap:
 function startGameNow(data){
   setTimeout(precompileAll,4000);setTimeout(precompileAll,12000);setTimeout(()=>warmGpu(),1500);
   P={...data,buffs:{}};delete P.tab;saveStale=false;saveClaimT=Date.now();if(!P.id)P.id='c'+Date.now().toString(36);P.seat=null;P.ride=null;P.drunk=0;P.blackout=false;
-  P.gold=data.gold||0;P.equip={weapon:null,sub:null,helm:null,armor:null,boots:null,acc:null,...(data.equip||{})};
+  wpnMigrate(data);P.gold=data.gold||0;P.equip={weapon:null,sub:null,helm:null,armor:null,boots:null,acc:null,...(data.equip||{})};
   for(const k in P.equip)if(P.equip[k]&&!ITEMS[P.equip[k]])P.equip[k]=null;
   P.enh={...(data.enh||{})};P.home='town';P.quest=data.quest&&(data.quest.goals||MON[data.quest.ty])&&ZONES[data.quest.zone]?{...data.quest}:null;if(P.quest)qGoals(P.quest);
   P.quick=(data.quick||['hp_s','mp_s',null]).slice(0,3);while(P.quick.length<3)P.quick.push(null);
   P.bag=Array.isArray(data.bag)?data.bag.filter(e=>e&&ITEMS[e.id]).map(e=>({id:e.id,n:Math.max(1,e.n|0),...(e.enh>0?{enh:Math.min(10,e.enh|0)}:{})})):null;
-  if(!P.bag){P.bag=[];addItem('hp_s',data.potions??3,true);addItem('mp_s',2,true);if(!data.equip)P.equip.weapon='w1';}
+  if(!P.bag){P.bag=[];addItem('hp_s',data.potions??3,true);addItem('mp_s',2,true);if(!data.equip)P.equip.weapon='w2';}
   delete P.potions;P.skills={...(data.skills||{})};P.faith=Math.max(0,Math.min(10,data.faith|0));P.slots=(data.slots||[]).slice(0,NSK);
   while(P.slots.length<NSK)P.slots.push(null);P.sp=data.sp??P.lv;
   // 바뀐 스킬: 지금 직업에 없는 스킬은 SP를 돌려주고 칸에서 뺀다
@@ -20322,7 +20351,7 @@ const USE_PRICE={hp_s:20,hp_l:60,mp_s:25,mp_l:80,elixir:400,atk_p:150,def_p:150,
 function priceOf(id){const I=ITEMS[id];if(I.price)return I.price;if(I.kind==='use')return USE_PRICE[id]||50;return GEAR_PRICE[I.tier];}
 const sellPrice=id=>Math.max(1,Math.floor(priceOf(id)*.4));
 const SHOPS={
-  village:{title:'떠돌이 상인의 좌판',list:['hp_s','hp_l','mp_s','recall','w1','w2','w3','h1','h2','a1','a2','a3','b1','b2','r1','r2','r3']},
+  village:{title:'떠돌이 상인의 좌판',list:['hp_s','hp_l','mp_s','recall','w2','w4','h1','h2','a1','a2','a3','b1','b2','r1','r2','r3']},
   arms:{title:'브론의 무기점',list:[...['w','h','a','b','r'].flatMap(k=>[1,2,3,4,5,6,7].map(n=>k+n))]},
   goods:{title:'미나의 잡화점',list:['hp_s','mp_s','recall']},
   /* 엑시즈 시장: 기본 직업별 장비점 (그 계열만 살 수 있다). 1~9등급 무기·방어구·장신구와 그 계열 전직 무기 */
@@ -22006,6 +22035,9 @@ function dropLoot(m){
   if(lv>=40)roll(.03,'elixir');
   const gc=(.07+(m.D.scale>1.5?.08:0))*gm*(hasPilfer()?ROGUE_GEAR:1);
   if(Math.random()<gc){const tt=Math.min(9,t+(Math.random()<.15?1:0));const id=pick(GEAR_BY_TIER[tt]);if(addItem(id)){got.push(`[${itemName(id,P.job)}]`);shown.push([id,1]);}}
+  /* 전직했으면 가끔 내 계열 전직 무기의 높은 등급이 나온다 (그 사냥터 레벨에 맞는 것 중 위의 둘) */
+  if(JOBS[P.job].from&&Math.random()<gc*.35){const c=Object.keys(ITEMS).filter(id=>ITEMS[id].g>1&&ITEMS[id].gbase&&canWear(id,P.job)&&ITEMS[id].req<=lv+2).sort((a,b)=>ITEMS[b].req-ITEMS[a].req).slice(0,2);
+    const id=c.length?pick(c):null;if(id&&addItem(id)){got.push(`[${itemName(id,P.job)}]`);shown.push([id,1]);}}
   log('획득: '+got.join(', '),'good');lootShow(m,g,shown);
 }
 function useItem(id){
