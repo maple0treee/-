@@ -16057,13 +16057,91 @@ function wbShelf(){const L=wbShow('책장','shelf');
   P.bag.forEach((e,i)=>{const r=wbRec(e);if(!r)return;n++;wbRow(L,'wbook',wbTitle(r),r.au?`${r.au} 지음`:'',[['꽂기',()=>{if(P.shelf.length>=120){toast('책장이 가득 찼어요');return;}P.bag.splice(i,1);P.shelf.push(e.b);invDirty();save();wbShelf();}]]);});
   if(!n)wbNote(L,'가방에 책이 없다.');}
 /* ---- 도서관: 서가 둘러보기 (등재된 책 읽기·사기) ---- */
-function wbCatalog(){const L=wbShow('왕립 도서관 서가','cat');
-  const q=document.createElement('input');q.type='search';q.className='wbq';q.placeholder='제목이나 지은이';q.value=LIBC.q||'';L.appendChild(q);const box=document.createElement('div');box.className='wblist';L.appendChild(box);
-  const draw=()=>{box.innerHTML='';const s=(LIBC.q||'').trim();const list=LIBC.cat.filter(b=>!s||b.ti.includes(s)||b.au.includes(s)).sort((a,b)=>(b.up||b.at)-(a.up||a.at));
-    const cm=!s||BOOKS.lib_credits.title.includes(s);if(!LIBC.got)wbNote(box,'서가를 살피는 중…');else if(!list.length&&!cm)wbNote(box,'찾는 책이 없다.');
-    const CB=BOOKS.lib_credits;if(CB&&cm)wbRow(box,'wbook',CB.title,'오를란도를 함께 만든 이들 · '+libSpText(LIB_CRED_SP),[['읽기',()=>{wbClose();openBook('lib_credits');}]]);
-    for(const b of list.slice(0,200))wbRow(box,'wbook',b.ti,`${b.au} 지음 · ${b.n}쪽`+(Number.isInteger(b.sp)?' · '+libSpText(b.sp):'')+(b.sold?` · ${b.sold.toLocaleString('ko-KR')}권 팔림`:''),[['읽기',()=>libRead(b.id)],[`사기 ${WBK.BUY.toLocaleString('ko-KR')}`,()=>libBuy(b.id),P.gold<WBK.BUY]]);};
-  q.oninput=()=>{LIBC.q=q.value;draw();};LIBC.redraw=()=>{if(wbMode==='cat')draw();};draw();libAskCat();}
+function wbCatalog(){libShelfOpen();}
+/* ---- 왕립 도서관 서가 창: 기둥 책장을 그대로 본다. 층 → 칸(위에서 본 기둥) → 선반의 책등을 눌러 읽기·사기 ---- */
+const LSW={fl:1,bay:LIB_NB/4,sel:null,hot:null,el:null};
+function libShelfWin(){let el=$('#lsWin');if(el)return el;el=document.createElement('div');el.id='lsWin';el.className='overlay';el.hidden=true;
+  el.innerHTML='<div class="lscard" role="dialog"><header><h2>왕립 도서관 서가</h2><input type="search" class="lsq" placeholder="제목이나 지은이" autocomplete="off"><span class="gold lsg"></span><button type="button" class="lsx" aria-label="닫기">×</button></header>'
+    +'<div class="lsfl"></div><div class="lsbody"><div class="lsside"><canvas class="lsring" width="440" height="440"></canvas><div class="lsfound"></div></div><div class="lsshelf"><canvas class="lsface" width="960" height="600"></canvas></div></div>'
+    +'<div class="lsinfo"></div></div>';
+  document.body.appendChild(el);el.querySelector('.lsx').onclick=libShelfClose;
+  el.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();libShelfClose();}e.stopPropagation();});el.addEventListener('keyup',e=>e.stopPropagation());
+  el.addEventListener('pointerdown',e=>{if(e.target===el)libShelfClose();});
+  const fl=el.querySelector('.lsfl');for(let f=1;f<=LIBM.NF;f++){const x=document.createElement('button');x.type='button';x.textContent=f+'층';x.onclick=()=>{LSW.fl=f;LSW.sel=null;libShelfDraw();};fl.appendChild(x);}
+  const q=el.querySelector('.lsq');q.oninput=()=>{LIBC.q=q.value;libShelfDraw();};
+  const ring=el.querySelector('.lsring'),face=el.querySelector('.lsface');
+  ring.onclick=e=>{const bb=ring.getBoundingClientRect(),x=(e.clientX-bb.left)/bb.width*ring.width-ring.width/2,y=(e.clientY-bb.top)/bb.height*ring.height-ring.height/2,d=Math.hypot(x,y);if(d<ring.width*.2||d>ring.width*.47)return;let a=Math.atan2(y,x);if(a<0)a+=Math.PI*2;LSW.bay=Math.floor(a/(Math.PI*2)*LIB_NB)%LIB_NB;LSW.sel=null;libShelfDraw();};
+  const pick=e=>{const bb=face.getBoundingClientRect(),x=(e.clientX-bb.left)/bb.width*face.width,y=(e.clientY-bb.top)/bb.height*face.height,rs=libRowsOf(LSW.fl),rh=(face.height-24)/rs.length,cw=(face.width-24)/12;
+    const t=Math.floor((x-12)/cw),k=Math.floor((face.height-12-y)/rh);if(t<0||t>11||k<0||k>=rs.length)return null;return rs[k]*LIB_NB*12+LSW.bay*12+t;};
+  face.onclick=e=>{const sp=pick(e);if(sp===null||!LSW.lay||!LSW.lay.has(sp))return;LSW.sel=sp;sfx('ui');libShelfDraw();};
+  face.onmousemove=e=>{const sp=pick(e),h=sp!==null&&LSW.lay&&LSW.lay.has(sp)?sp:null;face.style.cursor=h!==null?'pointer':'default';if(h!==LSW.hot){LSW.hot=h;libShelfDraw();}};
+  face.onmouseleave=()=>{if(LSW.hot!==null){LSW.hot=null;libShelfDraw();}};
+  return el;}
+function libRowsOf(f){return LIBM.rows.map((y,j)=>j).filter(j=>libFloorOfRow(j)===f);}
+function libShelfOpen(){if(!P||!LIBM.ready)return;const el=libShelfWin();if(!$('#inv').hidden)closeInv();wbClose();
+  /* 처음 보이는 곳: 내가 선 층, 내가 마주한 기둥의 칸 */
+  const I=OR.ISLES.library,p=player.position;let a=Math.atan2(p.z-I.z,p.x-I.x);if(a<0)a+=Math.PI*2;LSW.bay=Math.floor(a/(Math.PI*2)*LIB_NB)%LIB_NB;LSW.fl=Math.max(1,Math.min(LIBM.NF,libFloor()||1));LSW.sel=null;LSW.hot=null;
+  el.querySelector('.lsq').value=LIBC.q||'';el.hidden=false;mode='dialog';attackHeld=false;unlockPointer();syncLockTip();
+  LIBC.redraw=()=>{if(!el.hidden)libShelfDraw();};libShelfDraw();libAskCat();}
+function libShelfClose(){const el=$('#lsWin');if(!el||el.hidden)return;el.hidden=true;LIBC.redraw=null;mode='world';syncLockTip();focusGame();relock();}
+function libShelfDraw(){const el=$('#lsWin');if(!el||el.hidden)return;const S=LSW,lay=libLayout();S.lay=lay;
+  el.querySelector('.lsg').textContent=P.gold.toLocaleString('ko-KR');
+  el.querySelectorAll('.lsfl button').forEach((x,i)=>x.classList.toggle('on',i+1===S.fl));
+  const s=(LIBC.q||'').trim(),hit=b=>!!s&&((b.ti||'').includes(s)||(b.au||'').includes(s));
+  const rs=libRowsOf(S.fl),COLS=['#8a2a22','#2a4a6a','#3a6a3a','#9a7a3a','#5a3a5a','#6a4a2a','#2a5a5a','#7a3a2a','#3a3a5a','#8a6a2a'];
+  const hc=id=>{let h=0;for(const ch of id)h=(h*31+ch.charCodeAt(0))>>>0;return h;};
+  /* 위에서 본 기둥: 칸마다 이 층에 꽂힌 만큼 밝게, 찾는 책이 있는 칸은 금빛 점 */
+  const ring=el.querySelector('.lsring'),c=ring.getContext('2d'),W=ring.width,cx=W/2,cy=W/2,R1=W*.47,R0=W*.2;c.clearRect(0,0,W,W);
+  for(let bb=0;bb<LIB_NB;bb++){let n=0,f=false;for(const j of rs)for(let t=0;t<12;t++){const q=lay.get(j*LIB_NB*12+bb*12+t);if(q){n++;if(hit(q))f=true;}}
+    const a0=bb/LIB_NB*Math.PI*2+.012,a1=(bb+1)/LIB_NB*Math.PI*2-.012;c.beginPath();c.arc(cx,cy,R1,a0,a1);c.arc(cx,cy,R0,a1,a0,true);c.closePath();
+    c.fillStyle=bb===S.bay?'#c9a24a':n?`rgba(170,120,60,${.3+.55*Math.min(1,n/(rs.length*6))})`:'#3a2a1c';c.fill();c.strokeStyle='#150e08';c.lineWidth=2;c.stroke();
+    const am=(a0+a1)/2,mx=cx+Math.cos(am)*(R0+R1)/2,my=cy+Math.sin(am)*(R0+R1)/2;c.fillStyle=bb===S.bay?'#1a120a':'#e8dcc0';c.font='600 19px serif';c.textAlign='center';c.textBaseline='middle';c.fillText(String(libBayNo(bb)),mx,my);
+    if(f){c.fillStyle='#ffd86a';c.beginPath();c.arc(cx+Math.cos(am)*(R1-12),cy+Math.sin(am)*(R1-12),6,0,Math.PI*2);c.fill();}}
+  c.fillStyle='#24170d';c.beginPath();c.arc(cx,cy,R0-6,0,Math.PI*2);c.fill();c.fillStyle='#e8dcc0';c.font='600 24px serif';c.fillText(S.fl+'층',cx,cy-10);c.font='400 16px serif';c.fillStyle='#bba98a';c.fillText(libBayNo(S.bay)+'번 칸',cx,cy+16);
+  c.fillStyle='#f3cf6a';c.font='600 17px serif';c.fillText('입구',cx,W-9);
+  /* 칸 앞모습: 선반마다 열두 자리, 책등에 제목을 세로로 */
+  const face=el.querySelector('.lsface'),g=face.getContext('2d'),FW=face.width,FH=face.height,rh=(FH-24)/rs.length,cw=(FW-24)/12;
+  const wood=g.createLinearGradient(0,0,FW,0);wood.addColorStop(0,'#24160c');wood.addColorStop(.5,'#3a2414');wood.addColorStop(1,'#24160c');g.fillStyle=wood;g.fillRect(0,0,FW,FH);
+  g.fillStyle='#4a2e1a';g.fillRect(0,0,12,FH);g.fillRect(FW-12,0,12,FH);
+  rs.forEach((j,k)=>{const y0=FH-12-(k+1)*rh;g.fillStyle='rgba(0,0,0,.35)';g.fillRect(12,y0,FW-24,rh-8);g.fillStyle='#6a4428';g.fillRect(12,y0+rh-8,FW-24,8);g.fillStyle='rgba(255,220,160,.12)';g.fillRect(12,y0+rh-8,FW-24,2);
+    for(let t=0;t<12;t++){const sp=j*LIB_NB*12+S.bay*12+t,b=lay.get(sp),x0=12+t*cw;if(!b)continue;const h=hc(b.id),bh=rh*(.66+(h%9)/9*.22),bw=cw*(.5+((h>>5)%5)/5*.2),bx=x0+(cw-bw)/2,by=y0+rh-8-bh;
+      const col=b.cred?'#1f4a32':COLS[h%COLS.length];g.fillStyle=col;g.fillRect(bx,by,bw,bh);g.fillStyle='rgba(255,255,255,.08)';g.fillRect(bx,by,bw*.25,bh);g.fillStyle='rgba(0,0,0,.25)';g.fillRect(bx+bw*.8,by,bw*.2,bh);
+      g.fillStyle=b.cred?'#e8c25a':'#d8b866';g.fillRect(bx+2,by+6,bw-4,2);g.fillRect(bx+2,by+bh-9,bw-4,2);
+      const ti=[...(b.ti||'')].slice(0,Math.max(1,Math.floor((bh-24)/15)));g.fillStyle='#f1e4c4';g.font='600 13px serif';g.textAlign='center';g.textBaseline='middle';ti.forEach((ch,i)=>g.fillText(ch,bx+bw/2,by+18+i*15));
+      if(sp===S.sel||sp===S.hot||hit(b)){g.strokeStyle=sp===S.sel?'#ffd86a':hit(b)?'rgba(255,216,106,.8)':'rgba(255,230,170,.55)';g.lineWidth=sp===S.sel?3:2;g.strokeRect(bx-2,by-2,bw+4,bh+4);}}});
+  /* 찾은 책 목록: 누르면 그 자리로 */
+  const fd=el.querySelector('.lsfound');fd.innerHTML='';
+  if(!LIBC.got){fd.textContent='서가를 살피는 중…';}
+  else if(s){const L=[...lay].filter(([,b])=>hit(b)).slice(0,30);if(!L.length)fd.textContent='찾는 책이 없다.';
+    for(const [sp,b] of L){const x=document.createElement('button');x.type='button';x.className='lsfi';x.textContent=`『${b.ti}』 ${libSpText(sp)}`;x.onclick=()=>{const o=libSpOf(sp);S.fl=libFloorOfRow(o.j);S.bay=o.b;S.sel=sp;libShelfDraw();};fd.appendChild(x);}}
+  else{let n=0;for(const j of rs)for(let bb=0;bb<LIB_NB;bb++)for(let t=0;t<12;t++)if(lay.has(j*LIB_NB*12+bb*12+t))n++;fd.textContent=`${S.fl}층에 꽂힌 책 ${n.toLocaleString('ko-KR')}권`;}
+  /* 고른 책 */
+  const inf=el.querySelector('.lsinfo');inf.innerHTML='';const b=S.sel!==null?lay.get(S.sel):null;
+  if(!b){inf.textContent=rs.length?'책등을 누르면 꺼내 볼 수 있다.':'';return;}
+  const tx=document.createElement('div');tx.className='lstx';const h=document.createElement('b');h.textContent=b.ti;const sub=document.createElement('span');
+  sub.textContent=b.cred?'오를란도를 함께 만든 이들 · '+libSpText(S.sel):`${b.au} 지음 · ${b.n}쪽 · ${libSpText(S.sel)}`+(b.sold?` · ${b.sold.toLocaleString('ko-KR')}권 팔림`:'');tx.append(h,sub);
+  const bt=document.createElement('div');bt.className='lsbt';const mk=(t,f,dis)=>{const x=document.createElement('button');x.type='button';x.textContent=t;x.disabled=!!dis;x.onclick=f;bt.appendChild(x);};
+  if(b.cred)mk('읽기',()=>{libShelfClose();openBook('lib_credits');});
+  else{mk('읽기',()=>{libShelfClose();libRead(b.id);});mk(`사기 ${WBK.BUY.toLocaleString('ko-KR')}`,()=>libBuy(b.id),P.gold<WBK.BUY);}
+  inf.append(tx,bt);}
+addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#lsWin')&&!$('#lsWin').hidden){libShelfClose();e.stopImmediatePropagation();}},true);
+{const st=document.createElement('style');st.textContent=`
+#lsWin{z-index:58}
+#lsWin .lscard{width:min(1180px,96vw);max-height:94vh;display:grid;gap:10px;padding:18px 20px;border-radius:10px;background:linear-gradient(#2a1a0e,#1c120a);border:1px solid #6a4a2a;box-shadow:0 0 0 3px #120b06,0 0 0 4px #8a6a3a,0 20px 60px rgba(0,0,0,.6);color:#e8dcc0}
+#lsWin header{display:flex;align-items:center;gap:14px}#lsWin h2{margin:0;font:400 26px var(--f-display);color:#f3cf6a;white-space:nowrap}
+#lsWin .lsq{flex:1;min-width:0;padding:7px 10px;border-radius:6px;border:1px solid #5a3e24;background:#140c06;color:inherit;font:inherit}
+#lsWin .lsx{width:34px;height:34px;min-width:0;padding:0;font-size:22px;line-height:1}
+#lsWin .lsfl{display:flex;gap:6px}#lsWin .lsfl button{flex:1}#lsWin .lsfl button.on{border-color:#f3cf6a;box-shadow:0 0 0 2px rgba(243,207,106,.35);color:#f3cf6a}
+#lsWin .lsbody{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,7fr);gap:14px;align-items:start}
+#lsWin .lsside{display:grid;gap:8px}#lsWin canvas{width:100%;height:auto;display:block;border-radius:6px}#lsWin .lsring{cursor:pointer}
+#lsWin .lsface{box-shadow:inset 0 0 0 1px #000,0 6px 18px rgba(0,0,0,.5)}
+#lsWin .lsfound{display:grid;gap:4px;max-height:22vh;overflow-y:auto;font-size:14px;color:#bba98a;text-align:center}
+#lsWin .lsfi{text-align:left;font-size:13px;padding:5px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#lsWin .lsinfo{min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 14px;border-radius:6px;background:rgba(0,0,0,.3);color:#bba98a}
+#lsWin .lstx{display:grid;gap:2px;min-width:0}#lsWin .lstx b{font:400 20px var(--f-display);color:#f1e4c4}#lsWin .lstx span{font-size:13px}
+#lsWin .lsbt{display:flex;gap:8px;flex:0 0 auto}
+@media (max-width:760px){#lsWin .lsbody{grid-template-columns:1fr}#lsWin .lsside{grid-template-columns:1fr 1fr;align-items:center}}
+`;document.head.appendChild(st);}
 /* ---- 도서관: 책 맡기기 (등재) ---- */
 function wbRegister(){const L=wbShow('책 맡기기','reg');let n=0;
   P.bag.forEach((e,i)=>{const r=wbRec(e);if(!r||r.ro)return;n++;const empty=!wbPages(r)||!r.t;const upd=!!r.lib,cost=upd?WBK.REG2:WBK.REG;
