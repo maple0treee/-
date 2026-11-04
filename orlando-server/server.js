@@ -302,14 +302,24 @@ const LIB_MAXP = 30, LIB_TX = 300, LIB_DR = 5000, LIB_MAXB = 3000;
 const LIB_ID = /^b[a-z0-9]{6,14}$/, LIB_DRAW = /^[0-9A-Za-z+/|]*$/;
 const crypto = require('crypto');
 const akHash = (ak) => crypto.createHash('sha256').update('orlando-lib:' + ak).digest('hex').slice(0, 24);
+// 기둥 책장 자리 번호 sp = 줄(아래부터 0~35)*288 + 칸(0~23, 남쪽 입구가 6)*12 + 칸 안 자리(0~11). 77은 '도움을 준 사람들' 자리
+const LIB_ROWS = 36, LIB_NB = 24, LIB_SPN = LIB_ROWS * LIB_NB * 12, LIB_RESV = 77;
 const libBooks = new Map();   // id -> {id, ti, au, ah(작가 열쇠 지문), pages:[{x,d}], at, up, sold}
 try { const j = JSON.parse(fs.readFileSync(LIB_FILE, 'utf8')); for (const b of j.books || []) if (b && LIB_ID.test(b.id) && Array.isArray(b.pages)) libBooks.set(b.id, b); } catch (e) {}
+function libUsed(skip) { const u = new Set([LIB_RESV]); for (const b of libBooks.values()) if (b.id !== skip && Number.isInteger(b.sp)) u.add(b.sp); return u; }
+// 자리를 고르지 않은 책: 아래 줄부터, 입구 칸에서 양옆으로 번갈아 빈자리
+function libAutoSp(u) {
+  for (let j = 0; j < LIB_ROWS; j++) for (let b0 = 0; b0 < LIB_NB; b0++) { const b = (LIB_NB / 4 + (b0 % 2 ? -(b0 + 1) / 2 : b0 / 2) + LIB_NB) % LIB_NB; for (let t = 0; t < 12; t++) { const sp = j * LIB_NB * 12 + b * 12 + t; if (!u.has(sp)) return sp; } }
+  return -1;
+}
+for (const b of libBooks.values()) if (!Number.isInteger(b.sp) || b.sp < 0 || b.sp >= LIB_SPN) b.sp = undefined;
+{ const seen = new Set([LIB_RESV]); for (const b of libBooks.values()) { if (b.sp !== undefined && seen.has(b.sp)) b.sp = undefined; if (b.sp !== undefined) seen.add(b.sp); } for (const b of libBooks.values()) if (b.sp === undefined) { const sp = libAutoSp(seen); if (sp >= 0) { b.sp = sp; seen.add(sp); } } }
 let libSaveT = null;
 function libSaveSoon() {
   if (libSaveT) return;
   libSaveT = setTimeout(() => { libSaveT = null; try { fs.mkdirSync(path.dirname(LIB_FILE), { recursive: true }); fs.writeFileSync(LIB_FILE, JSON.stringify({ books: [...libBooks.values()] })); } catch (e) {} }, 4000);
 }
-const libMeta = (b) => ({ id: b.id, ti: b.ti, au: b.au, n: b.pages.length, at: b.at, up: b.up || b.at, sold: b.sold || 0, pic: b.pages.some((p) => p.d) ? 1 : 0 });
+const libMeta = (b) => ({ id: b.id, sp: b.sp, ti: b.ti, au: b.au, n: b.pages.length, at: b.at, up: b.up || b.at, sold: b.sold || 0, pic: b.pages.some((p) => p.d) ? 1 : 0 });
 // cleanText는 줄바꿈도 지우므로 쪽 글은 따로 다듬는다
 function libText(s) { if (typeof s !== 'string') return ''; return s.replace(/\r/g, '').replace(/[\u0000-\u0009\u000b-\u001f\u007f​-‏‪-‮⁦-⁩]/g, '').replace(/\n{3,}/g, '\n\n').slice(0, LIB_TX); }
 function libStart(ws, d) {
@@ -321,7 +331,14 @@ function libStart(ws, d) {
   if (cur && cur.ah !== akHash(ak)) { send(ws, { t: 'lpubok', d: { ok: 0, q: d.q } }); return; }   // 남의 책은 고칠 수 없다
   if (!cur && !d.re) id = null;                     // 새 책은 서버가 번호를 준다 (다시 채우기 re만 옛 번호를 쓴다)
   if (!cur && libBooks.size >= LIB_MAXB) { send(ws, { t: 'lpubok', d: { ok: 0, q: d.q, full: 1 } }); return; }
-  ws.lup = { id: id || 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ti, au, ah: akHash(ak), n, pages: new Array(n).fill(null), got: 0, re: !!d.re && !cur, at: d.re ? Math.min(Date.now(), gInt(d.at, 0, 9e15)) || Date.now() : Date.now(), sold: d.re ? gInt(d.sold, 0, 1e7) : 0, q: d.q };
+  // 자리: 고른 자리가 비었으면 그 자리, 고르지 않았으면 지금 자리(고쳐 쓰기)나 빈자리
+  const want = Number.isInteger(d.sp) && d.sp >= 0 && d.sp < LIB_SPN ? d.sp : null, u = libUsed(cur ? cur.id : id);
+  let sp;
+  if (want !== null && !u.has(want)) sp = want;
+  else if (want !== null && !d.re) { send(ws, { t: 'lpubok', d: { ok: 0, q: d.q, taken: 1 } }); return; }
+  else if (cur && Number.isInteger(cur.sp)) sp = cur.sp;
+  else { sp = libAutoSp(u); if (sp < 0) { send(ws, { t: 'lpubok', d: { ok: 0, q: d.q, full: 1 } }); return; } }
+  ws.lup = { sp, id: id || 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ti, au, ah: akHash(ak), n, pages: new Array(n).fill(null), got: 0, re: !!d.re && !cur, at: d.re ? Math.min(Date.now(), gInt(d.at, 0, 9e15)) || Date.now() : Date.now(), sold: d.re ? gInt(d.sold, 0, 1e7) : 0, q: d.q };
 }
 function libPageIn(ws, d) {
   const U = ws.lup; if (!U || !d || typeof d !== 'object') return;
@@ -330,10 +347,11 @@ function libPageIn(ws, d) {
   if (U.got < U.n) return;
   ws.lup = null;
   const cur = libBooks.get(U.id);
-  const b = cur ? Object.assign(cur, { ti: U.ti, au: U.au, pages: U.pages, up: Date.now() }) : { id: U.id, ti: U.ti, au: U.au, ah: U.ah, pages: U.pages, at: U.at, up: U.re ? U.at : Date.now(), sold: U.sold };
+  { const u = libUsed(U.id); if (u.has(U.sp)) { if (!U.re) { send(ws, { t: 'lpubok', d: { ok: 0, q: U.q, taken: 1 } }); return; } U.sp = libAutoSp(u); } }   // 올리는 사이 누가 먼저 차지했다
+  const b = cur ? Object.assign(cur, { ti: U.ti, au: U.au, pages: U.pages, up: Date.now(), sp: U.sp }) : { id: U.id, sp: U.sp, ti: U.ti, au: U.au, ah: U.ah, pages: U.pages, at: U.at, up: U.re ? U.at : Date.now(), sold: U.sold };
   if (!cur) libBooks.set(b.id, b);
   libSaveSoon();
-  send(ws, { t: 'lpubok', d: { ok: 1, id: b.id, q: U.q, at: b.at } });
+  send(ws, { t: 'lpubok', d: { ok: 1, id: b.id, q: U.q, at: b.at, sp: b.sp } });
   broadcast({ t: 'lnew', d: libMeta(b) });
 }
 
