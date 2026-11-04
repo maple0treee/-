@@ -11,7 +11,7 @@ const createSim = require('./sim.js');
 const OR = require('./shared.js');
 
 const PORT = process.env.PORT || 3000;
-const VERSION = 20; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
+const VERSION = 21; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
 const PUBLIC = path.join(__dirname, 'public');
 
 // 파일을 미리 읽어 두고(압축본 포함) 바로 보내 준다
@@ -294,6 +294,49 @@ setInterval(() => {
   if (ch) guildsChanged();
 }, 3600 * 1000);
 
+// 엑시즈 왕립 도서관: 모험가가 집 책상에서 쓴 책을 사서에게 맡기면(등재) 서버가 간직하고, 누구나 읽고 베껴 갈(사 갈) 수 있다.
+// 한 권을 여러 사람이 살 수 있다 (사는 것은 베낀 한 권을 받는 것). 서버가 다시 켜져 파일이 사라지면 작가가 접속할 때 자기 책을 다시 보내 채운다.
+// 책을 올릴 때는 한 메시지 크기(8KB)를 넘지 않게 한 쪽씩 나눠 보낸다: lpub(머리) → lpg(쪽) … → 다 오면 lpubok
+const LIB_FILE = path.join(__dirname, '.data', 'library.json');
+const LIB_MAXP = 30, LIB_TX = 300, LIB_DR = 5000, LIB_MAXB = 3000;
+const LIB_ID = /^b[a-z0-9]{6,14}$/, LIB_DRAW = /^[0-9A-Za-z+/|]*$/;
+const crypto = require('crypto');
+const akHash = (ak) => crypto.createHash('sha256').update('orlando-lib:' + ak).digest('hex').slice(0, 24);
+const libBooks = new Map();   // id -> {id, ti, au, ah(작가 열쇠 지문), pages:[{x,d}], at, up, sold}
+try { const j = JSON.parse(fs.readFileSync(LIB_FILE, 'utf8')); for (const b of j.books || []) if (b && LIB_ID.test(b.id) && Array.isArray(b.pages)) libBooks.set(b.id, b); } catch (e) {}
+let libSaveT = null;
+function libSaveSoon() {
+  if (libSaveT) return;
+  libSaveT = setTimeout(() => { libSaveT = null; try { fs.mkdirSync(path.dirname(LIB_FILE), { recursive: true }); fs.writeFileSync(LIB_FILE, JSON.stringify({ books: [...libBooks.values()] })); } catch (e) {} }, 4000);
+}
+const libMeta = (b) => ({ id: b.id, ti: b.ti, au: b.au, n: b.pages.length, at: b.at, up: b.up || b.at, sold: b.sold || 0, pic: b.pages.some((p) => p.d) ? 1 : 0 });
+// cleanText는 줄바꿈도 지우므로 쪽 글은 따로 다듬는다
+function libText(s) { if (typeof s !== 'string') return ''; return s.replace(/\r/g, '').replace(/[\u0000-\u0009\u000b-\u001f\u007f​-‏‪-‮⁦-⁩]/g, '').replace(/\n{3,}/g, '\n\n').slice(0, LIB_TX); }
+function libStart(ws, d) {
+  if (!d || typeof d !== 'object') return;
+  const ti = cleanText(d.ti, 24), au = cleanText(d.au, 12), ak = typeof d.ak === 'string' && /^[a-z0-9]{12,24}$/.test(d.ak) ? d.ak : null, n = gInt(d.n, 0, LIB_MAXP);
+  if (!ti || !au || !ak || n < 1) { send(ws, { t: 'lpubok', d: { ok: 0, q: d.q } }); return; }
+  let id = typeof d.id === 'string' && LIB_ID.test(d.id) ? d.id : null;
+  const cur = id && libBooks.get(id);
+  if (cur && cur.ah !== akHash(ak)) { send(ws, { t: 'lpubok', d: { ok: 0, q: d.q } }); return; }   // 남의 책은 고칠 수 없다
+  if (!cur && !d.re) id = null;                     // 새 책은 서버가 번호를 준다 (다시 채우기 re만 옛 번호를 쓴다)
+  if (!cur && libBooks.size >= LIB_MAXB) { send(ws, { t: 'lpubok', d: { ok: 0, q: d.q, full: 1 } }); return; }
+  ws.lup = { id: id || 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ti, au, ah: akHash(ak), n, pages: new Array(n).fill(null), got: 0, re: !!d.re && !cur, at: d.re ? Math.min(Date.now(), gInt(d.at, 0, 9e15)) || Date.now() : Date.now(), sold: d.re ? gInt(d.sold, 0, 1e7) : 0, q: d.q };
+}
+function libPageIn(ws, d) {
+  const U = ws.lup; if (!U || !d || typeof d !== 'object') return;
+  const i = gInt(d.i, -1, U.n - 1); if (i < 0 || U.pages[i]) return;
+  U.pages[i] = { x: libText(d.x), d: typeof d.d === 'string' && d.d.length <= LIB_DR && LIB_DRAW.test(d.d) ? d.d : '' }; U.got++;
+  if (U.got < U.n) return;
+  ws.lup = null;
+  const cur = libBooks.get(U.id);
+  const b = cur ? Object.assign(cur, { ti: U.ti, au: U.au, pages: U.pages, up: Date.now() }) : { id: U.id, ti: U.ti, au: U.au, ah: U.ah, pages: U.pages, at: U.at, up: U.re ? U.at : Date.now(), sold: U.sold };
+  if (!cur) libBooks.set(b.id, b);
+  libSaveSoon();
+  send(ws, { t: 'lpubok', d: { ok: 1, id: b.id, q: U.q, at: b.at } });
+  broadcast({ t: 'lnew', d: libMeta(b) });
+}
+
 wss.on('connection', (ws) => {
   const id = 'p' + (++counter).toString(36) + Math.random().toString(36).slice(2, 6);
   ws.id = id; ws.pres = {}; ws.alive = true; ws.budget = 60; ws.chatAt = 0;
@@ -347,6 +390,21 @@ wss.on('connection', (ws) => {
       const [p] = L.splice(i, 1);
       send(ws, { t: 'btook', d: { ok: 1, id: p.id, p } });
       broadcast({ t: 'board', d: { b: m.d.b, list: L } });
+    } else if (m.t === 'lcat') {
+      send(ws, { t: 'lcat', d: [...libBooks.values()].map(libMeta) });
+    } else if (m.t === 'lget' && m.d && typeof m.d.id === 'string') {
+      const b = libBooks.get(m.d.id);
+      send(ws, { t: 'lbook', d: b ? { id: b.id, ti: b.ti, au: b.au, at: b.at, up: b.up || b.at, pages: b.pages } : { id: m.d.id, gone: 1 } });
+    } else if (m.t === 'lbuy' && m.d && typeof m.d.id === 'string') {
+      const b = libBooks.get(m.d.id);
+      if (b) { b.sold = (b.sold || 0) + 1; libSaveSoon(); }
+    } else if (m.t === 'lhas' && Array.isArray(m.d)) {
+      // 작가가 자기 책 번호를 알려 주면, 서버가 모르는 번호만 다시 보내 달라고 한다 (서버가 다시 켜져 파일이 사라졌을 때)
+      send(ws, { t: 'lneed', d: m.d.slice(0, 200).filter((id) => typeof id === 'string' && LIB_ID.test(id) && !libBooks.has(id)) });
+    } else if (m.t === 'lpub') {
+      libStart(ws, m.d);
+    } else if (m.t === 'lpg') {
+      libPageIn(ws, m.d);
     } else if (m.t === 'chat' && m.d && typeof m.d === 'object') {
       const now = Date.now();
       if (now - ws.chatAt < 700) return; // 도배 방지
