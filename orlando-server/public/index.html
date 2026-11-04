@@ -12528,12 +12528,20 @@ function petDog(i){const D=LIFE.dogs[i];if(!D||!player)return;interactTarget=nul
   LIFE.pet={D,t:0,fx:p.x,fz:p.z,tx:hx+(p.x-hx)/dd*.55,tz:hz+(p.z-hz)/dd*.55,hx,hz,ht:0,hy:heightAt(D.x,D.z)+.95*k};
   cam.yaw=Math.atan2(-(hx-p.x),-(hz-p.z));if(!cam.third)cam.pitch=-.5;}
 let _heartTex=null;
+function petHeart(x,y,z){if(!_heartTex){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');g.fillStyle='#ff5a78';g.font='54px serif';g.textAlign='center';g.textBaseline='middle';g.fillText('♥',32,36);_heartTex=new THREE.CanvasTexture(c);}
+  const h=new THREE.Sprite(new THREE.SpriteMaterial({map:_heartTex,transparent:true,depthWrite:false}));h.scale.setScalar(.22);h.position.set(x+(Math.random()-.5)*.2,y+.1,z+(Math.random()-.5)*.2);h.userData.life=1.3;LIFE.g.add(h);(LIFE.hearts||(LIFE.hearts=[])).push(h);}
+/* 다른 모험가가 쓰다듬는 모습: 그 사람이 보낸 개 번호와 길 위 자리(pd)로 내 화면의 같은 개를 그 자리에 앉히고, 그 사람도 쓰다듬는 자세를 한다 */
+function petPresence(){const L=LIFE.pet;if(!L||L.t>=2.8)return 0;const i=LIFE.dogs.indexOf(L.D);return i<0?0:[i,+L.D.s.toFixed(2),+L.D.side.toFixed(2)];}
+function petRemote(o,dt){const m=o.mesh,u=m&&m.userData;if(!u)return;const pd=o.pr&&Array.isArray(o.pr.pd)?o.pr.pd:null,D=pd&&LIFE.ready?LIFE.dogs[pd[0]|0]:null;
+  u.petK=Math.max(0,Math.min(1,(u.petK||0)+(D?dt*5:-dt*4)));u.petT=(u.petT||0)+dt;if(!D)return;
+  if(D!==LIFE.pet?.D){const s0=+pd[1],sd=+pd[2];if(isFinite(s0)&&isFinite(sd)&&(Math.abs(D.s-s0)>.05||Math.abs(D.side-sd)>.05)){D.s=D.s1=clamp(s0,0,D.R.T);D.side=sd;const q=_lifeAlong(D.R,D.s,D.side);D.x=q.x;D.z=q.z;}
+    if(D.st==='walk'){D.st='rest';D.s1=D.s;}D.pose='sit';D.stT=Math.max(D.stT,3);D.pet=Math.max(D.pet||0,.4);D.yaw=Math.atan2(m.position.x-D.x,m.position.z-D.z);}
+  if(D.D.visible&&(o.petHt=(o.petHt||0)-dt)<=0){o.petHt=.5;const k=D.D.scale.x;petHeart(D.x+Math.sin(D.yaw)*.5*k,heightAt(D.x,D.z)+.95*k,D.z+Math.cos(D.yaw)*.5*k);}}
 function petTick(dt){const u=player&&player.userData;if(!u)return;const L=LIFE.pet;
   if(L){L.t+=dt;const p=player.position;
     if(L.t<.35){const k=Math.min(1,L.t/.35),e=k*k*(3-2*k);p.x=L.fx+(L.tx-L.fx)*e;p.z=L.fz+(L.tz-L.fz)*e;}   /* 손이 닿도록 한 걸음 다가선다 */
     else if(Math.hypot(p.x-L.tx,p.z-L.tz)>.25||mode!=='world')L.t=Math.max(L.t,3);   /* 움직이면 그만둔다 */
-    if((L.ht-=dt)<=0&&L.t<3){L.ht=.5;if(!_heartTex){const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');x.fillStyle='#ff5a78';x.font='54px serif';x.textAlign='center';x.textBaseline='middle';x.fillText('♥',32,36);_heartTex=new THREE.CanvasTexture(c);}
-      const h=new THREE.Sprite(new THREE.SpriteMaterial({map:_heartTex,transparent:true,depthWrite:false}));h.scale.setScalar(.22);h.position.set(L.hx+(Math.random()-.5)*.2,L.hy+.1,L.hz+(Math.random()-.5)*.2);h.userData.life=1.3;LIFE.g.add(h);(LIFE.hearts||(LIFE.hearts=[])).push(h);}
+    if((L.ht-=dt)<=0&&L.t<3){L.ht=.5;petHeart(L.hx,L.hy,L.hz);}
     if(L.t>=3){L.D.pet=0;LIFE.pet=null;}}
   u.petK=Math.max(0,Math.min(1,(u.petK||0)+(LIFE.pet&&LIFE.pet.t<2.8?dt*5:-dt*4)));u.petT=(u.petT||0)+dt;
   if(LIFE.hearts)for(let i=LIFE.hearts.length-1;i>=0;i--){const h=LIFE.hearts[i];h.userData.life-=dt;h.position.y+=dt*.45;h.material.opacity=Math.min(1,h.userData.life*1.5);if(h.userData.life<=0){LIFE.g.remove(h);h.material.dispose();LIFE.hearts.splice(i,1);}}}
@@ -21834,7 +21842,7 @@ function publishPresence(force){
   if(!room||!P||!player)return;
   const now=performance.now();if(!force&&now-lastPres<100)return;lastPres=now;
   const f2=v=>isFinite(v)?+v.toFixed(2):0;
-  const pr={n:P.name,j:P.job,lv:P.lv,x:f2(player.position.x),y:f2(player.position.y),z:f2(player.position.z),r:f2(cam.yaw%(Math.PI*2)),sw:swingN,on:mode!=='title'?1:0,al:P.hp>0&&mode!=='title'?1:0,pt:party?party.id:null,h:+clamp(P.hp/P.maxhp,0,1).toFixed(2),g:gearCode(gearOf(P)),st:sitting||P.fly?1:0,hd:(P.hideT>tAll||(typeof ninHidden==='function'&&ninHidden()))?1:0,sd:P.skills.deepaura?1:0,...shdPres(),mo:myMoId,xl:xlMine(),ap:apCode(P.ap),cr:ccarPresence(),gd:guildPres(),mt:P.ride||''};
+  const pr={n:P.name,j:P.job,lv:P.lv,x:f2(player.position.x),y:f2(player.position.y),z:f2(player.position.z),r:f2(cam.yaw%(Math.PI*2)),sw:swingN,on:mode!=='title'?1:0,al:P.hp>0&&mode!=='title'?1:0,pt:party?party.id:null,h:+clamp(P.hp/P.maxhp,0,1).toFixed(2),g:gearCode(gearOf(P)),st:sitting||P.fly?1:0,hd:(P.hideT>tAll||(typeof ninHidden==='function'&&ninHidden()))?1:0,sd:P.skills.deepaura?1:0,...shdPres(),mo:myMoId,xl:xlMine(),ap:apCode(P.ap),cr:ccarPresence(),gd:guildPres(),mt:P.ride||'',pd:petPresence()};
   const key=JSON.stringify(pr);if(key===lastPresKey)return;lastPresKey=key;
   room.presence(pr).catch(e=>{presErr=(e&&e.code)||'오류';renderOnline();});
 }
@@ -21916,7 +21924,7 @@ function updateOthers(dt){
     const s=screenOf(m.position.clone().add(new THREE.Vector3(0,2.3,0)));
     const d=m.position.distanceTo(camera.position);
     if(m.userData.ghostA!==(o.hd?.08:1))setGhost(m,o.hd?.08:1);
-    if(o.pr)shdRemote(o,o.pr);shdRemoteTick(o,dt);
+    if(o.pr)shdRemote(o,o.pr);shdRemoteTick(o,dt);petRemote(o,dt);
     {const hm=OR.inMyHome(o.tx,o.tz);if(m.visible===hm)m.visible=!hm;if(hm){o.tag.hidden=true;if(o.cb)o.cb.hidden=true;continue;}}   /* 저마다 자기 집 안: 같은 방을 함께 쓰므로 서로 안 보이게 */
     if(s.ok&&d<60&&mode!=='title'&&!o.hd){o.tag.hidden=false;o.tag.style.left=s.x+'px';o.tag.style.top=s.y+'px';}else o.tag.hidden=true;
     if(o.chat){o.chat.t-=dt;if(o.cb.textContent!==o.chat.text)o.cb.textContent=o.chat.text;o.cb.hidden=o.chat.t<=0;if(o.chat.t<=0)o.chat=null;}
