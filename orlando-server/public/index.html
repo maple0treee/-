@@ -15860,8 +15860,8 @@ function buildLibraryMap(K){if(LIBM.ready)return;const I=OR.ISLES.library;if(!I)
     for(let k=0;k<=NF;k++){const y=Math.min(TOP-.3,k*FH+(k?0:.02));add(new THREE.CylinderGeometry(RC+.12,RC+.12,k?.34:.5,64),k?GOLDM:m(0x3a2414),0,y+(k?0:.25),0);}
     add(new THREE.CylinderGeometry(RC+.5,RC+.6,.4,64),STONE2,0,.2,0);   /* 받침돌 */
     col(0,0,RC+.55,-1,TOP+1);
-    /* 등재된 책이 꽂힐 자리: 아래 칸부터, 입구(남쪽) 쪽 칸에서 양옆으로 차례로 (한 칸에 열두 권) */
-    const slots=[];for(let j=0;j<rows.length;j++){const y=rows[j]+.03;for(let b0=0;b0<NB;b0++){const b=(NB/4+(b0%2?-(b0+1)/2:b0/2)+NB)%NB,a0=b/NB*PI*2+.03,a1=(b+1)/NB*PI*2-.03;for(let t=0;t<12;t++){const a=a0+(a1-a0)*(t+.5)/12;slots.push({y,a});}}}
+    /* 등재된 책이 꽂힐 자리: 번호 = 줄*288 + 칸*12 + 칸 안 자리 (칸 6이 남쪽 입구 쪽, 서버와 같은 번호) */
+    const slots=[];for(let j=0;j<rows.length;j++){const y=rows[j]+.03;for(let b=0;b<NB;b++){const a0=b/NB*PI*2+.03,a1=(b+1)/NB*PI*2-.03;for(let t=0;t<12;t++){const a=a0+(a1-a0)*(t+.5)/12;slots.push({y,a});}}}
     LIBM.slots=slots;
     const bk=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({roughness:.8}),Math.min(slots.length,4000));bk.setColorAt(0,new THREE.Color(0xffffff));bk.count=0;bk.castShadow=true;bk.frustumCulled=false;g.add(bk);LIBM.spines=bk;
     LIBM.pillarSpot={x:X,z:Z,r:RC+1.9};}
@@ -15880,10 +15880,6 @@ function buildLibraryMap(K){if(LIBM.ready)return;const I=OR.ISLES.library;if(!I)
       {const [bx,bz]=pol(R0,PI/2+.12);C(g,.08,.1,.05,GOLDM,bx,1.1,bz,10);add(new THREE.SphereGeometry(.07,10,8,0,PI*2,0,PI/2),GOLDM,bx,1.13,bz);}
       {const [bx,bz]=pol(R0-.2,PI/2+.27);C(g,.08,.1,.3,GOLDM,bx,1.22,bz,8);const L=add(new THREE.SphereGeometry(.12,10,8),m(0xffe0a0,{emissive:0xffc060,emissiveIntensity:1.6}),bx,1.45,bz);L.castShadow=false;}
       const [dx,dz]=pol(R0-1.3,PI/2);LIBM.desk={x:X+dx,z:Z+dz};}
-    /* 도움을 준 사람들: 사서 책상 옆 독서대에 펼쳐 둔 책 (F로 읽는다) */
-    {const a=PI/2+.5,[lx,lz]=pol(13.2,a),q=p(lx,0,lz,-a+PI/2);B(q,.5,.06,.5,STONE2,0,.03,0);C(q,.08,.12,1.0,WOOD,0,.55,0,10);const top=B(q,.7,.05,.5,WOOD2,0,1.12,0);top.rotation.x=-.5;
-      const pg=B(q,.62,.02,.42,m(0xf4ecd8),0,1.16,.01);pg.rotation.x=-.5;col(lx,lz,.4,-1,1.3);
-      LIBM.credAt={x:X+lx,z:Z+lz};}
     /* 열람 탁자 여섯: 기둥과 아트리움 가장자리 사이에 빙 둘러 */
     const table=(x,y,z,ry)=>{const q=p(x,y,z,ry);B(q,2.4,.08,1.1,WOOD2,0,.78,0);for(const sx of [-1,1])for(const sz of [-1,1])B(q,.1,.74,.1,WOOD,sx*1.05,.37,sz*.42);B(q,2.0,.06,.06,WOOD,0,.25,0);
       {const L=new THREE.Group();L.position.set(0,.82,0);q.add(L);C(L,.09,.12,.04,GOLDM,0,.02,0,10);C(L,.02,.02,.32,GOLDM,0,.2,0,6);const s=add(new THREE.CylinderGeometry(.13,.2,.18,12,1,true),m(0x2a5a3a,{side:THREE.DoubleSide,emissive:0x0a2a12,emissiveIntensity:.4}),0,.4,0,0,0,0,L);s.castShadow=false;add(new THREE.SphereGeometry(.05,8,6),m(0xfff0c0,{emissive:0xffd070,emissiveIntensity:2}),0,.36,0,0,0,0,L).castShadow=false;}
@@ -15918,12 +15914,24 @@ function buildLibraryMap(K){if(LIBM.ready)return;const I=OR.ISLES.library;if(!I)
       acts:[['책 맡기기','wb:reg'],['서가 둘러보기','wb:cat']]});}
   LIBM.ready=true;}
 /* 등재된 책을 기둥 책장에 꽂는다 (책마다 정해진 색·키) */
-function libSpinesUpdate(){const S=LIBM.spines;if(!S||!LIBM.slots)return;const L=LIBC.cat,n=Math.min(L.length,S.instanceMatrix.count),M4=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler(),v=new THREE.Vector3(),s=new THREE.Vector3(),c=new THREE.Color();
+/* 기둥 책장 자리 번호 (서버와 같게): sp = 줄*288 + 칸*12 + 자리. 77은 '도움을 준 사람들' */
+const LIB_CRED_SP=77,LIB_NB=24;
+function libSpOf(sp){const j=Math.floor(sp/(LIB_NB*12)),b=Math.floor(sp/12)%LIB_NB,t=sp%12;return {j,b,t};}
+function libFloorOfRow(j){return Math.floor(((LIBM.rows&&LIBM.rows[j])||0)/LIBM.FH)+1;}
+function libBayNo(b){return (b-LIB_NB/4+LIB_NB)%LIB_NB+1;}   /* 입구 쪽 칸이 1번, 위에서 보아 시계 방향으로 */
+function libRowNo(j){const f=libFloorOfRow(j);let k=0;for(let q=0;q<j;q++)if(libFloorOfRow(q)===f)k++;return k+1;}   /* 그 층에서 아래부터 몇째 선반 */
+function libSpText(sp){if(!Number.isInteger(sp))return '';const {j,b,t}=libSpOf(sp);return `${libFloorOfRow(j)}층 · ${libBayNo(b)}번 칸 · ${libRowNo(j)}째 선반 · ${t+1}번째`;}
+/* 지금 서가의 자리 지도: sp -> 책 (자리 없는 책은 아래 줄 입구 쪽부터 빈자리에) */
+function libLayout(){const M=new Map([[LIB_CRED_SP,{id:'lib_credits',cred:1,ti:BOOKS.lib_credits?BOOKS.lib_credits.title:''}]]),N=LIBM.slots?LIBM.slots.length:0,late=[];
+  for(const b of [...LIBC.cat].sort((a,b)=>(a.at||0)-(b.at||0))){if(Number.isInteger(b.sp)&&b.sp>=0&&b.sp<N&&!M.has(b.sp))M.set(b.sp,b);else late.push(b);}
+  if(late.length){const R=LIBM.rows.length;let q=0;for(let j=0;j<R&&q<late.length;j++)for(let b0=0;b0<LIB_NB&&q<late.length;b0++){const b=(LIB_NB/4+(b0%2?-(b0+1)/2:b0/2)+LIB_NB)%LIB_NB;for(let t=0;t<12&&q<late.length;t++){const sp=j*LIB_NB*12+b*12+t;if(!M.has(sp))M.set(sp,late[q++]);}}}
+  return M;}
+function libSpinesUpdate(){const S=LIBM.spines;if(!S||!LIBM.slots)return;const M4=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler(),v=new THREE.Vector3(),s=new THREE.Vector3(),c=new THREE.Color();
   const COLS=[0x8a2a22,0x2a4a6a,0x3a6a3a,0x9a7a3a,0x5a3a5a,0x6a4a2a,0x2a5a5a,0x7a3a2a,0x3a3a5a,0x8a6a2a];
-  const sorted=[...L].sort((a,b)=>(a.at||0)-(b.at||0));
-  for(let i=0;i<n;i++){const b=sorted[i],sl=LIBM.slots[i];let h=0;for(const ch of b.id)h=(h*31+ch.charCodeAt(0))>>>0;const hh=.42+(h%17)/17*.2,w=.05+((h>>5)%7)/7*.05;
-    e.set(0,-sl.a,(((h>>9)%5)-2)*.015);q.setFromEuler(e);const r=LIBM.RC-.22;M4.compose(v.set(Math.cos(sl.a)*r,sl.y+hh/2,Math.sin(sl.a)*r),q,s.set(.32,hh,w));S.setMatrixAt(i,M4);S.setColorAt(i,c.setHex(COLS[h%COLS.length]).offsetHSL(0,0,((h>>13)%5-2)*.03));}
-  S.count=n;S.instanceMatrix.needsUpdate=true;if(S.instanceColor)S.instanceColor.needsUpdate=true;}
+  const L=libLayout();let i=0;const cap=S.instanceMatrix.count;
+  for(const [sp,b] of L){if(i>=cap)break;const sl=LIBM.slots[sp];if(!sl)continue;let h=0;for(const ch of b.id)h=(h*31+ch.charCodeAt(0))>>>0;const hh=.42+(h%17)/17*.2,w=.05+((h>>5)%7)/7*.05;
+    e.set(0,-sl.a,(((h>>9)%5)-2)*.015);q.setFromEuler(e);const r=LIBM.RC-.22;M4.compose(v.set(Math.cos(sl.a)*r,sl.y+hh/2,Math.sin(sl.a)*r),q,s.set(.32,hh,w));S.setMatrixAt(i,M4);S.setColorAt(i,b.cred?c.setHex(0x1f4a32):c.setHex(COLS[h%COLS.length]).offsetHSL(0,0,((h>>13)%5-2)*.03));i++;}
+  S.count=i;S.instanceMatrix.needsUpdate=true;if(S.instanceColor)S.instanceColor.needsUpdate=true;}
 /* 도서관 평면도 (큰 지도·미니맵): 지금 층만 */
 function drawLibraryPlan(c,X,Z,sc,I,fl){const {RIN,RC,RA,RS0,FH}=LIBM,cx=I.x,cz=I.z,k=fl-1,W=LIBM.stairW,PI=Math.PI;
   const arc=(r0,r1,a0,a1,col)=>{c.fillStyle=col;c.beginPath();c.arc(X(cx),Z(cz),r1*sc,a0,a1);c.arc(X(cx),Z(cz),r0*sc,a1,a0,true);c.closePath();c.fill();};
@@ -15963,7 +15971,7 @@ function wbNewId(){return 'w'+Date.now().toString(36)+Math.random().toString(36)
 /* 불러온 뒤: 모양이 맞지 않는 것은 버리고, 가방·책장 어디에도 없는 책 기록은 지운다 */
 function wbLoad(){if(!P)return;const W0=P.wbk&&typeof P.wbk==='object'?P.wbk:{},out={};
   for(const k in W0){const r=W0[k];if(!r||!/^w[a-z0-9]{4,20}$/.test(k)||!Array.isArray(r.p))continue;
-    out[k]={t:String(r.t||'').slice(0,24),au:String(r.au||'').slice(0,12),cap:Math.max(1,Math.min(30,r.cap|0||12)),ro:r.ro?1:0,lib:typeof r.lib==='string'?r.lib:null,lat:r.lat||0,
+    out[k]={t:String(r.t||'').slice(0,24),au:String(r.au||'').slice(0,12),cap:Math.max(1,Math.min(30,r.cap|0||12)),ro:r.ro?1:0,lib:typeof r.lib==='string'?r.lib:null,lat:r.lat||0,lsp:Number.isInteger(r.lsp)?r.lsp:null,
       p:r.p.slice(0,30).map(q=>({x:String(q&&q.x||'').slice(0,WBK.MAXX),d:typeof(q&&q.d)==='string'&&q.d.length<=WBK.MAXD?q.d:''}))};}
   P.wbk=out;P.shelf=Array.isArray(P.shelf)?P.shelf.filter(k=>out[k]):[];
   P.bag=P.bag.filter(e=>e.id!=='wbook'||out[e.b]);
@@ -16052,14 +16060,62 @@ function wbShelf(){const L=wbShow('책장','shelf');
 function wbCatalog(){const L=wbShow('왕립 도서관 서가','cat');
   const q=document.createElement('input');q.type='search';q.className='wbq';q.placeholder='제목이나 지은이';q.value=LIBC.q||'';L.appendChild(q);const box=document.createElement('div');box.className='wblist';L.appendChild(box);
   const draw=()=>{box.innerHTML='';const s=(LIBC.q||'').trim();const list=LIBC.cat.filter(b=>!s||b.ti.includes(s)||b.au.includes(s)).sort((a,b)=>(b.up||b.at)-(a.up||a.at));
-    if(!LIBC.got)wbNote(box,'서가를 살피는 중…');else if(!LIBC.cat.length)wbNote(box,'아직 꽂힌 책이 없다.');else if(!list.length)wbNote(box,'찾는 책이 없다.');
-    for(const b of list.slice(0,200))wbRow(box,'wbook',b.ti,`${b.au} 지음 · ${b.n}쪽`+(b.sold?` · ${b.sold.toLocaleString('ko-KR')}권 팔림`:''),[['읽기',()=>libRead(b.id)],[`사기 ${WBK.BUY.toLocaleString('ko-KR')}`,()=>libBuy(b.id),P.gold<WBK.BUY]]);};
+    const cm=!s||BOOKS.lib_credits.title.includes(s);if(!LIBC.got)wbNote(box,'서가를 살피는 중…');else if(!list.length&&!cm)wbNote(box,'찾는 책이 없다.');
+    const CB=BOOKS.lib_credits;if(CB&&cm)wbRow(box,'wbook',CB.title,'오를란도를 함께 만든 이들 · '+libSpText(LIB_CRED_SP),[['읽기',()=>{wbClose();openBook('lib_credits');}]]);
+    for(const b of list.slice(0,200))wbRow(box,'wbook',b.ti,`${b.au} 지음 · ${b.n}쪽`+(Number.isInteger(b.sp)?' · '+libSpText(b.sp):'')+(b.sold?` · ${b.sold.toLocaleString('ko-KR')}권 팔림`:''),[['읽기',()=>libRead(b.id)],[`사기 ${WBK.BUY.toLocaleString('ko-KR')}`,()=>libBuy(b.id),P.gold<WBK.BUY]]);};
   q.oninput=()=>{LIBC.q=q.value;draw();};LIBC.redraw=()=>{if(wbMode==='cat')draw();};draw();libAskCat();}
 /* ---- 도서관: 책 맡기기 (등재) ---- */
 function wbRegister(){const L=wbShow('책 맡기기','reg');let n=0;
   P.bag.forEach((e,i)=>{const r=wbRec(e);if(!r||r.ro)return;n++;const empty=!wbPages(r)||!r.t;const upd=!!r.lib,cost=upd?WBK.REG2:WBK.REG;
-    wbRow(L,'wbook',wbTitle(r),empty?'제목과 내용을 먼저 적어야 한다':upd?'맡긴 책 · 고쳐 쓴 대로 바꾸기':`${wbPages(r)}쪽`,[[`${upd?'바꾸기':'맡기기'} ${cost.toLocaleString('ko-KR')}`,()=>libPublish(e.b),empty||P.gold<cost||!!LIBC.pub]],empty);});
+    wbRow(L,'wbook',wbTitle(r),empty?'제목과 내용을 먼저 적어야 한다':upd?'맡긴 책 · 고쳐 쓴 대로 바꾸기'+(Number.isInteger(r.lsp)?' · '+libSpText(r.lsp):''):`${wbPages(r)}쪽`,[[`${upd?'바꾸기':'맡기기'} ${cost.toLocaleString('ko-KR')}`,()=>wbPlace(e.b),empty||P.gold<cost||!!LIBC.pub]],empty);});
   if(!n)wbNote(L,'맡길 만한 책이 가방에 없다.');}
+/* ---- 맡길 자리 고르기: 층 → 기둥의 칸(위에서 본 둥근 그림) → 선반과 자리(칸 앞모습) ---- */
+let WPL=null;
+function wbPlace(b){const r=P.wbk[b];if(!r||r.ro)return;if(!LIBC.got)libAskCat();
+  const upd=!!r.lib,cost=upd?WBK.REG2:WBK.REG,L=wbShow(upd?'책 자리 · 바꾸기':'책 자리 고르기','place');
+  const lay=libLayout(),mine=r.lib?[...lay].find(([,q])=>q.id===r.lib):null;
+  const free=sp=>!lay.has(sp)||(mine&&mine[0]===sp);
+  let sp0=mine?mine[0]:null;if(sp0===null){for(let j=0;j<LIBM.rows.length&&sp0===null;j++)for(let b0=0;b0<LIB_NB&&sp0===null;b0++){const bb=(LIB_NB/4+(b0%2?-(b0+1)/2:b0/2)+LIB_NB)%LIB_NB;for(let t=0;t<12;t++){const sp=j*LIB_NB*12+bb*12+t;if(free(sp)){sp0=sp;break;}}}}
+  const o=libSpOf(sp0||0);WPL={b,sp:sp0,fl:libFloorOfRow(o.j),bay:o.b,lay,mine:mine?mine[0]:null};
+  const head=document.createElement('div');head.className='wbt';head.innerHTML='<span>『'+'</span>';head.firstChild.textContent=`『${wbTitle(r)}』`;L.appendChild(head);
+  const fl=document.createElement('div');fl.className='wbfl';L.appendChild(fl);
+  const row=document.createElement('div');row.className='wbplc';L.appendChild(row);
+  const ring=document.createElement('canvas');ring.width=ring.height=440;ring.className='wbring';
+  const face=document.createElement('canvas');face.width=600;face.height=440;face.className='wbface';row.append(ring,face);
+  const info=document.createElement('div');info.className='wbpinfo';L.appendChild(info);
+  const go=document.createElement('div');go.className='wbnav';go.innerHTML='<button type="button" class="ghost wbback">뒤로</button><span class="wbn"></span><button type="button" class="pri wbok"></button>';L.appendChild(go);
+  go.querySelector('.wbback').onclick=()=>wbRegister();
+  go.querySelector('.wbok').textContent=`여기에 ${upd?'두기':'맡기기'} ${cost.toLocaleString('ko-KR')}`;
+  go.querySelector('.wbok').onclick=()=>{if(WPL.sp===null||!free(WPL.sp)){toast('빈자리를 골라 주세요');return;}libPublish(b,WPL.sp===WPL.mine?undefined:WPL.sp);};
+  const rowsOf=f=>LIBM.rows.map((y,j)=>j).filter(j=>libFloorOfRow(j)===f);
+  for(let f=1;f<=LIBM.NF;f++){const x=document.createElement('button');x.type='button';x.textContent=f+'층';x.onclick=()=>{WPL.fl=f;draw();};fl.appendChild(x);}
+  const COLS=['#8a2a22','#2a4a6a','#3a6a3a','#9a7a3a','#5a3a5a','#6a4a2a','#2a5a5a','#7a3a2a','#3a3a5a','#8a6a2a'];
+  const hcol=id=>{let h=0;for(const ch of id)h=(h*31+ch.charCodeAt(0))>>>0;return COLS[h%COLS.length];};
+  let hot=null;
+  const draw=()=>{const P2=WPL;fl.querySelectorAll('button').forEach((x,i)=>x.classList.toggle('on',i+1===P2.fl));const rs=rowsOf(P2.fl);
+    /* 위에서 본 기둥: 칸마다 이 층에 꽂힌 수만큼 채운다 */
+    const c=ring.getContext('2d'),W=ring.width,cx=W/2,cy=W/2,R1=W*.46,R0=W*.2;c.clearRect(0,0,W,W);
+    for(let bb=0;bb<LIB_NB;bb++){let n=0;for(const j of rs)for(let t=0;t<12;t++)if(!free(j*LIB_NB*12+bb*12+t))n++;const a0=bb/LIB_NB*Math.PI*2+.01,a1=(bb+1)/LIB_NB*Math.PI*2-.01;
+      c.beginPath();c.arc(cx,cy,R1,a0,a1);c.arc(cx,cy,R0,a1,a0,true);c.closePath();c.fillStyle=bb===P2.bay?'#c9a24a':n?`rgba(150,110,60,${.35+.5*n/(rs.length*12)})`:'#3a2a1c';c.fill();c.strokeStyle='#1a120a';c.lineWidth=2;c.stroke();
+      const am=(a0+a1)/2;c.fillStyle=bb===P2.bay?'#1a120a':'#e8dcc0';c.font='600 20px serif';c.textAlign='center';c.textBaseline='middle';c.fillText(String(libBayNo(bb)),cx+Math.cos(am)*(R0+R1)/2,cy+Math.sin(am)*(R0+R1)/2);}
+    c.fillStyle='#2a1c10';c.beginPath();c.arc(cx,cy,R0-6,0,Math.PI*2);c.fill();c.fillStyle='#e8dcc0';c.font='600 22px serif';c.fillText(P2.fl+'층',cx,cy);
+    c.fillStyle='#f3cf6a';c.font='600 18px serif';c.fillText('입구',cx,W-10);
+    /* 칸 앞모습: 아래 선반이 아래, 자리 열두 개 */
+    const f2=face.getContext('2d'),FW=face.width,FH=face.height,n=rs.length,rh=(FH-20)/n,cw=(FW-20)/12;f2.clearRect(0,0,FW,FH);f2.fillStyle='#2e1c10';f2.fillRect(0,0,FW,FH);
+    rs.forEach((j,k)=>{const y0=FH-10-(k+1)*rh;f2.fillStyle='#6a4428';f2.fillRect(6,y0+rh-6,FW-12,6);
+      for(let t=0;t<12;t++){const sp=j*LIB_NB*12+P2.bay*12+t,x0=10+t*cw,q=P2.lay.get(sp);
+        if(sp===P2.sp){f2.fillStyle='#f3cf6a';f2.fillRect(x0+4,y0+6,cw-8,rh-14);}
+        else if(q&&sp!==P2.mine){f2.fillStyle=q.cred?'#1f4a32':hcol(q.id);f2.fillRect(x0+cw*.2,y0+rh*.25,cw*.6,rh*.67-6);}
+        else if(sp===hot){f2.strokeStyle='#f3cf6a';f2.lineWidth=2;f2.strokeRect(x0+5,y0+7,cw-10,rh-16);}
+        else{f2.strokeStyle='rgba(232,220,192,.18)';f2.lineWidth=1;f2.strokeRect(x0+5,y0+7,cw-10,rh-16);}}});
+    info.textContent=WPL.sp===null?'빈자리를 골라 주세요':libSpText(WPL.sp)+(WPL.sp===WPL.mine?' (지금 자리)':'');};
+  const ringPick=e=>{const bb=ring.getBoundingClientRect(),x=(e.clientX-bb.left)/bb.width*ring.width-ring.width/2,y=(e.clientY-bb.top)/bb.height*ring.height-ring.height/2,d=Math.hypot(x,y);if(d<ring.width*.2||d>ring.width*.46)return null;let a=Math.atan2(y,x);if(a<0)a+=Math.PI*2;return Math.floor(a/(Math.PI*2)*LIB_NB)%LIB_NB;};
+  ring.onclick=e=>{const bb=ringPick(e);if(bb===null)return;WPL.bay=bb;draw();};
+  const facePick=e=>{const bb=face.getBoundingClientRect(),x=(e.clientX-bb.left)/bb.width*face.width,y=(e.clientY-bb.top)/bb.height*face.height,rs=rowsOf(WPL.fl),rh=(face.height-20)/rs.length,cw=(face.width-20)/12;
+    const t=Math.floor((x-10)/cw),k=Math.floor((face.height-10-y)/rh);if(t<0||t>11||k<0||k>=rs.length)return null;return rs[k]*LIB_NB*12+WPL.bay*12+t;};
+  face.onclick=e=>{const sp=facePick(e);if(sp===null)return;if(!free(sp)){const q=WPL.lay.get(sp);toast(q&&q.ti?`『${q.ti}』 자리예요`:'이미 책이 있어요');return;}WPL.sp=sp;draw();};
+  face.onmousemove=e=>{const sp=facePick(e),h=sp!==null&&free(sp)?sp:null;if(h!==hot){hot=h;draw();}};
+  draw();}
 /* ---- 서버와 주고받기 ---- */
 function libOnline(){return !!(window.ORLANDO_WS&&room&&room.connected());}
 function libAskCat(){if(libOnline())room.emit('lcat',{}).catch(()=>{});else{LIBC.got=true;if(LIBC.redraw)LIBC.redraw();}}
@@ -16070,14 +16126,14 @@ async function libBuy(id){if(P.gold<WBK.BUY){toast('골드가 부족해요');ret
   P.gold-=WBK.BUY;wbAdd({t:b.ti,au:b.au,cap:b.pages.length,ro:1,lib:b.id,lat:0,p:b.pages.map(q=>({x:String(q.x||''),d:String(q.d||'')}))});room.emit('lbuy',{id}).catch(()=>{});
   sfx('coin');lootFeed('wbook',1);log(`『${b.ti}』 구매 · -${WBK.BUY.toLocaleString('ko-KR')} 골드`,'sys');save();const g=$('#wbWin .wbg');if(g)g.textContent=P.gold.toLocaleString('ko-KR');if(LIBC.redraw)LIBC.redraw();}
 /* 책 올리기: 머리(lpub) 다음에 쪽(lpg)을 하나씩 (서버가 받는 한 번의 크기가 작고, 1초에 받는 수도 정해져 있어 천천히) */
-function libSend(b,r,re){const n=r.cap;room.emit('lpub',{ti:r.t,au:r.au||P.name,ak:P.lak,n,id:r.lib||undefined,q:b,re:re?1:undefined,at:re?r.lat:undefined}).catch(()=>{});
+function libSend(b,r,re,sp){const n=r.cap;room.emit('lpub',{ti:r.t,au:r.au||P.name,ak:P.lak,n,id:r.lib||undefined,q:b,re:re?1:undefined,at:re?r.lat:undefined,sp:Number.isInteger(sp)?sp:re&&Number.isInteger(r.lsp)?r.lsp:undefined}).catch(()=>{});
   let i=0;const step=()=>{for(let k=0;k<3&&i<n;k++,i++){const q=r.p[i]||{x:'',d:''};room.emit('lpg',{i,x:q.x,d:q.d}).catch(()=>{});}if(i<n)setTimeout(step,250);};setTimeout(step,120);}
-function libPublish(b){const r=P.wbk[b];if(!r||r.ro||LIBC.pub)return;if(!libOnline()){toast('지금은 사서가 책을 받을 수 없어요');return;}const cost=r.lib?WBK.REG2:WBK.REG;if(P.gold<cost){toast('골드가 부족해요');return;}
-  P.gold-=cost;save();LIBC.pub={b,cost,t:setTimeout(()=>libPubDone({ok:0,q:b}),20000)};libSend(b,r,false);wbRegister();}
+function libPublish(b,sp){const r=P.wbk[b];if(!r||r.ro||LIBC.pub)return;if(!libOnline()){toast('지금은 사서가 책을 받을 수 없어요');return;}const cost=r.lib?WBK.REG2:WBK.REG;if(P.gold<cost){toast('골드가 부족해요');return;}
+  P.gold-=cost;save();LIBC.pub={b,cost,t:setTimeout(()=>libPubDone({ok:0,q:b}),20000)};libSend(b,r,false,sp);wbRegister();}
 function libPubDone(d){const U=LIBC.pub;if(!U||d.q!==U.b)return;clearTimeout(U.t);LIBC.pub=null;const r=P.wbk[U.b];
-  if(d.ok&&r){const first=!r.lib;r.lib=d.id;r.lat=d.at||Date.now();save();sfx('quest');log(first?`『${r.t}』을(를) 왕립 도서관에 맡겼다. 이제 누구나 읽고 베껴 갈 수 있다.`:`왕립 도서관의 『${r.t}』을(를) 고쳐 쓴 대로 바꾸었다.`,'good');toast(first?'도서관에 책을 맡겼어요':'도서관 책을 바꾸었어요');}
-  else{P.gold+=U.cost;save();toast(d.full?'서가가 가득 찼어요':'책을 맡기지 못했어요');}
-  if(wbMode==='reg')wbRegister();}
+  if(d.ok&&r){const first=!r.lib;r.lib=d.id;r.lat=d.at||Date.now();if(Number.isInteger(d.sp))r.lsp=d.sp;save();sfx('quest');log(first?`『${r.t}』을(를) 왕립 도서관에 맡겼다. 이제 누구나 읽고 베껴 갈 수 있다.`:`왕립 도서관의 『${r.t}』을(를) 고쳐 쓴 대로 바꾸었다.`,'good');toast(first?'도서관에 책을 맡겼어요':'도서관 책을 바꾸었어요');}
+  else{P.gold+=U.cost;save();toast(d.full?'서가가 가득 찼어요':d.taken?'그 자리에 방금 다른 책이 꽂혔어요':'책을 맡기지 못했어요');}
+  if(wbMode==='reg'||wbMode==='place')wbRegister();}
 function libNetAttach(R){
   R.on('lcat',m=>{const d=m.d;if(!Array.isArray(d))return;LIBC.cat=d.filter(b=>b&&typeof b.id==='string');LIBC.got=true;libSpinesUpdate();if(LIBC.redraw)LIBC.redraw();});
   R.on('lnew',m=>{const b=m.d;if(!b||typeof b.id!=='string')return;const i=LIBC.cat.findIndex(q=>q.id===b.id);if(i>=0)LIBC.cat[i]=b;else LIBC.cat.push(b);libSpinesUpdate();if(LIBC.redraw)LIBC.redraw();});
@@ -16088,7 +16144,7 @@ function libNetAttach(R){
   R.onConnection(c=>{if(!c)return;setTimeout(()=>{if(!P||!P.wbk||!libOnline())return;const ids=Object.values(P.wbk).filter(r=>r.lib&&!r.ro).map(r=>r.lib);if(ids.length)room.emit('lhas',ids).catch(()=>{});
     const I=OR.ISLES.library;if(player&&I&&Math.hypot(player.position.x-I.x,player.position.z-I.z)<I.R+10)libAskCat();},1500);});}
 /* 도서관에 들어오면 서가 목록을 받아 기둥 책장에 꽂는다 */
-function libTick(){if(!player||!LIBM.ready)return;if(LIBM.credAt){const ci=LIB_LIST.indexOf('lib_credits');if(ci>=0)LIB_SHELVES.push({x:LIBM.credAt.x,z:LIBM.credAt.z,y:0,k:ci});LIBM.credAt=null;}const I=OR.ISLES.library,inL=Math.hypot(player.position.x-I.x,player.position.z-I.z)<I.R+6;
+function libTick(){if(!player||!LIBM.ready)return;if(!LIBM.spInit){LIBM.spInit=true;libSpinesUpdate();}const I=OR.ISLES.library,inL=Math.hypot(player.position.x-I.x,player.position.z-I.z)<I.R+6;
   if(inL&&!LIBC.asked){LIBC.asked=true;libAskCat();}if(!inL)LIBC.asked=false;}
 /* ---- F로 쓰는 자리: 집 책상·책장, 도서관 기둥 책장 ---- */
 function bkSpotNear(){if(!player||!P)return null;const p=player.position;
@@ -16117,6 +16173,8 @@ function wbNpcAct(a){if(a==='reg')wbRegister();else if(a==='cat')wbCatalog();}
 #wbWin .wbsw{width:28px;height:28px;min-width:0;padding:0;border-radius:50%;border:2px solid rgba(255,255,255,.15)}#wbWin .wbsw.er{width:auto;border-radius:14px;padding:0 10px;font-size:13px}
 #wbWin .wbsw.on,#wbWin .wbw.on{border-color:#f3cf6a;box-shadow:0 0 0 2px rgba(243,207,106,.35)}
 #wbWin .wbw{width:32px;height:28px;min-width:0;padding:0;display:grid;place-items:center;border:2px solid rgba(255,255,255,.12);border-radius:6px}#wbWin .wbw i{display:block;border-radius:50%;background:#e8dcc0}
+#wbWin[data-m="place"] .card{width:min(820px,100%)}#wbWin .wbfl{display:flex;gap:6px}#wbWin .wbfl button{flex:1}#wbWin .wbfl button.on{border-color:#f3cf6a;box-shadow:0 0 0 2px rgba(243,207,106,.35)}
+#wbWin .wbplc{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,5.5fr);gap:12px;align-items:center}#wbWin .wbring,#wbWin .wbface{width:100%;height:auto;display:block;cursor:pointer;border-radius:6px}#wbWin .wbpinfo{text-align:center;font-family:var(--f-display);font-size:17px;color:#f3cf6a}
 #wbWin .wbnav{display:flex;gap:8px;align-items:center}#wbWin .wbnav .wbn{flex:1;text-align:center;font-family:var(--f-display)}#wbWin .wbnav .wbprev,#wbWin .wbnav .wbnext{min-width:44px}
 .bk-pic{display:block;width:100%;max-height:46%;object-fit:contain;flex:0 0 auto}
 #bookWin .bk-in .bk-tx{white-space:pre-wrap}
