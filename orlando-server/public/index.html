@@ -1694,14 +1694,14 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   // ---------- 몬스터 ----------
   // fixed: 첫 지역의 손으로 정한 능력치 / 나머지는 레벨 공식(hpM·atkM·defM 배율)
   const MON = {
-    slime:    { name: '슬라임', lv: 1, fixed: { hp: 26, atk: 6, def: 1, exp: 9 }, build: 'slime', color: 0x7fd067 },
-    wolf:     { name: '회색 늑대', lv: 3, fixed: { hp: 38, atk: 8, def: 2, exp: 14 }, build: 'quad', color: 0x8d8f92 },
-    boar:     { name: '사막멧돼지', lv: 4, fixed: { hp: 58, atk: 11, def: 4, exp: 22 }, build: 'quad', color: 0x6e4b31, tusk: true },
-    goblin:   { name: '사막고블린', lv: 6, fixed: { hp: 54, atk: 13, def: 4, exp: 26 }, build: 'biped', color: 0x6f9440, scale: 0.8, ears: true },
-    toad:     { name: '독두꺼비', lv: 8, fixed: { hp: 84, atk: 16, def: 6, exp: 38 }, build: 'slime', color: 0x6a7a2c, toad: true, scale: 1.2 },
-    lizard:   { name: '모래도마뱀', lv: 10, fixed: { hp: 104, atk: 19, def: 8, exp: 50 }, build: 'biped', color: 0x3f7d60, tail: true },
-    skeleton: { name: '사막방울뱀', lv: 12, fixed: { hp: 120, atk: 23, def: 9, exp: 64 }, build: 'snake', color: 0xc4a46e, scale: 1.6 },
-    ogre:     { name: '낙타', lv: 15, fixed: { hp: 200, atk: 29, def: 12, exp: 98 }, build: 'biped', color: 0xc8a068, scale: 1.15 },
+    slime:    { name: '슬라임', lv: 1, hpM: 0.8, atkM: 0.8, build: 'slime', color: 0x7fd067 },
+    wolf:     { name: '회색 늑대', lv: 3, hpM: 0.9, atkM: 1.05, build: 'quad', color: 0x8d8f92 },
+    boar:     { name: '사막멧돼지', lv: 4, hpM: 1.15, atkM: 1, build: 'quad', color: 0x6e4b31, tusk: true },
+    goblin:   { name: '사막고블린', lv: 6, hpM: 0.95, atkM: 1.1, build: 'biped', color: 0x6f9440, scale: 0.8, ears: true },
+    toad:     { name: '독두꺼비', lv: 8, hpM: 1.25, atkM: 0.95, build: 'slime', color: 0x6a7a2c, toad: true, scale: 1.2 },
+    lizard:   { name: '모래도마뱀', lv: 10, hpM: 1.1, atkM: 1.05, build: 'biped', color: 0x3f7d60, tail: true },
+    skeleton: { name: '사막방울뱀', lv: 12, hpM: 0.95, atkM: 1.15, build: 'snake', color: 0xc4a46e, scale: 1.6 },
+    ogre:     { name: '낙타', lv: 15, hpM: 1.5, atkM: 1.05, build: 'biped', color: 0xc8a068, scale: 1.15 },
     // 길
     dog:      { name: '들개', lv: 12, build: 'quad', color: 0x7a5a3a, hpM: 0.8, atkM: 1 },
     bandit:   { name: '산적', lv: 16, build: 'biped', color: 0x6b4a2e, hpM: 1, atkM: 1.05, sword: true },
@@ -1808,18 +1808,33 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     firegiant:{ name: '불의 거인', lv: 235, build: 'biped', color: 0x6a2a1e, hpM: 3.2, atkM: 2.0, scale: 2.9, club: true },
     reddragon:{ name: '붉은 용 이그니스', lv: 100, fixed: { hp: 450000, atk: 900, def: 60, exp: 80000 }, gold: 80000, build: 'dragon', color: 0xa8231a, scale: 1, dragon: true },
   };
-  const HP_MUL = 1.6, EXP_MUL = 1.25;
+  /* ---------- 몬스터 능력치 (밸런스) ----------
+     몬스터는 "그 레벨에 그 레벨 장비를 갖춘 보통 모험가"(REF)를 기준으로 맞춘다.
+     - 보통 몬스터(hpM·atkM이 그 레벨에서 흔한 값)는 평타 TTK(L)대에 쓰러지고, 보통 모험가를 HTD(L)대에 쓰러뜨린다
+     - 한 레벨을 올리는 데 같은 레벨 보통 몬스터 KPL(L)마리
+     - hpM·atkM은 같은 레벨대 몬스터 사이의 차이로만 쓴다 (높은 레벨 몬스터일수록 값이 커지던 것을 그 레벨의 흔한 값으로 나눈다) */
+  const lerpT = (T, L) => { if (L <= T[0][0]) return T[0][1]; for (let i = 1; i < T.length; i++) if (L <= T[i][0]) { const [a, va] = T[i - 1], [b, vb] = T[i]; return va + (vb - va) * (L - a) / (b - a); } const [a, va] = T[T.length - 2], [b, vb] = T[T.length - 1]; return vb + (vb - va) * (L - b) / (b - a); };
+  const REF_ATK = [[1, 15], [5, 27], [10, 50], [20, 95], [30, 125], [45, 200], [60, 260], [80, 360], [100, 425], [130, 500], [165, 590], [200, 695]];
+  const REF_DEF = [[1, 7], [5, 18], [10, 40], [20, 70], [30, 112], [45, 145], [60, 195], [80, 250], [100, 315], [130, 360], [165, 410], [200, 460]];
+  const REF_HP = [[1, 76], [5, 140], [10, 265], [20, 440], [30, 740], [45, 900], [60, 1390], [80, 1610], [100, 2220], [130, 2520], [165, 2870], [200, 3290]];
+  const TTK = [[1, 4], [10, 6], [30, 9], [60, 12], [100, 13], [200, 15]];      // 보통 몬스터를 쓰러뜨리는 평타 수
+  const HTD = [[1, 18], [10, 15], [30, 13], [60, 11], [200, 10]];             // 보통 모험가가 버티는 몬스터 평타 수
+  const KPL = [[1, 3], [10, 6], [30, 10], [60, 15], [100, 20], [170, 26], [200, 28]];   // 한 레벨에 잡는 마리 수
+  const needExpS = (lv) => Math.floor(20 * Math.pow(lv, 1.5));               // 게임의 needExp와 같다
+  const typHpM = (lv) => 1.08 + 0.0031 * lv, typAtkM = (lv) => 1 + 0.0042 * lv;
   function monStats(ty, lv) {
     const D = MON[ty];
-    // 모든 몬스터: HP 1.6배, 대신 경험치 1.25배
-    if (D.fixed) return { ...D.fixed, hp: Math.round(D.fixed.hp * HP_MUL), exp: Math.round(D.fixed.exp * EXP_MUL), lv: D.lv };
-    const L = lv;
+    if (D.fixed) return { ...D.fixed, hp: Math.round(D.fixed.hp * 1.6), exp: Math.round(D.fixed.exp * 1.25), lv: D.lv };   // 보스·용은 따로 정한 값 (예전 그대로)
+    const L = Math.max(1, lv);
+    const hN = (D.hpM || 1) / typHpM(D.lv || L), aN = (D.atkM || 1) / typAtkM(D.lv || L);
+    const def = Math.round(L * 0.4 * (D.defM || 1));
+    const hit = Math.max(1, lerpT(REF_ATK, L) - def * 0.5);
     return {
       lv: L,
-      hp: Math.round((12 * Math.pow(L, 1.25) + 15) * (D.hpM || 1) * HP_MUL),
-      atk: Math.round((5 + 2.4 * Math.pow(L, 1.1)) * (D.atkM || 1)),
-      def: Math.round(L * 0.9 * (D.defM || 1)),
-      exp: Math.round(6 * Math.pow(L, 1.3) * (0.5 + 0.5 * (D.hpM || 1)) * EXP_MUL),
+      hp: Math.round(hit * lerpT(TTK, L) * hN),
+      atk: Math.round((lerpT(REF_HP, L) / lerpT(HTD, L) + lerpT(REF_DEF, L) * 0.6) * aN),
+      def,
+      exp: Math.max(1, Math.round(needExpS(L) / lerpT(KPL, L) * (0.25 + 0.75 * hN))),
     };
   }
   const ZONE_MON = {
@@ -1902,7 +1917,6 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   const api = { boardTierOf, MHUNT, MLINES, MH, THOUSE, inTHouse, MYHOME, inMyHome, GHOUSE, inGHouse, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
-
 </script>
 <script>
 /* 오를란도 몬스터 시뮬레이션: 서버에서도, Claude 안의 게임에서도 같은 코드로 몬스터와 보스를 움직인다 */
@@ -2889,6 +2903,9 @@ function wclsOf(id){const I=ITEMS[id];return I&&I.slot==='weapon'?(I.cls||'basic
 function drawJobOf(job,cls){return !cls||cls==='basic'?baseOf(job):cls;}
 function hasClsW(j){if(typeof P==='undefined'||!P)return false;const ok=w=>{const c=wclsOf(w);return !!(c&&c!=='basic'&&JOBS[c]&&jobChain(c).includes(j));};return ok(P.equip.weapon)||(P.job==='shielder'&&ok(P.equip.sub));}   // 상위 직업 무기는 그 아래 직업 스킬까지 연다
 const MAX_LV=9999; // 사실상 제한 없음
+/* 스킬 MP: 적힌 값은 Lv 1 기준이고, 레벨이 오를수록 최대 MP와 함께 커진다 (높은 레벨에서 MP가 남아돌지 않게) */
+const mpLv=()=>1+Math.max(0,((typeof P!=='undefined'&&P?P.lv:1)-1))/60;
+function skMp(v){return v>0?Math.round(v*mpLv()):0;}
 function needExp(lv){return Math.floor(20*Math.pow(lv,1.5));}
 function computeStats(P){
   const b=JOBS[baseOf(P.job)],a=JOBS[P.job];
@@ -18979,7 +18996,7 @@ function ninSkill(S,id,pw,opt){const q0=player.position;
     return camera.position.clone().addScaledVector(camDir(),1.2);}
   if(id==='nrush'){let best=null,bd=1e9;const f=flatFwd();
     for(const m of alive()){if(!(m.nStk>0&&m.nStkT>tAll))continue;const dx=m.mesh.position.x-q0.x,dz=m.mesh.position.z-q0.z,d=Math.hypot(dx,dz);if(d>S.range+m.r)continue;const sc=d-(dx*f.x+dz*f.z)/Math.max(d,1e-3)*3;if(sc<bd){bd=sc;best=m;}}
-    if(!best){toast('수리검이 꽂힌 적이 가까이 없다');cds[id]=0;P.mp+=S.mp;return null;}
+    if(!best){toast('수리검이 꽂힌 적이 가까이 없다');cds[id]=0;P.mp+=skMp(S.mp);return null;}
     const m=best,dx=m.mesh.position.x-q0.x,dz=m.mesh.position.z-q0.z,d=Math.hypot(dx,dz)||1,ff={x:dx/d,z:dz/d},dist=Math.max(0,d-m.r-.8),dd=Math.max(.08,Math.min(.22,dist/60));   /* 기습 돌진: 60m/s */
     P.dash={t:dd,dur:dd,dist,mult:0,opt,hit:new Set(),f:ff,push:false,nohit:true,tgt:m,stop:m.r+.9,onDone:()=>{if(mode!=='world'||!P||m.dying!==null)return;const n=m.nStk||0;m.nStk=0;
       const c=mCenter(m);VFX.burst(c,0xb060ff,22,5,.4,{mix:0xffffff});VFX.burst(c,0xc02020,12,3,.4,{grav:6});sfx('d_deep',c,1);shakeT=Math.max(shakeT,.14);myMoId='deepslash';myMo=motionFor('dagger','deepslash');swingT=0;
@@ -19377,7 +19394,7 @@ function bmbBasic(B,opt){basicCd=B.cd*(JOBS[P.job].aspd||1)/(1+famLv()*.05*(P.fa
     if(bmbLive(m))bmbBoom(m,1,opt);   /* 이미 붙어 있던 소형 폭탄이 터진다 */
     if(m.dying===null){bmbAttach(m,1,BMB_BASIC);sfx('d_shit',m.mesh.position,.6,.8);}}});}
 function bmbSkill(S,id,pw,opt){const q0=player.position;opt={...opt,sk:id};
-  const refund=msg=>{toast(msg);cds[id]=0;P.mp+=S.mp;swingT=1;myMo=null;myMoId='';return null;};
+  const refund=msg=>{toast(msg);cds[id]=0;P.mp+=skMp(S.mp);swingT=1;myMo=null;myMoId='';return null;};
   if(id==='bdet'){const tg=monsters.filter(bmbLive),mines=BMB.mines.slice();if(!tg.length&&!mines.length)return refund('터뜨릴 폭탄이 없다');
     sfx('xb_click',null,1,.6);setTimeout(()=>{if(mode==='world')sfx('xb_click',null,.8,1.4);},70);   /* 딸깍: 버튼을 누른다 */
     const tip=player.position.clone().add(new THREE.Vector3(0,1.3,0));VFX.burst(tip,0xff3020,8,1.2,.25,{mix:0xffffff});
@@ -19932,7 +19949,7 @@ function shdForm(S){const s=shdState();
   const f=s.pa?'pa':'sc',F=S[f];
   const pull=S.id==='shB'&&f==='sc'&&!!s.plant;
   const ok=!(f==='pa'&&s.paObj&&S.id!=='shB');
-  return {f,F,name:pull?'뽑아 들기':F.name,cd:F.cd,mp:pull?0:F.mp,key:S.id+'_'+f,ok,pull};}
+  return {f,F,name:pull?'뽑아 들기':F.name,cd:F.cd,mp:pull?0:skMp(F.mp),key:S.id+'_'+f,ok,pull};}
 function shdUse(S,lvl){
   const s=shdState(),F=shdForm(S),pw=1+.25*(lvl-1);
   if(F.pull){swingT=0;swingN++;myMoId='shpull';myMo=motionFor('shield','shpull');P.skN=swingN;shdUnplant(false);return;}
@@ -20389,7 +20406,7 @@ function updateHotbar(){
       if(!id){name='빈칸';cls+=' empty';}
       else{const S=SK[id],SF=S.type==='shd'?shdForm(S):null;name=SF?SF.name:S.name;left=SF?(SF.pull?0:cds[SF.key]||0):cds[id]||0;frac=left/(SF?SF.cd:S.cd);if(SF&&!SF.ok)cls+=' nomp';else if(S.recast&&P.reLeap&&P.reLeap.id===id&&tAll<P.reLeap.until){left=0;frac=0;win=P.reLeap.until-tAll;cls+=' ready follow again';}
       else if(S.type==='triple'&&P.tri&&P.tri.id===id&&tAll<P.tri.until&&P.tri.n<=S.re){left=0;frac=0;win=P.tri.until-tAll;cls+=' ready follow again';}   /* 삼연 발사: 남은 두 발을 쏠 수 있는 동안 */   /* 파괴적 착지: 한 번 더 쓸 수 있는 동안 빛나고 남은 시간을 보인다 */
-      else if(S.counter&&P.counterT>0){name='쳐내기';left=0;frac=0;cls+=' ready follow';}else if(id==='reap'&&P.reapHold){left=0;frac=0;cls+=' ready follow';}else if(!faithLine()&&P.mp<(SF?SF.mp:S.mp))cls+=' nomp';else if(S.type==='guide'&&!(P.faith>0))cls+=' nomp';else if(left<=0)cls+=' ready';}}
+      else if(S.counter&&P.counterT>0){name='쳐내기';left=0;frac=0;cls+=' ready follow';}else if(id==='reap'&&P.reapHold){left=0;frac=0;cls+=' ready follow';}else if(!faithLine()&&P.mp<(SF?SF.mp:skMp(S.mp)))cls+=' nomp';else if(S.type==='guide'&&!(P.faith>0))cls+=' nomp';else if(left<=0)cls+=' ready';}}
     if(i<NSK){const id=P.slots[i];if(id==='bdet'||id==='bmine'){const n=id==='bmine'?BMB.mines.length:bmbCount();if(n)count=String(n);}   /* 폭발궁: 터뜨릴 폭탄 수 · 깔린 지뢰 수 */
       else if(id==='bload'&&P.bload&&P.buffs.bload&&!cls.includes('follow'))cls+=' ready follow';}
     const key=name+cls+count+(left>0?Math.ceil(left):'')+(win>0?'w'+Math.ceil(win):'');
@@ -21320,7 +21337,7 @@ function renderSkills(){
     const card=document.createElement('div');card.className='sk'+(locked?' locked':'')+(past?' past':'')+(lvl>0&&S.type==='passive'&&!isTrait(S)&&pOff(S.id)?' off':'');
     const nm=document.createElement('div');nm.className='nm';
     const b=document.createElement('b');b.textContent=S.name;
-    const meta=document.createElement('span');meta.textContent=S.noTag?'':isTrait(S)?'특성':faithLine()&&!S.sc&&S.type!=='passive'?`재사용 ${S.cd}초`:S.type==='passive'?'패시브':S.sc?`MP ${S.sc.mp} · ${S.sc.cd}초 / MP ${S.pa.mp} · ${S.pa.cd}초`:`MP ${S.mp} · 재사용 ${S.cd}초`;
+    const meta=document.createElement('span');meta.textContent=S.noTag?'':isTrait(S)?'특성':faithLine()&&!S.sc&&S.type!=='passive'?`재사용 ${S.cd}초`:S.type==='passive'?'패시브':S.sc?`MP ${skMp(S.sc.mp)} · ${S.sc.cd}초 / MP ${skMp(S.pa.mp)} · ${S.pa.cd}초`:`MP ${skMp(S.mp)} · 재사용 ${S.cd}초`;
     const pips=document.createElement('span');pips.className='pips';pips.textContent=isTrait(S)?'':'●'.repeat(lvl)+'○'.repeat(Math.max(0,skMax(S)-lvl));
     nm.append(b,meta,pips);
     const btn=document.createElement('button');btn.className='learn';btn.type='button';
@@ -22585,7 +22602,7 @@ const skHeld=[];
 function flameTick(dt){const F=P.flame;if(!F)return;const S=F.S;F.t+=dt;
   const held=F.i===1||F.i===2?F.t<1.5:!!skHeld[F.i];   /* 휠 칸은 누르고 있을 수 없어 1.5초만 */
   if(!held||P.mp<=0||mode!=='world'||P.hp<=0||myMoId!=='flame'){P.flame=null;if(myMoId==='flame'){swingT=1;myMo=null;myMoId='';}sfxStop('mg_fire');if(viewModel&&viewModel.userData.orb)viewModel.userData.orb.scale.setScalar(1);return;}
-  P.mp=Math.max(0,P.mp-S.drain*dt);swingT=Math.min(swingT,.8);
+  P.mp=Math.max(0,P.mp-S.drain*mpLv()*dt);swingT=Math.min(swingT,.8);
   const d=camDir();let o;if(viewModel&&viewModel.userData.orb&&!cam.third){o=new THREE.Vector3();viewModel.userData.orb.getWorldPosition(o);}else o=camera.position.clone().addScaledVector(d,.9).add(new THREE.Vector3(0,-.3,0));
   const R=camDir().cross(new THREE.Vector3(0,1,0)).normalize(),U=new THREE.Vector3().crossVectors(R,d).normalize();
   for(let k=0;k<10;k++){const sp=13+Math.random()*7,a=Math.random()*Math.PI*2,r=Math.random()*.34;const v=d.clone().multiplyScalar(sp).addScaledVector(R,Math.cos(a)*r*sp).addScaledVector(U,Math.sin(a)*r*sp+.8);
@@ -22834,12 +22851,12 @@ function useSkillInner(i){
   if(S.type==='farblast'&&P.fly){toast('지팡이 위에서는 쓸 수 없어요');return;}
   if(S.type==='chainz'&&!aimTarget(pas('agile')?S.range/4:S.range,.96)){toast('적을 조준해야 해요');return;}
   {const sj=SKJOB[id];if(sj&&JOBS[sj].from&&!hasClsW(sj)){toast(`${JOBS[sj].name}의 무기를 들어야 해요`);return;}}   // 전직 스킬: 그 직업 류 무기
-  if(!reUse&&!faithLine()&&P.mp<S.mp){toast('MP가 부족해요');return;}
+  if(!reUse&&!faithLine()&&P.mp<skMp(S.mp)){toast('MP가 부족해요');return;}
   if(S.type==='guide'&&!(P.faith>0)){toast('신앙이 없다');return;}
   if(emp){endGuard();P.empShield=true;}
   const bc=S.type==='barb'?barbCombo(id):'';
-  if(P.fly&&Math.random()<.3){if(!faithLine())P.mp-=S.mp;cds[id]=Math.min(S.cd,1.5);swingT=0;swingN++;myMoId='fizzle';myMo=motionFor(JOBS[P.job].weapon,'fizzle');const tp=staffTip();VFX.burst(tp,0x9a90b0,10,1.5,.3,{mix:0xffffff,up:.2});for(let k=0;k<6;k++)VFX.emit(0,tp.x,tp.y,tp.z,(Math.random()-.5)*2,(Math.random()-.5)*2,(Math.random()-.5)*2,0x6a6080,.5,3,1);sfx('mg_basic',null,.4,.6);toast('지팡이 위라 마법이 흔들렸다');updateHud();return;}   /* 비행 중: 마법이 종종 불발 */
-  if(reUse)P.reLeap=null;else{if(!faithLine())P.mp-=S.mp;cds[id]=S.cd;}if(P.hideT>tAll&&id!=='deepstab'&&id!=='sassn')P.hideT=0;agileStack();vetStack();swingN++;if(!P.fly){swingT=0;myMoId=bc==='bat'?'batswing':bc==='spinchop'?'axechopF':id;myMo=motionFor(JOBS[P.job].weapon,emp&&id==='push'?'pushE':myMoId);}P.skN=swingN;sfxSkill(S,id);   /* 타고 있을 땐 동작 없이 지팡이 끝에서 바로 */
+  if(P.fly&&Math.random()<.3){if(!faithLine())P.mp-=skMp(S.mp);cds[id]=Math.min(S.cd,1.5);swingT=0;swingN++;myMoId='fizzle';myMo=motionFor(JOBS[P.job].weapon,'fizzle');const tp=staffTip();VFX.burst(tp,0x9a90b0,10,1.5,.3,{mix:0xffffff,up:.2});for(let k=0;k<6;k++)VFX.emit(0,tp.x,tp.y,tp.z,(Math.random()-.5)*2,(Math.random()-.5)*2,(Math.random()-.5)*2,0x6a6080,.5,3,1);sfx('mg_basic',null,.4,.6);toast('지팡이 위라 마법이 흔들렸다');updateHud();return;}   /* 비행 중: 마법이 종종 불발 */
+  if(reUse)P.reLeap=null;else{if(!faithLine())P.mp-=skMp(S.mp);cds[id]=S.cd;}if(P.hideT>tAll&&id!=='deepstab'&&id!=='sassn')P.hideT=0;agileStack();vetStack();swingN++;if(!P.fly){swingT=0;myMoId=bc==='bat'?'batswing':bc==='spinchop'?'axechopF':id;myMo=motionFor(JOBS[P.job].weapon,emp&&id==='push'?'pushE':myMoId);}P.skN=swingN;sfxSkill(S,id);   /* 타고 있을 땐 동작 없이 지팡이 끝에서 바로 */
   const pw=1+.25*(lvl-1),opt={stun:S.stun,dot:S.dot,crit:S.crit,execute:S.execute,steal:S.steal,color:S.color,skHit:1,skT:skTier(id)};
   let fxAt=null;
   switch(S.type){
@@ -24110,7 +24127,7 @@ const SK_CAP=[30,60],SK_CAP_MUL=[1,.5,.25];
 function skCapMul(t,mlv){if(t<0)return 1;let n=0;for(let k=t;k<SK_CAP.length;k++)if(mlv>=SK_CAP[k])n++;return SK_CAP_MUL[n];}
 function gapMul(mlv){const d=mlv-(P?P.lv:1);return d>0?Math.max(.03,1-.11*d):1;}           // 내가 주는 피해
 function gapTaken(mlv){const d=mlv-(P?P.lv:1);return d>0?1+.12*d:Math.max(.5,1+.04*d);}  // 내가 받는 피해
-function gapExp(mlv){const d=mlv-(P?P.lv:1);return d<-15?.05:d<-8?.25:1;}
+function gapExp(mlv){const d=mlv-(P?P.lv:1);return d>0?1+.05*Math.min(d,8):d>=-6?1:Math.max(.05,1-.09*(-6-d));}   /* 경험치·전리품: 나보다 높은 몬스터는 레벨마다 5% 더(최대 40%), 6레벨 넘게 낮으면 레벨마다 9%씩 줄어든다 */
 function hurtByMonster(atk,mlv,name,mon){if(jumpY>3)return;   /* 공중 높이 떠 있으면 몬스터 공격이 닿지 않는다 */
   if(mon&&mon.myTauntT>tAll)atk*=.5;
   if(P.blk&&mon&&mon.mesh&&Math.hypot(mon.mesh.position.x-player.position.x,mon.mesh.position.z-player.position.z)<P.blk.R)atk*=1-P.blk.weak;damagePlayer(atk*gapTaken(mlv)*(.88+Math.random()*.24),name,mon);}

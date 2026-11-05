@@ -216,14 +216,14 @@
   // ---------- 몬스터 ----------
   // fixed: 첫 지역의 손으로 정한 능력치 / 나머지는 레벨 공식(hpM·atkM·defM 배율)
   const MON = {
-    slime:    { name: '슬라임', lv: 1, fixed: { hp: 26, atk: 6, def: 1, exp: 9 }, build: 'slime', color: 0x7fd067 },
-    wolf:     { name: '회색 늑대', lv: 3, fixed: { hp: 38, atk: 8, def: 2, exp: 14 }, build: 'quad', color: 0x8d8f92 },
-    boar:     { name: '사막멧돼지', lv: 4, fixed: { hp: 58, atk: 11, def: 4, exp: 22 }, build: 'quad', color: 0x6e4b31, tusk: true },
-    goblin:   { name: '사막고블린', lv: 6, fixed: { hp: 54, atk: 13, def: 4, exp: 26 }, build: 'biped', color: 0x6f9440, scale: 0.8, ears: true },
-    toad:     { name: '독두꺼비', lv: 8, fixed: { hp: 84, atk: 16, def: 6, exp: 38 }, build: 'slime', color: 0x6a7a2c, toad: true, scale: 1.2 },
-    lizard:   { name: '모래도마뱀', lv: 10, fixed: { hp: 104, atk: 19, def: 8, exp: 50 }, build: 'biped', color: 0x3f7d60, tail: true },
-    skeleton: { name: '사막방울뱀', lv: 12, fixed: { hp: 120, atk: 23, def: 9, exp: 64 }, build: 'snake', color: 0xc4a46e, scale: 1.6 },
-    ogre:     { name: '낙타', lv: 15, fixed: { hp: 200, atk: 29, def: 12, exp: 98 }, build: 'biped', color: 0xc8a068, scale: 1.15 },
+    slime:    { name: '슬라임', lv: 1, hpM: 0.8, atkM: 0.8, build: 'slime', color: 0x7fd067 },
+    wolf:     { name: '회색 늑대', lv: 3, hpM: 0.9, atkM: 1.05, build: 'quad', color: 0x8d8f92 },
+    boar:     { name: '사막멧돼지', lv: 4, hpM: 1.15, atkM: 1, build: 'quad', color: 0x6e4b31, tusk: true },
+    goblin:   { name: '사막고블린', lv: 6, hpM: 0.95, atkM: 1.1, build: 'biped', color: 0x6f9440, scale: 0.8, ears: true },
+    toad:     { name: '독두꺼비', lv: 8, hpM: 1.25, atkM: 0.95, build: 'slime', color: 0x6a7a2c, toad: true, scale: 1.2 },
+    lizard:   { name: '모래도마뱀', lv: 10, hpM: 1.1, atkM: 1.05, build: 'biped', color: 0x3f7d60, tail: true },
+    skeleton: { name: '사막방울뱀', lv: 12, hpM: 0.95, atkM: 1.15, build: 'snake', color: 0xc4a46e, scale: 1.6 },
+    ogre:     { name: '낙타', lv: 15, hpM: 1.5, atkM: 1.05, build: 'biped', color: 0xc8a068, scale: 1.15 },
     // 길
     dog:      { name: '들개', lv: 12, build: 'quad', color: 0x7a5a3a, hpM: 0.8, atkM: 1 },
     bandit:   { name: '산적', lv: 16, build: 'biped', color: 0x6b4a2e, hpM: 1, atkM: 1.05, sword: true },
@@ -330,18 +330,33 @@
     firegiant:{ name: '불의 거인', lv: 235, build: 'biped', color: 0x6a2a1e, hpM: 3.2, atkM: 2.0, scale: 2.9, club: true },
     reddragon:{ name: '붉은 용 이그니스', lv: 100, fixed: { hp: 450000, atk: 900, def: 60, exp: 80000 }, gold: 80000, build: 'dragon', color: 0xa8231a, scale: 1, dragon: true },
   };
-  const HP_MUL = 1.6, EXP_MUL = 1.25;
+  /* ---------- 몬스터 능력치 (밸런스) ----------
+     몬스터는 "그 레벨에 그 레벨 장비를 갖춘 보통 모험가"(REF)를 기준으로 맞춘다.
+     - 보통 몬스터(hpM·atkM이 그 레벨에서 흔한 값)는 평타 TTK(L)대에 쓰러지고, 보통 모험가를 HTD(L)대에 쓰러뜨린다
+     - 한 레벨을 올리는 데 같은 레벨 보통 몬스터 KPL(L)마리
+     - hpM·atkM은 같은 레벨대 몬스터 사이의 차이로만 쓴다 (높은 레벨 몬스터일수록 값이 커지던 것을 그 레벨의 흔한 값으로 나눈다) */
+  const lerpT = (T, L) => { if (L <= T[0][0]) return T[0][1]; for (let i = 1; i < T.length; i++) if (L <= T[i][0]) { const [a, va] = T[i - 1], [b, vb] = T[i]; return va + (vb - va) * (L - a) / (b - a); } const [a, va] = T[T.length - 2], [b, vb] = T[T.length - 1]; return vb + (vb - va) * (L - b) / (b - a); };
+  const REF_ATK = [[1, 15], [5, 27], [10, 50], [20, 95], [30, 125], [45, 200], [60, 260], [80, 360], [100, 425], [130, 500], [165, 590], [200, 695]];
+  const REF_DEF = [[1, 7], [5, 18], [10, 40], [20, 70], [30, 112], [45, 145], [60, 195], [80, 250], [100, 315], [130, 360], [165, 410], [200, 460]];
+  const REF_HP = [[1, 76], [5, 140], [10, 265], [20, 440], [30, 740], [45, 900], [60, 1390], [80, 1610], [100, 2220], [130, 2520], [165, 2870], [200, 3290]];
+  const TTK = [[1, 4], [10, 6], [30, 9], [60, 12], [100, 13], [200, 15]];      // 보통 몬스터를 쓰러뜨리는 평타 수
+  const HTD = [[1, 18], [10, 15], [30, 13], [60, 11], [200, 10]];             // 보통 모험가가 버티는 몬스터 평타 수
+  const KPL = [[1, 3], [10, 6], [30, 10], [60, 15], [100, 20], [170, 26], [200, 28]];   // 한 레벨에 잡는 마리 수
+  const needExpS = (lv) => Math.floor(20 * Math.pow(lv, 1.5));               // 게임의 needExp와 같다
+  const typHpM = (lv) => 1.08 + 0.0031 * lv, typAtkM = (lv) => 1 + 0.0042 * lv;
   function monStats(ty, lv) {
     const D = MON[ty];
-    // 모든 몬스터: HP 1.6배, 대신 경험치 1.25배
-    if (D.fixed) return { ...D.fixed, hp: Math.round(D.fixed.hp * HP_MUL), exp: Math.round(D.fixed.exp * EXP_MUL), lv: D.lv };
-    const L = lv;
+    if (D.fixed) return { ...D.fixed, hp: Math.round(D.fixed.hp * 1.6), exp: Math.round(D.fixed.exp * 1.25), lv: D.lv };   // 보스·용은 따로 정한 값 (예전 그대로)
+    const L = Math.max(1, lv);
+    const hN = (D.hpM || 1) / typHpM(D.lv || L), aN = (D.atkM || 1) / typAtkM(D.lv || L);
+    const def = Math.round(L * 0.4 * (D.defM || 1));
+    const hit = Math.max(1, lerpT(REF_ATK, L) - def * 0.5);
     return {
       lv: L,
-      hp: Math.round((12 * Math.pow(L, 1.25) + 15) * (D.hpM || 1) * HP_MUL),
-      atk: Math.round((5 + 2.4 * Math.pow(L, 1.1)) * (D.atkM || 1)),
-      def: Math.round(L * 0.9 * (D.defM || 1)),
-      exp: Math.round(6 * Math.pow(L, 1.3) * (0.5 + 0.5 * (D.hpM || 1)) * EXP_MUL),
+      hp: Math.round(hit * lerpT(TTK, L) * hN),
+      atk: Math.round((lerpT(REF_HP, L) / lerpT(HTD, L) + lerpT(REF_DEF, L) * 0.6) * aN),
+      def,
+      exp: Math.max(1, Math.round(needExpS(L) / lerpT(KPL, L) * (0.25 + 0.75 * hN))),
     };
   }
   const ZONE_MON = {
