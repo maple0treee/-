@@ -67,36 +67,35 @@
     exmarket: { x: 7700, z: 0, R: 110 }, // 중앙 시장: 엑시즈 시내 시장 문으로 들어가면 나온다 (좌판·회랑·장비점·마구간)
     arena: { x: 8200, z: 0, R: 70 },     // 투기장: 어느 땅과도 이어지지 않는 둥근 콜로세움. 결투가 시작되면 둘이 옮겨 가고 끝나면 돌아온다
     library: { x: 8600, z: 0, R: 22 },   // 엑시즈 왕립 도서관: 시내 도서관 문으로 들어가면 나온다 (5층 원통 건물 안, R = 바깥벽 안쪽 면)
-    // 엑시즈 남문 밖 사냥터 (Lv 60–95): 다섯 땅을 지나 마지막 땅을 나가면 밀골
-    mfield: { x: 2700, z: 900, R: 150 },   // 들판
-    mhill:  { x: 3150, z: 900, R: 150 },   // 구릉
-    mwood:  { x: 3600, z: 900, R: 150 },   // 숲길
-    mvale:  { x: 4050, z: 900, R: 150 },   // 계곡
-    mpass:  { x: 4500, z: 900, R: 150 },   // 고개
+    // 엑시즈 남문 밖 사냥터 (모래톱, Lv 60–67). 자리는 아래 MLINES에서 정한다
+    mfield: { x: 2700, z: 900, R: 150 },
   };
   // 엑시즈 문 밖 사냥터 줄: 숫자=줄, 글자=그 줄의 몇 번째 땅. 땅 생김새(kind)는 들판·구릉·숲·계곡·고개·호숫가·강가와 바닷가(모래톱·갯바위·해안 절벽·곶)
   // 2026-11-03 원호: 엑시즈는 남문·동문 쪽이 바다, 북문·서문 쪽이 숲·들판. 사냥터도 뭍을 따라 말굽 모양으로 놓는다
   //   1 남문(Lv 60, 바닷가에서 시작) → 2 서문 → 3 북문 → 4 동문(Lv 200, 바닷가 절벽에서 끝). 세 번째 칸 'c' = 바다에 닿은 땅(바깥쪽이 바다)
+  // 2026-11-05 원호: 문마다 첫 땅 하나씩, 네 곳만 남긴다 (모래톱·들판·숲·고개). 땅끼리는 이어지지 않고 저마다 제 문의 고갯길로만 드나든다.
+  //   자리(k = (줄-1)·5 + 순번)는 말굽 위 예전 그대로라 줄 사이에 빈 산이 있다. 밀골은 마차로만 간다
   const MLINES_ALL = [
-    { n: 1, gate: '남문', end: 'milgol', zones: [['mfield', 'beach', 'c'], ['mhill', 'field', 'c'], ['mwood', 'rocks', 'c'], ['mvale', 'field'], ['mpass', 'hill']] },
-    { n: 2, gate: '서문', zones: [['m2a', 'field'], ['m2b', 'wood'], ['m2c', 'wood'], ['m2d', 'lake'], ['m2e', 'vale']] },
-    { n: 3, gate: '북문', zones: [['m3a', 'wood'], ['m3b', 'river'], ['m3c', 'wood'], ['m3d', 'hill'], ['m3e', 'pass']] },
-    { n: 4, gate: '동문', zones: [['m4a', 'pass'], ['m4b', 'cliff', 'c'], ['m4c', 'wood', 'c'], ['m4d', 'cape', 'c'], ['m4e', 'cliff', 'c', '등대 절벽']] },
+    { n: 1, gate: '남문', zones: [['mfield', 'beach', 'c']] },
+    { n: 2, gate: '서문', zones: [['m2a', 'field']] },
+    { n: 3, gate: '북문', zones: [['m3a', 'wood']] },
+    { n: 4, gate: '동문', zones: [['m4a', 'pass']] },
     // 고리 밖으로 뻗은 가지: 4E에서 이어지는 새 지역 (엑시즈로 가는 문은 없다)
     // off: 게임에서 잠시 뺀 줄 (2026-11-03 원호: 몬스터가 예전과 똑같이 생겨서 다시 만들 때까지 뺀다). off를 지우면 다시 켜진다
     { n: 5, off: true, region: '불타는 협곡', branch: [162, 130, 100, 70, 40], zones: [['m5a', 'ash'], ['m5b', 'vale'], ['m5c', 'lava'], ['m5d', 'vale'], ['m5e', 'pass']] },
   ];
   const MLINES = MLINES_ALL.filter((L) => !L.off);
-  // 사냥터 땅 스무 곳은 엑시즈를 둘러싼 말굽(고리의 일부)에 레벨 순서대로 놓는다: 남(남문, Lv 60)에서 시작해 시계 방향으로 서(서문, 95) → 북(북문, 130) → 동(동문, 165) → 동쪽 바닷가 절벽(200).
-  // 말굽이 트인 남동쪽(4E와 1A 사이)은 바다다. 고리 안쪽은 엑시즈를 둘러싼 산이고, 문마다 안쪽으로 고갯길이 나 있다
+  // 사냥터 땅은 엑시즈를 둘러싼 말굽(고리의 일부) 위에 레벨 순서대로 놓는다: 남(남문, Lv 60)에서 시작해 시계 방향으로 서(서문, 95) → 북(북문, 130) → 동(동문, 165).
+  // 말굽이 트인 남동쪽(TH1과 TH0 사이)은 바다다. 고리 안쪽은 엑시즈를 둘러싼 산이고, 문마다 안쪽으로 고갯길이 나 있다
   const MH = { cx: 3600, cz: 2200, RR: 1600, R: 150, neckHW: 60, gateHW: 14, gateLen: 55 };
   MH.DTH = 2 * Math.asin(180 / MH.RR);   // 이웃 땅 사이 각 (가운데 사이 360m)
-  MH.TH0 = 102.5 * PI / 180;             // 1A 자리 (남쪽 조금 서쪽). 마지막 땅 4E는 TH0 + 19·DTH (동쪽 조금 북쪽)
+  MH.TH0 = 102.5 * PI / 180;             // 1A(모래톱) 자리 (남쪽 조금 서쪽)
+  MH.TH1 = MH.TH0 + 19 * MH.DTH;         // 말굽 뭍의 동쪽 끝 (동쪽 조금 북쪽). 여기서 TH0까지(남동)가 바다
   MH.SEA = 45 * PI / 180;                // 바다가 트인 쪽 (남동)
   // 가지(branch): 앞 땅에서 정한 방향(도, 지도에서 x 오른쪽 0 · z 아래 90)으로 MH.STEP씩 나아간다. th는 나아가는 방향에서 90도 뺀 값 (고리 땅처럼 th의 접선이 길 방향)
   MH.STEP = 360;
   MLINES.forEach((L) => L.zones.forEach(([id, kind, cst], i) => { const k = (L.n - 1) * 5 + i; const I = ISLES[id] || (ISLES[id] = { R: MH.R }); I.R = MH.R; I.kind = kind; I.coast = cst === 'c' ? 1 : 0; I.line = L.n; I.seq = i; I.k = k;
-    if (L.branch) { const prev = i ? ISLES[L.zones[i - 1][0]] : ISLES[MLINES[L.n - 2].zones[4][0]], h = L.branch[i] * PI / 180; I.x = prev.x + Math.cos(h) * MH.STEP; I.z = prev.z + Math.sin(h) * MH.STEP; I.th = h - PI / 2; I.branch = 1; }
+    if (L.branch) { const prev = i ? ISLES[L.zones[i - 1][0]] : ISLES[MLINES[L.n - 2].zones[MLINES[L.n - 2].zones.length - 1][0]], h = L.branch[i] * PI / 180; I.x = prev.x + Math.cos(h) * MH.STEP; I.z = prev.z + Math.sin(h) * MH.STEP; I.th = h - PI / 2; I.branch = 1; }
     else { const th = MH.TH0 + k * MH.DTH; I.x = MH.cx + Math.cos(th) * MH.RR; I.z = MH.cz + Math.sin(th) * MH.RR; I.th = th; } }));
   const MHUNT = MLINES.flatMap((L) => L.zones.map((q) => q[0]));
   const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'fort', 'coachway', 'castle', 'guildhall', 'exmarket', 'arena', 'library', ...MHUNT];
@@ -113,10 +112,13 @@
       I.entry = tw(A, I.R - 14); I.exit = B ? tw(B, I.R - 14) : { x: I.x - Math.sin(I.th) * (I.R - 14), z: I.z + Math.cos(I.th) * (I.R - 14) }; } }   // 사냥터: 레벨이 낮은 쪽(고리 반시계)에서 들어와 높은 쪽(시계)으로 나간다
   // 걸어 다닐 수 있는 사냥터 모양: 둥근 땅들 + 이웃 땅을 잇는 넓은 목(neck) + 문마다 엑시즈 쪽(안쪽)으로 난 고갯길(gate), 밀골로 가는 바깥 고갯길
   MH.links = [];
-  for (let i = 0; i + 1 < MHUNT.length; i++) { const A = ISLES[MHUNT[i]], B = ISLES[MHUNT[i + 1]]; MH.links.push({ a: A.id, b: B.id, ax: A.x, az: A.z, bx: B.x, bz: B.z, hw: MH.neckHW, k: 'neck' }); }
+  for (let i = 0; i + 1 < MHUNT.length; i++) { const A = ISLES[MHUNT[i]], B = ISLES[MHUNT[i + 1]]; if (A.line !== B.line && !B.branch) continue;   // 다른 문의 땅끼리는 잇지 않는다
+    MH.links.push({ a: A.id, b: B.id, ax: A.x, az: A.z, bx: B.x, bz: B.z, hw: MH.neckHW, k: 'neck' }); }
   // gate: 고갯길 끝의 문(엑시즈·밀골로 넘어가는 자리)과 넘어왔을 때 서는 자리(arr), 바라보는 방향(ux, uz)
   for (const L of MLINES) { if (!L.gate) continue; const F = ISLES[L.zones[0][0]], e = ringP(F.th, MH.RR - F.R - MH.gateLen); F.gate = { ...ringP(F.th, MH.RR - F.R - MH.gateLen + 6), arr: ringP(F.th, MH.RR - F.R - MH.gateLen + 14), ux: Math.cos(F.th), uz: Math.sin(F.th) }; MH.links.push({ a: F.id, b: null, ax: F.x, az: F.z, bx: e.x, bz: e.z, hw: MH.gateHW, k: 'gate' });
     if (L.end === 'milgol') { const E = ISLES[L.zones[L.zones.length - 1][0]], o = ringP(E.th, MH.RR + E.R + MH.gateLen); E.mgate = { ...ringP(E.th, MH.RR + E.R + MH.gateLen - 6), arr: ringP(E.th, MH.RR + E.R + MH.gateLen - 14), ux: -Math.cos(E.th), uz: -Math.sin(E.th) }; MH.links.push({ a: E.id, b: null, ax: E.x, az: E.z, bx: o.x, bz: o.z, hw: MH.gateHW, k: 'gate' }); } }
+  // 지도에 밀골을 그릴 자리: 예전 남문 줄 끝(1E) 바깥 고갯길 문 자리 (지금은 걸어서 가는 길이 없다)
+  { const th = MH.TH0 + 4 * MH.DTH; MH.milgolMark = { ...ringP(th, MH.RR + MH.R + MH.gateLen - 6), ux: -Math.cos(th), uz: -Math.sin(th) }; }
   const segQ = (L, x, z) => { const dx = L.bx - L.ax, dz = L.bz - L.az, t = clampN(((x - L.ax) * dx + (z - L.az) * dz) / (dx * dx + dz * dz), 0, 1), qx = L.ax + dx * t, qz = L.az + dz * t; return { x: qx, z: qz, t, d: Math.hypot(x - qx, z - qz) }; };
   // 걸을 수 있는 곳 경계까지의 거리 (안쪽은 음수)
   // (빠르게: 가장 가까울 수 없는 땅은 Math.hypot 없이 건너뛴다. hypot(a,b) >= max(|a|,|b|) 이라 결과는 똑같다. 목 거리는 segQ와 같은 계산을 객체 없이)
@@ -346,13 +348,13 @@
     forest: ['slime', 'slime', 'wolf'], plains: ['boar', 'goblin'], swamp: ['toad', 'lizard'], ruins: ['skeleton', 'skeleton', 'ogre'],
     wwest: ['jackal', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
     silva: ['silvawolf', 'mossslime'], arbus: ['snowwolf', 'frostslime'], kaolis: ['mackerel', 'tideslime', 'octopus'], subcus: ['darkhound', 'crystalslime'],
-    mfield: ['fieldwolf', 'fieldwolf', 'mudslime'], mhill: ['hillboar', 'meadowviper'], mwood: ['woodbear', 'thornslime', 'woodtroll'], mvale: ['stonehound', 'valleyogre'], mpass: ['windwolf', 'mistslime', 'cliffgiant'],
-    m2a: ['pinewolf', 'pinewolf', 'barkslime'], m2b: ['hornboar', 'rockviper'], m2c: ['greybear', 'resinslime', 'pinetroll'], m2d: ['cragdog', 'rockogre'], m2e: ['icewolf', 'snowslime', 'frostgiant'],
-    m3a: ['steppewolf', 'steppewolf', 'clayslime'], m3b: ['wildram', 'reedviper'], m3c: ['warboar', 'pollenslime', 'fieldogre'], m3d: ['ashwolf', 'brownbear'], m3e: ['hilltroll', 'stoneslime', 'hillgiant'],
-    m4a: ['shadewolf', 'shadewolf', 'leafslime'], m4b: ['cliffboar', 'pitviper'], m4c: ['moonbear', 'rotslime', 'oldtroll'], m4d: ['gorgehound', 'gorgeogre'], m4e: ['stormwolf', 'cloudslime', 'peakgiant'],
+    mfield: ['fieldwolf', 'fieldwolf', 'mudslime'],
+    m2a: ['pinewolf', 'pinewolf', 'barkslime'],
+    m3a: ['steppewolf', 'steppewolf', 'clayslime'],
+    m4a: ['shadewolf', 'shadewolf', 'leafslime'],
     m5a: ['cinderhound', 'cinderhound', 'cinderslime'], m5b: ['scorchboar', 'magmaviper'], m5c: ['ashbear', 'lavaslime', 'lavatroll'], m5d: ['flamehound', 'flameogre'], m5e: ['firewolf', 'smokeslime', 'firegiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 40, mhill: 42, mwood: 44, mvale: 44, mpass: 46, m2a: 32, m2b: 32, m2c: 32, m2d: 32, m2e: 32, m3a: 32, m3b: 32, m3c: 32, m3d: 32, m3e: 32, m4a: 32, m4b: 32, m4c: 32, m4d: 32, m4e: 32, m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 40, m2a: 32, m3a: 32, m4a: 32, m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
   for (const L of MLINES_ALL) if (L.off) for (const [id] of L.zones) { delete ZONE_COUNT[id]; delete ZONE_MON[id]; }   // 꺼 둔 땅에는 몬스터가 나오지 않는다
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
@@ -366,7 +368,7 @@
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], mfield: [60, 67], mhill: [67, 74], mwood: [74, 81], mvale: [81, 88], mpass: [88, 95] };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], mfield: [60, 67] };
   MLINES.forEach((L) => { if (L.n > 1) L.zones.forEach(([id], i) => { const a = 60 + (L.n - 1) * 35 + i * 7; ZONE_LEVELS[id] = [a, a + 7];   /* 엑시즈 사냥터: 60레벨부터 한 줄에 35레벨, 한 땅에 7레벨 */ }); });
 
   // ---------- 의뢰 게시판 포스터 ----------
