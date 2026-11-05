@@ -16208,6 +16208,10 @@ function wbDesk(){const L=wbShow('책상','desk');const hasQ=countOf('quill')>0;
   for(const o of mine)wbRow(L,'wbook',wbTitle(o.r),`${wbPages(o.r)} / ${o.r.cap}쪽`+(o.r.lib?' · 도서관에 맡긴 책':''),[['고쳐 쓰기',()=>wbEdit(o.e.b),!hasQ],['읽기',()=>{wbClose();wbOpenRead(o.r);}]]);
   for(const id of ['bk_blank','bk_thick']){const n=countOf(id);if(n)wbRow(L,id,ITEMS[id].name,`${ITEMS[id].blank}쪽 · ${n}권`,[['새로 쓰기',()=>wbStartNew(id),!hasQ]]);}
   if(!hasQ)wbNote(L,'깃펜이 없다.');if(!mine.length&&!countOf('bk_blank')&&!countOf('bk_thick'))wbNote(L,'쓸 책이 없다.');}
+/* 집 책상 의자에 앉아 있나 */
+function wbAtDesk(){if(!P||P.seat==null||!player||!OR.inMyHome(player.position.x,player.position.z)||!MYH.spots)return false;const st=SEATS[P.seat];return !!st&&MYH.spots.some(s=>s.k==='desk'&&Math.hypot(st.x-s.x,st.z-s.z)<1.6&&Math.abs(st.y-s.y)<1.6);}
+/* 가방에서 빈 책·내가 쓴 책을 쓴다: 책상 의자에 앉아 깃펜이 있어야 한다 */
+function wbUseAtDesk(f){if(!wbAtDesk()){toast('책상에 앉아서 쓸 수 있다');return;}if(countOf('quill')<1){toast('깃펜이 없다');return;}closeInv();f();}
 function wbStartNew(id){if(countOf(id)<1||countOf('quill')<1)return;if(wbSize()>WBK.MAXALL){toast('책이 너무 많아 더 쓸 수 없어요');return;}
   removeItem(id,1);const cap=ITEMS[id].blank,rec={t:'',au:P.name,cap,ro:0,lib:null,lat:0,p:Array.from({length:cap},()=>({x:'',d:''}))};
   const b=wbNewId();P.wbk[b]=rec;P.bag.push({id:'wbook',n:1,b});invDirty();save();wbEdit(b);}
@@ -16424,7 +16428,7 @@ function libTick(){if(!player||!LIBM.ready)return;if(!LIBM.spInit){LIBM.spInit=t
   if(inL&&!LIBC.asked){LIBC.asked=true;libAskCat();}if(!inL)LIBC.asked=false;}
 /* ---- F로 쓰는 자리: 집 책상·책장, 도서관 기둥 책장 ---- */
 function bkSpotNear(){if(!player||!P)return null;const p=player.position;
-  if(OR.inMyHome(p.x,p.z)&&MYH.spots){let bi=-1,bd=1.9;const st=P.seat!=null&&SEATS[P.seat];MYH.spots.forEach((s,i)=>{if(s.k==='desk'&&!(st&&Math.hypot(st.x-s.x,st.z-s.z)<1.6))return;   /* 책 쓰기는 책상 의자에 앉아서만 */const d=Math.hypot(p.x-s.x,p.z-s.z);if(d<bd&&Math.abs(p.y-s.y)<1.6){bd=d;bi=i;}});if(bi>=0)return MYH.spots[bi].k+':'+bi;}
+  if(OR.inMyHome(p.x,p.z)&&MYH.spots){let bi=-1,bd=1.9;MYH.spots.forEach((s,i)=>{if(s.k==='desk')return;   /* 책상은 의자에 앉아 가방의 빈 책을 쓴다 (wbAtDesk) */const d=Math.hypot(p.x-s.x,p.z-s.z);if(d<bd&&Math.abs(p.y-s.y)<1.6){bd=d;bi=i;}});if(bi>=0)return MYH.spots[bi].k+':'+bi;}
   const S=LIBM.pillarSpot;if(S&&Math.abs(p.x-S.x)<S.r+1&&Math.abs(p.z-S.z)<S.r+1&&Math.hypot(p.x-S.x,p.z-S.z)<S.r&&p.y<2)return 'cat';
   return null;}
 function bkSpotLabel(it){const k=it.slice(4).split(':')[0];return k==='desk'?'책 쓰기':k==='shelf'?'책장 열기':'서가 둘러보기';}
@@ -23197,7 +23201,7 @@ function renderInv(){
   const acts=document.createElement('div');acts.className='dacts';
   const btn=(t,f,cls='')=>{const b=document.createElement('button');b.type='button';b.textContent=t;if(cls)b.className=cls;b.onclick=f;acts.appendChild(b);return b;};
   if(I.kind==='use'){btn('사용',()=>{useItem(id);},'pri');[0,1,2].forEach(k=>btn(`${k+1}번 등록`,()=>setQuick(k,id)));}
-  else if(I.kind==='book'){if(wr)btn('읽기',()=>{closeInv();wbOpenRead(wr);},'pri');else if(!I.tool&&!I.blank&&!I.wb)btn('읽기',()=>openBook(id),'pri');}
+  else if(I.kind==='book'){if(I.blank)btn('쓰기',()=>wbUseAtDesk(()=>wbStartNew(id)),'pri');if(wr){if(!wr.ro)btn('고쳐 쓰기',()=>wbUseAtDesk(()=>wbEdit(P.bag[idx].b)),'pri');btn('읽기',()=>{closeInv();wbOpenRead(wr);},wr.ro?'pri':'');}else if(!I.tool&&!I.blank&&!I.wb)btn('읽기',()=>openBook(id),'pri');}
   else if(eqSlot)btn('해제',()=>{unequip(eqSlot);invSel=null;renderInv();},'pri');
   else{const b=btn(I.req>P.lv?`장착 불가 (Lv ${I.req} 필요)`:'장착',()=>equipAt(idx),'pri');if(I.req>P.lv)b.disabled=true;}
   if(idx!=null&&(I.kind!=='book'||I.wb||I.tool||I.blank)){const d=btn('버리기',()=>{if(!d.classList.contains('arm')){d.classList.add('arm');d.textContent='정말 버리기';return;}
@@ -23243,7 +23247,7 @@ let lastBagClick=null,lastEqClick=null;
 function quickPlace(i){
   const e=P.bag[i];if(!e)return;const I=ITEMS[e.id];
   if(I.kind==='gear'){equipAt(i);return;}
-  if(I.wb){const r=wbRec(e);if(r){closeInv();wbOpenRead(r);}return;}if(I.tool||I.blank)return;
+  if(I.wb){const r=wbRec(e);if(r){closeInv();wbOpenRead(r);}return;}if(I.blank){wbUseAtDesk(()=>wbStartNew(e.id));return;}if(I.tool)return;
   if(I.kind==='book'){openBook(I.book||P.bag[i].id);return;}
   if(I.kind==='use'){
     const cur=P.quick.indexOf(e.id);if(cur>=0){toast(`이미 ${cur+1}번 칸에 등록되어 있어요`);return;}
