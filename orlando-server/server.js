@@ -29,6 +29,8 @@ const files = {
   '/sfx.json': { file: 'sfx.json', type: 'application/json; charset=utf-8', cache: 'public, max-age=604800' },
   '/SkeletonUtils.js': { file: 'SkeletonUtils.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=604800' },
 };
+// 안내 페이지 (public/site/*.html, site-src/build.js 로 굽는다): 게임 소개·시작 안내·개인정보처리방침 등
+try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'site'))) if (/^[a-z]+\.html$/.test(fn)) files['/' + fn.slice(0, -5)] = { file: 'site/' + fn, type: 'text/html; charset=utf-8', cache: 'public, max-age=3600' }; } catch (e) {}
 // 미리 구운 NPC 모델 (public/npcbake/*.json)
 // 플레이어 애니 모델 (public/pmodel/*.json)
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'icon'))) if (/^[a-z0-9_-]+\.png$/.test(fn)) files['/icon/' + fn] = { file: 'icon/' + fn, type: 'image/png', cache: 'public, max-age=604800' }; } catch (e) {}
