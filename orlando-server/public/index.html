@@ -15704,10 +15704,32 @@ function rideOn(kind){if(!P||!MOUNTS[kind]||rideEquipped()!==kind)return false;i
 function rideOff(quiet){if(RIDE.g){scene.remove(RIDE.g);RIDE.g=null;RIDE.H=null;}RIDE.kind=null;if(P){P.ride=null;}if(player)player.userData.rideY=0;if(!quiet&&typeof publishPresence==='function')publishPresence(true);}
 /* 장착한 탈것의 종류 (탈것 칸에 낀 것) */
 function rideEquipped(){const id=P&&P.equip&&P.equip.mount,I=id&&ITEMS[id];return I&&I.mount||null;}
-function rideToggle(){if(!P)return;if(P.ride){rideOff();log('내렸다','sys');return;}const kind=rideEquipped();if(!kind){toast('탈것을 장착하지 않았다');return;}rideOn(kind);}
+function rideToggle(){if(!P)return;if(P.ride){const wolf=P.ride==='wolf'&&RIDE.H&&mode==='world';const H=wolf?RIDE.H:null;if(H){RIDE.g=null;RIDE.H=null;}rideOff();if(H)wolfChargeStart(H);log('내렸다','sys');return;}const kind=rideEquipped();if(!kind){toast('탈것을 장착하지 않았다');return;}if(kind==='wolf'&&WOLFRUN.list.length){toast('늑대가 아직 돌아오지 않았다');return;}rideOn(kind);}
+/* 늑대에서 내리면: 늑대가 바라보던 쪽으로 돌진하며 부딪힌 적에게 피해를 주고 기절시킨 뒤, 흙먼지 속에 사라진다.
+   돌진하는 동안(사라질 때까지)은 다시 탈 수 없다 */
+const WOLFRUN={list:[],dist:14,dur:.85,mult:2.2,stun:1.5};
+function wolfChargeStart(H){const ry=player.rotation.y,f={x:Math.sin(ry),z:Math.cos(ry)},q=player.position;
+  WOLFRUN.list.push({H,f,t:0,fade:0,hit:new Set(),pos:new THREE.Vector3(q.x,q.y,q.z),prev:new THREE.Vector3(q.x,q.y,q.z)});
+  sfx('dash',q,1,.75);dustPuffs({x:q.x,y:q.y,z:q.z},.8,6);}
+function wolfChargeTick(dt){const W=WOLFRUN;
+  for(let i=W.list.length-1;i>=0;i--){const R=W.list[i],g=R.H.g,p=R.pos;
+    if(mode!=='world'||!g.parent){scene.remove(g);W.list.splice(i,1);continue;}
+    if(R.t<W.dur){const step=W.dist/W.dur*Math.min(dt,W.dur-R.t),ns=Math.max(1,Math.ceil(step/.2));R.t+=dt;
+      for(let k=0;k<ns;k++){const ax=p.x,az=p.z;p.x+=R.f.x*step/ns;p.z+=R.f.z*step/ns;pushOut(p,.5);if(((p.x-ax)*R.f.x+(p.z-az)*R.f.z)<step/ns*.25){R.t=W.dur;break;}}   /* 벽·건물에 막혀 앞으로 거의 못 나가면 거기서 멈춘다 (스치면 미끄러져 지나간다) */
+      p.y=floorAt(p.x,p.z,p.y+.6);
+      for(const m of alive()){if(R.hit.has(m))continue;const dx=m.mesh.position.x-p.x,dz=m.mesh.position.z-p.z;if(Math.hypot(dx,dz)>1.5+m.r)continue;
+        R.hit.add(m);shared(()=>damageMonster(m,W.mult,{stun:W.stun,nohs:1,kb:[+(R.f.x*2.4).toFixed(2),+(R.f.z*2.4).toFixed(2)]}));
+        const c=mCenter(m);VFX.burst(c,0xe8e4dc,14,4,.4,{mix:0xffffff});sfx('heavy',c,.8);shakeT=Math.max(shakeT,.15);}
+      if(Math.random()<.6)dustPuffs({x:p.x,y:p.y,z:p.z},.5,1);
+      if(R.t>=W.dur){dustPuffs({x:p.x,y:p.y,z:p.z},1.3,12);sfx('step',p,1,.7);}}
+    else{R.fade+=dt;const k=Math.max(0,1-R.fade/.35);g.scale.setScalar(QUAD_LOOK.wolf.S*k);p.y-=dt*.6;   /* 흙먼지 속으로 줄어들며 사라진다 */
+      if(R.fade>=.35){scene.remove(g);W.list.splice(i,1);continue;}}
+    const sp=Math.hypot(p.x-R.prev.x,p.z-R.prev.z)/Math.max(dt,1e-3);R.prev.copy(p);
+    g.position.copy(p);g.rotation.y=Math.atan2(R.f.x,R.f.z);R.H.set(R.t<W.dur?Math.max(sp,10):0,dt);}}
 function rideSpeedMul(){return P&&P.ride&&MOUNTS[P.ride]?MOUNTS[P.ride].speed:1;}
 /* 매 프레임: 내 탈것은 내 자리에, 다른 사람 것은 그 사람 자리에 */
 function rideTick(dt){if(!P||!player)return;
+  if(WOLFRUN.list.length)wolfChargeTick(dt);
   if(P.ride&&rideEquipped()!==P.ride)rideOff(true);
   if(P.ride&&!RIDE.g){{const H=mountInstance(P.ride);if(H){RIDE.g=H.g;RIDE.H=H;RIDE.kind=P.ride;scene.add(H.g);player.userData.rideY=MOUNTS[P.ride].h;RIDE.prev=player.position.clone();}}}
   if(P.ride&&RIDE.g&&(P.ride!==RIDE.kind)){rideOff(true);}
