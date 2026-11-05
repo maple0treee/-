@@ -20481,27 +20481,29 @@ function wmvCenterOn(W,H,mx,my,z){WMV.zoom=z;WMV.px=-(mx-W/2)*z;WMV.py=-(my-H/2)
 function wmvDetail(c,W,H,Lo){const T=c.getTransform(),M=OR.ISLES.marcus,sc=Lo.rc/350,s2=T.a*sc,R=Math.min(W,H),t=smooth(R*.26,R*.38,M.R*s2);Lo.detailT=t;
   if(t>0){const X=v=>T.a*(Lo.cx+(v-M.x)*sc)+T.e,Z=v=>T.d*(Lo.cy+(v-M.z)*sc)+T.f,f2=Math.min(2.4,Math.max(1,s2*.13));
     c.save();c.setTransform(1,0,0,1,0,0);c.globalAlpha=t;c.beginPath();for(let i=0;i<=96;i++){const a=i/96*Math.PI*2,r=OR.isleEdge(M,a);i?c.lineTo(X(M.x+Math.cos(a)*r),Z(M.z+Math.sin(a)*r)):c.moveTo(X(M.x+Math.cos(a)*r),Z(M.z+Math.sin(a)*r));}c.closePath();c.clip();
-    drawIslePlan(c,X,Z,s2,M,1);if(typeof myHomeMapMark==='function')myHomeMapMark(c,X,Z,f2,M,1);if(typeof ganelMapMark==='function')ganelMapMark(c,X,Z,f2,M,1);
+    drawIslePlan(c,X,Z,s2,M,1);if(typeof myHomeMapMark==='function')myHomeMapMark(c,X,Z,f2,M,1);if(typeof ganelMapMark==='function')ganelMapMark(c,X,Z,f2,M,1);mapAge(c,1);
     {const ent=wmvEntrance();if(ent){c.translate(X(ent.x),Z(ent.z));c.scale(f2,f2);c.fillStyle='#fff';c.strokeStyle='#c4493b';c.lineWidth=2.5;c.beginPath();c.arc(0,0,8,0,7);c.stroke();c.beginPath();c.arc(0,0,3.5,0,7);c.fill();}}   /* 길드홀·시장 안에서 보면: 들어간 문 자리 */
     c.restore();}
   /* 사냥터 몬스터: 땅이 화면에서 커지면 */
   if(T.a*Lo.k*OR.MH.R>R*.14&&typeof monsters!=='undefined'){const MH=OR.MH;c.save();for(const m of monsters){if(m.dying!==null)continue;const x=m.mesh.position.x,z=m.mesh.position.z;if(x<800)continue;const I=OR.isleAt(x,z);if(!I||!Lo.zones[I.id])continue;
       const gap=m.lv-(P?P.lv:1);c.fillStyle=gap>=6?'#b0302a':gap>2?'#c0603a':'#8a3a22';c.beginPath();c.arc(Lo.cx+(x-MH.cx)*Lo.k,Lo.cy+(z-MH.cz)*Lo.k,2.2/T.a*Math.max(1,R/600),0,7);c.fill();}c.restore();}}
+/* 엑시즈 안 시설과 그 문 (엑시즈 시내 쪽 포탈) */
+const WMV_FAC=['guildhall','exmarket','castle','library','arena'];
+function wmvFacEnt(id){const I=OR.ISLES[id],M=OR.ISLES.marcus;if(!I)return null;for(const p of PORTALS){if(!p.to||Math.hypot(p.x-M.x,p.z-M.z)>M.R)continue;if(Math.abs(p.to.x-I.x)<I.R&&Math.abs(p.to.z-I.z)<I.R)return p;}return null;}
+function wmvFacAt(x,z){let best=null,bd=35;for(const id of WMV_FAC){const p=wmvFacEnt(id);if(!p)continue;const d=Math.hypot(p.x-x,p.z-z);if(d<bd){bd=d;best=id;}}return best;}
 function wmvReset(){WMV.coach=null;WMV.ghFl=null;WMV.fromK=false;WMV.zoom=1;WMV.px=0;WMV.py=0;WMV.focus=null;const id=wmvKingdomOK()?OR.isleAt(player.position.x,player.position.z).id:null;WMV.level=id&&(OR.MHUNT.includes(id)||(id==='marcus'&&!wmvSubPlace()))?'kingdom':'local';WMV.init=WMV.level==='kingdom'?(id==='marcus'?'town':'here'):null;}
 function wmvClamp(W,H){const mx=W/2*Math.max(0,WMV.zoom-1),my=H/2*Math.max(0,WMV.zoom-1);   /* 끌어서 옮기기: 빈 곳이 보이지 않는 만큼만 */WMV.px=Math.max(-mx,Math.min(mx,WMV.px));WMV.py=Math.max(-my,Math.min(my,WMV.py));}
 (()=>{const cv=$('#wmapC');if(!cv)return;const toPx=e=>{const b=cv.getBoundingClientRect();return [(e.clientX-b.left)*cv.width/b.width,(e.clientY-b.top)*cv.height/b.height];};
   cv.addEventListener('wheel',e=>{e.preventDefault();const [mx,my]=toPx(e),W=cv.width,H=cv.height,z0=WMV.zoom,zin=e.deltaY<0;
     if(wmvKingdomOK()&&!WMV.coach){   /* 단계 바꾸기 (마차 고르는 동안은 왕국 지도 그대로) */
-      /* 지도가 처음 크기일 때 휠을 더 내리면 바로 넘어가지 않고, 세 칸쯤 더 내려야 다음 단계로 (그동안 지도 아래에 안내) */
-      if(WMV.level==='local'&&!zin&&z0<=1.001){const now=performance.now();if(now-(WMV.outT||0)>2500)WMV.outA=0;WMV.outT=now;WMV.outA=(WMV.outA||0)+Math.min(120,Math.abs(e.deltaY));
-        if(WMV.outA<300){drawWorldMap();clearTimeout(WMV.hintT);WMV.hintT=setTimeout(()=>{if(wmapOpen)drawWorldMap();},2600);return;}
-        WMV.outA=0;}else WMV.outA=0;
-      if(WMV.level==='kingdom'&&zin&&wmvSubPlace()&&z0>=wmvTownZoom(W,H)*1.7){const Lo=movLayout(W,H,false),M=OR.ISLES.marcus,k=Lo.rc/350,lx=(mx-W/2-WMV.px)/z0+W/2,ly=(my-H/2-WMV.py)/z0+H/2,e=wmvEntrance()||player.position;
-        if(Math.hypot(M.x+(lx-Lo.cx)/k-e.x,M.z+(ly-Lo.cy)/k-e.z)<45){WMV.level='local';WMV.focus=null;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}}   /* 엑시즈 시내에서 내가 있는 곳 쪽으로 크게 확대하면 다시 그곳 지도로 */
-      if(WMV.level==='local'&&!zin&&z0<=1.001){WMV.level='kingdom';WMV.focus=null;WMV.fromK=false;WMV.init=wmvSubPlace()?'town':null;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}}   /* 길드홀·시장·광장 → 엑시즈 시내(큰 지도) / 밀골·요새 → 왕국 */
+      if(WMV.level==='kingdom'&&zin&&z0>=wmvTownZoom(W,H)*1.7){const Lo=movLayout(W,H,false),M=OR.ISLES.marcus,k=Lo.rc/350,lx=(mx-W/2-WMV.px)/z0+W/2,ly=(my-H/2-WMV.py)/z0+H/2,wx=M.x+(lx-Lo.cx)/k,wz=M.z+(ly-Lo.cy)/k;
+        const pid=OR.isleAt(player.position.x,player.position.z).id,fid=wmvFacAt(wx,wz);   /* 길드홀·도서관 같은 시설 문 위에서 크게 확대하면 그 안 지도로 */
+        if(fid){WMV.level='local';WMV.focus=fid===pid?null:fid;WMV.ghFl=null;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}
+        if(pid==='marcus'&&wmvSubPlace()&&Math.hypot(wx-player.position.x,wz-player.position.z)<45){WMV.level='local';WMV.focus=null;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}}   /* 광장 */
+      if(WMV.level==='local'&&!zin&&z0<=1.001){WMV.init=WMV.focus&&WMV.focus!=='marcus'?'ent:'+WMV.focus:wmvSubPlace()?'ent:'+OR.isleAt(player.position.x,player.position.z).id:null;WMV.level='kingdom';WMV.focus=null;WMV.fromK=false;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}}   /* 길드홀·시장·광장 → 엑시즈 시내(큰 지도) / 밀골·요새 → 왕국 */
     const z1=Math.max(1,Math.min(wmvZMax(W,H),z0*(zin?1.2:1/1.2)));if(z1===z0)return;   /* 어느 지도든 처음 크기보다 작게 줄이지 않는다 (빈 곳이 보이지 않게) */
     const wx=(mx-W/2-WMV.px)/z0,wy=(my-H/2-WMV.py)/z0;WMV.zoom=z1;WMV.px=mx-W/2-wx*z1;WMV.py=my-H/2-wy*z1;wmvClamp(W,H);drawWorldMap();},{passive:false});
-  const ghHit=e=>{const [mx,my]=toPx(e);if(!wmapOpen||!player||OR.isleAt(player.position.x,player.position.z).id!=='guildhall'||WMV.focus||WMV.level!=='local')return 0;for(const b of WMV.ghBtn||[])if(mx>=b.x0&&mx<=b.x1&&my>=b.y0&&my<=b.y1)return b.f;return 0;};
+  const ghHit=e=>{const [mx,my]=toPx(e);if(!wmapOpen||!player||!(WMV.focus==='guildhall'||(!WMV.focus&&OR.isleAt(player.position.x,player.position.z).id==='guildhall'))||WMV.level!=='local')return 0;for(const b of WMV.ghBtn||[])if(mx>=b.x0&&mx<=b.x1&&my>=b.y0&&my<=b.y1)return b.f;return 0;};
   cv.addEventListener('pointerdown',e=>{if(e.button!==0)return;const f=ghHit(e);if(f){WMV.ghFl=f===ghFloor()?null:f;drawWorldMap();return;}   /* 길드홀 층 단추 */
     WMV.drag={x:e.clientX,y:e.clientY,px:WMV.px,py:WMV.py};WMV.moved=false;cv.setPointerCapture(e.pointerId);});
   cv.addEventListener('pointermove',e=>{const D=WMV.drag;if(D&&Math.hypot(e.clientX-D.x,e.clientY-D.y)>6)WMV.moved=true;
@@ -20525,11 +20527,7 @@ function wmvHit(mx,my,W,H){const z0=WMV.zoom,Lo=movLayout(W,H,false),lx=(mx-W/2-
   if(!hit&&Math.hypot(lx-Lo.cx,ly-Lo.cy)<Lo.rc*1.3)hit='marcus';return hit;}
 function wmvEnter(hit){const pid=OR.isleAt(player.position.x,player.position.z).id;WMV.level='local';WMV.focus=hit===pid||(hit==='marcus'&&MARCUS_PLACES.has(pid)&&!wmvSubPlace())?null:hit;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();}
 function toggleWorldMap(v){wmapOpen=v??!wmapOpen;$('#wmap').hidden=!wmapOpen;if(wmapOpen){$('#wmap .wmhead span').textContent=coarse()?'길게 눌러 위치 표시 · 다시 누르면 지우기':'Ctrl+클릭 위치 표시 · M · Esc 닫기';wantLock=false;unlockPointer();wmvReset();drawWorldMap();}else{if(WMV.coach){WMV.coach=null;$('#wmapC').style.cursor='';if(mode==='dialog')mode='world';syncLockTip();focusGame();}relock();}}   /* 지도를 여는 동안은 마우스를 풀어 끌어 옮기고 누를 수 있게 */
-function drawWorldMap(){drawWorldMap0();
-  /* 휠을 더 내리는 중이면 지도 아래에 다음 단계 안내와 얼마나 남았는지 */
-  if(WMV.level==='local'&&WMV.outA>0&&performance.now()-(WMV.outT||0)<2500&&wmvKingdomOK()){const cv=$('#wmapC'),c=cv.getContext('2d'),W=cv.width,H=cv.height;c.setTransform(1,0,0,1,0,0);const k=Math.max(1,H/520),t=wmvSubPlace()?'휠을 더 내리면 엑시즈 지도':'휠을 더 내리면 마르쿠스 왕국 지도';
-    c.font=`700 ${Math.round(14*k)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.textAlign='center';c.textBaseline='middle';const tw=c.measureText(t).width+24*k,y=H-24*k;c.fillStyle='rgba(20,16,12,.8)';c.fillRect(W/2-tw/2,y-14*k,tw,28*k);
-    c.fillStyle='#d8a030';c.fillRect(W/2-tw/2,y+12*k,tw*Math.min(1,WMV.outA/300),2*k);c.fillStyle='#f0e2c0';c.fillText(t,W/2,y);}}
+function drawWorldMap(){drawWorldMap0();}
 function drawWorldMap0(){
   const cv=$('#wmapC'),box=cv.getBoundingClientRect();if(!box.width)return;
   const dpr=Math.min(2,devicePixelRatio||1),W=Math.round(box.width*dpr),H=Math.round(box.height*dpr);if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}
@@ -20537,12 +20535,13 @@ function drawWorldMap0(){
   if(WMV.zoom!==1||WMV.px||WMV.py){c.translate(W/2+WMV.px,H/2+WMV.py);c.scale(WMV.zoom,WMV.zoom);c.translate(-W/2,-H/2);}   /* 확대·이동 */
   if(WMV.level==null)wmvReset();
   if(WMV.level==='kingdom'&&WMV.init&&!WMV.coach&&player){const Lo=movLayout(W,H,false),q=movPos(Lo,player.position.x,player.position.z),i=WMV.init;WMV.init=null;   /* 여는 곳에 맞춰 처음 확대 */
-    if(i==='town')wmvCenterOn(W,H,Lo.cx,Lo.cy,wmvTownZoom(W,H));else if(q)wmvCenterOn(W,H,q.x,q.y,2.4);
+    const e=i.startsWith('ent:')?(wmvFacEnt(i.slice(4))||player.position):null,M=OR.ISLES.marcus;
+    if(e)wmvCenterOn(W,H,Lo.cx+(e.x-M.x)*Lo.rc/350,Lo.cy+(e.z-M.z)*Lo.rc/350,wmvTownZoom(W,H)*1.5);else if(i==='town')wmvCenterOn(W,H,Lo.cx,Lo.cy,wmvTownZoom(W,H));else if(q)wmvCenterOn(W,H,q.x,q.y,2.4);
     c.setTransform(1,0,0,1,0,0);c.translate(W/2+WMV.px,H/2+WMV.py);c.scale(WMV.zoom,WMV.zoom);c.translate(-W/2,-H/2);}
   if(WMV.coach){drawMarcusOverview(c,W,H,{coach:WMV.coach,hunt:WMV.zoom>1.1,detail:Lo=>wmvDetail(c,W,H,Lo)});wpMapKingdom(c,W,H);return;}   /* 마차: 같은 왕국 지도 위에서 갈 곳을 고른다 */
-  if(WMV.level==='kingdom'&&wmvKingdomOK()){drawMarcusOverview(c,W,H,{hunt:WMV.zoom>1.1,detail:Lo=>wmvDetail(c,W,H,Lo)});   /* 처음 크기에선 주요한 곳만, 확대하면 엑시즈 둘레 사냥터까지 */
+  if(WMV.level==='kingdom'&&wmvKingdomOK()){drawMarcusOverview(c,W,H,{hunt:WMV.zoom>1.1,detail:Lo=>wmvDetail(c,W,H,Lo)});if(WMV.zoom>1.01)mapFrame(c);   /* 처음 크기에선 주요한 곳만, 확대하면 엑시즈 둘레 사냥터까지 */
    wpMapKingdom(c,W,H);return;}   /* 마르쿠스 왕국 전체 지도 */
-  if(player&&player.position.x>=800){const FI=WMV.focus&&OR.ISLES[WMV.focus],I=FI||OR.isleAt(player.position.x,player.position.z),PM=!FI&&curPlace&&curPlace.map?curPlace.map():null,GH=!FI&&I.id==='guildhall',C=PM||(GH?{x:I.x,z:I.z-11,R:15}:I),s2=Math.min(W,H)/2/(C.R+16),X=v=>W/2+(v-C.x)*s2,Z=v=>H/2+(v-C.z)*s2,f2=Math.min(2.4,Math.max(1,s2*.13));
+  if(player&&player.position.x>=800){const FI=WMV.focus&&OR.ISLES[WMV.focus],I=FI||OR.isleAt(player.position.x,player.position.z),PM=!FI&&curPlace&&curPlace.map?curPlace.map():null,GH=I.id==='guildhall',C=PM||(GH?{x:I.x,z:I.z-11,R:15}:I),s2=Math.min(W,H)/2/(C.R+16),X=v=>W/2+(v-C.x)*s2,Z=v=>H/2+(v-C.z)*s2,f2=Math.min(2.4,Math.max(1,s2*.13));
     drawIslePlan(c,X,Z,s2,I,null);if(typeof myHomeMapMark==='function')myHomeMapMark(c,X,Z,f2,I,1);if(typeof ganelMapMark==='function')ganelMapMark(c,X,Z,f2,I,1);   /* 중앙 광장 지도: 광장 이름은 광장 위에 (맨 위 제목은 엑시즈) */c.textAlign='center';c.textBaseline='middle';c.font=`bold ${Math.round(16*f2)}px "KMUSunggokSerif","Gowun Batang",serif`;c.lineWidth=4*f2;c.strokeStyle='rgba(20,16,12,.9)';c.fillStyle='#f0e2c0';
     const ty=PM||GH?18*f2+12:Math.max(18*f2+12,Z(I.z-I.R)-18*f2),L=OR.ZONE_LEVELS[I.id],lvT=GH?`엑시즈 · ${ghViewFl(c)}층`:I.id==='library'?`엑시즈 · ${libFloor()}층`:L&&L[0]?`Lv ${L[0]}–${L[1]}`:'안전 지대',ttl=ZONES[I.id].name;c.strokeText(ttl,W/2,ty);c.fillText(ttl,W/2,ty);
     c.font=`${Math.round(10*f2)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.fillStyle='#d4ae63';c.strokeText(lvT,W/2,ty+17*f2);c.fillText(lvT,W/2,ty+17*f2);
@@ -20634,12 +20633,24 @@ function wpPin(c,x,y,s,a=1){c.save();c.globalAlpha*=a;c.translate(x,y);c.scale(s
   c.beginPath();c.moveTo(0,0);c.bezierCurveTo(-2,-5,-8,-9,-8,-14);c.arc(0,-14,8,Math.PI,0);c.bezierCurveTo(8,-9,2,-5,0,0);c.closePath();c.stroke();c.fill();
   c.fillStyle='#fff3dc';c.beginPath();c.arc(0,-14,3.2,0,7);c.fill();c.restore();}
 /* 큰 지도: 이 지도의 세계 좌표 → 지도 위 자리를 적어 두고(Ctrl+클릭을 거꾸로 풀 때 쓴다), 표시가 이 지도에 있으면 그린다 */
-function wpMapDraw(c,X,Z,f,area){WMV.proj={x0:X(0),xk:X(1)-X(0),z0:Z(0),zk:Z(1)-Z(0),area};const W=WAYPT;if(!W||W.area!==area)return;
+/* 옛 지도 물들이기: 그린 지도에 양피지 빛깔(색만 바꿈)과 종이 결을 입힌다. 왕국 지도와 그림체를 맞추려고 모든 지도(큰 지도·미니맵)에 쓴다 */
+function mapAge(c,noFrame){const cv=c.canvas,W=cv.width,H=cv.height;c.save();c.setTransform(1,0,0,1,0,0);c.setLineDash([]);
+  c.globalCompositeOperation='color';c.globalAlpha=.7;c.fillStyle='#a8875a';c.fillRect(0,0,W,H);   /* 빛깔은 양피지 쪽으로 */
+  c.globalCompositeOperation='screen';c.globalAlpha=.75;c.fillStyle='#8a7550';c.fillRect(0,0,W,H);   /* 어두운 곳을 밝은 종이 쪽으로 끌어올림 */
+  c.globalCompositeOperation='multiply';c.globalAlpha=.7;c.fillStyle=c.createPattern(movPaper(),'repeat');c.fillRect(0,0,W,H);   /* 종이 결 */
+  c.globalCompositeOperation='source-over';c.globalAlpha=1;
+  c.restore();if(cv.id==='wmapC'&&!noFrame)mapFrame(c);}
+/* 큰 지도 가장자리: 그을린 양피지와 두 줄 테두리 (화면에 붙는다) */
+function mapFrame(c){const cv=c.canvas,W=cv.width,H=cv.height;c.save();c.setTransform(1,0,0,1,0,0);c.setLineDash([]);
+  {const f=Math.max(1,Math.min(W,H)/600),g=c.createRadialGradient(W/2,H/2,Math.min(W,H)*.35,W/2,H/2,Math.hypot(W,H)*.6);g.addColorStop(0,'rgba(90,60,30,0)');g.addColorStop(1,'rgba(90,60,30,.35)');c.fillStyle=g;c.fillRect(0,0,W,H);
+    c.strokeStyle=MOV_INK;c.lineWidth=2.2*f;c.strokeRect(7*f,7*f,W-14*f,H-14*f);c.lineWidth=.8*f;c.strokeRect(11*f,11*f,W-22*f,H-22*f);}
+  c.restore();}
+function wpMapDraw(c,X,Z,f,area){mapAge(c);WMV.proj={x0:X(0),xk:X(1)-X(0),z0:Z(0),zk:Z(1)-Z(0),area};const W=WAYPT;if(!W||W.area!==area)return;
   const gh=area==='guildhall',vf=gh?(WMV.ghFl||ghFloor()):0,off=gh&&W.fl&&W.fl!==vf;wpPin(c,X(W.x),Z(W.z),f*1.25,off?.4:1);
   if(off){c.save();c.font=`700 ${Math.round(11*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.textAlign='center';c.textBaseline='top';c.lineWidth=3*f;c.strokeStyle='rgba(20,16,12,.9)';c.fillStyle='#ffd0c4';c.strokeText(W.fl+'층',X(W.x),Z(W.z)+3*f);c.fillText(W.fl+'층',X(W.x),Z(W.z)+3*f);c.restore();}}
 function wpMapKingdom(c,W0,H0){WMV.proj={kingdom:true};const W=WAYPT;if(!W||W.x<800)return;const Lo=movLayout(W0,H0,false),m=movPos(Lo,W.x,W.z);if(m)wpPin(c,m.x,m.y,Math.max(1,Lo.u/34)*1.15/Math.pow(Math.max(1,WMV.zoom),.8));}
 /* 미니맵: 같은 곳이면 핀 (밖이면 가장자리 화살표), 다른 곳이면 가는 포탈 */
-function wpMini(c,X,Z,S){const t=wpTarget();if(!t||t.none)return;const x=X(t.x),y=Z(t.z),dx=x-S/2,dy=y-S/2,dd=Math.hypot(dx,dy);c.save();
+function wpMini(c,X,Z,S){mapAge(c);const t=wpTarget();if(!t||t.none)return;const x=X(t.x),y=Z(t.z),dx=x-S/2,dy=y-S/2,dd=Math.hypot(dx,dy);c.save();
   if(dd<S/2-14)wpPin(c,x,y,t.portal?.7:.9);
   else{const ux=dx/dd,uy=dy/dd,ex=S/2+ux*(S/2-13),ey=S/2+uy*(S/2-13);c.fillStyle='#ff5a3c';c.strokeStyle='#2a140c';c.lineWidth=2;c.beginPath();c.moveTo(ex+ux*10,ey+uy*10);c.lineTo(ex-uy*7-ux*4,ey+ux*7-uy*4);c.lineTo(ex+uy*7-ux*4,ey-ux*7-uy*4);c.closePath();c.stroke();c.fill();}
   c.restore();}
@@ -20748,7 +20759,7 @@ function drawHallMini(){
 }
 // 다섯 땅 평면도 (미니맵·큰 지도 공용)
 function drawIslePlan(c,X,Z,sc,I,skipName){const Zd=ZONES[I.id];
-  c.fillStyle=I.id==='kaolis'?'#1f4e6e':I.id==='subcus'?'#0e0c12':'#2a2622';c.fillRect(-9999,-9999,99999,99999);
+  c.fillStyle=I.id==='kaolis'?'#1f4e6e':I.id==='subcus'?'#0e0c12':'#d6c49a';c.fillRect(-9999,-9999,99999,99999);
   c.fillStyle=Zd.mm;c.beginPath();if(I.id==='marcus'){for(let i=0;i<=96;i++){const a=i/96*Math.PI*2,r=OR.isleEdge(I,a);i?c.lineTo(X(I.x+Math.cos(a)*r),Z(I.z+Math.sin(a)*r)):c.moveTo(X(I.x+Math.cos(a)*r),Z(I.z+Math.sin(a)*r));}c.closePath();}else c.arc(X(I.x),Z(I.z),I.R*sc,0,7);c.fill();   /* 엑시즈 땅은 성벽을 따라 들쭉날쭉 */
   if(I.id==='marcus'){const PL=marcusPlan(),ox=I.x,oz=I.z,mX=v=>X(ox+v),mZ=v=>Z(oz+v);
     const poly=(P)=>{c.beginPath();P.forEach((p,i)=>i?c.lineTo(mX(p[0]),mZ(p[1])):c.moveTo(mX(p[0]),mZ(p[1])));c.closePath();};
