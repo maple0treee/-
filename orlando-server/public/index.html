@@ -19470,7 +19470,9 @@ function movExiz(c,Lo,mini){const {cx,cy,rc,f}=Lo,MP=marcusPlan(),T=movExizT(Lo)
     if(MP.gates.some(g=>Math.hypot(g.x-x,g.y-y)<45))continue;const [px,py]=T(x,y);movGlyph.tower(c,px,py+rc*.06,Math.max(3.5*f,rc*.12));}
   for(const g of MP.gates){const [x,y]=T(g.x,g.y),r=(mini?2.5:4.5)*f;c.fillStyle='#5a4028';c.beginPath();c.arc(x,y,r,0,7);c.fill();}}   /* 성문 */
 /* 땅·바다·산·도시처럼 움직이지 않는 그림: 화면 크기·확대가 같으면 한 번 그린 것을 다시 쓴다 */
-function movStatic(c,W,H,mini,Lo){const {u,cx,cy,rc,k,zones}=Lo,f=mini?1:Math.max(1,u/300),MH=OR.MH,P2=(wx,wz)=>[cx+(wx-MH.cx)*k,cy+(wz-MH.cz)*k];
+/* 왕국 지도에 그릴 사냥터: 처음 크기에선 주요한 곳(도시·마을)만 두고 사냥터는 확대했을 때 (지금 서 있는 사냥터는 늘) */
+function movShown(Lo,hunt,curZ){if(hunt)return Lo.zones;const o={};if(curZ&&Lo.zones[curZ])o[curZ]=Lo.zones[curZ];return o;}
+function movStatic(c,W,H,mini,Lo,hunt,curZ){const {u,cx,cy,rc,k}=Lo,zones=movShown(Lo,hunt,curZ),f=mini?1:Math.max(1,u/300),MH=OR.MH,P2=(wx,wz)=>[cx+(wx-MH.cx)*k,cy+(wz-MH.cz)*k];
   /* 바탕: 양피지 */
   c.fillStyle=c.createPattern(movPaper(),'repeat');c.fillRect(-W,-H,W*3,H*3);
   /* 바다: 말굽이 트인 남동쪽과 바닷가 땅 바깥. 물가는 들쭉날쭉하게 */
@@ -19506,7 +19508,7 @@ function movStatic(c,W,H,mini,Lo){const {u,cx,cy,rc,k,zones}=Lo,f=mini?1:Math.ma
       c.beginPath();c.moveTo(x-s,y);c.quadraticCurveTo(x-s*.2,y-s*.55,x+s,y-s*.05);c.stroke();}
     movTown(c,hx,hy,hr,f,{seed:3,houses:16,towers:8,ground:'#f1e2bd',roof:'#c48a58',water:()=>{c.fillStyle='#8fb7b5';movBlob(c,hx+hr*.1,hy-hr*.05,hr*.17,5,.2);c.fill();c.strokeStyle=MOV_INK2;c.lineWidth=1*f;c.stroke();}});}
   /* 고리 밖 뭍: 옅은 숲과 들 (바다·사냥터·사막은 비운다) */
-  if(!mini){for(let i=0;i<520;i++){const a=movRnd(i+1000)*Math.PI*2,rr=MH.RR+MH.R*(1.5+movRnd(i+2000)*5),wx=MH.cx+Math.cos(a)*rr,wz=MH.cz+Math.sin(a)*rr,[x,y]=P2(wx,wz);
+  if(!mini){const r0=hunt?1.5:-1.2,rs=hunt?5:7.7;for(let i=0;i<(hunt?520:760);i++){const a=movRnd(i+1000)*Math.PI*2,rr=MH.RR+MH.R*(r0+movRnd(i+2000)*rs),wx=MH.cx+Math.cos(a)*rr,wz=MH.cz+Math.sin(a)*rr,[x,y]=P2(wx,wz);
       if(x<-20||y<-20||x>W+20||y>H+20||onSea(x,y)||onSea(x,y+8*f))continue;if(Object.values(zones).some(Z=>Math.hypot(Z.x-x,Z.y-y)<Z.r*1.35))continue;
       const h=MOV_HARENA,[hx,hy]=P2(h.x,h.z);if(Math.hypot(hx-x,hy-y)<h.R*k*3.6)continue;
       c.globalAlpha=.55;const s=(5+movRnd(i)*2.5)*f;movRnd(i+5)<.62?movGlyph.tree(c,x,y,s,i):movRnd(i+6)<.5?movGlyph.hill(c,x,y,s*1.2):movGlyph.grass(c,x,y,s);c.globalAlpha=1;}}
@@ -19537,12 +19539,12 @@ function movStatic(c,W,H,mini,Lo){const {u,cx,cy,rc,k,zones}=Lo,f=mini?1:Math.ma
   /* 길: 흙길은 잉크 점선 */
   c.lineCap='round';c.lineJoin='round';
   const road=(pts,dash)=>{c.beginPath();pts.forEach((p,i)=>{const [x,y]=P2(p.x,p.z);i?c.lineTo(x,y):c.moveTo(x,y);});c.strokeStyle='rgba(239,226,191,.9)';c.lineWidth=(mini?2.5:5)*f;c.setLineDash([]);c.stroke();c.strokeStyle='#7a5532';c.lineWidth=(mini?1:1.6)*f;c.setLineDash(dash);c.stroke();c.setLineDash([]);};
-  for(const pts of MHR.paths)road(pts,[6*f,4*f]);
-  for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],G=movGate(Lo,L.gate);if(!G)continue;
+  if(hunt)for(const pts of MHR.paths)road(pts,[6*f,4*f]);
+  if(hunt)for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],G=movGate(Lo,L.gate);if(!G)continue;
     const gx=MH.cx+(G.x-cx)/k,gz=MH.cz+(G.y-cy)/k,d=rc/k*.35;road([{x:gx,z:gz},{x:gx+Math.cos(G.out)*d,z:gz+Math.sin(G.out)*d},F.gate],[3*f,4*f]);}
   /* 밀골 */
   {const E=OR.ISLES.mpass;if(E.mgate){const [ex,ey]=P2(E.mgate.x,E.mgate.z),ux=-E.mgate.ux,uy=-E.mgate.uz,mx=ex+ux*34*f,my=ey+uy*34*f;
-    c.strokeStyle='#7a5532';c.lineWidth=1.4*f;c.setLineDash([3*f,4*f]);c.beginPath();c.moveTo(ex,ey);c.lineTo(mx,my);c.stroke();c.setLineDash([]);
+    if(hunt){c.strokeStyle='#7a5532';c.lineWidth=1.4*f;c.setLineDash([3*f,4*f]);c.beginPath();c.moveTo(ex,ey);c.lineTo(mx,my);c.stroke();c.setLineDash([]);}
     c.fillStyle='rgba(214,190,110,.6)';movBlob(c,mx,my,11*f,9,.2);c.fill();for(let q=0;q<4;q++)movGlyph.house(c,mx-6*f+(q%2)*8*f+(q>1?3*f:0),my-1*f+Math.floor(q/2)*6*f,5*f,'#a8603e');}}
   /* 통로 요새: 밀골에서 사막으로 넘어가는 길목. 흙길로 잇고 돌 성벽과 탑 셋 */
   {const R=movRealm(Lo),A=R.milgol,B=R.fort;if(A&&B){c.strokeStyle='#7a5532';c.lineWidth=1.4*f;c.setLineDash([3*f,4*f]);c.beginPath();c.moveTo(A.x-8*f,A.y);c.quadraticCurveTo((A.x+B.x)/2,(A.y+B.y)/2+10*f,B.x+8*f,B.y+2*f);c.stroke();c.setLineDash([]);
@@ -19560,12 +19562,11 @@ function movStatic(c,W,H,mini,Lo){const {u,cx,cy,rc,k,zones}=Lo,f=mini?1:Math.ma
   {const g=c.createRadialGradient(W/2,H/2,Math.min(W,H)*.35,W/2,H/2,Math.hypot(W,H)*.6);g.addColorStop(0,'rgba(90,60,30,0)');g.addColorStop(1,'rgba(90,60,30,.35)');c.fillStyle=g;c.fillRect(0,0,W,H);
     c.strokeStyle=MOV_INK;c.lineWidth=2.2*f;c.strokeRect(7*f,7*f,W-14*f,H-14*f);c.lineWidth=.8*f;c.strokeRect(11*f,11*f,W-22*f,H-22*f);}}
 const MOV_CACHE={};
-function drawMarcusOverview(c,W,H,o={}){const mini=!!o.mini,Lo=movLayout(W,H,mini),{u,cx,cy,rc,k,zones}=Lo,f=mini?1:Math.max(1,u/300),MH=OR.MH,P2=(wx,wz)=>[cx+(wx-MH.cx)*k,cy+(wz-MH.cz)*k];
+function drawMarcusOverview(c,W,H,o={}){const mini=!!o.mini,Lo=movLayout(W,H,mini),{u,cx,cy,rc,k}=Lo,hunt=mini||!!o.hunt,here=player?movPos(Lo,player.position.x,player.position.z):null,curZ=here&&here.id||null,zones=movShown(Lo,hunt,curZ),f=mini?1:Math.max(1,u/300),MH=OR.MH,P2=(wx,wz)=>[cx+(wx-MH.cx)*k,cy+(wz-MH.cz)*k];
   /* 움직이지 않는 그림은 따로 그려 두고 붙인다 (지도는 1초에 몇 번씩 다시 그려진다) */
-  {const T=c.getTransform(),cw=c.canvas.width,ch=c.canvas.height,key=[mini,W,H,cw,ch,T.a,T.d,T.e,T.f].map(v=>typeof v==='number'?v.toFixed(2):v).join(',');let C=MOV_CACHE[mini?'m':'b'];
-    if(!C||C.key!==key){if(!C){C=MOV_CACHE[mini?'m':'b']={cv:document.createElement('canvas')};}C.key=key;C.cv.width=cw;C.cv.height=ch;const g=C.cv.getContext('2d');g.setTransform(T);movStatic(g,W,H,mini,Lo);}
+  {const T=c.getTransform(),cw=c.canvas.width,ch=c.canvas.height,key=[mini,hunt,curZ,W,H,cw,ch,T.a,T.d,T.e,T.f].map(v=>typeof v==='number'?v.toFixed(2):v).join(',');let C=MOV_CACHE[mini?'m':'b'];
+    if(!C||C.key!==key){if(!C){C=MOV_CACHE[mini?'m':'b']={cv:document.createElement('canvas')};}C.key=key;C.cv.width=cw;C.cv.height=ch;const g=C.cv.getContext('2d');g.setTransform(T);movStatic(g,W,H,mini,Lo,hunt,curZ);}
     c.save();c.setTransform(1,0,0,1,0,0);c.drawImage(C.cv,0,0);c.restore();}
-  const here=player?movPos(Lo,player.position.x,player.position.z):null;
   const ink=(t,x,y,font,col,halo)=>{c.font=font;c.lineJoin='round';c.lineWidth=(halo||3)*f;c.strokeStyle='rgba(241,229,198,.9)';c.strokeText(t,x,y);c.fillStyle=col||MOV_INK;c.fillText(t,x,y);};
   const SER=`"KMUSunggokSerif","Gowun Batang",serif`,SEMI=`"KMUSunggokSemiSerif","Gowun Batang",serif`;
   if(!mini){c.textAlign='center';c.textBaseline='middle';
@@ -19573,9 +19574,9 @@ function drawMarcusOverview(c,W,H,o={}){const mini=!!o.mini,Lo=movLayout(W,H,min
     {const N=360;let best=null;for(let i=0;i<N;i++){const a=i/N*Math.PI*2,rp=MHR.ringPt(a);if(MHR.gapK(rp.x,rp.z)>.9){best=a;break;}}
       if(best!=null){const a=best+.18,x=cx+Math.cos(a)*Lo.ringR*.95,y=cy+Math.sin(a)*Lo.ringR*.95;c.save();c.font=`italic 700 ${Math.round(17*f)}px ${SER}`;c.fillStyle='#3f6468';c.translate(x,y);c.rotate(-.12);c.fillText('바 다',0,0);c.restore();}}
     /* 가지 지역 이름 */
-    for(const L of OR.MLINES){if(!L.branch)continue;const Zs=L.zones.map(q=>zones[q[0]]),Z1=Zs[Zs.length-1],Z0=Zs[Zs.length-2],a=Math.atan2(Z1.y-Z0.y,Z1.x-Z0.x);c.textAlign='left';ink(L.region,Z1.x+Math.cos(a)*Z1.r*1.5,Z1.y+Math.sin(a)*Z1.r*1.5,`700 ${Math.round(15*f)}px ${SER}`,'#8a3a22',4);c.textAlign='center';}
+    if(hunt)for(const L of OR.MLINES){if(!L.branch)continue;const Zs=L.zones.map(q=>Lo.zones[q[0]]),Z1=Zs[Zs.length-1],Z0=Zs[Zs.length-2],a=Math.atan2(Z1.y-Z0.y,Z1.x-Z0.x);c.textAlign='left';ink(L.region,Z1.x+Math.cos(a)*Z1.r*1.5,Z1.y+Math.sin(a)*Z1.r*1.5,`700 ${Math.round(15*f)}px ${SER}`,'#8a3a22',4);c.textAlign='center';}
     /* 문 이름 */
-    for(const L of OR.MLINES){if(!L.gate)continue;const G=movGate(Lo,L.gate);if(!G)continue;ink(L.gate,G.x+Math.cos(G.out)*15*f,G.y+Math.sin(G.out)*12*f,`700 ${Math.round(11*f)}px ${SEMI}`,MOV_INK2);}
+    if(hunt)for(const L of OR.MLINES){if(!L.gate)continue;const G=movGate(Lo,L.gate);if(!G)continue;ink(L.gate,G.x+Math.cos(G.out)*15*f,G.y+Math.sin(G.out)*12*f,`700 ${Math.round(11*f)}px ${SEMI}`,MOV_INK2);}
     /* 밀골 */
     {const E=OR.ISLES.mpass;if(E.mgate){const [ex,ey]=P2(E.mgate.x,E.mgate.z),mx=ex-E.mgate.ux*34*f,my=ey-E.mgate.uz*34*f;c.textAlign='right';ink(ZONES.milgol?ZONES.milgol.name:'밀골',mx-15*f,my+2*f,`700 ${Math.round(11*f)}px ${SEMI}`);c.textAlign='center';}}
     {const B=movRealm(Lo).fort;if(B){c.textBaseline='top';ink(ZONES.fort?ZONES.fort.name:'통로 요새',B.x,B.y+7*f,`700 ${Math.round(11*f)}px ${SEMI}`);c.textBaseline='middle';}}
@@ -20503,7 +20504,7 @@ function wmvSubPlace(){if(!player)return false;const id=OR.isleAt(player.positio
 function wmvEntrance(){if(!player)return null;const I=OR.isleAt(player.position.x,player.position.z),M=OR.ISLES.marcus;if(!I||I===M)return null;
   for(const p of PORTALS){if(!p.to||Math.hypot(p.x-M.x,p.z-M.z)>M.R)continue;if(Math.abs(p.to.x-I.x)<I.R&&Math.abs(p.to.z-I.z)<I.R)return p;}return null;}
 function wmvHit(mx,my,W,H){const z0=WMV.zoom,Lo=movLayout(W,H,false),lx=(mx-W/2-WMV.px)/z0+W/2,ly=(my-H/2-WMV.py)/z0+H/2;let hit=null,bd=1e9;
-  for(const id in Lo.zones){const Z=Lo.zones[id],d=Math.hypot(lx-Z.x,ly-Z.y);if(d<Z.r*1.5&&d<bd){bd=d;hit=id;}}
+  if(z0>1.1)for(const id in Lo.zones){const Z=Lo.zones[id],d=Math.hypot(lx-Z.x,ly-Z.y);if(d<Z.r*1.5&&d<bd){bd=d;hit=id;}}
   if(!hit&&Math.hypot(lx-Lo.cx,ly-Lo.cy)<Lo.rc*1.3)hit='marcus';return hit;}
 function wmvEnter(hit){const pid=OR.isleAt(player.position.x,player.position.z).id;WMV.level='local';WMV.focus=hit===pid||(hit==='marcus'&&MARCUS_PLACES.has(pid)&&!wmvSubPlace())?null:hit;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();}
 function toggleWorldMap(v){wmapOpen=v??!wmapOpen;$('#wmap').hidden=!wmapOpen;if(wmapOpen){$('#wmap .wmhead span').textContent=coarse()?'길게 눌러 위치 표시 · 다시 누르면 지우기':'Ctrl+클릭 위치 표시 · M · Esc 닫기';wantLock=false;unlockPointer();wmvReset();drawWorldMap();}else{if(WMV.coach){WMV.coach=null;$('#wmapC').style.cursor='';if(mode==='dialog')mode='world';syncLockTip();focusGame();}relock();}}   /* 지도를 여는 동안은 마우스를 풀어 끌어 옮기고 누를 수 있게 */
@@ -20518,8 +20519,9 @@ function drawWorldMap0(){
   const c=cv.getContext('2d');c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,W,H);
   if(WMV.zoom!==1||WMV.px||WMV.py){c.translate(W/2+WMV.px,H/2+WMV.py);c.scale(WMV.zoom,WMV.zoom);c.translate(-W/2,-H/2);}   /* 확대·이동 */
   if(WMV.level==null)wmvReset();
-  if(WMV.coach){drawMarcusOverview(c,W,H,{coach:WMV.coach});wpMapKingdom(c,W,H);return;}   /* 마차: 같은 왕국 지도 위에서 갈 곳을 고른다 */
-  if(WMV.level==='kingdom'&&wmvKingdomOK()){drawMarcusOverview(c,W,H);wpMapKingdom(c,W,H);return;}   /* 마르쿠스 왕국 전체 지도 */
+  if(WMV.coach){drawMarcusOverview(c,W,H,{coach:WMV.coach,hunt:WMV.zoom>1.1});wpMapKingdom(c,W,H);return;}   /* 마차: 같은 왕국 지도 위에서 갈 곳을 고른다 */
+  if(WMV.level==='kingdom'&&wmvKingdomOK()){drawMarcusOverview(c,W,H,{hunt:WMV.zoom>1.1});   /* 처음 크기에선 주요한 곳만, 확대하면 엑시즈 둘레 사냥터까지 */
+   wpMapKingdom(c,W,H);return;}   /* 마르쿠스 왕국 전체 지도 */
   if(player&&player.position.x>=800){const FI=WMV.focus&&OR.ISLES[WMV.focus],I=FI||OR.isleAt(player.position.x,player.position.z),PM=!FI&&curPlace&&curPlace.map?curPlace.map():null,GH=!FI&&I.id==='guildhall',C=PM||(GH?{x:I.x,z:I.z-11,R:15}:I),s2=Math.min(W,H)/2/(C.R+16),X=v=>W/2+(v-C.x)*s2,Z=v=>H/2+(v-C.z)*s2,f2=Math.min(2.4,Math.max(1,s2*.13));
     drawIslePlan(c,X,Z,s2,I,null);if(typeof myHomeMapMark==='function')myHomeMapMark(c,X,Z,f2,I,1);if(typeof ganelMapMark==='function')ganelMapMark(c,X,Z,f2,I,1);   /* 중앙 광장 지도: 광장 이름은 광장 위에 (맨 위 제목은 엑시즈) */c.textAlign='center';c.textBaseline='middle';c.font=`bold ${Math.round(16*f2)}px "KMUSunggokSerif","Gowun Batang",serif`;c.lineWidth=4*f2;c.strokeStyle='rgba(20,16,12,.9)';c.fillStyle='#f0e2c0';
     const ty=PM||GH?18*f2+12:Math.max(18*f2+12,Z(I.z-I.R)-18*f2),L=OR.ZONE_LEVELS[I.id],lvT=GH?`엑시즈 · ${ghViewFl(c)}층`:I.id==='library'?`엑시즈 · ${libFloor()}층`:L&&L[0]?`Lv ${L[0]}–${L[1]}`:'안전 지대',ttl=ZONES[I.id].name;c.strokeText(ttl,W/2,ty);c.fillText(ttl,W/2,ty);
