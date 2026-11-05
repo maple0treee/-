@@ -20517,6 +20517,11 @@ function wmvOut(){if(!player)return null;const p=player.position;
     const d=PORTALS.find(q=>q.to&&OR.isleAt(q.x,q.z)===I&&OR.isleAt(q.to.x,q.to.z)!==I);if(!d)return null;var p2=d.to;I=OR.isleAt(p2.x,p2.z);}
   return null;}
 function wmvOutPos(Lo){const o=wmvOut();if(!o)return null;if(o==='harena'){const D=MOV_DETAIL[0],w=D.world(),a=D.at(Lo),p=player.position,inH=Math.hypot(p.x-w.x,p.z-w.z)<w.R;return {x:a.x+(inH?(p.x-w.x)*Lo.k:0),y:a.y+(inH?(p.z-w.z)*Lo.k:0),rot:0};}const q=movPos(Lo,o.x,o.z);return q&&{x:q.x,y:q.y,rot:0};}
+/* 왕국 밖에서 줄여 본 큰 지도에서 크게 확대할 때 마우스 아래가 어디인지: 'here'(지금 있는 곳), 시설 id, 아니면 null */
+function wmvBigHit(mx,my,W,H,o){const z0=WMV.zoom,Lo=movLayout(W,H,false),lx=(mx-W/2-WMV.px)/z0+W/2,ly=(my-H/2-WMV.py)/z0+H/2;
+  if(o==='harena'){const D=MOV_DETAIL[0],a=D.at(Lo);if(z0>=wmvHarenaZoom(W,H)*1.8&&Math.hypot(lx-a.x,ly-a.y)<D.world().R*1.2*Lo.k)return 'here';}
+  if(z0<wmvTownZoom(W,H)*2.4)return null;const M=OR.ISLES.marcus,k=Lo.rc/350,wx=M.x+(lx-Lo.cx)/k,wz=M.z+(ly-Lo.cy)/k;
+  const fid=wmvFacAt(wx,wz);if(fid)return fid;if(o&&o!=='harena'&&Math.hypot(wx-o.x,wz-o.z)<45)return 'here';return null;}
 function wmvKingdomOK(){return !!player&&player.position.x>=800&&(()=>{const id=OR.isleAt(player.position.x,player.position.z).id;return MARCUS_PLACES.has(id)||OR.MHUNT.includes(id);})();}
 /* 하나의 큰 지도 (마르쿠스 왕국 → 확대하면 엑시즈 둘레 사냥터 → 더 확대하면 엑시즈 시내)
    왕국 지도 위 엑시즈는 movPos와 같은 줄임(rc/350)으로 놓여 있어서, 시내 지도를 같은 자리·같은 줄임으로 겹쳐 그리면 이어진다 */
@@ -20556,8 +20561,9 @@ function wmvClamp(W,H){const mx=W/2*Math.max(0,WMV.zoom-1),my=H/2*Math.max(0,WMV
 (()=>{const cv=$('#wmapC');if(!cv)return;const toPx=e=>{const b=cv.getBoundingClientRect();return [(e.clientX-b.left)*cv.width/b.width,(e.clientY-b.top)*cv.height/b.height];};
   cv.addEventListener('wheel',e=>{e.preventDefault();const [mx,my]=toPx(e),W=cv.width,H=cv.height,z0=WMV.zoom,zin=e.deltaY<0;
     if(!wmvKingdomOK()&&!WMV.coach){   /* 왕국 밖 실내·하레나: 처음 크기에서 더 줄이면 큰 지도, 큰 지도에서 그곳으로 크게 확대하면 다시 안 지도 */
-      if(WMV.level!=='kingdom'&&!zin&&z0<=1.001){WMV.level='kingdom';WMV.big=true;WMV.init='out';WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}
-      if(WMV.level==='kingdom'&&WMV.big&&zin){const o=wmvOut(),lim=o==='harena'?wmvHarenaZoom(W,H)*1.8:wmvTownZoom(W,H)*2.4;if(z0>=lim){WMV.level='local';WMV.big=false;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}}}
+      if(WMV.level!=='kingdom'&&!zin&&z0<=1.001){WMV.init=WMV.focus?'ent:'+WMV.focus:'out';WMV.level='kingdom';WMV.big=true;WMV.focus=null;WMV.ghFl=null;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}
+      if(WMV.level==='kingdom'&&WMV.big&&zin){const o=wmvOut(),hit=wmvBigHit(mx,my,W,H,o);   /* 마우스가 가리킨 곳으로: 내가 있는 곳이면 안 지도, 길드홀 같은 시설 문이면 그 시설 지도 */
+        if(hit){WMV.level='local';WMV.big=false;WMV.focus=hit==='here'?null:hit;WMV.ghFl=null;WMV.zoom=1;WMV.px=0;WMV.py=0;drawWorldMap();return;}}}
     if(wmvKingdomOK()&&!WMV.coach){   /* 단계 바꾸기 (마차 고르는 동안은 왕국 지도 그대로) */
       if(WMV.level==='kingdom'&&zin&&z0>=wmvTownZoom(W,H)*2.4){const Lo=movLayout(W,H,false),M=OR.ISLES.marcus,k=Lo.rc/350,lx=(mx-W/2-WMV.px)/z0+W/2,ly=(my-H/2-WMV.py)/z0+H/2,wx=M.x+(lx-Lo.cx)/k,wz=M.z+(ly-Lo.cy)/k;
         const pid=OR.isleAt(player.position.x,player.position.z).id,fid=wmvFacAt(wx,wz);   /* 길드홀·도서관 같은 시설 문 위에서 크게 확대하면 그 안 지도로 */
@@ -20604,7 +20610,7 @@ function drawWorldMap0(){
   if(WMV.coach){drawMarcusOverview(c,W,H,{coach:WMV.coach,hunt:WMV.zoom>1.1,detail:Lo=>wmvDetail(c,W,H,Lo)});wpMapKingdom(c,W,H);return;}   /* 마차: 같은 왕국 지도 위에서 갈 곳을 고른다 */
   if(WMV.level==='kingdom'&&(wmvKingdomOK()||WMV.big)){drawMarcusOverview(c,W,H,{hunt:WMV.zoom>1.1,detail:Lo=>wmvDetail(c,W,H,Lo)});if(WMV.zoom>1.01)mapFrame(c);   /* 처음 크기에선 주요한 곳만, 확대하면 엑시즈 둘레 사냥터까지 */
    wpMapKingdom(c,W,H);return;}   /* 마르쿠스 왕국 전체 지도 */
-  if(player&&player.position.x>=800){const FI=WMV.focus&&OR.ISLES[WMV.focus],I=FI||OR.isleAt(player.position.x,player.position.z),PM=!FI&&curPlace&&curPlace.map?curPlace.map():null,GH=I.id==='guildhall',C=PM||(GH?{x:I.x,z:I.z-11,R:15}:I),s2=Math.min(W,H)/2/(C.R+16),X=v=>W/2+(v-C.x)*s2,Z=v=>H/2+(v-C.z)*s2,f2=Math.min(2.4,Math.max(1,s2*.13));
+  if(player&&(player.position.x>=800||WMV.focus&&OR.ISLES[WMV.focus])){const FI=WMV.focus&&OR.ISLES[WMV.focus],I=FI||OR.isleAt(player.position.x,player.position.z),PM=!FI&&curPlace&&curPlace.map?curPlace.map():null,GH=I.id==='guildhall',C=PM||(GH?{x:I.x,z:I.z-11,R:15}:I),s2=Math.min(W,H)/2/(C.R+16),X=v=>W/2+(v-C.x)*s2,Z=v=>H/2+(v-C.z)*s2,f2=Math.min(2.4,Math.max(1,s2*.13));
     drawIslePlan(mapInk(c,X,Z),X,Z,s2,I,null);if(typeof myHomeMapMark==='function')myHomeMapMark(c,X,Z,f2,I,1);if(typeof ganelMapMark==='function')ganelMapMark(c,X,Z,f2,I,1);   /* 중앙 광장 지도: 광장 이름은 광장 위에 (맨 위 제목은 엑시즈) */c.textAlign='center';c.textBaseline='middle';c.font=`bold ${Math.round(16*f2)}px "KMUSunggokSerif","Gowun Batang",serif`;c.lineWidth=4*f2;c.strokeStyle='rgba(241,229,198,.92)';c.fillStyle='#3b2a18';
     const ty=PM||GH?18*f2+12:Math.max(18*f2+12,Z(I.z-I.R)-18*f2),L=OR.ZONE_LEVELS[I.id],lvT=GH?`엑시즈 · ${ghViewFl(c)}층`:I.id==='library'?`엑시즈 · ${libFloor()}층`:L&&L[0]?`Lv ${L[0]}–${L[1]}`:'안전 지대',ttl=ZONES[I.id].name;c.strokeText(ttl,W/2,ty);c.fillText(ttl,W/2,ty);
     c.font=`${Math.round(10*f2)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.fillStyle='#7a5a32';c.strokeText(lvT,W/2,ty+17*f2);c.fillText(lvT,W/2,ty+17*f2);
