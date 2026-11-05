@@ -24,6 +24,7 @@
 | `public/models/*.glb.wasm` | 풍경·건물·몬스터 모델 (내용은 `.glb`, 이름 끝만 `.wasm`) |
 | `public/npcbake/`, `public/citbake/` | 미리 구워 둔 NPC·시민 데이터 |
 | `public/music/`, `public/sfx.json`, `public/fonts/`, `public/icon/` | 음악, 효과음, 글꼴, 아이콘 |
+| `public/site/*.html`, `site-src/` | 게임 소개·시작 안내·직업·세계·소식·질문·개인정보처리방침·이용약관·문의 페이지 (`/about` 같은 주소). 글은 `site-src/pages.js`에서 고치고 `node site-src/build.js`로 다시 굽습니다. 애드센스 심사와 검색 노출에 필요합니다. |
 | `public/robots.txt`, `sitemap.xml`, `manifest.webmanifest`, `og.jpg`, `ads.txt` | 검색·공유·앱 설치용 파일 |
 
 저장소 맨 위의 `.github/workflows/keepalive.yml`은 10분마다 `https://orlando.io.kr/health`를 불러 무료 서버가 잠들지 않게 합니다.
