@@ -13008,10 +13008,9 @@ function petTick(dt){const u=player&&player.userData;if(!u)return;const L=LIFE.p
 const _petW=new THREE.Vector3();let _petH=null;
 function petFP(){if(!player)return;const vm=viewModel,u=vm&&vm.userData,k=player.userData.petK||0,L=LIFE.pet;let H=_petH;
   if(k<=0||!LIFE.ready||cam.third){if(H){H.visible=false;H.userData.arm.visible=false;}return;}
-  if(!H){const sk=u&&u.L?u.L.userData.skin[0].material.color.getHex():0xf6dccb,sl=u&&u.L?u.L.userData.arm.material.color.getHex():0x6a5a48;
-    H=_petH=fpHand(-1,camera,sk,sl);camera.add(H);   /* 카메라에 바로 단다: 직업을 고르기 전(손 화면이 꺼져 있을 때)에도 보이게 */
-    const f=H.userData.skin[0];f.scale.set(1.25,.45,1.5);H.userData.skin[1].position.set(.06,-.005,-.03);H.userData.skin[1].scale.set(1,.8,1.6);   /* 주먹 대신 편 손바닥과 손가락 */
-    for(let i=0;i<4;i++){const fg=new THREE.Mesh(new THREE.SphereGeometry(1,8,6),f.material);fg.scale.set(.012,.01,.042);fg.position.set(-.03+i*.02,-.004,-.085+Math.abs(i-1.5)*.008);H.add(fg);}}
+  if(H&&H.userData.pl!==player){camera.remove(H,H.userData.arm);H=_petH=null;}   /* 옷·장비를 바꿔 몸을 다시 만들었으면 손도 다시 */
+  if(!H){const sk=u&&u.L?u.L.userData.skin[0].material.color.getHex():0xf6dccb,sl=u&&u.L?u.L.userData.arm.material.color.getHex():0x24201c;
+    H=_petH=fpHand(-1,camera,sk,sl);camera.add(H);H.userData.pl=player;}   /* 1인칭 왼손과 같은 주먹 손. 카메라에 바로 단다: 직업을 고르기 전(손 화면이 꺼져 있을 때)에도 보이게 */
   if(u&&u.L){u.L.visible=false;u.L.userData.arm.visible=false;}H.visible=true;
   const D=L?L.D:null,st=Math.sin((player.userData.petT||0)*5.5);let tx=-.3,ty=-.55,tz=-.5;
   if(D){const kk=D.D.scale.x,a=D.yaw;D.H.getWorldPosition(_petW);const sw=st*.06-.06;_petW.x+=Math.sin(a)*sw*kk;_petW.z+=Math.cos(a)*sw*kk;_petW.y+=.21*kk;   /* 개 머리 꼭대기에서 앞뒤로 */camera.updateMatrixWorld();camera.worldToLocal(_petW);tx=_petW.x;ty=_petW.y;tz=_petW.z;}
@@ -19995,8 +19994,11 @@ function makeViewModel(job){const jobReal=job;job=drawJobOf(jobReal,P?wclsOf(P.e
   const J=JOBS[jobReal],G=P?gearOf(P):{weapon:-1},style=(G.weapon??-1)<0||(jobReal==='shielder'&&!shdHandKind())?'fist':J.weapon,root=new THREE.Group();   // 쉴더: 든 방패가 없으면 맨손
   // 소매 색: 갑옷을 입었으면 갑옷 색, 아니면 직업 셔츠 색
   const Gq=P?gearOf(P):{armor:-1};const slv=(Gq.armor>=1?pmTint('armor',Gq.armor,jobReal):pmTint('shirt',-1,jobReal,P&&P.ap)).getHex();
-  const skC=new THREE.Color(0xf6dccb).multiply(new THREE.Color(P&&P.ap?SKIN_TONES[P.ap.k|0]??0xffffff:0xffffff)).getHex();   // 피부: 고른 피부색
-  const R=fpHand(1,root,skC,slv),L=fpHand(-1,root,skC,slv);root.add(R,L);L.visible=false;
+  let skC=new THREE.Color(0xf6dccb).multiply(new THREE.Color(P&&P.ap?SKIN_TONES[P.ap.k|0]??0xffffff:0xffffff)).getHex();   // 피부: 고른 피부색
+  /* 막대 인형 몸(OLD_LOOK)이면 3인칭에서 보이는 팔·손 색을 그대로 쓴다 (셔츠·갑옷 색을 쓰면 초록 셔츠 직업은 1인칭 팔만 초록이 된다) */
+  let slvC=slv;if(OLD_LOOK&&player&&player.userData.stick){const A=player.userData.stick.AL,seg=A.el.children.find(o=>o.isMesh&&o.geometry.type==='CylinderGeometry'),hb=A.hand.children.find(o=>o.isMesh);
+    if(seg)slvC=seg.material.color.getHex();if(hb)skC=hb.material.color.getHex();}
+  const R=fpHand(1,root,skC,slvC),L=fpHand(-1,root,skC,slvC);root.add(R,L);L.visible=false;
   const u={style,R,L,arrow:null,orb:null};
   if(style==='fist'){L.visible=true;if((G.sub??-1)>=0&&J.sub==='shield'){u.hasL=true;u.shieldL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
   else if(style==='sword'){const w=stickWeapon(style,job,G.weapon);w.rotation.set(-.5,0,-.12);w.scale.setScalar(job==='barbarian'||job==='fowler'?.6:.85);if(job==='barbarian'||job==='fowler')w.position.y=-.08;R.add(w);
