@@ -19420,6 +19420,55 @@ function movTown(c,x,y,r,f,o){const sd=o.seed||1;
   if(o.keep)o.keep();
   movBlob(c,x,y,r,sd,.05);c.strokeStyle=MOV_INK;c.lineWidth=Math.max(1.5,r*.05);c.stroke();c.strokeStyle='rgba(74,54,34,.35)';c.lineWidth=Math.max(.8,r*.02);movBlob(c,x,y,r*1.06,sd,.05);c.stroke();
   const T=o.towers||10;for(let q=0;q<T;q++){const a=q/T*Math.PI*2+.2,rr=r*(1+.05*movWob(a,sd));movGlyph.tower(c,x+Math.cos(a)*rr,y+Math.sin(a)*rr+r*.06,Math.max(3.5*f,r*.12));}}
+/* 엑시즈 시내 계획(marcusPlan) 좌표 → 왕국 지도 자리. 시내 지도·내 자리(movPos)와 같은 줄임 */
+/* 엑시즈 섬 안의 바다 (남·동쪽): 실제 땅 높이로 한 번만 찾아 물가 선을 만든다 (칸 → 등고선 → 부드럽게) */
+function movExizSea(){if(movExizSea.v)return movExizSea.v;const I=OR.ISLES.marcus,MP=marcusPlan(),S=12,R=I.R,HB=R+4*S,n=Math.round(HB*2/S)+1,P=i=>-HB+i*S;
+  const wet=new Uint8Array(n*n);
+  for(let j=1;j<n-1;j++)for(let i=1;i<n-1;i++){let x=P(i),y=P(j);const r=Math.hypot(x,y),m=R-S;if(r>m){x*=m/r;y*=m/r;}   /* 섬 밖은 섬 가장자리 값을 그대로 */
+    wet[j*n+i]=heightAt(I.x+x,I.z+y)<-1.2&&MP.wallDist(x,y)>8?1:0;}
+  /* 작은 물웅덩이·강 조각은 빼고 큰 바다만 */
+  const comp=new Int32Array(n*n).fill(-1),keep=new Uint8Array(n*n);
+  for(let s0=0;s0<n*n;s0++){if(!wet[s0]||comp[s0]>=0)continue;const st=[s0],mem=[];comp[s0]=s0;while(st.length){const q=st.pop();mem.push(q);const i=q%n,j=(q/n)|0;
+      for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const a=i+di,b=j+dj;if(a<0||b<0||a>=n||b>=n)continue;const t=b*n+a;if(wet[t]&&comp[t]<0){comp[t]=s0;st.push(t);}}}
+    if(mem.length>=50)for(const q of mem)keep[q]=1;}
+  const V=(i,j)=>keep[j*n+i];
+  /* 등고선 조각 */
+  const segs=[],E=(i,j,e)=>e===0?[P(i)+S/2,P(j)]:e===1?[P(i+1),P(j)+S/2]:e===2?[P(i)+S/2,P(j+1)]:[P(i),P(j)+S/2];
+  const TAB={1:[[3,2]],2:[[2,1]],3:[[3,1]],4:[[0,1]],5:[[3,0],[2,1]],6:[[0,2]],7:[[3,0]],8:[[0,3]],9:[[0,2]],10:[[0,1],[3,2]],11:[[0,1]],12:[[3,1]],13:[[2,1]],14:[[3,2]]};
+  for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const k=V(i,j)*8+V(i+1,j)*4+V(i+1,j+1)*2+V(i,j+1);const t=TAB[k];if(!t)continue;for(const [e0,e1] of t)segs.push([E(i,j,e0),E(i,j,e1)]);}
+  /* 조각을 이어 고리로 */
+  const key=p=>p[0].toFixed(1)+','+p[1].toFixed(1),at=new Map();segs.forEach((g,ix)=>{for(const p of g){const kk=key(p);(at.get(kk)||at.set(kk,[]).get(kk)).push(ix);}});
+  const used=new Uint8Array(segs.length),loops=[];
+  for(let s0=0;s0<segs.length;s0++){if(used[s0])continue;used[s0]=1;const L=[segs[s0][0],segs[s0][1]];
+    for(;;){const kk=key(L[L.length-1]);const nx=(at.get(kk)||[]).find(q=>!used[q]);if(nx==null)break;used[nx]=1;const g=segs[nx];L.push(key(g[0])===kk?g[1]:g[0]);}
+    if(L.length>4)loops.push(L);}
+  /* 모서리를 둥글게 (차이킨 두 번) */
+  const smooth=L=>{let A=L;for(let it=0;it<2;it++){const B=[];for(let q=0;q<A.length;q++){const a=A[q],b=A[(q+1)%A.length];B.push([a[0]*.75+b[0]*.25,a[1]*.75+b[1]*.25],[a[0]*.25+b[0]*.75,a[1]*.25+b[1]*.75]);}A=B;}return A;};
+  return movExizSea.v={R,loops:loops.map(smooth)};}
+function movExizT(Lo){const s=Lo.rc/350;return (x,y)=>[Lo.cx+x*s,Lo.cy+y*s];}
+function movGate(Lo,name){const g=marcusPlan().gates.find(q=>q.name===name);if(!g)return null;const [x,y]=movExizT(Lo)(g.x,g.y);return {x,y,out:g.out};}
+/* 엑시즈: 실제 성벽 모양·강·항구·왕궁·성문 자리를 옛 지도 그림으로 */
+function movExiz(c,Lo,mini){const {cx,cy,rc,f}=Lo,MP=marcusPlan(),T=movExizT(Lo),sc=rc/350;
+  const poly=P=>{c.beginPath();P.forEach((q,i)=>{const [x,y]=T(q[0],q[1]);i?c.lineTo(x,y):c.moveTo(x,y);});c.closePath();};
+  poly(MP.wall);c.fillStyle='#efe2bf';c.fill();
+  c.save();poly(MP.wall);c.clip();
+  c.fillStyle=MOV_SEA;poly(MP.harbor);c.fill();c.strokeStyle=MOV_INK2;c.lineWidth=.8*f;c.stroke();   /* 항구 */
+  c.strokeStyle='#8fb3b3';c.lineWidth=Math.max(mini?2:3,13*sc);c.lineCap='round';c.lineJoin='round';c.beginPath();MP.river.forEach((q,i)=>{const [x,y]=T(q[0],q[1]);i?c.lineTo(x,y):c.moveTo(x,y);});c.stroke();   /* 강 */
+  c.strokeStyle=MOV_INK2;c.lineWidth=.8*f;c.stroke();
+  const pal=MP.zones.find(z=>z.id==='palace');
+  const n=mini?20:70,hs=[];for(let q=0;q<n;q++){const a=q*2.399+1,rr=Math.sqrt((q+.5)/n)*370,x=Math.cos(a)*rr,y=Math.sin(a)*rr;
+    if(MP.wallDist(x,y)>-14||MP.riverDist(x,y)<18||MP.inPoly(MP.harbor,x,y)||MP.polyDist(MP.harbor,x,y)<12)continue;if(pal&&Math.abs(x-pal.x)<pal.w*.6&&Math.abs(y-pal.y)<pal.h*.7)continue;hs.push(T(x,y));}
+  hs.sort((A,B)=>A[1]-B[1]);for(const [x,y] of hs)movGlyph.house(c,x,y+rc*.03,Math.max(3*f,rc*.1),undefined);
+  if(pal){const [x,y]=T(pal.x,pal.y+pal.h*.2),s=rc*.2;c.fillStyle='#e8dab4';c.strokeStyle=MOV_INK;c.lineWidth=Math.max(1,s*.06);c.fillRect(x-s*.8,y-s*.6,s*1.6,s*.6);c.strokeRect(x-s*.8,y-s*.6,s*1.6,s*.6);   /* 왕궁 */
+    movGlyph.tower(c,x-s*.75,y,s*1.1);movGlyph.tower(c,x+s*.75,y,s*1.1);movGlyph.tower(c,x,y-s*.2,s*1.4);
+    c.beginPath();c.moveTo(x,y-s*1.75);c.lineTo(x,y-s*2.2);c.stroke();c.fillStyle='#a8473a';c.beginPath();c.moveTo(x,y-s*2.2);c.lineTo(x+s*.4,y-s*2.08);c.lineTo(x,y-s*1.96);c.closePath();c.fill();}
+  c.restore();
+  /* 성벽: 잉크 두 줄, 탑은 성문을 비켜 고르게 */
+  poly(MP.wall);c.strokeStyle=MOV_INK;c.lineWidth=Math.max(1.5,rc*.05);c.stroke();
+  const W=MP.wall,L=[0];for(let i=0;i<W.length;i++){const A=W[i],B=W[(i+1)%W.length];L.push(L[i]+Math.hypot(B[0]-A[0],B[1]-A[1]));}const TL=L[W.length],NT=mini?8:16;
+  for(let q=0;q<NT;q++){let d=(q+.3)/NT*TL,i=0;while(L[i+1]<d)i++;const A=W[i],B=W[(i+1)%W.length],t=(d-L[i])/(L[i+1]-L[i]),x=A[0]+(B[0]-A[0])*t,y=A[1]+(B[1]-A[1])*t;
+    if(MP.gates.some(g=>Math.hypot(g.x-x,g.y-y)<45))continue;const [px,py]=T(x,y);movGlyph.tower(c,px,py+rc*.06,Math.max(3.5*f,rc*.12));}
+  for(const g of MP.gates){const [x,y]=T(g.x,g.y),r=(mini?2.5:4.5)*f;c.fillStyle='#5a4028';c.beginPath();c.arc(x,y,r,0,7);c.fill();}}   /* 성문 */
 /* 땅·바다·산·도시처럼 움직이지 않는 그림: 화면 크기·확대가 같으면 한 번 그린 것을 다시 쓴다 */
 function movStatic(c,W,H,mini,Lo){const {u,cx,cy,rc,k,zones}=Lo,f=mini?1:Math.max(1,u/300),MH=OR.MH,P2=(wx,wz)=>[cx+(wx-MH.cx)*k,cy+(wz-MH.cz)*k];
   /* 바탕: 양피지 */
@@ -19444,7 +19493,11 @@ function movStatic(c,W,H,mini,Lo){const {u,cx,cy,rc,k,zones}=Lo,f=mini?1:Math.ma
       if(!mini){c.strokeStyle='rgba(60,95,100,.45)';c.lineWidth=1*f;for(let w=0;w<70;w++){const q=run[Math.floor(movRnd(w+3)*run.length)],rr=Math.max(q.r,rcW*.9)+MH.R*(1.1+movRnd(w+7)*4.2),[x,y]=pt(q.a+(movRnd(w+11)-.5)*.05,rr);movGlyph.wave(c,x,y,(5+movRnd(w)*3)*f);}}
       c.restore();
       c.strokeStyle=MOV_INK;c.lineWidth=(mini?1.2:2)*f;c.beginPath();coast.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));c.stroke();}}
-  const T0=c.getTransform(),onSea=(x,y)=>{const q=T0.transformPoint(new DOMPoint(x,y));return c.isPointInPath(sea,q.x,q.y);};
+  const isea=new Path2D();{const ES=movExizSea(),T=movExizT(Lo);for(const L of ES.loops)L.forEach((q,i)=>{const [x,y]=T(q[0],q[1]);i?isea.lineTo(x,y):isea.moveTo(x,y);}),isea.closePath();
+    {const R0=ES.R*rc/350,g=c.createRadialGradient(cx,cy,R0*.8,cx,cy,R0*1.04);g.addColorStop(0,MOV_SEA);g.addColorStop(1,'rgba(169,195,189,0)');c.fillStyle=g;}c.fill(isea,'evenodd');
+    const shore=new Path2D();for(const L of ES.loops){let on=false;for(const q of L){const [x,y]=T(q[0],q[1]),inn=Math.hypot(q[0],q[1])<ES.R-14;if(inn){on?shore.lineTo(x,y):shore.moveTo(x,y);on=true;}else on=false;}}   /* 섬 밖은 선을 긋지 않는다 */
+    c.save();c.clip(isea,'evenodd');c.strokeStyle=MOV_SEA2;c.globalAlpha=.35;c.lineWidth=(mini?2:5)*f;c.stroke(shore);c.restore();c.strokeStyle=MOV_INK;c.lineWidth=(mini?1.2:2)*f;c.stroke(shore);}   /* 엑시즈 남·동쪽 바다 (시내 지도와 같은 물가). 섬 밖은 선을 긋지 않는다 */
+  const T0=c.getTransform(),onSea=(x,y)=>{const q=T0.transformPoint(new DOMPoint(x,y));return c.isPointInPath(sea,q.x,q.y)||c.isPointInPath(isea,q.x,q.y,'evenodd');};
   /* 하레나: 서쪽 끝 사막 */
   if(!mini){const h=MOV_HARENA,[hx,hy]=P2(h.x,h.z),hr=h.R*k,dr=hr*3.2;
     c.save();c.globalAlpha=.8;movBlob(c,hx-dr*.15,hy,dr,7,.18);const sg=c.createRadialGradient(hx,hy,dr*.2,hx,hy,dr*1.1);sg.addColorStop(0,'#e3c78e');sg.addColorStop(.75,'rgba(226,196,140,.85)');sg.addColorStop(1,'rgba(226,196,140,0)');c.fillStyle=sg;c.fill();c.restore();
@@ -19485,8 +19538,8 @@ function movStatic(c,W,H,mini,Lo){const {u,cx,cy,rc,k,zones}=Lo,f=mini?1:Math.ma
   c.lineCap='round';c.lineJoin='round';
   const road=(pts,dash)=>{c.beginPath();pts.forEach((p,i)=>{const [x,y]=P2(p.x,p.z);i?c.lineTo(x,y):c.moveTo(x,y);});c.strokeStyle='rgba(239,226,191,.9)';c.lineWidth=(mini?2.5:5)*f;c.setLineDash([]);c.stroke();c.strokeStyle='#7a5532';c.lineWidth=(mini?1:1.6)*f;c.setLineDash(dash);c.stroke();c.setLineDash([]);};
   for(const pts of MHR.paths)road(pts,[6*f,4*f]);
-  for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],ux=Math.cos(F.th),uz=Math.sin(F.th);
-    road([{x:MH.cx+ux*rc/k,z:MH.cz+uz*rc/k},F.gate],[3*f,4*f]);}
+  for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],G=movGate(Lo,L.gate);if(!G)continue;
+    const gx=MH.cx+(G.x-cx)/k,gz=MH.cz+(G.y-cy)/k,d=rc/k*.35;road([{x:gx,z:gz},{x:gx+Math.cos(G.out)*d,z:gz+Math.sin(G.out)*d},F.gate],[3*f,4*f]);}
   /* 밀골 */
   {const E=OR.ISLES.mpass;if(E.mgate){const [ex,ey]=P2(E.mgate.x,E.mgate.z),ux=-E.mgate.ux,uy=-E.mgate.uz,mx=ex+ux*34*f,my=ey+uy*34*f;
     c.strokeStyle='#7a5532';c.lineWidth=1.4*f;c.setLineDash([3*f,4*f]);c.beginPath();c.moveTo(ex,ey);c.lineTo(mx,my);c.stroke();c.setLineDash([]);
@@ -19497,13 +19550,7 @@ function movStatic(c,W,H,mini,Lo){const {u,cx,cy,rc,k,zones}=Lo,f=mini?1:Math.ma
     c.fillStyle='#e8dab4';c.strokeStyle=MOV_INK;c.lineWidth=1*f;c.beginPath();c.moveTo(x-8*f,y+3*f);c.lineTo(x-7.5*f,y-3*f);c.lineTo(x+7.5*f,y-3.4*f);c.lineTo(x+8*f,y+3*f);c.closePath();c.fill();c.stroke();
     movGlyph.tower(c,x-7.5*f,y+3.5*f,7*f);movGlyph.tower(c,x+7.5*f,y+3.5*f,7*f);movGlyph.tower(c,x,y+1*f,9*f);
     c.beginPath();c.moveTo(x,y-9.6*f);c.lineTo(x,y-13*f);c.stroke();c.fillStyle='#a8473a';c.beginPath();c.moveTo(x,y-13*f);c.lineTo(x+3.4*f,y-12*f);c.lineTo(x,y-11*f);c.closePath();c.fill();}}
-  /* 엑시즈: 성벽 도시, 북쪽에 성, 가운데로 흐르는 강 */
-  movTown(c,cx,cy,rc,f,{seed:1,houses:mini?14:46,towers:mini?8:14,
-    water:()=>{c.strokeStyle='#8fb3b3';c.lineWidth=(mini?2.5:5)*f;c.beginPath();c.moveTo(cx-rc*1.05,cy-rc*.05);c.quadraticCurveTo(cx,cy+rc*.45,cx+rc*.3,cy+rc*1.05);c.stroke();c.strokeStyle=MOV_INK2;c.lineWidth=.8*f;c.stroke();},
-    keep:()=>{const s=rc*.2,x=cx+rc*.05,y=cy-rc*.42;c.fillStyle='#e8dab4';c.strokeStyle=MOV_INK;c.lineWidth=Math.max(1,s*.06);c.fillRect(x-s*.8,y-s*.6,s*1.6,s*.6);c.strokeRect(x-s*.8,y-s*.6,s*1.6,s*.6);
-      movGlyph.tower(c,x-s*.75,y,s*1.1);movGlyph.tower(c,x+s*.75,y,s*1.1);movGlyph.tower(c,x,y-s*.2,s*1.4);
-      c.beginPath();c.moveTo(x,y-s*1.75);c.lineTo(x,y-s*2.2);c.stroke();c.fillStyle='#a8473a';c.beginPath();c.moveTo(x,y-s*2.2);c.lineTo(x+s*.4,y-s*2.08);c.lineTo(x,y-s*1.96);c.closePath();c.fill();}});
-  for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],ux=Math.cos(F.th),uy=Math.sin(F.th);c.fillStyle='#5a4028';c.beginPath();c.arc(cx+ux*rc,cy+uy*rc,(mini?2.5:4.5)*f,0,7);c.fill();}
+  movExiz(c,Lo,mini);
   if(mini)return;
   /* 나침반: 바다 위 오른쪽 아래 */
   {const R=34*f,x=W-R-26*f,y=H-R-30*f;c.save();c.translate(x,y);c.strokeStyle=MOV_INK;c.lineWidth=1*f;c.beginPath();c.arc(0,0,R*.62,0,7);c.stroke();c.beginPath();c.arc(0,0,R*.55,0,7);c.stroke();
@@ -19528,7 +19575,7 @@ function drawMarcusOverview(c,W,H,o={}){const mini=!!o.mini,Lo=movLayout(W,H,min
     /* 가지 지역 이름 */
     for(const L of OR.MLINES){if(!L.branch)continue;const Zs=L.zones.map(q=>zones[q[0]]),Z1=Zs[Zs.length-1],Z0=Zs[Zs.length-2],a=Math.atan2(Z1.y-Z0.y,Z1.x-Z0.x);c.textAlign='left';ink(L.region,Z1.x+Math.cos(a)*Z1.r*1.5,Z1.y+Math.sin(a)*Z1.r*1.5,`700 ${Math.round(15*f)}px ${SER}`,'#8a3a22',4);c.textAlign='center';}
     /* 문 이름 */
-    for(const L of OR.MLINES){if(!L.gate)continue;const F=OR.ISLES[L.zones[0][0]],ux=Math.cos(F.th),uy=Math.sin(F.th),gx=cx+ux*(rc+16*f)+(uy?14*f:0),gy=cy+uy*(rc+16*f)+(ux?-12*f:0);ink(L.gate,gx,gy,`700 ${Math.round(11*f)}px ${SEMI}`,MOV_INK2);}
+    for(const L of OR.MLINES){if(!L.gate)continue;const G=movGate(Lo,L.gate);if(!G)continue;ink(L.gate,G.x+Math.cos(G.out)*15*f,G.y+Math.sin(G.out)*12*f,`700 ${Math.round(11*f)}px ${SEMI}`,MOV_INK2);}
     /* 밀골 */
     {const E=OR.ISLES.mpass;if(E.mgate){const [ex,ey]=P2(E.mgate.x,E.mgate.z),mx=ex-E.mgate.ux*34*f,my=ey-E.mgate.uz*34*f;c.textAlign='right';ink(ZONES.milgol?ZONES.milgol.name:'밀골',mx-15*f,my+2*f,`700 ${Math.round(11*f)}px ${SEMI}`);c.textAlign='center';}}
     {const B=movRealm(Lo).fort;if(B){c.textBaseline='top';ink(ZONES.fort?ZONES.fort.name:'통로 요새',B.x,B.y+7*f,`700 ${Math.round(11*f)}px ${SEMI}`);c.textBaseline='middle';}}
@@ -19536,7 +19583,7 @@ function drawMarcusOverview(c,W,H,o={}){const mini=!!o.mini,Lo=movLayout(W,H,min
     if(o.coach){const C=o.coach,R=movRealm(Lo);for(const id in REALM.coach){const q=R[id];if(!q||id===C.here||!COACH.dur[C.here+'>'+id])continue;const hv=C.hover===id,r=(id==='marcus'?rc*.22:13*f)*(hv?1.12:1);
       c.save();c.strokeStyle=hv?'#9a2a20':MOV_INK2;c.lineWidth=(hv?2.4:1.5)*f;if(!hv)c.setLineDash([4*f,3*f]);movBlob(c,q.x,q.y,r,id.length*1.7,.08);if(hv){c.fillStyle='rgba(176,48,42,.12)';c.fill();}c.stroke();c.restore();}}
     /* 도시 이름 */
-    c.textBaseline='bottom';ink(ZONES.marcus.name,cx,cy-rc-14*f,`700 ${Math.round(20*f)}px ${SER}`,MOV_INK,4);
+    c.textBaseline='bottom';ink(ZONES.marcus.name,cx,Math.min(...marcusPlan().wall.map(q=>movExizT(Lo)(q[0],q[1])[1]))-16*f,`700 ${Math.round(20*f)}px ${SER}`,MOV_INK,4);
     {const h=MOV_HARENA,[hx,hy]=P2(h.x,h.z);ink(ZONES.town?ZONES.town.name:'하레나',hx,hy-h.R*k-12*f,`700 ${Math.round(17*f)}px ${SER}`,MOV_INK,4);}
     c.textBaseline='middle';}
   /* 사냥터 이름·레벨, 지금 있는 땅 */
