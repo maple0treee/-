@@ -3049,6 +3049,320 @@ void main(){vec3 d=normalize(vD);float h=d.y;
 skyDome.renderOrder=-1000;skyDome.frustumCulled=false;scene.add(skyDome);
 
 const mat=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.85,flatShading:true},o)),_mat=mat;
+/* ---------- 음식 모양 (FOODK): 맛있어 보이게 새로 빚은 음식들.
+   상자·공을 덧붙이지 않고, 면 그물(surf)로 한 덩어리씩 빚는다. 꼭짓점마다 색과 윤기(mt: 0 푸석 ~ 1 반들)를 담는다.
+   매끈하게 그리는 재질(FOODK.mat)로 그린다: 시내 굽기에서는 frame P에 {b:'fd'}로, 따로 쓸 때는 new THREE.Mesh(FOODK.geo(k),FOODK.mat()).
+   모양은 처음 쓸 때 한 번 만들어 두고 같이 쓴다 ---------- */
+const FOODK=(()=>{
+  const PI=Math.PI,TAU=PI*2;let GAM=1.8;   /* 고른 색(눈에 보이는 색)을 빛 계산용으로 바꾸는 정도. 시내 굽기 색과 같은 밝기가 되게 맞춘 값 */
+  const hash3=(x,y,z)=>{const s=Math.sin(x*127.1+y*311.7+z*74.7)*43758.5453;return s-Math.floor(s);};
+  const vn=(x,y,z)=>{const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z),xf=x-xi,yf=y-yi,zf=z-zi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf),w=zf*zf*(3-2*zf),L=(a,b,t)=>a+(b-a)*t,h=hash3;
+    return L(L(L(h(xi,yi,zi),h(xi+1,yi,zi),u),L(h(xi,yi+1,zi),h(xi+1,yi+1,zi),u),v),L(L(h(xi,yi,zi+1),h(xi+1,yi,zi+1),u),L(h(xi,yi+1,zi+1),h(xi+1,yi+1,zi+1),u),v),w);};
+  const fbm=(x,y,z,o=3)=>{let s=0,a=.5,f=1,t=0;for(let i=0;i<o;i++){s+=a*vn(x*f+i*17.3,y*f,z*f);t+=a;a*=.5;f*=2.03;}return s/t;};   /* 0~1 */
+  const cl=t=>t<0?0:t>1?1:t,sm=(a,b,t)=>{t=cl((t-a)/(b-a));return t*t*(3-2*t);};
+  const _d=new THREE.Color(),_P=new THREE.Vector3(),_V=new THREE.Vector3(),_W=new THREE.Vector3();
+  const mixC=(C,a,b,t)=>C.set(a).lerp(_d.set(b),cl(t));
+  const tint=(C,h,t)=>C.lerp(_d.set(h),cl(t));
+  const T=(x=0,y=0,z=0,ry=0,rx=0,rz=0,sx=1,sy=sx,sz=sx)=>new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rx,ry,rz,'YXZ')),new THREE.Vector3(sx,sy,sz));
+
+  /* 모음: 삼각형 꼭짓점들 */
+  const acc=()=>({p:[],n:[],c:[],g:[]});
+  /* 면 그물: u는 둘레(wrap이면 끝이 처음과 이어짐), v는 위→아래 따위. fn(u,v,P)가 자리를, col(C,P,u,v)가 색을, gl이 윤기를 정한다 */
+  function surf(A,nu,nv,fn,col,gl,o={}){
+    const wrap=o.wrap!==false,cu=wrap?nu:nu+1,cv=nv+1,N=cu*cv;
+    const pos=new Float32Array(N*3),cs=new Float32Array(N*3),gs=new Float32Array(N),nor=new Float32Array(N*3),C=new THREE.Color();
+    for(let j=0;j<cv;j++)for(let i=0;i<cu;i++){const u=i/nu,v=j/nv,k=j*cu+i;_P.set(0,0,0);fn(u,v,_P);
+      pos[k*3]=_P.x;pos[k*3+1]=_P.y;pos[k*3+2]=_P.z;C.set(0xffffff);col(C,_P,u,v);C.r=Math.pow(C.r,GAM);C.g=Math.pow(C.g,GAM);C.b=Math.pow(C.b,GAM);cs[k*3]=C.r;cs[k*3+1]=C.g;cs[k*3+2]=C.b;gs[k]=typeof gl==='function'?gl(_P,u,v):gl;}
+    const idx=[];for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const i1=wrap?(i+1)%nu:i+1,a=j*cu+i,b=j*cu+i1,c=(j+1)*cu+i,d=(j+1)*cu+i1;idx.push(a,c,b,b,c,d);}
+    /* 매끈한 법선: 둘레의 면 법선을 넓이만큼 더한다 */
+    for(let t=0;t<idx.length;t+=3){const a=idx[t]*3,b=idx[t+1]*3,c=idx[t+2]*3;
+      const ux=pos[b]-pos[a],uy=pos[b+1]-pos[a+1],uz=pos[b+2]-pos[a+2],vx=pos[c]-pos[a],vy=pos[c+1]-pos[a+1],vz=pos[c+2]-pos[a+2];
+      const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;for(const q of [a,b,c]){nor[q]+=nx;nor[q+1]+=ny;nor[q+2]+=nz;}}
+    /* 극(한 점에 모인 줄)은 이웃 줄의 법선을 모아 한 방향으로 */
+    for(const j of [0,nv]){let sx=0,sy=0,sz=0,same=true;const r0=j*cu*3;for(let i=0;i<cu;i++){const k=(j*cu+i)*3;if(Math.abs(pos[k]-pos[r0])+Math.abs(pos[k+1]-pos[r0+1])+Math.abs(pos[k+2]-pos[r0+2])>1e-7)same=false;sx+=nor[k];sy+=nor[k+1];sz+=nor[k+2];}
+      if(same)for(let i=0;i<cu;i++){const k=(j*cu+i)*3;nor[k]=sx;nor[k+1]=sy;nor[k+2]=sz;}}
+    const m=o.m,nm=m?new THREE.Matrix3().getNormalMatrix(m):null;
+    for(const k of idx){_V.set(pos[k*3],pos[k*3+1],pos[k*3+2]);_W.set(nor[k*3],nor[k*3+1],nor[k*3+2]);if(m){_V.applyMatrix4(m);_W.applyMatrix3(nm);}_W.normalize();
+      A.p.push(_V.x,_V.y,_V.z);A.n.push(_W.x,_W.y,_W.z);A.c.push(cs[k*3],cs[k*3+1],cs[k*3+2]);A.g.push(gs[k]);}
+    return A;}
+  /* 다른 모음을 옮겨 붙인다 (tn: 색 곱, gm: 윤기 곱) */
+  function put(A,B,m,tn,gm=1){const nm=new THREE.Matrix3().getNormalMatrix(m),tc=tn!=null?new THREE.Color(tn):null;
+    for(let i=0;i<B.p.length;i+=3){_V.set(B.p[i],B.p[i+1],B.p[i+2]).applyMatrix4(m);_W.set(B.n[i],B.n[i+1],B.n[i+2]).applyMatrix3(nm).normalize();A.p.push(_V.x,_V.y,_V.z);A.n.push(_W.x,_W.y,_W.z);
+      if(tc)A.c.push(B.c[i]*tc.r,B.c[i+1]*tc.g,B.c[i+2]*tc.b);else A.c.push(B.c[i],B.c[i+1],B.c[i+2]);}for(const g of B.g)A.g.push(Math.min(1,g*gm));return A;}
+  /* 도는 모양: prof는 [[r,y],...] (v=0이 첫 점). 꺾이는 곳은 점을 두 번 넣는다. dr(θ,v,r,y)로 반지름을 흔든다 */
+  const profAt=(prof,len,v,out)=>{const L=len[len.length-1]*v;let i=1;while(i<len.length-1&&len[i]<L)i++;const a=prof[i-1],b=prof[i],t=len[i]>len[i-1]?(L-len[i-1])/(len[i]-len[i-1]):0;out[0]=a[0]+(b[0]-a[0])*t;out[1]=a[1]+(b[1]-a[1])*t;return out;};
+  function lathe(A,prof,nu,nv,col,gl,o={}){const len=[0];for(let i=1;i<prof.length;i++)len.push(len[i-1]+Math.hypot(prof[i][0]-prof[i-1][0],prof[i][1]-prof[i-1][1]));
+    const q=[0,0],a0=o.a0||0,a1=o.a1??TAU,part=o.a1!=null;
+    return surf(A,nu,nv,(u,v,P)=>{profAt(prof,len,v,q);const th=a0+(a1-a0)*u;let r=q[0];if(o.dr)r+=o.dr(th,v,r,q[1]);P.set(r*Math.cos(th),q[1]+(o.dy?o.dy(th,v,r,q[1]):0),r*Math.sin(th));},(C,P,u,v)=>col(C,P,a0+(a1-a0)*u,v),gl,{wrap:!part,m:o.m});}
+  /* 관: path(t,out)가 가운데 줄, rad(t)가 굵기 */
+  function tube(A,path,rad,nu,nv,col,gl,o={}){const a=new THREE.Vector3(),b=new THREE.Vector3(),tg=new THREE.Vector3(),n1=new THREE.Vector3(),n2=new THREE.Vector3(),up=new THREE.Vector3(0,1,0);
+    return surf(A,nu,nv,(u,v,P)=>{path(Math.max(0,v-.01),a);path(Math.min(1,v+.01),b);tg.subVectors(b,a).normalize();const ref=Math.abs(tg.y)>.9?n2.set(1,0,0):up;n1.crossVectors(tg,ref).normalize();n2.crossVectors(tg,n1).normalize();
+      path(v,P);const r=rad(v),th=u*TAU;P.addScaledVector(n1,Math.cos(th)*r*(o.sx||1)).addScaledVector(n2,Math.sin(th)*r);},(C,P,u,v)=>col(C,P,u,v),gl,{m:o.m});}
+  /* 덩어리: 공을 d(방향)로 부풀리고 줄인다 */
+  function blob(A,rx,ry,rz,nu,nv,d,col,gl,o={}){const dir=new THREE.Vector3();
+    return surf(A,nu,nv,(u,v,P)=>{const th=u*TAU,ph=v*PI;dir.set(Math.sin(ph)*Math.cos(th),Math.cos(ph),Math.sin(ph)*Math.sin(th));const k=d?d(dir,u,v):1;P.set(dir.x*rx*k,dir.y*ry*k,dir.z*rz*k);if(o.shape)o.shape(P,dir,u,v);},col,gl,{m:o.m});}
+  /* 납작한 판: 가장자리 모양 edge(θ)→반지름 */
+  const disc=(A,edge,y,nu,nr,col,gl,o={})=>surf(A,nu,nr,(u,v,P)=>{const th=u*TAU,r=edge(th)*v;P.set(r*Math.cos(th),y+(o.dy?o.dy(r*Math.cos(th),r*Math.sin(th),v):0),r*Math.sin(th));},col,gl,{m:o.m});
+
+  /* ================= 과일 ================= */
+  /* 사과: 꼭지 쪽이 쏙 들어가고 아래가 살짝 좁다. v 0 빨강·1 풋사과·2 노랑 */
+  function apple(v,leaf,lo){const A=acc(),R=.038,s0=v*7.1+1,sunA=hash3(v,3,1)*TAU;
+    blob(A,1,1,1,lo?9:14,lo?7:10,null,(C,P,u,w)=>{const th=u*TAU,st=fbm(Math.cos(th)*2.2+s0,P.y*55,Math.sin(th)*2.2,3),sun=.5+.5*Math.cos(th-sunA);
+        if(v===0){mixC(C,0x6e0a10,0xd02a2a,st*1.5-.15);tint(C,0xe8b048,(1-sun)*.55*(.4+st));}
+        else if(v===1){mixC(C,0x6aa02a,0xb8d454,st*1.3);tint(C,0xd8703a,sm(.65,1,sun)*.4);}
+        else{mixC(C,0xd0a028,0xf2dc5c,st*1.2);tint(C,0xd8783a,sm(.7,1,sun)*.38);}
+        if(hash3(Math.floor(th*34),Math.floor(P.y*700),v)>.94)C.multiplyScalar(1.18);   /* 점점이 숨구멍 */
+        tint(C,0x9a8a3a,Math.exp(-((w/.13)**2))*.7);tint(C,0x4a3a1a,Math.exp(-(((1-w)/.09)**2))*.6);},.8,
+      {shape:(P,dir,u,w)=>{const ph=w*PI,s=Math.sin(ph),c=Math.cos(ph),th=u*TAU;let r=R*s*(1+.1*s)*(c<0?1-.13*(-c):1)*(1+.03*Math.cos(5*th)*Math.max(0,-c));
+        let y=R*.92*c-R*.34*Math.exp(-((ph/.42)**2))+R*.2*Math.exp(-(((PI-ph)/.38)**2));P.set(r*Math.cos(th),y+R*.95,r*Math.sin(th));}});
+    const top=R*1.5;tube(A,(t,o)=>o.set(.0035*t*t,top+t*.018,.001*t),t=>.0024-.001*t,lo?4:6,lo?2:4,(C,P,u,w)=>mixC(C,0x6a4a24,0x3a2410,w),.15);
+    if(leaf){const L=.034;surf(A,6,8,(u,w,P)=>{const hw=.012*Math.sin(PI*w)**.8*(u*2-1);P.set(.004+w*L*.9,top+.016+Math.sin(w*PI)*.005-w*w*.006+Math.abs(hw)*.25,hw);},(C,P,u,w)=>{mixC(C,0x2f6a22,0x5a9a34,w*.6+.2);tint(C,0x9ac060,Math.exp(-(((u-.5)/.07)**2))*.5);},.45,{wrap:false,m:T(0,0,0,hash3(v,9,9)*TAU)});}
+    return A;}
+  /* 오렌지: 껍질에 잔 구멍, 꼭지는 초록 별 */
+  function orange(lo){const A=acc(),R=.041;
+    blob(A,R,R*.95,R,lo?10:16,lo?7:11,(d)=>1+.01*(vn(d.x*22,d.y*22,d.z*22)-.5),(C,P,u,w)=>{const n=fbm(P.x*70,P.y*70,P.z*70,2);mixC(C,0xe0680c,0xfaa22a,n*1.3-.1);
+        if(hash3(Math.floor(u*60),Math.floor(w*40),3)>.86)C.multiplyScalar(.9);tint(C,0x6a7a1a,Math.exp(-((w/.07)**2)));tint(C,0xb05a10,Math.exp(-(((1-w)/.08)**2))*.7);},.55,{m:T(0,R*.95,0)});
+    return A;}
+  /* 배: 아래는 통통, 위는 가는 목 */
+  function pear(lo){const A=acc(),R=.034,H=.098,pr=[];for(let k=0;k<=14;k++){const v=k/14,r1=R*Math.sqrt(Math.max(0,1-((v-.33)/.34)**2)),r2=R*.56*Math.sqrt(Math.max(0,1-((v-.72)/.28)**2));pr.push([Math.pow(r1**4+r2**4,.25)*(k===0||k===14?0:1),H*v+(k===0?.004:0)]);}
+    lathe(A,pr,lo?9:14,lo?10:14,(C,P,th,v)=>{const n=fbm(Math.cos(th)*3,P.y*40,Math.sin(th)*3,3);mixC(C,0x98aa2c,0xd8cc4c,n*1.2+v*.2);tint(C,0xb8502a,sm(.55,1,.5+.5*Math.cos(th-1))*.3*(1-v));
+      if(hash3(Math.floor(th*22),Math.floor(P.y*500),5)>.88)tint(C,0x8a5a24,.6);tint(C,0x7a5a24,Math.exp(-(((1-v)/.06)**2))*.6);},.42,{dr:(th,v)=>v>.5?.002*Math.sin(th)*(v-.5):0});
+    tube(A,(t,o)=>o.set(-.004*t,H-.002+t*.024,.002*t*t),t=>.0026-.0012*t,6,4,(C)=>C.set(0x5a3a1c),.15);return A;}
+  /* 레몬: 양 끝이 젖꼭지처럼 뾰족 */
+  function lemon(lo){const A=acc(),W=.03,L=.042;
+    surf(A,lo?9:14,lo?8:12,(u,w,P)=>{const th=u*TAU,ph=w*PI,r=W*Math.pow(Math.sin(ph),.85),x=L*Math.cos(ph)+Math.sign(Math.cos(ph))*.007*Math.exp(-(((ph<PI/2?ph:PI-ph)/.22)**2));P.set(x,W+r*Math.sin(th)*.96,r*Math.cos(th));},
+      (C,P,u,w)=>{mixC(C,0xe8be18,0xfae25a,fbm(P.x*80,P.y*80,P.z*80,2)*1.2);if(hash3(Math.floor(u*50),Math.floor(w*40),7)>.85)C.multiplyScalar(.92);tint(C,0x8a9a20,Math.exp(-((w/.06)**2))*.8);},.6);return A;}
+  /* 포도송이: 알 하나하나에 뽀얀 분 */
+  function grapes(green){const A=acc(),g=acc(),r=.0105;
+    blob(g,r,r*1.08,r,8,6,null,(C,P,u,w)=>{if(green){mixC(C,0x8aa830,0xc8d870,1-w);}else{mixC(C,0x2a0a26,0x5a1e4a,1-w*.8);tint(C,0x8a7aa0,(1-w)*.35);}},.55);
+    let i=0;for(let row=0;row<6;row++){const n=Math.max(1,6-row),rad=(5-row)*.0072;for(let k=0;k<n;k++){const a=k/n*TAU+row*.7,x=-row*.0155,y=.011+(row===0?.004:0)+Math.max(0,1.2-row)*.002+(k%2)*.006,jj=hash3(i,row,k);
+        put(A,g,T(x,y+rad*.35*Math.sin(a)+.006,rad*Math.cos(a),jj*6,0,0,.9+jj*.2),green?null:(jj>.7?0xe0d0e8:null));i++;}}
+    tube(A,(t,o)=>o.set(.014-t*.06,.026+Math.sin(t*PI)*.006,0),t=>.0022*(1-t*.5),5,5,(C)=>C.set(green?0x6a6a24:0x5a4a24),.1);
+    tube(A,(t,o)=>o.set(.012+t*.012,.028+t*.008,t*.006),t=>.002,5,3,(C)=>C.set(0x5a4a24),.1);
+    return A;}
+
+  /* ================= 빵 ================= */
+  const CRUST=(C,P,top,s0)=>{const n=fbm(P.x*38+s0,P.y*38,P.z*38,3),n2=vn(P.x*120,P.y*120,P.z*120);mixC(C,0xd99a50,0xa45a22,top*1.15+n*.5-.25);tint(C,0x6a3410,sm(.7,.95,n)*top*.6);if(n2>.8)C.multiplyScalar(.92);};
+  const CRUMB=(C,P,s0)=>{const n=vn(P.x*260+s0,P.y*260,P.z*260);mixC(C,0xf6e2b4,0xe8cc8a,n*.6);if(n>.82)C.multiplyScalar(.82);};   /* 빵 속: 숭숭 구멍 */
+  /* 둥근 빵: 칼집(열십자·우물정자) 사이로 속살이 터져 나오고, 밀가루가 살짝 */
+  function boule(v,R=.1,H=.078,lo){const A=acc(),s0=v*13.7;
+    const cd=(x,z)=>v%2===0?Math.min(Math.abs(x),Math.abs(z)):Math.min(Math.abs(Math.abs(x)-R*.26),Math.abs(Math.abs(z)-R*.26))+(Math.max(Math.abs(x),Math.abs(z))>R*.62?1:0);
+    const cut=(x,z,y)=>{const d=cd(x,z),wc=.011*(R/.1);return sm(.45*H,.75*H,y)*(1-sm(wc*.45,wc,d));};
+    surf(A,lo?36:56,lo?16:24,(u,w,P)=>{const th=u*TAU;let r,y;if(w<=.86){const ph=w/.86*PI/2;r=R*Math.pow(Math.sin(ph),.72);y=H*Math.pow(Math.cos(ph),1.05)*.86+H*.14;}else{const t=(w-.86)/.14;r=R*(1-.1*t*t);y=H*.14*(1-t);}
+        const k=1+.035*(fbm(Math.cos(th)*3+s0,y*30,Math.sin(th)*3,3)-.5);r*=k;let x=r*Math.cos(th),z=r*Math.sin(th);const c=cut(x,z,y);y-=c*.012*(R/.1);
+        const d=cd(x,z),wc=.011*(R/.1);y+=sm(.45*H,.75*H,y)*.0045*Math.exp(-(((d-wc*1.25)/(wc*.45))**2));P.set(x,y+.0005,z);},
+      (C,P,u,w)=>{const top=sm(.2,.9,P.y/H);CRUST(C,P,top,s0);const c=cut(P.x,P.z,P.y+.005);if(c>0){const C2=new THREE.Color();CRUMB(C2,P,s0);C.lerp(C2,sm(.15,.7,c));}
+        const d=cd(P.x,P.z);if(c<.15&&top>.4)tint(C,0x6a2e0c,Math.exp(-(((d-.012*(R/.1))/.0035)**2))*.65);
+        tint(C,0xeee2cc,sm(.5,.72,fbm(P.x*45+5,P.y*20,P.z*45,3))*.4*top);},(P)=>.32-cut(P.x,P.z,P.y+.005)*.28);
+    disc(A,()=>R*.9,.0005,24,3,(C,P)=>{mixC(C,0xd8a868,0xeedcc0,vn(P.x*90,0,P.z*90));},.05);return A;}
+  /* 긴 빵(바타르): 비스듬한 칼집 세 줄. sliced면 한쪽 끝을 잘라 속살이 보이고 썬 조각 둘을 옆에 눕힌다 */
+  const batSec=(s,th,L,W,Hh)=>{const k=Math.pow(Math.max(0,1-s*s),.42),sn=Math.sin(th);return [W*k*Math.cos(th),Hh*k*(sn>=0?sn:sn*.28)+Hh*.3];};
+  function batard(v,sliced,L=.17,W=.052,Hh=.05,lo){const A=acc(),s0=v*5.3,s1=sliced?.55:1;
+    const cutD=(x,z)=>{let best=9;for(const o of [-.55,0,.55]){const d=Math.abs((x/L-o)*L*.92-z*1.15);if(Math.abs(x/L-o)<.3)best=Math.min(best,d);}return best;};
+    surf(A,lo?24:40,lo?30:40,(u,w,P)=>{const th=u*TAU,s=-1+w*(1+s1),q=batSec(s,th,L,W,Hh);let x=s*L,z=q[0],y=q[1];const top=sm(.35,.8,Math.sin(th));const d=cutD(x,z),c=top*(1-sm(.004,.009,d));
+        const k=1+.03*(fbm(x*30+s0,y*30,z*30,3)-.5);z*=k;y=(y-Hh*.3)*k+Hh*.3-c*.01+top*.004*Math.exp(-(((d-.0105)/.0035)**2));P.set(x,y+.0005,z);},
+      (C,P,u,w)=>{const th=u*TAU,top=sm(-.3,.9,Math.sin(th));CRUST(C,P,top,s0);const d=cutD(P.x,P.z),c=sm(.35,.8,Math.sin(th))*(1-sm(.004,.009,d));if(c>0){const C2=new THREE.Color();CRUMB(C2,P,s0);C.lerp(C2,sm(.2,.8,c));}tint(C,0x6a2e0c,Math.exp(-(((d-.0105)/.003)**2))*.6*sm(.35,.8,Math.sin(th)));
+        tint(C,0xeee2cc,sm(.52,.72,fbm(P.x*40,P.y*20,P.z*40+3,3))*.35*top);},.3);
+    if(sliced){const sx=s1*L,face=(A2,xx,m,dir)=>surf(A2,30,5,(u,w,P)=>{const th=u*TAU,q=batSec(s1,th,L,W,Hh);P.set(xx,Hh*.3+(q[1]-Hh*.3)*w+.0005,q[0]*w);},(C,P,u,w)=>{CRUMB(C,P,s0+dir);if(w>.9)mixC(C,0xb06a2c,0x8a4a18,(w-.9)*10);},.05,{m});
+      face(A,sx,null,0);
+      /* 썬 조각: 앞뒤 속살과 둘레 껍질 */
+      const sl=acc(),tk=.013,sA=.42;
+      for(const f of [0,1])surf(sl,30,5,(u,w,P)=>{const th=u*TAU,q=batSec(sA,th,L,W,Hh);P.set(f*tk,Hh*.3+(q[1]-Hh*.3)*w,q[0]*w);},(C,P,u,w)=>{CRUMB(C,P,f*3+1);if(w>.88)mixC(C,0xb86e30,0x8a4a18,(w-.88)*8);},.05);
+      surf(sl,30,1,(u,w,P)=>{const th=u*TAU,q=batSec(sA,th,L,W,Hh);P.set(w*tk,q[1],q[0]);},(C,P,u)=>CRUST(C,P,sm(-.3,.9,Math.sin(u*TAU)),2),.3);
+      put(A,sl,T(sx+.035,Hh*.62+.0005,.012,.25,0,PI/2-.02));put(A,sl,T(sx+.075,Hh*.62+.014,.02,.5,0,PI/2+.06));}
+    return A;}
+  /* 땋은 빵: 세 가닥이 꼬이고 달걀물로 반들 */
+  function braid(v,L=.2,lo){const A=acc();for(let i=0;i<3;i++){const ph=i/3*TAU;
+    tube(A,(t,o)=>{const x=(t-.5)*L,a=t*TAU*2.2+ph,e=Math.sin(PI*t);o.set(x,.024*e+.012*Math.cos(a)*e+.004,.018*Math.sin(a)*e);},t=>.017*Math.pow(Math.sin(PI*(.06+t*.88)),.55),lo?8:12,lo?26:36,
+      (C,P,u,w)=>{const n=fbm(P.x*40+i,P.y*40,P.z*40,3);mixC(C,0xd88a3a,0x9a4a14,sm(.2,1,(P.y-.01)/.04)+n*.4-.2);},(P)=>.55+.3*sm(.02,.045,P.y));}
+    return A;}
+  /* 작은 빵(롤) */
+  const roll=v=>boule(v+1,.038,.032,1);
+
+  /* ================= 치즈 ================= */
+  /* 바퀴 치즈: a0~a1만큼(라디안) 있는 덩어리. 잘린 면엔 동글동글 구멍, 둘레는 밀랍 껍질 */
+  function wheel(A,R,H,a0,a1,rind,paste,holes,m){const pr=[[0,H],[R-.012,H],[R-.003,H-.004],[R*1.035,H*.5],[R-.003,.004],[R-.012,0],[0,0]];
+    const part=a1-a0<TAU-1e-4,rim=(y)=>{const t=y/H;return R*(1+.035*Math.sin(PI*t))-.009*(Math.exp(-((t/.09)**2))+Math.exp(-(((1-t)/.09)**2)));};
+    lathe(A,pr,part?Math.max(6,Math.round(40*(a1-a0)/TAU)):40,14,(C,P,th,v)=>{const n=fbm(P.x*30,P.y*30,P.z*30,3);mixC(C,rind,0x5a3a10,.06+n*.16);if(v<.18||v>.82)tint(C,0xffffff,.08);},.5,{a0,a1,m});
+    if(!part)return A;
+    const HL=[];for(let i=0;i<(holes||0);i++)HL.push([.18+.64*hash3(i,R*100,1),.2+.6*hash3(i,2,R*100),Math.min(R*.18,.006+.008*hash3(i,3,3))]);
+    for(const [ang,sg] of [[a0,1],[a1,-1]]){const nx=-Math.sin(ang)*sg,nz=Math.cos(ang)*sg;
+      surf(A,26,22,(u,w,P)=>{const y=H*(.002+u*.996),rr=rim(y)*w,hb=HL.reduce((s,[hr,hy,hs])=>{const d=Math.hypot(rr-hr*R,y-hy*H);return Math.max(s,d<hs?Math.sqrt(1-(d/hs)**2):0);},0);
+          P.set(rr*Math.cos(ang)+nx*hb*.007,y,rr*Math.sin(ang)+nz*hb*.007);},
+        (C,P,u,w)=>{const y=H*(.002+u*.996),rr=rim(y)*w,hb=HL.reduce((s,[hr,hy,hs])=>{const d=Math.hypot(rr-hr*R,y-hy*H);return Math.max(s,d<hs?1-d/hs:0);},0);
+          mixC(C,paste,0xffffff,.05+vn(P.x*200,P.y*200,P.z*200)*.12);if(hb>0)C.multiplyScalar(1-.3*hb);const e=Math.min(rim(y)-rr,y,H-y);if(e<.006)C.lerp(_d.set(rind),sm(.006,.0015,e));},
+        (P)=>.38,{wrap:false,m});}
+    return A;}
+  /* ================= 그릇·접시·나무판 ================= */
+  /* 둥근 나무 도마: 결 무늬 */
+  function board(A,w,d,h,m,col=0x9a6a3a){const n=6;
+    surf(A,48,8,(u,v,P)=>{const th=u*TAU,c=Math.cos(th),s=Math.sin(th),ex=Math.sign(c)*Math.pow(Math.abs(c),2/n)*w/2,ez=Math.sign(s)*Math.pow(Math.abs(s),2/n)*d/2;let k,y;
+        if(v<.5){k=v/.5;y=h;}else if(v<.62){const t=(v-.5)/.12;k=1;y=h-t*.003;}else{k=1;y=h-.003-(v-.62)/.38*(h-.003);}
+        const kk=v<.5?k*(1-.02):1-.02+.02*Math.sin(Math.min(1,(v-.5)/.12)*PI/2);P.set(ex*kk,y,ez*kk);},
+      (C,P)=>{const g=vn(P.x*3,0,P.z*28)*.65+vn(P.x*12,P.y*30,P.z*70)*.35;mixC(C,col,0x6a4020,g*.55);},.22,{m});return A;}
+  /* 접시: 가운데 오목, 테두리에 푸른 띠 */
+  function plate(A,R,m,band=0x2e4f8a){const pr=[[0,.004],[R*.55,.004],[R*.64,.007],[R*.95,.017],[R,.018],[R*.98,.014],[R*.64,.003],[R*.5,0],[0,0]];
+    return lathe(A,pr,36,16,(C,P,th,v)=>{const r=Math.hypot(P.x,P.z);mixC(C,0xf2ead8,0xe0d4bc,vn(P.x*40,0,P.z*40)*.4);if(v<.5){if(r>R*.84&&r<R*.91)C.set(band);if(r>R*.6&&r<R*.62)C.set(band);if(r>R*.86&&r<R*.89&&Math.sin(Math.atan2(P.z,P.x)*24)>.3)C.set(0xf2ead8);}},.78,{m});}
+  /* 바구니: 엮은 버들 */
+  function basket(A,R,H,m){const pr=[[0,.004],[R*.8,.004],[R*.86,.01],[R,H],[R*1.04,H+.008],[R*.96,H+.008],[R*.92,H],[R*.78,.012],[0,.012]];
+    return lathe(A,pr,40,14,(C,P,th,v)=>{const a=Math.floor(th/TAU*40),b=Math.floor(P.y*90);mixC(C,0xc89a58,0x8a6230,((a+b)%2)*.6+vn(th*8,P.y*60,0)*.3);if(v>.4&&v<.62)C.set(0x9a6a34);},.15,
+      {m,dr:(th,v,r,y)=>v<.4?.0025*Math.sin(th*40+Math.floor(y*90)*PI):0});}
+
+  /* ================= 상에 놓는 음식들 ================= */
+  const B={};
+  /* 맥주잔: 0 소금유약 돌잔(푸른 띠), 1 나무 통잔(쇠테), 2 크림빛 흙잔. 거품이 잔 위로 부풀고 한쪽으로 흘러내린다 */
+  B.mug=vv=>{const A=acc(),R=.06,H=.16,N=11;
+    const outer=vv===1?(C,P,th)=>{const g=th/TAU*N,si=Math.floor(g);mixC(C,0x8a5a30,0xb0743e,hash3(si,1,2));tint(C,0x4a2c14,vn(si*3,P.y*30,0)*.4+Math.exp(-(((g-si)/.05)**2))*.5+Math.exp(-(((1-(g-si))/.05)**2))*.5);}
+      :vv===0?(C,P,th)=>{mixC(C,0x8a9098,0xb8bcc0,fbm(P.x*80,P.y*80,P.z*80,2));if(P.y>.03&&P.y<.05||P.y>.11&&P.y<.125)C.set(0x2a4888).lerp(_d.set(0x4a68a8),vn(th*20,P.y*80,0));if(P.y>.06&&P.y<.1&&Math.abs(Math.sin(th*6))>.85)C.set(0x3a58a0);}
+      :(C,P)=>{mixC(C,0xe0d0b0,0xc8b48a,fbm(P.x*60,P.y*60,P.z*60,2));const drip=.112-.028*Math.pow(Math.max(0,Math.sin(Math.atan2(P.z,P.x)*4)),3);C.lerp(_d.set(0x7a4a24).lerp(new THREE.Color(0x9a6034),vn(P.x*90,P.y*90,P.z*90)),sm(drip-.006,drip+.004,P.y));};
+    lathe(A,[[0,0],[R*.94,0],[R,.006],[R*1.04,H*.5],[R,H-.004],[R*.97,H],[R*.88,H],[R*.86,.014],[0,.014]],40,26,(C,P,th,v)=>{if(v<.62)outer(C,P,th);else mixC(C,vv===2?0x5a3418:0x3a2410,0x2a1a0c,.4);},
+      vv===1?(P)=>.18:.72,{dr:vv===1?(th,v)=>{if(v>.62)return 0;const g=th/TAU*N%1;return -.0018*(Math.exp(-((g/.06)**2))+Math.exp(-(((1-g)/.06)**2)));}:null});
+    if(vv===1)for(const y0 of [.028,.128])lathe(A,[[R*1.0,y0],[R*1.045,y0+.001],[R*1.045,y0+.013],[R*1.0,y0+.014]],40,4,(C,P)=>mixC(C,0x2e2a26,0x5a524a,vn(P.x*200,P.y*200,P.z*200)),.6,
+      {dr:(th,v,r,y)=>.0015*Math.sin(PI*(y-.08)/.16)});
+    /* 손잡이 */
+    tube(A,(t,o)=>{const a=-PI/2+t*PI;o.set(R*.99+.04*Math.cos(a)*(vv===0?1.05:1),H*.5-.045*Math.sin(a)*1.1+(vv===0?.008:0),0);},t=>(vv===1?.0105:.0085)*(1-.18*Math.sin(PI*t)),10,16,(C,P)=>{if(vv===1)mixC(C,0x7a4c26,0x9a6434,vn(P.x*80,P.y*200,0));else if(vv===0)mixC(C,0x8a9098,0xb0b4b8,vn(P.y*200,0,0));else mixC(C,0xe0d0b0,0x7a4a24,sm(.105,.115,P.y));},vv===1?.2:.7,{sx:vv===1?1.25:1.1});
+    /* 거품: 볼록 + 보글보글, 한쪽으로 넘쳐 흐른다 */
+    const fa=1.1,dg=(th,c,wd)=>{const q=((th-c+PI*3)%TAU-PI)/wd;return q*q<1?Math.pow(1-q*q,.35):0;};
+    surf(A,80,20,(u,w,P)=>{const th=u*TAU,W=w*1.32,b=fbm(Math.cos(th)*3.5*Math.min(W,1)+5,Math.min(W,1)*2,Math.sin(th)*3.5*Math.min(W,1),3),ov=Math.max(dg(th,fa,.2)*.036,dg(th,fa+.5,.15)*.022,dg(th,fa-2.4,.17)*.014);let rr,y;
+        if(W<=1){rr=R*.95*Math.pow(W,.8);y=H-.002+.024*Math.pow(1-W*W,.6)+.007*(b-.5);}
+        else{const t=(W-1)/.32;if(t<.4){const q=t/.4;rr=R*(.95+.1*Math.sin(q*PI/2));y=H-.002+.007*(b-.5)+.007*Math.sin(q*PI)+.002;}
+          else{const q=(t-.4)/.6;rr=R*1.05-.004*q;y=H+.001-(.006+ov)*q*q*(3-2*q);rr+=.003*Math.sin(q*PI)*(ov>.004?1:.3);}}
+        P.set(rr*Math.cos(th),y,rr*Math.sin(th));},
+      (C,P,u,w)=>{const b=fbm(P.x*170,P.y*170,P.z*170,2);mixC(C,0xfffaf0,0xe6cf9c,sm(.38,.72,b)*.85);},.32);
+    return A;};
+  /* 포도주: 짙은 초록 병(종이 이름표, 붉은 밀랍), 백랍 술잔에 붉은 술 */
+  B.wine=v=>{const A=acc();
+    lathe(A,[[0,0],[.033,0],[.038,.006],[.038,.172],[.034,.196],[.022,.216],[.0135,.236],[.0125,.282],[.0148,.285],[.0148,.293],[.011,.296],[0,.296]],32,30,(C,P,th,v)=>{mixC(C,0x10241a,0x2a4a30,.2+.35*Math.max(0,Math.cos(th-.6)));if(P.y<.006)C.multiplyScalar(.7);},.97);
+    lathe(A,[[.0385,.07],[.0385,.142]],18,6,(C,P,th)=>{const y=P.y;C.set(0xeee2c4).lerp(_d.set(0xd8c8a0),vn(th*20,y*200,0)*.5);if(y>.118&&y<.127)C.set(0x7a1a22);if(y>.131&&y<.134)C.set(0xb08a3a);
+        if(y>.085&&y<.108&&hash3(Math.floor(th*60),Math.floor(y*300),2)>.55&&Math.abs(th)<.85)C.set(0x4a3a2a);},.12,{a0:-1.15,a1:1.15});
+    surf(A,24,8,(u,w,P)=>{const th=u*TAU,y0=.254-.014*Math.pow(Math.max(0,Math.sin(th*3+.4)),4)-.008*Math.pow(Math.max(0,Math.sin(th*5)),6);
+        if(w<.75){const t=w/.75;P.set(.0153*Math.cos(th),y0+t*(.2965-y0),.0153*Math.sin(th));}else{const t=(w-.75)/.25;P.set(.0153*(1-t)*Math.cos(th),.2965+.001*Math.sin(t*PI),.0153*(1-t)*Math.sin(th));}},
+      (C,P)=>mixC(C,0x8a1018,0xb02028,vn(P.x*300,P.y*300,P.z*300)),.65);
+    /* 백랍 술잔 */
+    const G=acc();lathe(G,[[0,0],[.032,0],[.034,.003],[.03,.006],[.012,.01],[.006,.022],[.0105,.03],[.006,.038],[.008,.05],[.026,.062],[.035,.085],[.037,.106],[.0345,.106],[.032,.086],[.025,.066],[0,.057]],30,26,
+      (C,P,th,v)=>{mixC(C,0x8a8c92,0xc4c6ca,fbm(P.x*40,P.y*40,P.z*40,3));if(v>.88)C.multiplyScalar(.75);},.9);
+    disc(G,()=>.0328,.092,30,3,(C,P,u,w)=>mixC(C,0x3a040e,0x7a1424,w*.8),.95);
+    put(A,G,T(.14,0,.04));return A;};
+  /* 빵: 0 열십자 둥근 빵, 1 썰어 둔 긴 빵과 빵칼(도마 위), 2 땋은 빵 */
+  const knife=(A,m)=>{surf(A,6,10,(u,w,P)=>{const th=u*TAU,len=.13,x=w*len,wd=.011*(w<.85?1:Math.sqrt(Math.max(0,(1-w)/.15)))*(1-w*.15);P.set(x,.0018*Math.sin(th)*(1-.6*Math.cos(th)),wd*(.5+.5*Math.cos(th))-.002);},(C,P,u,w)=>mixC(C,0x9aa0a8,0xe0e4e8,.5+.5*Math.sin(u*TAU+w*3)),1,{m});
+    tube(A,(t,o)=>o.set(-t*.085,.005,0),t=>.0075*(1-.15*Math.sin(t*PI)),8,6,(C,P)=>mixC(C,0x3a2010,0x5a3418,vn(P.x*200,0,0)),.35,{m,sx:1.4});
+    for(const x of [-.02,-.06])blob(A,.0025,.0025,.0025,6,4,null,(C)=>C.set(0xc8b080),.9,{m:new THREE.Matrix4().multiplyMatrices(m,T(x,.0115,0))});};
+  B.bread=v=>{if(v===0){return boule(0);}
+    if(v===1){const A=acc();board(A,.3,.17,.016,null);put(A,batard(1,true),T(-.04,.016,0,0));knife(A,T(.02,.017,.06,-.25));return A;}
+    const A=acc();put(A,braid(0),T(0,0,0,0));return A;};
+  /* 치즈: 0 한쪽을 잘라 낸 바퀴 치즈와 그 조각·칼 (도마 위), 1 큰 조각과 작은 깍둑 몇 개, 포도 한 송이 */
+  B.cheese=v=>{const A=acc();board(A,.3,.22,.016,null,0xa87440);
+    if(v===0){wheel(A,.08,.06,.9,TAU,0xd8a030,0xf4d46c,9,T(-.03,.016,-.01));const wg=acc();wheel(wg,.08,.06,0,.9,0xd8a030,0xf4d46c,9,null);put(A,wg,T(.07,.016+.0,.05,-1.9,0,0));knife(A,T(-.07,.017,.08,.3));}
+    else{const wg=acc();wheel(wg,.14,.07,0,.55,0xc89030,0xf2d880,12,null);put(A,wg,T(-.1,.016,-.02,.4));
+      const cb=acc();blob(cb,.013,.013,.013,10,8,null,(C,P)=>{mixC(C,0xf2d880,0xffffff,vn(P.x*300,P.y*300,P.z*300)*.15);if(P.y>.011)tint(C,0xc89030,.7);},.4,{shape:(P,d)=>{const f=q=>Math.sign(q)*Math.pow(Math.abs(q),.35);P.set(f(d.x)*.013,f(d.y)*.013+.013,f(d.z)*.013);}});for(let k=0;k<5;k++)put(A,cb,T(.03+(k%3)*.034,.016,.045+Math.floor(k/3)*.036-.03,k*.7+.2));
+      put(A,grapes(true),T(.06,.016,-.06,2.4));}
+    return A;};
+  /* 스튜: 유약 바른 흙그릇에 걸쭉한 국물, 고기·당근·감자·완두, 파슬리, 나무 숟가락 */
+  B.stew=vv=>{const A=acc(),RIM=.105,SY=.064;
+    lathe(A,[[0,0],[.044,0],[.05,.006],[.047,.012],[.072,.034],[.098,.062],[.106,.076],[.104,.081],[.098,.079],[.094,.072],[.07,.044],[.042,.02],[0,.016]],44,26,(C,P,th,v)=>{const gl=.032+.008*Math.sin(th*7)+.006*Math.sin(th*3+1);
+        if(v>.62)mixC(C,0x5a2a12,0x7a3a18,vn(P.x*60,P.y*60,P.z*60));else if(v>.52)mixC(C,0xe6d4a8,0xd0b888,vn(th*30,0,0)*.5);else if(P.y<gl)mixC(C,0xb06a40,0x8a4a28,fbm(P.x*50,P.y*50,P.z*50,3));else mixC(C,vv===0?0x2e5a3a:0x6a3416,0x8a4a1e,fbm(P.x*40,P.y*60,P.z*40,3)*.8);},
+      (P,u,v)=>v>.52?.85:(P.y<.032+.008*Math.sin(u*TAU*7)?.08:.85));
+    disc(A,th=>.0935+.0012*Math.sin(th*9),SY,40,10,(C,P,u,w)=>{const n=fbm(P.x*50,P.y,P.z*50,3);mixC(C,0x6e2a0c,0xa8481a,n*1.2-.1);if(vn(P.x*140,0,P.z*140)>.78)tint(C,0xd88a3a,.5);},.88,{dy:(x,z,w)=>.004*(fbm(x*60,0,z*60,3)-.5)+.002*(1-w*w)});
+    const meat=acc();blob(meat,.016,.012,.014,10,7,d=>1+.12*(vn(d.x*4,d.y*4,d.z*4)-.5),(C,P)=>{mixC(C,0x4a1e0c,0x8a4224,fbm(P.x*120,P.y*120,P.z*120,2)*1.3);},.62,{shape:(P)=>{P.x=Math.sign(P.x)*Math.pow(Math.abs(P.x)/.016,.7)*.016;P.z=Math.sign(P.z)*Math.pow(Math.abs(P.z)/.014,.7)*.014;}});
+    const car=acc();lathe(car,[[0,.005],[.0105,.005],[.0115,.0025],[.0105,0],[0,0]],14,6,(C,P)=>{const r=Math.hypot(P.x,P.z);mixC(C,0xf0902a,0xd85a10,sm(.003,.009,r));if(r>.0095)C.set(0xc04a0a);},.65);
+    const pot=acc();blob(pot,.013,.011,.012,9,7,d=>1+.15*(vn(d.x*3+2,d.y*3,d.z*3)-.5),(C,P)=>mixC(C,0xf0d888,0xd8b060,vn(P.x*150,P.y*150,P.z*150)),.45);
+    const pea=acc();blob(pea,.0045,.0045,.0045,7,5,null,(C,P)=>mixC(C,0x4a8a1e,0x7ab03a,P.y/.0045*.5+.5),.6);
+    const lf=acc();surf(lf,4,4,(u,w,P)=>{const a=u*TAU,r=.0035*(.6+.4*Math.abs(Math.sin(a*2.5)))*w;P.set(r*Math.cos(a),.0006*w,r*Math.sin(a));},(C)=>C.set(0x2f7a22),.4);
+    const S=[[.03,.02,0],[-.035,.025,1],[.01,-.04,0],[-.02,-.03,2],[.045,-.02,1],[-.05,-.005,0],[0,.045,2],[.025,.05,1],[-.045,.04,0],[.055,.03,2]];
+    S.forEach(([x,z,t],k)=>{const r=hash3(k,vv,4);if(t===0)put(A,meat,T(x,SY-.002,z,r*6,r*.6,.3));else if(t===1)put(A,car,T(x,SY-.001,z,r*6,.3*(r-.5),.4*(r-.5)));else put(A,pot,T(x,SY-.002,z,r*6,.4,0));});
+    for(let k=0;k<9;k++){const a=k*2.4,r=.02+.06*hash3(k,1,vv);put(A,pea,T(Math.cos(a)*r,SY+.001,Math.sin(a)*r));}
+    for(let k=0;k<16;k++){const a=k*1.9,r=.075*Math.sqrt(hash3(k,2,vv));put(A,lf,T(Math.cos(a)*r,SY+.005+.004*hash3(k,5,5),Math.sin(a)*r,a));}
+    /* 숟가락: 국물에 담근 채 그릇 테에 걸쳤다 */
+    const sp=T(-.03,SY-.011,.005,-.5,0,.28);blob(A,.024,.008,.017,12,8,null,(C,P)=>mixC(C,0xc89a60,0xa87440,vn(P.x*200,P.y*200,P.z*200)),.3,{m:sp,shape:(P)=>{if(P.y>0)P.y*=.3;}});
+    tube(A,(t,o)=>o.set(.02+t*.17,.003+t*.002,0),t=>.0042*(1+.35*t),8,8,(C,P)=>mixC(C,0xc89a60,0xa87440,vn(P.x*200,0,0)),.3,{m:sp,sx:1.5});
+    return A;};
+  /* 고기 접시: 0 통닭구이(윤기 나는 껍질, 다리 뼈), 1 두툼하게 썬 구운 고기 세 점과 감자·완두, 2 과일 접시 */
+  const roastC=(C,P,s=0)=>{const n=fbm(P.x*70+s,P.y*70,P.z*70,3),top=sm(.01,.06,P.y);mixC(C,0xd88a38,0x8a3a0e,top*.9+n*.6-.15);tint(C,0x4a1a06,sm(.6,.78,n)*top*.85);if(hash3(Math.floor(P.x*500),Math.floor(P.y*500),Math.floor(P.z*500))>.975)C.set(0x3a5a1a);};
+  const potato=(v)=>{const A=acc();blob(A,.016,.014,.015,10,8,d=>1+.14*(vn(d.x*3+v,d.y*3,d.z*3)-.5),(C,P)=>{const n=fbm(P.x*120+v,P.y*120,P.z*120,2);mixC(C,0xe8b850,0xa8601e,n*1.4-.3+(P.y>.004?.25:0));},.55);return A;};
+  const sprig=()=>{const A=acc();tube(A,(t,o)=>o.set(t*.055,.004+Math.sin(t*PI)*.004,0),t=>.0011,4,6,(C)=>C.set(0x6a5a2a),.2);
+    for(let k=0;k<22;k++){const t=.06+k/22*.9,a=k*2.4,L=.009*(1-t*.45);surf(A,4,3,(u,w,P)=>{const th=u*TAU;P.set(t*.055+w*L*.35,.004+Math.sin(t*PI)*.004+w*L*.55*Math.max(.2,Math.sin(a))+Math.sin(th)*.0005*(1-w),Math.cos(a)*w*L+Math.cos(th)*.0007*(1-w));},(C,P,u,w)=>mixC(C,0x2a4a22,0x4a6a3a,w),.35);}return A;};
+  B.plate=v=>{const A=acc(),PR=.135;plate(A,PR,null);const FY=.0045;
+    if(v===0){disc(A,th=>.07+.012*Math.sin(th*5)+.006*Math.sin(th*3+1),FY+.0008,30,3,(C,P,u,w)=>mixC(C,0x4a1a06,0x7a3410,w*.8),.92);
+      blob(A,.072,.046,.054,22,16,null,(C,P)=>roastC(C,P),(P)=>.55+.35*sm(.02,.07,P.y),{m:T(.005,FY,0),shape:(P,d)=>{P.y=P.y<0?P.y*.25:P.y*(1+.12*Math.exp(-(((Math.abs(P.z)-.02)/.012)**2)))-.006*Math.exp(-((P.z/.008)**2))*(P.y>0?1:0);P.y+=.012;if(P.x>.04)P.y-=(P.x-.04)*.3;}});
+      /* 다리: 넓적다리는 몸통에 붙고, 북채는 꽁무니 쪽으로 올라가 뼈 끝이 모인다. 날개는 앞 옆구리에 접혀 있다 */
+      for(const sd of [-1,1]){blob(A,.036,.025,.021,14,10,null,(C,P)=>roastC(C,P,sd),.8,{m:T(-.016,FY+.03,sd*.041,sd*.25,0,-.1)});
+        tube(A,(t,o)=>o.set(-.03-t*.06,FY+.033+t*.02+Math.sin(t*PI)*.004,sd*(.044-t*.03)),t=>.0165*(1-.42*t)*Math.min(1,(1-t)*7+.25)*(1+.15*Math.sin(t*PI)),12,12,(C,P)=>roastC(C,P,sd+2),.8);
+        tube(A,(t,o)=>o.set(-.085-t*.013,FY+.052+t*.003,sd*(.016-t*.004)),t=>.0042,6,3,(C)=>C.set(0xeee2c8),.3);
+        blob(A,.0068,.006,.0068,8,6,null,(C,P,u,w)=>mixC(C,0xf6eedc,0xd8c8a8,w),.35,{m:T(-.1,FY+.0555,sd*.011)});
+        blob(A,.029,.0105,.016,10,7,null,(C,P)=>{roastC(C,P,sd+5);tint(C,0x5a220a,sm(.02,.05,P.x)*.5);},.8,{m:T(.042,FY+.028,sd*.049,sd*.45,0,sd*.25)});}
+      const pt=potato(1);for(const [x,z,r] of [[.08,.06,1],[.095,-.035,2],[-.02,.095,3],[-.07,-.08,4]])put(A,pt,T(x,FY+.011,z,r,.2,0));
+      put(A,sprig(),T(.06,FY+.002,-.07,.8));put(A,sprig(),T(-.09,FY+.002,.05,2.6));}
+    else if(v===1){disc(A,th=>.06+.01*Math.sin(th*4),FY+.0008,24,3,(C,P,u,w)=>mixC(C,0x4a1a06,0x7a3410,w*.8),.92);
+      const sl=acc(),ew=.055,ed=.036,tk=.014,E=th=>[ew*Math.cos(th)*(1+.05*Math.sin(th*3)),ed*Math.sin(th)];
+      for(const f of [0,1])surf(sl,28,6,(u,w,P)=>{const e=E(u*TAU);P.set(e[0]*w,f*tk,e[1]*w);},(C,P,u,w)=>{mixC(C,0xd88a7a,0xb85a48,w*.8+vn(P.x*200,0,P.z*200)*.2);if(w>.82)mixC(C,0x8a4a2a,0x4a1e0a,(w-.82)*6);if(Math.abs(Math.sin(u*TAU*2+1)*w-.4)<.04&&w<.8)tint(C,0xf0d8c8,.5);},.55);
+      surf(sl,28,2,(u,w,P)=>{const e=E(u*TAU);P.set(e[0],w*tk,e[1]);},(C,P)=>{mixC(C,0x5a220a,0x8a3e14,vn(P.x*200,P.y*200,P.z*200));},.6);
+      for(let k=0;k<3;k++)put(A,sl,T(-.03+k*.032,FY+.002+k*.007,-.01+k*.008,.3,0,-.18));
+      const pt=potato(2);for(const [x,z,r] of [[.07,.06,1],[.085,-.04,2],[-.06,.07,3]])put(A,pt,T(x,FY+.011,z,r,.2,0));
+      const pea=acc();blob(pea,.005,.005,.005,7,5,null,(C,P)=>mixC(C,0x4a8a1e,0x80b840,P.y/.005*.5+.5),.65);for(let k=0;k<14;k++){const a=k*.9,r=.012*Math.sqrt(k);put(A,pea,T(-.07+Math.cos(a)*r*.6,FY+.006+(k%3)*.003,-.06+Math.sin(a)*r*.5));}
+      put(A,sprig(),T(.04,FY+.002,.085,-.3));}
+    else{put(A,apple(0,true),T(-.045,FY,.03,.3));put(A,apple(2),T(.03,FY,.055,2,.3,.2));put(A,pear(),T(.045,FY+.03,-.025,1.3,0,PI/2-.15));put(A,grapes(false),T(-.03,FY,-.05,.6));}
+    return A;};
+
+  /* ================= 시장 좌판에 올리는 것 ================= */
+  /* 과일 무더기: 상자 안(w×d)에 kind 과일을 빈틈없이 쌓는다 */
+  const FRUIT={apple0:()=>apple(0,0,1),apple1:()=>apple(1,0,1),apple2:()=>apple(2,0,1),orange:()=>orange(1),pear:()=>pear(1),lemon:()=>lemon(1)};
+  const _fc={};const fruitG=k=>_fc[k]||(_fc[k]=FRUIT[k]());
+  /* 과일 무더기: w×d 안에 한 켜를 빈틈없이 깔고, 위에 몇 알을 더 얹는다 (아래 켜는 어차피 안 보여 빚지 않는다) */
+  function heap(A,kind,w,d,y,m,s=1){const F=fruitG(kind),sp=(kind==='pear'?.075:.08)*s,nx=Math.max(1,Math.floor(w/sp)),nz=Math.max(1,Math.floor(d/sp)),tl=kind==='pear'||kind==='lemon'?.12:.45;
+    for(let L=0;L<2;L++)for(let a=0;a<nx-L;a++)for(let b=0;b<nz-L;b++){const h=hash3(a+L*.5,b,L+3);if(L&&h>.35)continue;const x=-w/2+sp*(a+.5+L*.5)+(hash3(a,b,1)-.5)*.014*s,z=-d/2+sp*(b+.5+L*.5)+(hash3(b,a,3)-.5)*.014*s;
+      const lift=L*.04*s+.006*(1-Math.min(1,(Math.abs(x)/(w/2))**4+(Math.abs(z)/(d/2))**4));put(A,F,new THREE.Matrix4().multiplyMatrices(m,T(x,y+lift,z,h*TAU,(hash3(a,b,5)-.5)*tl,(hash3(a,b,9)-.5)*tl,s)),hash3(a,b,11)>.8?0xf0e8e0:null);}}
+  /* 살 상자 */
+  function crate(A,w,d,h,m){const S=(x,y,z,sx,sy,sz,c)=>surf(A,4,1,(u,v,P)=>{const a=u*TAU+PI/4,cx=Math.cos(a)*Math.SQRT2*.5,cz=Math.sin(a)*Math.SQRT2*.5;P.set(x+cx*sx,y+(v-.5)*sy,z+cz*sz);},(C,P)=>mixC(C,c,0x5a3a1c,vn(P.x*20,P.y*20,P.z*90)*.5),.15,{m});
+    S(0,.006,0,w,.012,d,0x9a7a4a);for(const sd of [-1,1]){for(const y of [.03,.075])S(0,y,sd*(d/2-.006),w,.035,.012,0xa8844e);for(const y of [.03,.075])S(sd*(w/2-.006),y,0,.012,.035,d,0xa8844e);}
+    for(const sx of [-1,1])for(const sz of [-1,1])S(sx*(w/2-.012),h/2,sz*(d/2-.012),.024,h,.024,0x7a5a32);}
+  /* 좌판 위 (좌판 앞 +z, 판 윗면 y .9. 굽기에서 판이 깜빡임 막느라 몇 mm 커지므로 1cm쯤 띄워 얹는다) */
+  const ST={};
+  ST[0]=v=>{const A=acc(),K=[['apple0','orange','apple1','lemon'],['apple0','pear','orange','apple2']][v];
+    for(let k=0;k<4;k++){const m=T(-1+k*.66,.912,0,0,-.16,0);crate(A,.6,.78,.13,m);heap(A,K[k],.56,.74,.02,m);}return A;};
+  ST[3]=v=>{const A=acc();
+    surf(A,60,26,(u,w,P)=>{const x=-1.35+u*2.7;let y,z;if(w<.8){z=-.55+w/.8*1.15;y=.911+.002*Math.sin(x*9)*Math.sin(z*7);}else{const t=(w-.8)/.2;z=.6+.01*t;y=.911-t*.22;}P.set(x,y,z+.012*Math.sin(x*14)*sm(.8,1,w));},
+      (C,P,u,w)=>{mixC(C,0xe0d4b8,0xc8b896,vn(P.x*30,P.y*30,P.z*30));const gx=Math.abs(((P.x+5)*5)%1-.5)<.09,gz=Math.abs(((P.z+5)*5)%1-.5)<.09;if(gx||gz)tint(C,0xa83a30,gx&&gz?.8:.5);},.12,{wrap:false});
+    const Y=.914,bo=[boule(v*2,.1,.078,1),boule(v*2+1,.11,.085,1)],ba=batard(v,false,.17,.052,.05,1),br=braid(v,.2,1),R=roll(v);
+    /* 뒷줄: 높은 바구니 셋에 긴 빵을 세워 꽂았다 */
+    for(const bx of [-1.0,-.12,.78]){const m=T(bx,Y,-.36,bx);basket(A,.15,.2,m);for(let k=0;k<5;k++){const a=k/5*TAU+bx;put(A,ba,new THREE.Matrix4().multiplyMatrices(m,T(Math.cos(a)*.06,.17,Math.sin(a)*.06,-a,0,PI/2-.28)));}}
+    /* 가운데: 둥근 빵 줄 */
+    for(let k=0;k<6;k++){const h=hash3(k,v,2);put(A,bo[k%2],T(-1.12+k*.43+(h-.5)*.06,Y,-.02+(h-.5)*.08,h*6,0,0,.95+h*.25));}
+    /* 앞줄: 땋은 빵 둘, 작은 빵 무더기, 누운 긴 빵 둘 */
+    put(A,br,T(-.95,Y,.32,.15));put(A,br,T(-.45,Y,.34,-.1,0,0,.9));
+    for(let k=0;k<7;k++){const a=k*2.4,r=k?.06+.02*(k%2):0;put(A,R,T(.12+Math.cos(a)*r,Y+(k?0:.028),.3+Math.sin(a)*r*.8,a));}
+    put(A,ba,T(.62,Y,.3,.12));put(A,ba,T(.98,Y,.28,-.2));
+    return A;};
+  ST[4]=v=>{const A=acc(),G=[[0xd8a030,0xf4d46c],[0xe8dcc0,0xf8f0d8],[0xc06a20,0xf0b860],[0xb08a50,0xf0e0a8]];
+    const Y=.914;
+    /* 왼쪽: 큰 바퀴 셋을 쌓았다 */
+    for(let k=0;k<3;k++)wheel(A,.25,.13,0,TAU,G[(v+k)%2*2][0],G[(v+k)%2*2][1],0,T(-1.08+(k%2)*.02,Y+k*.132,-.12+(k%2)*.015,k*.7));
+    /* 둘: 가운데 크기 바퀴 */
+    wheel(A,.19,.1,0,TAU,G[1][0],G[1][1],0,T(-.6,Y,-.3,.3));wheel(A,.19,.1,0,TAU,G[3][0],G[3][1],0,T(-.62,Y,.2,1.2));wheel(A,.17,.09,0,TAU,G[2][0],G[2][1],0,T(-.6,Y+.1,-.28,2.2));
+    /* 가운데: 도마 위에 잘라 낸 바퀴와 조각, 칼 */
+    board(A,.66,.5,.02,T(.1,Y,0),0x9a6a3a);wheel(A,.21,.12,1.1,TAU,G[v][0],G[v][1],10,T(.06,Y+.02,-.06,.6));
+    const wg=acc();wheel(wg,.21,.12,0,.75,G[v][0],G[v][1],10,null);put(A,wg,T(.2,Y+.02,.14,-2.2));knife(A,T(-.08,Y+.021,.18,.4));
+    /* 오른쪽: 작은 바퀴 탑과 앞쪽 조각 셋 */
+    for(let k=0;k<4;k++)wheel(A,.11,.07,0,TAU,G[(k+v)%4][0],G[(k+v)%4][1],0,T(.74+(k%2)*.012,Y+k*.071,-.28,k));
+    for(let k=0;k<3;k++){const w=acc();wheel(w,.17,.1,0,.6,G[(k+1)%4][0],G[(k+1)%4][1],6,null);put(A,w,T(.6+k*.26,Y,.2,-PI/2-.3+k*.1));}
+    wheel(A,.15,.09,0,TAU,G[2][0],G[2][1],0,T(1.14,Y,-.2,2));
+    return A;};
+  /* 하레나 좌판: 판 위(y .8)에 과일 넷 무더기 */
+  ST.h=v=>{const A=acc(),K=['apple0','orange','apple1','lemon'];for(let k=0;k<4;k++)heap(A,K[(k+v)%4],.34,.34,.8,T(-.6+k*.4,0,0,0),.9);return A;};
+
+  /* ================= 꾸리기 ================= */
+  const done=A=>{const g=new THREE.BufferGeometry(),n=A.p.length/3,p=new Float32Array(A.p);for(let i=1;i<p.length;i+=3)p[i]+=.0015;   /* 밑면이 바닥과 딱 붙지 않게 1.5mm 띄운다 (굽기에서 밑면 붙은 모양을 내려 깜빡임을 막는 장치가 음식을 바닥에 묻지 않게) */
+    g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(A.n,3));g.setAttribute('color',new THREE.Float32BufferAttribute(A.c,3));g.setAttribute('mt',new THREE.Float32BufferAttribute(A.g,1));
+    g.computeBoundingSphere();g.computeBoundingBox();g.userData.fd=1;g.userData.n=n;return g;};
+  const cache=new Map();
+  const geo=key=>{let g=cache.get(key);if(!g){const [k,vs]=key.split(':'),v=+vs||0;const A=k[0]==='S'?ST[k.slice(1)](v):B[k](v);g=done(A);cache.set(key,g);}return g;};
+  let _m=null;const mat=()=>{if(_m)return _m;_m=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.9,metalness:0,side:THREE.DoubleSide});
+    _m.onBeforeCompile=s=>{s.vertexShader=s.vertexShader.replace('#include <common>','#include <common>\nattribute float mt;\nvarying float vGl;').replace('#include <begin_vertex>','#include <begin_vertex>\nvGl=mt;');
+      s.fragmentShader=s.fragmentShader.replace('#include <common>','#include <common>\nvarying float vGl;').replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(.95,.2,vGl);');};
+    _m.customProgramCacheKey=()=>'foodk';return _m;};
+  /* 같은 자리면 늘 같은 갈래 (무작위 수를 쓰지 않는다: 둘레의 배치가 바뀌지 않게) */
+  const pickV=(x,z,n)=>Math.floor(hash3(Math.round(x*10),Math.round(z*10),5.5)*n)%n;
+  return {geo,mat,pickV,VARS:{mug:3,wine:1,bread:3,cheese:2,stew:2,plate:3}};
+})();
 const colliders=[];
 /* 앉을 자리: 벤치·걸상·소파. {x,z,y:앉는 높이(세계), ry:앉아서 보는 방향} — F로 앉고, 움직이면 일어난다 */
 const SEATS=[];
@@ -11400,7 +11714,7 @@ async function buildMarcus(H){
     out(){return this.a.subarray(0,this.length);}});
   const nb=()=>({pos:fbuf(),nor:fbuf(),col:fbuf(),mt:fbuf()});
   const cell=(x,z)=>{const i=Math.floor((x-cx)/CELL),j=Math.floor((z-cz)/CELL),k=i+','+j;let C=MARCUS.cells.get(k);
-    if(!C){C={op:nb(),gl:nb(),sh:nb(),ip:nb(),dt:nb(),x:cx+(i+.5)*CELL,z:cz+(j+.5)*CELL,g:new THREE.Group()};C.g.userData.mc=1;scene.add(C.g);MARCUS.cells.set(k,C);}return C;};
+    if(!C){C={op:nb(),gl:nb(),sh:nb(),ip:nb(),dt:nb(),fd:nb(),x:cx+(i+.5)*CELL,z:cz+(j+.5)*CELL,g:new THREE.Group()};C.g.userData.mc=1;scene.add(C.g);MARCUS.cells.set(k,C);}return C;};
   const GC=new Map(),geoC=(key,mk)=>{if(!GC.has(key))GC.set(key,mk());return GC.get(key);};
   const BOX=geoC('b',()=>new THREE.BoxGeometry(1,1,1)),QUAD=geoC('q',()=>new THREE.PlaneGeometry(1,1));
   const CYL=(rt,rb,n,open)=>geoC('c'+rt+'_'+rb+'_'+n+(open?'o':''),()=>new THREE.CylinderGeometry(rt,rb,1,n,1,!!open));
@@ -11430,14 +11744,14 @@ async function buildMarcus(H){
   setMt([PAVE,PAVE2,CURB,0xc8bca4,0xb2a488,0x9a8c72,0xc0b296,0xae9e82,0xa8957a,0xb3a48a],4);setMt([WOOD,DARKW,0x6a4a32,0x8a6a4a,0x5a3d24,0x7a5232,0x9a7a4a,0x8a5a3a,0x7a4a2a],5);
   setMt([BRICK,0xa8603e],6);setMt([MAR,MAR2,0xe8e0d0,0xd8d0c0,0xeee8dc],7);
   const NI=new Map(),_c=new THREE.Color(),_nm=new THREE.Matrix3();
-  const flat=geo=>{let e=NI.get(geo);if(!e){const g=geo.index?geo.toNonIndexed():geo.clone();g.computeVertexNormals();e={p:g.attributes.position.array,n:g.attributes.normal.array};NI.set(geo,e);}return e;};
+  const flat=geo=>{let e=NI.get(geo);if(!e){if(geo.userData.fd){const a=geo.attributes;e={p:a.position.array,n:a.normal.array,c:a.color.array,g:a.mt.array};}else{const g=geo.index?geo.toNonIndexed():geo.clone();g.computeVertexNormals();e={p:g.attributes.position.array,n:g.attributes.normal.array};}NI.set(geo,e);}return e;};   /* 음식(FOODK)은 제 매끈한 법선·꼭짓점 색·윤기를 그대로 쓴다 */
   /* aoY: 그늘을 넣을 때의 바닥 높이 (벽 아래쪽과 처마 밑을 어둡게) */
-  const push=(b,geo,m,color,mt,aoY)=>{const e=flat(geo),me=m.elements;_c.set(color);_nm.getNormalMatrix(m);const ne=_nm.elements,P=e.p,N=e.n;const k=mt??MT.get(color)??0;
+  const push=(b,geo,m,color,mt,aoY)=>{const e=flat(geo),me=m.elements;_c.set(color);_nm.getNormalMatrix(m);const ne=_nm.elements,P=e.p,N=e.n,EC=e.c,EG=e.g;const k=mt??MT.get(color)??0;
     const nv=P.length/3;b.pos.grow(nv*3);b.nor.grow(nv*3);b.col.grow(nv*3);b.mt.grow(nv);const BP=b.pos.a,BN=b.nor.a,BC=b.col.a,BM=b.mt.a;let o3=b.pos.length,o1=b.mt.length;
     for(let i=0;i<P.length;i+=3){const x=P[i],y=P[i+1],z=P[i+2],wy=me[1]*x+me[5]*y+me[9]*z+me[13];BP[o3]=me[0]*x+me[4]*y+me[8]*z+me[12];BP[o3+1]=wy;BP[o3+2]=me[2]*x+me[6]*y+me[10]*z+me[14];
       const nx=N[i],ny=N[i+1],nz=N[i+2],ox=ne[0]*nx+ne[3]*ny+ne[6]*nz,oy=ne[1]*nx+ne[4]*ny+ne[7]*nz,oz=ne[2]*nx+ne[5]*ny+ne[8]*nz,l=Math.hypot(ox,oy,oz)||1;BN[o3]=ox/l;BN[o3+1]=oy/l;BN[o3+2]=oz/l;
       let a=1;if(aoY!=null){const dy=wy-aoY;if(dy<1.1&&oy/l<.5)a=.6+.4*Math.max(0,Math.min(1,dy/1.1))**.7;if(oy/l<-.5)a*=.72;}
-      BC[o3]=_c.r*a;BC[o3+1]=_c.g*a;BC[o3+2]=_c.b*a;BM[o1++]=k;o3+=3;}
+      if(EC){BC[o3]=_c.r*a*EC[i];BC[o3+1]=_c.g*a*EC[i+1];BC[o3+2]=_c.b*a*EC[i+2];BM[o1++]=EG[i/3];}else{BC[o3]=_c.r*a;BC[o3+1]=_c.g*a;BC[o3+2]=_c.b*a;BM[o1++]=k;}o3+=3;}
     b.pos.length=b.nor.length=b.col.length=o3;b.mt.length=o1;};
   const _q=new THREE.Quaternion(),_e=new THREE.Euler(),_v=new THREE.Vector3(),_s3=new THREE.Vector3(),_m=new THREE.Matrix4();
   const TRS=(x,y,z,ry,sx,sy,sz,rx=0,rz=0)=>new THREE.Matrix4().compose(_v.set(x,y,z),_q.setFromEuler(_e.set(rx,ry,rz,'YXZ')),_s3.set(sx,sy,sz));
@@ -11932,11 +12246,10 @@ async function buildMarcus(H){
     for(const [px,pz] of [[-1.35,-.55],[1.35,-.55],[-1.35,.65],[1.35,.65]])F.P(BOX,px,1.3,pz,.08,2.6,.08,WOOD);
     for(let k=0;k<6;k++)F.P(BOX,-1.25+k*.5,2.62,.1,.5,.06,1.9,k%2?c1:0xf2ece0,{rx:.2});F.P(BOX,0,2.5,1.05,3,.4,.04,c1);
     const G=GOODS[kind];
-    if(kind===0)for(let k=0;k<4;k++){F.P(BOX,-1+k*.66,1,0,.6,.22,.8,0x8a6a4a);for(let q=0;q<6;q++)F.P(SPH,-1.15+k*.66+(q%3)*.15,1.17,-.2+Math.floor(q/3)*.3,.09,.09,.09,G[k]);}
+    /* 과일 상자·빵·치즈는 FOODK가 빚은 좌판 짐 (자리마다 두 갈래) */
+    if(kind===0||kind===3||kind===4)F.P(FOODK.geo('S'+kind+':'+FOODK.pickV(x,z,2)),0,0,0,1,1,1,0xffffff,{b:'fd'});
     if(kind===1)for(let k=0;k<5;k++)F.P(CYL(.12,.12,8),-1+k*.5,1.05,0,1,.8,1,G[k%4],{rx:PI/2});
     if(kind===2)for(let k=0;k<5;k++){F.P(CYL(.14,.2,8),-1+k*.5,1.12,-.1,1,.45,1,G[k%4]);F.P(CYL(.08,.14,8),-1+k*.5,1.42,-.1,1,.15,1,G[k%4]);}
-    if(kind===3)for(let k=0;k<7;k++)F.P(SPH,-1.1+k*.36,1,-.05+(k%2)*.2,.18,.11,.12,G[k%4]);
-    if(kind===4)for(let k=0;k<4;k++)F.P(CYL(.25,.25,12),-1+k*.66,1.02,0,1,.2,1,G[k%4]);
     F.box(0,0,3,1.5,2.6);};
   const AW=[0xe0503a,0x3a78c8,0x4a9a44,0xf0b838,0xc0508a];   /* 시장 차양: 밝고 또렷한 빛깔 */
   const loggia=(x,z,W,D,Hh,roof)=>{const F=frame(x,z,0);const nx=Math.max(2,Math.round(W/6)),nz=Math.max(2,Math.round(D/6));
@@ -12305,12 +12618,12 @@ async function buildMarcus(H){
   /* ===== 칸 굽기 ===== */
   await BOOT.y();const MAT={op:MTEX.patch(new THREE.MeshStandardMaterial({vertexColors:true,roughness:.85,flatShading:true,side:THREE.DoubleSide}),'o'),
     gl:MTEX.patch(new THREE.MeshStandardMaterial({vertexColors:true,emissive:0xb08030,emissiveIntensity:.7,roughness:.3,side:THREE.DoubleSide}),'l')};
-  MAT.sh=MAT.op;MAT.ip=MAT.op;MAT.dt=MAT.op;
+  MAT.sh=MAT.op;MAT.ip=MAT.op;MAT.dt=MAT.op;MAT.fd=FOODK.mat();   /* fd: 음식. 매끈하게 그리고 mt 자리에 윤기를 담는다. 가까운 칸에서만 그린다(C.fm) */
   /* dt: 집 잔손질(창틀·덧문 살·처마 홈통·모서리 돌 등). 가까운 칸에서만 그린다(updateMarcus의 C.dm) */
-  const SHD={op:[true,true],gl:[false,false],sh:[true,false],ip:[false,false],dt:[false,true]};
+  const SHD={op:[true,true],gl:[false,false],sh:[true,false],ip:[false,false],dt:[false,true],fd:[false,false]};
   const bake=(b,key,parent)=>{if(!b.pos.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(b.pos.out(),3));g.setAttribute('normal',new THREE.Float32BufferAttribute(b.nor.out(),3));g.setAttribute('color',new THREE.Float32BufferAttribute(b.col.out(),3));g.setAttribute('mt',new THREE.Float32BufferAttribute(b.mt.out(),1));
     g.computeBoundingSphere();const m=new THREE.Mesh(g,MAT[key]);m.castShadow=SHD[key][0];m.receiveShadow=SHD[key][1];parent.add(m);b.pos=b.nor=b.col=b.mt=null;return m;};
-  for(const C of MARCUS.cells.values()){await BOOT.y();for(const k of ['op','gl','sh','ip'])bake(C[k],k,C.g);C.dm=bake(C.dt,'dt',C.g);if(C.dm)C.dm.visible=false;}
+  for(const C of MARCUS.cells.values()){await BOOT.y();for(const k of ['op','gl','sh','ip'])bake(C[k],k,C.g);C.dm=bake(C.dt,'dt',C.g);if(C.dm)C.dm.visible=false;C.fm=bake(C.fd,'fd',C.g);if(C.fm)C.fm.visible=false;}
   await BOOT.y();makeCitizens(cx,cz);
   await BOOT.y();if(typeof marcusLife==='function')marcusLife(cx,cz);
   MARCUS.ready=true;
@@ -12712,8 +13025,9 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
 let _mcT=0;
 /* 집 잔손질 칸을 그리는 거리: 그래픽 낮음이면 안 그림 (칸은 100m라 칸 가운데까지 거리로 잰다) */
 function DT_D(){const g=gfxLv();return g===0?0:g>=2?150:115;}
+function FD_D(){const g=gfxLv();return g===0?95:g>=2?160:125;}   /* 음식이 보이는 거리 (칸 가운데까지. 칸이 100m라 제 칸 안에 있으면 늘 보이게) */
 function marcusTick(dt){if(!MARCUS.ready||!player)return;if(typeof coachTick==='function')coachTick(dt);const p=player.position,inM=p.x>2000&&Math.abs(p.z)<700;
-  _mcT-=dt;if(_mcT<=0){_mcT=.25;for(const C of MARCUS.cells.values()){const dd=Math.hypot(C.x-p.x,C.z-p.z),v=inM&&dd<260;if(C.g.visible!==v)C.g.visible=v;if(C.dm){const dv=v&&dd<DT_D();if(C.dm.visible!==dv)C.dm.visible=dv;}}for(const D of MARCUS.details){const v=inM&&Math.hypot(D.x-p.x,D.z-p.z)<75;if(D.g.visible!==v)D.g.visible=v;}}
+  _mcT-=dt;if(_mcT<=0){_mcT=.25;for(const C of MARCUS.cells.values()){const dd=Math.hypot(C.x-p.x,C.z-p.z),v=inM&&dd<260;if(C.g.visible!==v)C.g.visible=v;if(C.dm){const dv=v&&dd<DT_D();if(C.dm.visible!==dv)C.dm.visible=dv;}if(C.fm){const fv=v&&dd<FD_D();if(C.fm.visible!==fv)C.fm.visible=fv;}}for(const D of MARCUS.details){const v=inM&&Math.hypot(D.x-p.x,D.z-p.z)<75;if(D.g.visible!==v)D.g.visible=v;}}
   if(MARCUS.inst)for(const m of MARCUS.inst)if(m.visible!==inM)m.visible=inM;
   /* 바다에는 걸어 들어가지 못한다: 깊은 바다(둑 너머)로 들어서면 마지막 뭍 자리로 되돌린다 */
   if(inM&&OR.isleAt(p.x,p.z).id==='marcus'){const PL=marcusPlan(),I=OR.ISLES.marcus,lx=p.x-I.x,lz=p.z-I.z;
@@ -14074,14 +14388,15 @@ function buildGuildHallMap(K){
     glight(x,y+1.35,z,.5,5.2,0xffb050);pool(x,y+.875,z,r+.35,.32);};
   /* 음식 소품: 탁자 윗면 높이 ty에 놓는다 */
   const TORS=new THREE.TorusGeometry(.5,.12,6,12),FOODS=['mug','mug','wine','bread','cheese','stew','plate'];
+  const FK=(k,v,x,ty,z,ry)=>P(FOODK.geo(k+':'+v),x,ty,z,1,1,1,0xffffff,{b:'fd',ry});
   const food=(kind,x,ty,z,ry)=>{const o={b:'ip',ry};switch(kind){
-    case 'mug':P(CYL(.07,.06,10),x,ty+.09,z,1,.18,1,pick([0xb8b0a0,0x8a6a48,0xc8c0b0]),o);P(TORS,x+.085,ty+.1,z,.09,.09,.09,0x8a6a48,{b:'ip',ry:PI/2});P(SPH,x,ty+.19,z,.13,.05,.13,0xfff4e0,o);break;   /* 손잡이 달린 맥주잔, 거품 */
-    case 'wine':P(CYL(.04,.045,10),x,ty+.11,z,1,.22,1,0x2a4a2a,o);P(CYL(.015,.02,8),x,ty+.27,z,1,.1,1,0x2a4a2a,o);P(CYL(.016,.016,6),x,ty+.33,z,1,.03,1,0xc8a060,o);   /* 병·목·코르크 */
-      P(CYL(.045,.025,10),x+.14,ty+.1,z+.04,1,.08,1,0x6a1a2a,o);P(CYL(.01,.01,6),x+.14,ty+.03,z+.04,1,.06,1,0xd8d0c0,o);P(CYL(.035,.035,8),x+.14,ty+.005,z+.04,1,.01,1,0xd8d0c0,o);break;   /* 잔: 술·다리·받침 */
-    case 'bread':P(SPH,x,ty+.05,z,.26,.1,.14,0xc89050,o);P(SPH,x,ty+.09,z,.22,.05,.11,0xe0b070,o);for(const q of [-.07,0,.07])P(BOX,x+q*Math.cos(ry),ty+.11,z-q*Math.sin(ry),.015,.01,.09,0x8a5a2a,o);break;   /* 둥근 빵, 칼집 세 줄 */
-    case 'cheese':P(PRISM,x,ty+.0,z,.18,.08,.14,0xe8c860,o);P(BOX,x,ty+.075,z,.17,.012,.13,0xf0d880,o);P(CYL(1,1,10),x+.12,ty+.005,z+.1,.11,.01,.11,0xd8c8b0,o);break;   /* 치즈 조각과 작은 접시 */
-    case 'stew':P(CYL(.11,.08,10),x,ty+.045,z,1,.09,1,0x5a3a22,o);P(CYL(.095,.095,10),x,ty+.085,z,1,.015,1,0x7a4a24,o);for(let q=0;q<3;q++)P(SPH,x+rr(-.05,.05),ty+.1,z+rr(-.05,.05),.03,.02,.03,pick([0xd8a050,0x8a5a3a,0xa8c070]),o);P(BOX,x+.08,ty+.1,z-.04,.015,.01,.16,0xb8b0a0,{b:'ip',ry:ry+.6});break;   /* 스튜 그릇과 숟가락 */
-    case 'plate':P(CYL(1,1,12),x,ty+.008,z,.15,.016,.15,0xe8e0d0,o);P(SPH,x-.02,ty+.04,z,.12,.05,.08,0xb86a5a,o);P(SPH,x+.07,ty+.03,z+.05,.04,.03,.04,0x6aa040,o);P(SPH,x+.08,ty+.03,z-.04,.04,.03,.04,0x6aa040,o);break;   /* 고기와 야채 접시 */
+    /* 음식은 FOODK가 빚은 모양 (갈래는 자리로 정한다). 무작위 수는 예전과 같은 개수만 쓴다: 잔 1번, 스튜 9번 (뒤의 배치가 바뀌지 않게) */
+    case 'mug':FK('mug',Math.floor(rnd()*3),x,ty,z,ry);break;   /* 돌잔·나무 통잔·흙잔, 넘치는 거품 */
+    case 'wine':FK('wine',0,x,ty,z,ry);break;   /* 밀랍 봉한 병과 백랍 잔 */
+    case 'bread':FK('bread',FOODK.pickV(x,z,3),x,ty,z,ry);break;   /* 둥근 빵·썬 긴 빵·땋은 빵 */
+    case 'cheese':FK('cheese',FOODK.pickV(x,z,2),x,ty,z,ry);break;   /* 도마 위 바퀴 치즈 */
+    case 'stew':for(let q=0;q<9;q++)rnd();FK('stew',FOODK.pickV(x,z,2),x,ty,z,ry);break;   /* 흙그릇 스튜와 나무 숟가락 */
+    case 'plate':FK('plate',FOODK.pickV(x,z,3),x,ty,z,ry);break;   /* 통닭구이·썬 고기·과일 접시 */
     case 'candle':P(CYL(.03,.03,8),x,ty+.01,z,1,.02,1,0x8a8a90,o);P(CYL(.012,.014,6),x,ty+.08,z,1,.12,1,0xf0e8d0,o);P(CONE(5),x,ty+.17,z,.03,.05,.03,0xffd070,{b:'ip',glow:true});halo(x,ty+.18,z,0);break;}};
   const tableL=(x,z,y,w,d)=>{P(BOX,x,y+.8,z,w,.1,d,WOOD,IP);for(const sx of [-1,1])for(const sz of [-1,1])P(BOX,x+sx*(w/2-.2),y+.38,z+sz*(d/2-.2),.12,.76,.12,DARKW,IP);objC(x,z,w,d,y,.9);};
   const benchL=(x,z,y,w,alongX=true)=>{P(BOX,x,y+.45,z,alongX?w:.4,.08,alongX?.4:w,WOOD,IP);for(const s of [-1,1])P(BOX,x+(alongX?s*(w/2-.2):0),y+.22,z+(alongX?0:s*(w/2-.2)),.08,.44,.36,DARKW,IP);};
@@ -18287,7 +18602,7 @@ await BOOT.y();(function buildDecor(){
   {const cx=C2.x,cz=C2.z;
     const stall=(a,r,c)=>{const x=cx+Math.cos(a)*r,z=cz+Math.sin(a)*r;
       grp(x,z,-a+Math.PI/2,[mesh(new THREE.BoxGeometry(1.8,.8,.8),wood,0,.4,0),...[[-.85,-.35],[.85,-.35],[-.85,.35],[.85,.35]].map(([px,pz])=>mesh(new THREE.BoxGeometry(.08,2,.08),dark,px,1,pz)),
-        mesh(new THREE.BoxGeometry(2,.06,1.1),mat(c),0,2.05,0,.15),...[0,1,2,3].map(k=>mesh(new THREE.SphereGeometry(.13,6,5),mat([0xd04a3a,0xe0c040,0x6ab04a,0xf09a40][k]),-.6+k*.4,.9,0))],.75);};
+        mesh(new THREE.BoxGeometry(2,.06,1.1),mat(c),0,2.05,0,.15),mesh(FOODK.geo('Sh:'+FOODK.pickV(x,z,2)),FOODK.mat(),0,0,0)],.75);};   /* 판 위 과일 무더기 넷 */
     stall(.55,11.5,0xc04a3a);stall(1.0,11.5,0x3a6ac0);stall(-.55,11.5,0xe0c040);stall(-1.0,11.5,0x4a9a5a);
     // 도시의 작은 소품은 걸리지 않고 지나갈 수 있다
     [[.8,13.6],[-.8,13.6],[2.2,12.8],[-2.2,12.8]].forEach(([a,r])=>barrel(cx+Math.cos(a)*r,cz+Math.sin(a)*r,false));
