@@ -3054,6 +3054,320 @@ void main(){vec3 d=normalize(vD);float h=d.y;
 skyDome.renderOrder=-1000;skyDome.frustumCulled=false;scene.add(skyDome);
 
 const mat=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.85,flatShading:true},o)),_mat=mat;
+/* ---------- 음식 모양 (FOODK): 맛있어 보이게 새로 빚은 음식들.
+   상자·공을 덧붙이지 않고, 면 그물(surf)로 한 덩어리씩 빚는다. 꼭짓점마다 색과 윤기(mt: 0 푸석 ~ 1 반들)를 담는다.
+   매끈하게 그리는 재질(FOODK.mat)로 그린다: 시내 굽기에서는 frame P에 {b:'fd'}로, 따로 쓸 때는 new THREE.Mesh(FOODK.geo(k),FOODK.mat()).
+   모양은 처음 쓸 때 한 번 만들어 두고 같이 쓴다 ---------- */
+const FOODK=(()=>{
+  const PI=Math.PI,TAU=PI*2;let GAM=1.8;   /* 고른 색(눈에 보이는 색)을 빛 계산용으로 바꾸는 정도. 시내 굽기 색과 같은 밝기가 되게 맞춘 값 */
+  const hash3=(x,y,z)=>{const s=Math.sin(x*127.1+y*311.7+z*74.7)*43758.5453;return s-Math.floor(s);};
+  const vn=(x,y,z)=>{const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z),xf=x-xi,yf=y-yi,zf=z-zi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf),w=zf*zf*(3-2*zf),L=(a,b,t)=>a+(b-a)*t,h=hash3;
+    return L(L(L(h(xi,yi,zi),h(xi+1,yi,zi),u),L(h(xi,yi+1,zi),h(xi+1,yi+1,zi),u),v),L(L(h(xi,yi,zi+1),h(xi+1,yi,zi+1),u),L(h(xi,yi+1,zi+1),h(xi+1,yi+1,zi+1),u),v),w);};
+  const fbm=(x,y,z,o=3)=>{let s=0,a=.5,f=1,t=0;for(let i=0;i<o;i++){s+=a*vn(x*f+i*17.3,y*f,z*f);t+=a;a*=.5;f*=2.03;}return s/t;};   /* 0~1 */
+  const cl=t=>t<0?0:t>1?1:t,sm=(a,b,t)=>{t=cl((t-a)/(b-a));return t*t*(3-2*t);};
+  const _d=new THREE.Color(),_P=new THREE.Vector3(),_V=new THREE.Vector3(),_W=new THREE.Vector3();
+  const mixC=(C,a,b,t)=>C.set(a).lerp(_d.set(b),cl(t));
+  const tint=(C,h,t)=>C.lerp(_d.set(h),cl(t));
+  const T=(x=0,y=0,z=0,ry=0,rx=0,rz=0,sx=1,sy=sx,sz=sx)=>new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rx,ry,rz,'YXZ')),new THREE.Vector3(sx,sy,sz));
+
+  /* 모음: 삼각형 꼭짓점들 */
+  const acc=()=>({p:[],n:[],c:[],g:[]});
+  /* 면 그물: u는 둘레(wrap이면 끝이 처음과 이어짐), v는 위→아래 따위. fn(u,v,P)가 자리를, col(C,P,u,v)가 색을, gl이 윤기를 정한다 */
+  function surf(A,nu,nv,fn,col,gl,o={}){
+    const wrap=o.wrap!==false,cu=wrap?nu:nu+1,cv=nv+1,N=cu*cv;
+    const pos=new Float32Array(N*3),cs=new Float32Array(N*3),gs=new Float32Array(N),nor=new Float32Array(N*3),C=new THREE.Color();
+    for(let j=0;j<cv;j++)for(let i=0;i<cu;i++){const u=i/nu,v=j/nv,k=j*cu+i;_P.set(0,0,0);fn(u,v,_P);
+      pos[k*3]=_P.x;pos[k*3+1]=_P.y;pos[k*3+2]=_P.z;C.set(0xffffff);col(C,_P,u,v);C.r=Math.pow(C.r,GAM);C.g=Math.pow(C.g,GAM);C.b=Math.pow(C.b,GAM);cs[k*3]=C.r;cs[k*3+1]=C.g;cs[k*3+2]=C.b;gs[k]=typeof gl==='function'?gl(_P,u,v):gl;}
+    const idx=[];for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const i1=wrap?(i+1)%nu:i+1,a=j*cu+i,b=j*cu+i1,c=(j+1)*cu+i,d=(j+1)*cu+i1;idx.push(a,c,b,b,c,d);}
+    /* 매끈한 법선: 둘레의 면 법선을 넓이만큼 더한다 */
+    for(let t=0;t<idx.length;t+=3){const a=idx[t]*3,b=idx[t+1]*3,c=idx[t+2]*3;
+      const ux=pos[b]-pos[a],uy=pos[b+1]-pos[a+1],uz=pos[b+2]-pos[a+2],vx=pos[c]-pos[a],vy=pos[c+1]-pos[a+1],vz=pos[c+2]-pos[a+2];
+      const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;for(const q of [a,b,c]){nor[q]+=nx;nor[q+1]+=ny;nor[q+2]+=nz;}}
+    /* 극(한 점에 모인 줄)은 이웃 줄의 법선을 모아 한 방향으로 */
+    for(const j of [0,nv]){let sx=0,sy=0,sz=0,same=true;const r0=j*cu*3;for(let i=0;i<cu;i++){const k=(j*cu+i)*3;if(Math.abs(pos[k]-pos[r0])+Math.abs(pos[k+1]-pos[r0+1])+Math.abs(pos[k+2]-pos[r0+2])>1e-7)same=false;sx+=nor[k];sy+=nor[k+1];sz+=nor[k+2];}
+      if(same)for(let i=0;i<cu;i++){const k=(j*cu+i)*3;nor[k]=sx;nor[k+1]=sy;nor[k+2]=sz;}}
+    const m=o.m,nm=m?new THREE.Matrix3().getNormalMatrix(m):null;
+    for(const k of idx){_V.set(pos[k*3],pos[k*3+1],pos[k*3+2]);_W.set(nor[k*3],nor[k*3+1],nor[k*3+2]);if(m){_V.applyMatrix4(m);_W.applyMatrix3(nm);}_W.normalize();
+      A.p.push(_V.x,_V.y,_V.z);A.n.push(_W.x,_W.y,_W.z);A.c.push(cs[k*3],cs[k*3+1],cs[k*3+2]);A.g.push(gs[k]);}
+    return A;}
+  /* 다른 모음을 옮겨 붙인다 (tn: 색 곱, gm: 윤기 곱) */
+  function put(A,B,m,tn,gm=1){const nm=new THREE.Matrix3().getNormalMatrix(m),tc=tn!=null?new THREE.Color(tn):null;
+    for(let i=0;i<B.p.length;i+=3){_V.set(B.p[i],B.p[i+1],B.p[i+2]).applyMatrix4(m);_W.set(B.n[i],B.n[i+1],B.n[i+2]).applyMatrix3(nm).normalize();A.p.push(_V.x,_V.y,_V.z);A.n.push(_W.x,_W.y,_W.z);
+      if(tc)A.c.push(B.c[i]*tc.r,B.c[i+1]*tc.g,B.c[i+2]*tc.b);else A.c.push(B.c[i],B.c[i+1],B.c[i+2]);}for(const g of B.g)A.g.push(Math.min(1,g*gm));return A;}
+  /* 도는 모양: prof는 [[r,y],...] (v=0이 첫 점). 꺾이는 곳은 점을 두 번 넣는다. dr(θ,v,r,y)로 반지름을 흔든다 */
+  const profAt=(prof,len,v,out)=>{const L=len[len.length-1]*v;let i=1;while(i<len.length-1&&len[i]<L)i++;const a=prof[i-1],b=prof[i],t=len[i]>len[i-1]?(L-len[i-1])/(len[i]-len[i-1]):0;out[0]=a[0]+(b[0]-a[0])*t;out[1]=a[1]+(b[1]-a[1])*t;return out;};
+  function lathe(A,prof,nu,nv,col,gl,o={}){const len=[0];for(let i=1;i<prof.length;i++)len.push(len[i-1]+Math.hypot(prof[i][0]-prof[i-1][0],prof[i][1]-prof[i-1][1]));
+    const q=[0,0],a0=o.a0||0,a1=o.a1??TAU,part=o.a1!=null;
+    return surf(A,nu,nv,(u,v,P)=>{profAt(prof,len,v,q);const th=a0+(a1-a0)*u;let r=q[0];if(o.dr)r+=o.dr(th,v,r,q[1]);P.set(r*Math.cos(th),q[1]+(o.dy?o.dy(th,v,r,q[1]):0),r*Math.sin(th));},(C,P,u,v)=>col(C,P,a0+(a1-a0)*u,v),gl,{wrap:!part,m:o.m});}
+  /* 관: path(t,out)가 가운데 줄, rad(t)가 굵기 */
+  function tube(A,path,rad,nu,nv,col,gl,o={}){const a=new THREE.Vector3(),b=new THREE.Vector3(),tg=new THREE.Vector3(),n1=new THREE.Vector3(),n2=new THREE.Vector3(),up=new THREE.Vector3(0,1,0);
+    return surf(A,nu,nv,(u,v,P)=>{path(Math.max(0,v-.01),a);path(Math.min(1,v+.01),b);tg.subVectors(b,a).normalize();const ref=Math.abs(tg.y)>.9?n2.set(1,0,0):up;n1.crossVectors(tg,ref).normalize();n2.crossVectors(tg,n1).normalize();
+      path(v,P);const r=rad(v),th=u*TAU;P.addScaledVector(n1,Math.cos(th)*r*(o.sx||1)).addScaledVector(n2,Math.sin(th)*r);},(C,P,u,v)=>col(C,P,u,v),gl,{m:o.m});}
+  /* 덩어리: 공을 d(방향)로 부풀리고 줄인다 */
+  function blob(A,rx,ry,rz,nu,nv,d,col,gl,o={}){const dir=new THREE.Vector3();
+    return surf(A,nu,nv,(u,v,P)=>{const th=u*TAU,ph=v*PI;dir.set(Math.sin(ph)*Math.cos(th),Math.cos(ph),Math.sin(ph)*Math.sin(th));const k=d?d(dir,u,v):1;P.set(dir.x*rx*k,dir.y*ry*k,dir.z*rz*k);if(o.shape)o.shape(P,dir,u,v);},col,gl,{m:o.m});}
+  /* 납작한 판: 가장자리 모양 edge(θ)→반지름 */
+  const disc=(A,edge,y,nu,nr,col,gl,o={})=>surf(A,nu,nr,(u,v,P)=>{const th=u*TAU,r=edge(th)*v;P.set(r*Math.cos(th),y+(o.dy?o.dy(r*Math.cos(th),r*Math.sin(th),v):0),r*Math.sin(th));},col,gl,{m:o.m});
+
+  /* ================= 과일 ================= */
+  /* 사과: 꼭지 쪽이 쏙 들어가고 아래가 살짝 좁다. v 0 빨강·1 풋사과·2 노랑 */
+  function apple(v,leaf,lo){const A=acc(),R=.038,s0=v*7.1+1,sunA=hash3(v,3,1)*TAU;
+    blob(A,1,1,1,lo?9:14,lo?7:10,null,(C,P,u,w)=>{const th=u*TAU,st=fbm(Math.cos(th)*2.2+s0,P.y*55,Math.sin(th)*2.2,3),sun=.5+.5*Math.cos(th-sunA);
+        if(v===0){mixC(C,0x6e0a10,0xd02a2a,st*1.5-.15);tint(C,0xe8b048,(1-sun)*.55*(.4+st));}
+        else if(v===1){mixC(C,0x6aa02a,0xb8d454,st*1.3);tint(C,0xd8703a,sm(.65,1,sun)*.4);}
+        else{mixC(C,0xd0a028,0xf2dc5c,st*1.2);tint(C,0xd8783a,sm(.7,1,sun)*.38);}
+        if(hash3(Math.floor(th*34),Math.floor(P.y*700),v)>.94)C.multiplyScalar(1.18);   /* 점점이 숨구멍 */
+        tint(C,0x9a8a3a,Math.exp(-((w/.13)**2))*.7);tint(C,0x4a3a1a,Math.exp(-(((1-w)/.09)**2))*.6);},.8,
+      {shape:(P,dir,u,w)=>{const ph=w*PI,s=Math.sin(ph),c=Math.cos(ph),th=u*TAU;let r=R*s*(1+.1*s)*(c<0?1-.13*(-c):1)*(1+.03*Math.cos(5*th)*Math.max(0,-c));
+        let y=R*.92*c-R*.34*Math.exp(-((ph/.42)**2))+R*.2*Math.exp(-(((PI-ph)/.38)**2));P.set(r*Math.cos(th),y+R*.95,r*Math.sin(th));}});
+    const top=R*1.5;tube(A,(t,o)=>o.set(.0035*t*t,top+t*.018,.001*t),t=>.0024-.001*t,lo?4:6,lo?2:4,(C,P,u,w)=>mixC(C,0x6a4a24,0x3a2410,w),.15);
+    if(leaf){const L=.034;surf(A,6,8,(u,w,P)=>{const hw=.012*Math.sin(PI*w)**.8*(u*2-1);P.set(.004+w*L*.9,top+.016+Math.sin(w*PI)*.005-w*w*.006+Math.abs(hw)*.25,hw);},(C,P,u,w)=>{mixC(C,0x2f6a22,0x5a9a34,w*.6+.2);tint(C,0x9ac060,Math.exp(-(((u-.5)/.07)**2))*.5);},.45,{wrap:false,m:T(0,0,0,hash3(v,9,9)*TAU)});}
+    return A;}
+  /* 오렌지: 껍질에 잔 구멍, 꼭지는 초록 별 */
+  function orange(lo){const A=acc(),R=.041;
+    blob(A,R,R*.95,R,lo?10:16,lo?7:11,(d)=>1+.01*(vn(d.x*22,d.y*22,d.z*22)-.5),(C,P,u,w)=>{const n=fbm(P.x*70,P.y*70,P.z*70,2);mixC(C,0xe0680c,0xfaa22a,n*1.3-.1);
+        if(hash3(Math.floor(u*60),Math.floor(w*40),3)>.86)C.multiplyScalar(.9);tint(C,0x6a7a1a,Math.exp(-((w/.07)**2)));tint(C,0xb05a10,Math.exp(-(((1-w)/.08)**2))*.7);},.55,{m:T(0,R*.95,0)});
+    return A;}
+  /* 배: 아래는 통통, 위는 가는 목 */
+  function pear(lo){const A=acc(),R=.034,H=.098,pr=[];for(let k=0;k<=14;k++){const v=k/14,r1=R*Math.sqrt(Math.max(0,1-((v-.33)/.34)**2)),r2=R*.56*Math.sqrt(Math.max(0,1-((v-.72)/.28)**2));pr.push([Math.pow(r1**4+r2**4,.25)*(k===0||k===14?0:1),H*v+(k===0?.004:0)]);}
+    lathe(A,pr,lo?9:14,lo?10:14,(C,P,th,v)=>{const n=fbm(Math.cos(th)*3,P.y*40,Math.sin(th)*3,3);mixC(C,0x98aa2c,0xd8cc4c,n*1.2+v*.2);tint(C,0xb8502a,sm(.55,1,.5+.5*Math.cos(th-1))*.3*(1-v));
+      if(hash3(Math.floor(th*22),Math.floor(P.y*500),5)>.88)tint(C,0x8a5a24,.6);tint(C,0x7a5a24,Math.exp(-(((1-v)/.06)**2))*.6);},.42,{dr:(th,v)=>v>.5?.002*Math.sin(th)*(v-.5):0});
+    tube(A,(t,o)=>o.set(-.004*t,H-.002+t*.024,.002*t*t),t=>.0026-.0012*t,6,4,(C)=>C.set(0x5a3a1c),.15);return A;}
+  /* 레몬: 양 끝이 젖꼭지처럼 뾰족 */
+  function lemon(lo){const A=acc(),W=.03,L=.042;
+    surf(A,lo?9:14,lo?8:12,(u,w,P)=>{const th=u*TAU,ph=w*PI,r=W*Math.pow(Math.sin(ph),.85),x=L*Math.cos(ph)+Math.sign(Math.cos(ph))*.007*Math.exp(-(((ph<PI/2?ph:PI-ph)/.22)**2));P.set(x,W+r*Math.sin(th)*.96,r*Math.cos(th));},
+      (C,P,u,w)=>{mixC(C,0xe8be18,0xfae25a,fbm(P.x*80,P.y*80,P.z*80,2)*1.2);if(hash3(Math.floor(u*50),Math.floor(w*40),7)>.85)C.multiplyScalar(.92);tint(C,0x8a9a20,Math.exp(-((w/.06)**2))*.8);},.6);return A;}
+  /* 포도송이: 알 하나하나에 뽀얀 분 */
+  function grapes(green){const A=acc(),g=acc(),r=.0105;
+    blob(g,r,r*1.08,r,8,6,null,(C,P,u,w)=>{if(green){mixC(C,0x8aa830,0xc8d870,1-w);}else{mixC(C,0x2a0a26,0x5a1e4a,1-w*.8);tint(C,0x8a7aa0,(1-w)*.35);}},.55);
+    let i=0;for(let row=0;row<6;row++){const n=Math.max(1,6-row),rad=(5-row)*.0072;for(let k=0;k<n;k++){const a=k/n*TAU+row*.7,x=-row*.0155,y=.011+(row===0?.004:0)+Math.max(0,1.2-row)*.002+(k%2)*.006,jj=hash3(i,row,k);
+        put(A,g,T(x,y+rad*.35*Math.sin(a)+.006,rad*Math.cos(a),jj*6,0,0,.9+jj*.2),green?null:(jj>.7?0xe0d0e8:null));i++;}}
+    tube(A,(t,o)=>o.set(.014-t*.06,.026+Math.sin(t*PI)*.006,0),t=>.0022*(1-t*.5),5,5,(C)=>C.set(green?0x6a6a24:0x5a4a24),.1);
+    tube(A,(t,o)=>o.set(.012+t*.012,.028+t*.008,t*.006),t=>.002,5,3,(C)=>C.set(0x5a4a24),.1);
+    return A;}
+
+  /* ================= 빵 ================= */
+  const CRUST=(C,P,top,s0)=>{const n=fbm(P.x*38+s0,P.y*38,P.z*38,3),n2=vn(P.x*120,P.y*120,P.z*120);mixC(C,0xd99a50,0xa45a22,top*1.15+n*.5-.25);tint(C,0x6a3410,sm(.7,.95,n)*top*.6);if(n2>.8)C.multiplyScalar(.92);};
+  const CRUMB=(C,P,s0)=>{const n=vn(P.x*260+s0,P.y*260,P.z*260);mixC(C,0xf6e2b4,0xe8cc8a,n*.6);if(n>.82)C.multiplyScalar(.82);};   /* 빵 속: 숭숭 구멍 */
+  /* 둥근 빵: 칼집(열십자·우물정자) 사이로 속살이 터져 나오고, 밀가루가 살짝 */
+  function boule(v,R=.1,H=.078,lo){const A=acc(),s0=v*13.7;
+    const cd=(x,z)=>v%2===0?Math.min(Math.abs(x),Math.abs(z)):Math.min(Math.abs(Math.abs(x)-R*.26),Math.abs(Math.abs(z)-R*.26))+(Math.max(Math.abs(x),Math.abs(z))>R*.62?1:0);
+    const cut=(x,z,y)=>{const d=cd(x,z),wc=.011*(R/.1);return sm(.45*H,.75*H,y)*(1-sm(wc*.45,wc,d));};
+    surf(A,lo?36:56,lo?16:24,(u,w,P)=>{const th=u*TAU;let r,y;if(w<=.86){const ph=w/.86*PI/2;r=R*Math.pow(Math.sin(ph),.72);y=H*Math.pow(Math.cos(ph),1.05)*.86+H*.14;}else{const t=(w-.86)/.14;r=R*(1-.1*t*t);y=H*.14*(1-t);}
+        const k=1+.035*(fbm(Math.cos(th)*3+s0,y*30,Math.sin(th)*3,3)-.5);r*=k;let x=r*Math.cos(th),z=r*Math.sin(th);const c=cut(x,z,y);y-=c*.012*(R/.1);
+        const d=cd(x,z),wc=.011*(R/.1);y+=sm(.45*H,.75*H,y)*.0045*Math.exp(-(((d-wc*1.25)/(wc*.45))**2));P.set(x,y+.0005,z);},
+      (C,P,u,w)=>{const top=sm(.2,.9,P.y/H);CRUST(C,P,top,s0);const c=cut(P.x,P.z,P.y+.005);if(c>0){const C2=new THREE.Color();CRUMB(C2,P,s0);C.lerp(C2,sm(.15,.7,c));}
+        const d=cd(P.x,P.z);if(c<.15&&top>.4)tint(C,0x6a2e0c,Math.exp(-(((d-.012*(R/.1))/.0035)**2))*.65);
+        tint(C,0xeee2cc,sm(.5,.72,fbm(P.x*45+5,P.y*20,P.z*45,3))*.4*top);},(P)=>.32-cut(P.x,P.z,P.y+.005)*.28);
+    disc(A,()=>R*.9,.0005,24,3,(C,P)=>{mixC(C,0xd8a868,0xeedcc0,vn(P.x*90,0,P.z*90));},.05);return A;}
+  /* 긴 빵(바타르): 비스듬한 칼집 세 줄. sliced면 한쪽 끝을 잘라 속살이 보이고 썬 조각 둘을 옆에 눕힌다 */
+  const batSec=(s,th,L,W,Hh)=>{const k=Math.pow(Math.max(0,1-s*s),.42),sn=Math.sin(th);return [W*k*Math.cos(th),Hh*k*(sn>=0?sn:sn*.28)+Hh*.3];};
+  function batard(v,sliced,L=.17,W=.052,Hh=.05,lo){const A=acc(),s0=v*5.3,s1=sliced?.55:1;
+    const cutD=(x,z)=>{let best=9;for(const o of [-.55,0,.55]){const d=Math.abs((x/L-o)*L*.92-z*1.15);if(Math.abs(x/L-o)<.3)best=Math.min(best,d);}return best;};
+    surf(A,lo?24:40,lo?30:40,(u,w,P)=>{const th=u*TAU,s=-1+w*(1+s1),q=batSec(s,th,L,W,Hh);let x=s*L,z=q[0],y=q[1];const top=sm(.35,.8,Math.sin(th));const d=cutD(x,z),c=top*(1-sm(.004,.009,d));
+        const k=1+.03*(fbm(x*30+s0,y*30,z*30,3)-.5);z*=k;y=(y-Hh*.3)*k+Hh*.3-c*.01+top*.004*Math.exp(-(((d-.0105)/.0035)**2));P.set(x,y+.0005,z);},
+      (C,P,u,w)=>{const th=u*TAU,top=sm(-.3,.9,Math.sin(th));CRUST(C,P,top,s0);const d=cutD(P.x,P.z),c=sm(.35,.8,Math.sin(th))*(1-sm(.004,.009,d));if(c>0){const C2=new THREE.Color();CRUMB(C2,P,s0);C.lerp(C2,sm(.2,.8,c));}tint(C,0x6a2e0c,Math.exp(-(((d-.0105)/.003)**2))*.6*sm(.35,.8,Math.sin(th)));
+        tint(C,0xeee2cc,sm(.52,.72,fbm(P.x*40,P.y*20,P.z*40+3,3))*.35*top);},.3);
+    if(sliced){const sx=s1*L,face=(A2,xx,m,dir)=>surf(A2,30,5,(u,w,P)=>{const th=u*TAU,q=batSec(s1,th,L,W,Hh);P.set(xx,Hh*.3+(q[1]-Hh*.3)*w+.0005,q[0]*w);},(C,P,u,w)=>{CRUMB(C,P,s0+dir);if(w>.9)mixC(C,0xb06a2c,0x8a4a18,(w-.9)*10);},.05,{m});
+      face(A,sx,null,0);
+      /* 썬 조각: 앞뒤 속살과 둘레 껍질 */
+      const sl=acc(),tk=.013,sA=.42;
+      for(const f of [0,1])surf(sl,30,5,(u,w,P)=>{const th=u*TAU,q=batSec(sA,th,L,W,Hh);P.set(f*tk,Hh*.3+(q[1]-Hh*.3)*w,q[0]*w);},(C,P,u,w)=>{CRUMB(C,P,f*3+1);if(w>.88)mixC(C,0xb86e30,0x8a4a18,(w-.88)*8);},.05);
+      surf(sl,30,1,(u,w,P)=>{const th=u*TAU,q=batSec(sA,th,L,W,Hh);P.set(w*tk,q[1],q[0]);},(C,P,u)=>CRUST(C,P,sm(-.3,.9,Math.sin(u*TAU)),2),.3);
+      put(A,sl,T(sx+.035,Hh*.62+.0005,.012,.25,0,PI/2-.02));put(A,sl,T(sx+.075,Hh*.62+.014,.02,.5,0,PI/2+.06));}
+    return A;}
+  /* 땋은 빵: 세 가닥이 꼬이고 달걀물로 반들 */
+  function braid(v,L=.2,lo){const A=acc();for(let i=0;i<3;i++){const ph=i/3*TAU;
+    tube(A,(t,o)=>{const x=(t-.5)*L,a=t*TAU*2.2+ph,e=Math.sin(PI*t);o.set(x,.024*e+.012*Math.cos(a)*e+.004,.018*Math.sin(a)*e);},t=>.017*Math.pow(Math.sin(PI*(.06+t*.88)),.55),lo?8:12,lo?26:36,
+      (C,P,u,w)=>{const n=fbm(P.x*40+i,P.y*40,P.z*40,3);mixC(C,0xd88a3a,0x9a4a14,sm(.2,1,(P.y-.01)/.04)+n*.4-.2);},(P)=>.55+.3*sm(.02,.045,P.y));}
+    return A;}
+  /* 작은 빵(롤) */
+  const roll=v=>boule(v+1,.038,.032,1);
+
+  /* ================= 치즈 ================= */
+  /* 바퀴 치즈: a0~a1만큼(라디안) 있는 덩어리. 잘린 면엔 동글동글 구멍, 둘레는 밀랍 껍질 */
+  function wheel(A,R,H,a0,a1,rind,paste,holes,m){const pr=[[0,H],[R-.012,H],[R-.003,H-.004],[R*1.035,H*.5],[R-.003,.004],[R-.012,0],[0,0]];
+    const part=a1-a0<TAU-1e-4,rim=(y)=>{const t=y/H;return R*(1+.035*Math.sin(PI*t))-.009*(Math.exp(-((t/.09)**2))+Math.exp(-(((1-t)/.09)**2)));};
+    lathe(A,pr,part?Math.max(6,Math.round(40*(a1-a0)/TAU)):40,14,(C,P,th,v)=>{const n=fbm(P.x*30,P.y*30,P.z*30,3);mixC(C,rind,0x5a3a10,.06+n*.16);if(v<.18||v>.82)tint(C,0xffffff,.08);},.5,{a0,a1,m});
+    if(!part)return A;
+    const HL=[];for(let i=0;i<(holes||0);i++)HL.push([.18+.64*hash3(i,R*100,1),.2+.6*hash3(i,2,R*100),Math.min(R*.18,.006+.008*hash3(i,3,3))]);
+    for(const [ang,sg] of [[a0,1],[a1,-1]]){const nx=-Math.sin(ang)*sg,nz=Math.cos(ang)*sg;
+      surf(A,26,22,(u,w,P)=>{const y=H*(.002+u*.996),rr=rim(y)*w,hb=HL.reduce((s,[hr,hy,hs])=>{const d=Math.hypot(rr-hr*R,y-hy*H);return Math.max(s,d<hs?Math.sqrt(1-(d/hs)**2):0);},0);
+          P.set(rr*Math.cos(ang)+nx*hb*.007,y,rr*Math.sin(ang)+nz*hb*.007);},
+        (C,P,u,w)=>{const y=H*(.002+u*.996),rr=rim(y)*w,hb=HL.reduce((s,[hr,hy,hs])=>{const d=Math.hypot(rr-hr*R,y-hy*H);return Math.max(s,d<hs?1-d/hs:0);},0);
+          mixC(C,paste,0xffffff,.05+vn(P.x*200,P.y*200,P.z*200)*.12);if(hb>0)C.multiplyScalar(1-.3*hb);const e=Math.min(rim(y)-rr,y,H-y);if(e<.006)C.lerp(_d.set(rind),sm(.006,.0015,e));},
+        (P)=>.38,{wrap:false,m});}
+    return A;}
+  /* ================= 그릇·접시·나무판 ================= */
+  /* 둥근 나무 도마: 결 무늬 */
+  function board(A,w,d,h,m,col=0x9a6a3a){const n=6;
+    surf(A,48,8,(u,v,P)=>{const th=u*TAU,c=Math.cos(th),s=Math.sin(th),ex=Math.sign(c)*Math.pow(Math.abs(c),2/n)*w/2,ez=Math.sign(s)*Math.pow(Math.abs(s),2/n)*d/2;let k,y;
+        if(v<.5){k=v/.5;y=h;}else if(v<.62){const t=(v-.5)/.12;k=1;y=h-t*.003;}else{k=1;y=h-.003-(v-.62)/.38*(h-.003);}
+        const kk=v<.5?k*(1-.02):1-.02+.02*Math.sin(Math.min(1,(v-.5)/.12)*PI/2);P.set(ex*kk,y,ez*kk);},
+      (C,P)=>{const g=vn(P.x*3,0,P.z*28)*.65+vn(P.x*12,P.y*30,P.z*70)*.35;mixC(C,col,0x6a4020,g*.55);},.22,{m});return A;}
+  /* 접시: 가운데 오목, 테두리에 푸른 띠 */
+  function plate(A,R,m,band=0x2e4f8a){const pr=[[0,.004],[R*.55,.004],[R*.64,.007],[R*.95,.017],[R,.018],[R*.98,.014],[R*.64,.003],[R*.5,0],[0,0]];
+    return lathe(A,pr,36,16,(C,P,th,v)=>{const r=Math.hypot(P.x,P.z);mixC(C,0xf2ead8,0xe0d4bc,vn(P.x*40,0,P.z*40)*.4);if(v<.5){if(r>R*.84&&r<R*.91)C.set(band);if(r>R*.6&&r<R*.62)C.set(band);if(r>R*.86&&r<R*.89&&Math.sin(Math.atan2(P.z,P.x)*24)>.3)C.set(0xf2ead8);}},.78,{m});}
+  /* 바구니: 엮은 버들 */
+  function basket(A,R,H,m){const pr=[[0,.004],[R*.8,.004],[R*.86,.01],[R,H],[R*1.04,H+.008],[R*.96,H+.008],[R*.92,H],[R*.78,.012],[0,.012]];
+    return lathe(A,pr,40,14,(C,P,th,v)=>{const a=Math.floor(th/TAU*40),b=Math.floor(P.y*90);mixC(C,0xc89a58,0x8a6230,((a+b)%2)*.6+vn(th*8,P.y*60,0)*.3);if(v>.4&&v<.62)C.set(0x9a6a34);},.15,
+      {m,dr:(th,v,r,y)=>v<.4?.0025*Math.sin(th*40+Math.floor(y*90)*PI):0});}
+
+  /* ================= 상에 놓는 음식들 ================= */
+  const B={};
+  /* 맥주잔: 0 소금유약 돌잔(푸른 띠), 1 나무 통잔(쇠테), 2 크림빛 흙잔. 거품이 잔 위로 부풀고 한쪽으로 흘러내린다 */
+  B.mug=vv=>{const A=acc(),R=.06,H=.16,N=11;
+    const outer=vv===1?(C,P,th)=>{const g=th/TAU*N,si=Math.floor(g);mixC(C,0x8a5a30,0xb0743e,hash3(si,1,2));tint(C,0x4a2c14,vn(si*3,P.y*30,0)*.4+Math.exp(-(((g-si)/.05)**2))*.5+Math.exp(-(((1-(g-si))/.05)**2))*.5);}
+      :vv===0?(C,P,th)=>{mixC(C,0x8a9098,0xb8bcc0,fbm(P.x*80,P.y*80,P.z*80,2));if(P.y>.03&&P.y<.05||P.y>.11&&P.y<.125)C.set(0x2a4888).lerp(_d.set(0x4a68a8),vn(th*20,P.y*80,0));if(P.y>.06&&P.y<.1&&Math.abs(Math.sin(th*6))>.85)C.set(0x3a58a0);}
+      :(C,P)=>{mixC(C,0xe0d0b0,0xc8b48a,fbm(P.x*60,P.y*60,P.z*60,2));const drip=.112-.028*Math.pow(Math.max(0,Math.sin(Math.atan2(P.z,P.x)*4)),3);C.lerp(_d.set(0x7a4a24).lerp(new THREE.Color(0x9a6034),vn(P.x*90,P.y*90,P.z*90)),sm(drip-.006,drip+.004,P.y));};
+    lathe(A,[[0,0],[R*.94,0],[R,.006],[R*1.04,H*.5],[R,H-.004],[R*.97,H],[R*.88,H],[R*.86,.014],[0,.014]],40,26,(C,P,th,v)=>{if(v<.62)outer(C,P,th);else mixC(C,vv===2?0x5a3418:0x3a2410,0x2a1a0c,.4);},
+      vv===1?(P)=>.18:.72,{dr:vv===1?(th,v)=>{if(v>.62)return 0;const g=th/TAU*N%1;return -.0018*(Math.exp(-((g/.06)**2))+Math.exp(-(((1-g)/.06)**2)));}:null});
+    if(vv===1)for(const y0 of [.028,.128])lathe(A,[[R*1.0,y0],[R*1.045,y0+.001],[R*1.045,y0+.013],[R*1.0,y0+.014]],40,4,(C,P)=>mixC(C,0x2e2a26,0x5a524a,vn(P.x*200,P.y*200,P.z*200)),.6,
+      {dr:(th,v,r,y)=>.0015*Math.sin(PI*(y-.08)/.16)});
+    /* 손잡이 */
+    tube(A,(t,o)=>{const a=-PI/2+t*PI;o.set(R*.99+.04*Math.cos(a)*(vv===0?1.05:1),H*.5-.045*Math.sin(a)*1.1+(vv===0?.008:0),0);},t=>(vv===1?.0105:.0085)*(1-.18*Math.sin(PI*t)),10,16,(C,P)=>{if(vv===1)mixC(C,0x7a4c26,0x9a6434,vn(P.x*80,P.y*200,0));else if(vv===0)mixC(C,0x8a9098,0xb0b4b8,vn(P.y*200,0,0));else mixC(C,0xe0d0b0,0x7a4a24,sm(.105,.115,P.y));},vv===1?.2:.7,{sx:vv===1?1.25:1.1});
+    /* 거품: 볼록 + 보글보글, 한쪽으로 넘쳐 흐른다 */
+    const fa=1.1,dg=(th,c,wd)=>{const q=((th-c+PI*3)%TAU-PI)/wd;return q*q<1?Math.pow(1-q*q,.35):0;};
+    surf(A,80,20,(u,w,P)=>{const th=u*TAU,W=w*1.32,b=fbm(Math.cos(th)*3.5*Math.min(W,1)+5,Math.min(W,1)*2,Math.sin(th)*3.5*Math.min(W,1),3),ov=Math.max(dg(th,fa,.2)*.036,dg(th,fa+.5,.15)*.022,dg(th,fa-2.4,.17)*.014);let rr,y;
+        if(W<=1){rr=R*.95*Math.pow(W,.8);y=H-.002+.024*Math.pow(1-W*W,.6)+.007*(b-.5);}
+        else{const t=(W-1)/.32;if(t<.4){const q=t/.4;rr=R*(.95+.1*Math.sin(q*PI/2));y=H-.002+.007*(b-.5)+.007*Math.sin(q*PI)+.002;}
+          else{const q=(t-.4)/.6;rr=R*1.05-.004*q;y=H+.001-(.006+ov)*q*q*(3-2*q);rr+=.003*Math.sin(q*PI)*(ov>.004?1:.3);}}
+        P.set(rr*Math.cos(th),y,rr*Math.sin(th));},
+      (C,P,u,w)=>{const b=fbm(P.x*170,P.y*170,P.z*170,2);mixC(C,0xfffaf0,0xe6cf9c,sm(.38,.72,b)*.85);},.32);
+    return A;};
+  /* 포도주: 짙은 초록 병(종이 이름표, 붉은 밀랍), 백랍 술잔에 붉은 술 */
+  B.wine=v=>{const A=acc();
+    lathe(A,[[0,0],[.033,0],[.038,.006],[.038,.172],[.034,.196],[.022,.216],[.0135,.236],[.0125,.282],[.0148,.285],[.0148,.293],[.011,.296],[0,.296]],32,30,(C,P,th,v)=>{mixC(C,0x10241a,0x2a4a30,.2+.35*Math.max(0,Math.cos(th-.6)));if(P.y<.006)C.multiplyScalar(.7);},.97);
+    lathe(A,[[.0385,.07],[.0385,.142]],18,6,(C,P,th)=>{const y=P.y;C.set(0xeee2c4).lerp(_d.set(0xd8c8a0),vn(th*20,y*200,0)*.5);if(y>.118&&y<.127)C.set(0x7a1a22);if(y>.131&&y<.134)C.set(0xb08a3a);
+        if(y>.085&&y<.108&&hash3(Math.floor(th*60),Math.floor(y*300),2)>.55&&Math.abs(th)<.85)C.set(0x4a3a2a);},.12,{a0:-1.15,a1:1.15});
+    surf(A,24,8,(u,w,P)=>{const th=u*TAU,y0=.254-.014*Math.pow(Math.max(0,Math.sin(th*3+.4)),4)-.008*Math.pow(Math.max(0,Math.sin(th*5)),6);
+        if(w<.75){const t=w/.75;P.set(.0153*Math.cos(th),y0+t*(.2965-y0),.0153*Math.sin(th));}else{const t=(w-.75)/.25;P.set(.0153*(1-t)*Math.cos(th),.2965+.001*Math.sin(t*PI),.0153*(1-t)*Math.sin(th));}},
+      (C,P)=>mixC(C,0x8a1018,0xb02028,vn(P.x*300,P.y*300,P.z*300)),.65);
+    /* 백랍 술잔 */
+    const G=acc();lathe(G,[[0,0],[.032,0],[.034,.003],[.03,.006],[.012,.01],[.006,.022],[.0105,.03],[.006,.038],[.008,.05],[.026,.062],[.035,.085],[.037,.106],[.0345,.106],[.032,.086],[.025,.066],[0,.057]],30,26,
+      (C,P,th,v)=>{mixC(C,0x8a8c92,0xc4c6ca,fbm(P.x*40,P.y*40,P.z*40,3));if(v>.88)C.multiplyScalar(.75);},.9);
+    disc(G,()=>.0328,.092,30,3,(C,P,u,w)=>mixC(C,0x3a040e,0x7a1424,w*.8),.95);
+    put(A,G,T(.14,0,.04));return A;};
+  /* 빵: 0 열십자 둥근 빵, 1 썰어 둔 긴 빵과 빵칼(도마 위), 2 땋은 빵 */
+  const knife=(A,m)=>{surf(A,6,10,(u,w,P)=>{const th=u*TAU,len=.13,x=w*len,wd=.011*(w<.85?1:Math.sqrt(Math.max(0,(1-w)/.15)))*(1-w*.15);P.set(x,.0018*Math.sin(th)*(1-.6*Math.cos(th)),wd*(.5+.5*Math.cos(th))-.002);},(C,P,u,w)=>mixC(C,0x9aa0a8,0xe0e4e8,.5+.5*Math.sin(u*TAU+w*3)),1,{m});
+    tube(A,(t,o)=>o.set(-t*.085,.005,0),t=>.0075*(1-.15*Math.sin(t*PI)),8,6,(C,P)=>mixC(C,0x3a2010,0x5a3418,vn(P.x*200,0,0)),.35,{m,sx:1.4});
+    for(const x of [-.02,-.06])blob(A,.0025,.0025,.0025,6,4,null,(C)=>C.set(0xc8b080),.9,{m:new THREE.Matrix4().multiplyMatrices(m,T(x,.0115,0))});};
+  B.bread=v=>{if(v===0){return boule(0);}
+    if(v===1){const A=acc();board(A,.3,.17,.016,null);put(A,batard(1,true),T(-.04,.016,0,0));knife(A,T(.02,.017,.06,-.25));return A;}
+    const A=acc();put(A,braid(0),T(0,0,0,0));return A;};
+  /* 치즈: 0 한쪽을 잘라 낸 바퀴 치즈와 그 조각·칼 (도마 위), 1 큰 조각과 작은 깍둑 몇 개, 포도 한 송이 */
+  B.cheese=v=>{const A=acc();board(A,.3,.22,.016,null,0xa87440);
+    if(v===0){wheel(A,.08,.06,.9,TAU,0xd8a030,0xf4d46c,9,T(-.03,.016,-.01));const wg=acc();wheel(wg,.08,.06,0,.9,0xd8a030,0xf4d46c,9,null);put(A,wg,T(.07,.016+.0,.05,-1.9,0,0));knife(A,T(-.07,.017,.08,.3));}
+    else{const wg=acc();wheel(wg,.14,.07,0,.55,0xc89030,0xf2d880,12,null);put(A,wg,T(-.1,.016,-.02,.4));
+      const cb=acc();blob(cb,.013,.013,.013,10,8,null,(C,P)=>{mixC(C,0xf2d880,0xffffff,vn(P.x*300,P.y*300,P.z*300)*.15);if(P.y>.011)tint(C,0xc89030,.7);},.4,{shape:(P,d)=>{const f=q=>Math.sign(q)*Math.pow(Math.abs(q),.35);P.set(f(d.x)*.013,f(d.y)*.013+.013,f(d.z)*.013);}});for(let k=0;k<5;k++)put(A,cb,T(.03+(k%3)*.034,.016,.045+Math.floor(k/3)*.036-.03,k*.7+.2));
+      put(A,grapes(true),T(.06,.016,-.06,2.4));}
+    return A;};
+  /* 스튜: 유약 바른 흙그릇에 걸쭉한 국물, 고기·당근·감자·완두, 파슬리, 나무 숟가락 */
+  B.stew=vv=>{const A=acc(),RIM=.105,SY=.064;
+    lathe(A,[[0,0],[.044,0],[.05,.006],[.047,.012],[.072,.034],[.098,.062],[.106,.076],[.104,.081],[.098,.079],[.094,.072],[.07,.044],[.042,.02],[0,.016]],44,26,(C,P,th,v)=>{const gl=.032+.008*Math.sin(th*7)+.006*Math.sin(th*3+1);
+        if(v>.62)mixC(C,0x5a2a12,0x7a3a18,vn(P.x*60,P.y*60,P.z*60));else if(v>.52)mixC(C,0xe6d4a8,0xd0b888,vn(th*30,0,0)*.5);else if(P.y<gl)mixC(C,0xb06a40,0x8a4a28,fbm(P.x*50,P.y*50,P.z*50,3));else mixC(C,vv===0?0x2e5a3a:0x6a3416,0x8a4a1e,fbm(P.x*40,P.y*60,P.z*40,3)*.8);},
+      (P,u,v)=>v>.52?.85:(P.y<.032+.008*Math.sin(u*TAU*7)?.08:.85));
+    disc(A,th=>.0935+.0012*Math.sin(th*9),SY,40,10,(C,P,u,w)=>{const n=fbm(P.x*50,P.y,P.z*50,3);mixC(C,0x6e2a0c,0xa8481a,n*1.2-.1);if(vn(P.x*140,0,P.z*140)>.78)tint(C,0xd88a3a,.5);},.88,{dy:(x,z,w)=>.004*(fbm(x*60,0,z*60,3)-.5)+.002*(1-w*w)});
+    const meat=acc();blob(meat,.016,.012,.014,10,7,d=>1+.12*(vn(d.x*4,d.y*4,d.z*4)-.5),(C,P)=>{mixC(C,0x4a1e0c,0x8a4224,fbm(P.x*120,P.y*120,P.z*120,2)*1.3);},.62,{shape:(P)=>{P.x=Math.sign(P.x)*Math.pow(Math.abs(P.x)/.016,.7)*.016;P.z=Math.sign(P.z)*Math.pow(Math.abs(P.z)/.014,.7)*.014;}});
+    const car=acc();lathe(car,[[0,.005],[.0105,.005],[.0115,.0025],[.0105,0],[0,0]],14,6,(C,P)=>{const r=Math.hypot(P.x,P.z);mixC(C,0xf0902a,0xd85a10,sm(.003,.009,r));if(r>.0095)C.set(0xc04a0a);},.65);
+    const pot=acc();blob(pot,.013,.011,.012,9,7,d=>1+.15*(vn(d.x*3+2,d.y*3,d.z*3)-.5),(C,P)=>mixC(C,0xf0d888,0xd8b060,vn(P.x*150,P.y*150,P.z*150)),.45);
+    const pea=acc();blob(pea,.0045,.0045,.0045,7,5,null,(C,P)=>mixC(C,0x4a8a1e,0x7ab03a,P.y/.0045*.5+.5),.6);
+    const lf=acc();surf(lf,4,4,(u,w,P)=>{const a=u*TAU,r=.0035*(.6+.4*Math.abs(Math.sin(a*2.5)))*w;P.set(r*Math.cos(a),.0006*w,r*Math.sin(a));},(C)=>C.set(0x2f7a22),.4);
+    const S=[[.03,.02,0],[-.035,.025,1],[.01,-.04,0],[-.02,-.03,2],[.045,-.02,1],[-.05,-.005,0],[0,.045,2],[.025,.05,1],[-.045,.04,0],[.055,.03,2]];
+    S.forEach(([x,z,t],k)=>{const r=hash3(k,vv,4);if(t===0)put(A,meat,T(x,SY-.002,z,r*6,r*.6,.3));else if(t===1)put(A,car,T(x,SY-.001,z,r*6,.3*(r-.5),.4*(r-.5)));else put(A,pot,T(x,SY-.002,z,r*6,.4,0));});
+    for(let k=0;k<9;k++){const a=k*2.4,r=.02+.06*hash3(k,1,vv);put(A,pea,T(Math.cos(a)*r,SY+.001,Math.sin(a)*r));}
+    for(let k=0;k<16;k++){const a=k*1.9,r=.075*Math.sqrt(hash3(k,2,vv));put(A,lf,T(Math.cos(a)*r,SY+.005+.004*hash3(k,5,5),Math.sin(a)*r,a));}
+    /* 숟가락: 국물에 담근 채 그릇 테에 걸쳤다 */
+    const sp=T(-.03,SY-.011,.005,-.5,0,.28);blob(A,.024,.008,.017,12,8,null,(C,P)=>mixC(C,0xc89a60,0xa87440,vn(P.x*200,P.y*200,P.z*200)),.3,{m:sp,shape:(P)=>{if(P.y>0)P.y*=.3;}});
+    tube(A,(t,o)=>o.set(.02+t*.17,.003+t*.002,0),t=>.0042*(1+.35*t),8,8,(C,P)=>mixC(C,0xc89a60,0xa87440,vn(P.x*200,0,0)),.3,{m:sp,sx:1.5});
+    return A;};
+  /* 고기 접시: 0 통닭구이(윤기 나는 껍질, 다리 뼈), 1 두툼하게 썬 구운 고기 세 점과 감자·완두, 2 과일 접시 */
+  const roastC=(C,P,s=0)=>{const n=fbm(P.x*70+s,P.y*70,P.z*70,3),top=sm(.01,.06,P.y);mixC(C,0xd88a38,0x8a3a0e,top*.9+n*.6-.15);tint(C,0x4a1a06,sm(.6,.78,n)*top*.85);if(hash3(Math.floor(P.x*500),Math.floor(P.y*500),Math.floor(P.z*500))>.975)C.set(0x3a5a1a);};
+  const potato=(v)=>{const A=acc();blob(A,.016,.014,.015,10,8,d=>1+.14*(vn(d.x*3+v,d.y*3,d.z*3)-.5),(C,P)=>{const n=fbm(P.x*120+v,P.y*120,P.z*120,2);mixC(C,0xe8b850,0xa8601e,n*1.4-.3+(P.y>.004?.25:0));},.55);return A;};
+  const sprig=()=>{const A=acc();tube(A,(t,o)=>o.set(t*.055,.004+Math.sin(t*PI)*.004,0),t=>.0011,4,6,(C)=>C.set(0x6a5a2a),.2);
+    for(let k=0;k<22;k++){const t=.06+k/22*.9,a=k*2.4,L=.009*(1-t*.45);surf(A,4,3,(u,w,P)=>{const th=u*TAU;P.set(t*.055+w*L*.35,.004+Math.sin(t*PI)*.004+w*L*.55*Math.max(.2,Math.sin(a))+Math.sin(th)*.0005*(1-w),Math.cos(a)*w*L+Math.cos(th)*.0007*(1-w));},(C,P,u,w)=>mixC(C,0x2a4a22,0x4a6a3a,w),.35);}return A;};
+  B.plate=v=>{const A=acc(),PR=.135;plate(A,PR,null);const FY=.0045;
+    if(v===0){disc(A,th=>.07+.012*Math.sin(th*5)+.006*Math.sin(th*3+1),FY+.0008,30,3,(C,P,u,w)=>mixC(C,0x4a1a06,0x7a3410,w*.8),.92);
+      blob(A,.072,.046,.054,22,16,null,(C,P)=>roastC(C,P),(P)=>.55+.35*sm(.02,.07,P.y),{m:T(.005,FY,0),shape:(P,d)=>{P.y=P.y<0?P.y*.25:P.y*(1+.12*Math.exp(-(((Math.abs(P.z)-.02)/.012)**2)))-.006*Math.exp(-((P.z/.008)**2))*(P.y>0?1:0);P.y+=.012;if(P.x>.04)P.y-=(P.x-.04)*.3;}});
+      /* 다리: 넓적다리는 몸통에 붙고, 북채는 꽁무니 쪽으로 올라가 뼈 끝이 모인다. 날개는 앞 옆구리에 접혀 있다 */
+      for(const sd of [-1,1]){blob(A,.036,.025,.021,14,10,null,(C,P)=>roastC(C,P,sd),.8,{m:T(-.016,FY+.03,sd*.041,sd*.25,0,-.1)});
+        tube(A,(t,o)=>o.set(-.03-t*.06,FY+.033+t*.02+Math.sin(t*PI)*.004,sd*(.044-t*.03)),t=>.0165*(1-.42*t)*Math.min(1,(1-t)*7+.25)*(1+.15*Math.sin(t*PI)),12,12,(C,P)=>roastC(C,P,sd+2),.8);
+        tube(A,(t,o)=>o.set(-.085-t*.013,FY+.052+t*.003,sd*(.016-t*.004)),t=>.0042,6,3,(C)=>C.set(0xeee2c8),.3);
+        blob(A,.0068,.006,.0068,8,6,null,(C,P,u,w)=>mixC(C,0xf6eedc,0xd8c8a8,w),.35,{m:T(-.1,FY+.0555,sd*.011)});
+        blob(A,.029,.0105,.016,10,7,null,(C,P)=>{roastC(C,P,sd+5);tint(C,0x5a220a,sm(.02,.05,P.x)*.5);},.8,{m:T(.042,FY+.028,sd*.049,sd*.45,0,sd*.25)});}
+      const pt=potato(1);for(const [x,z,r] of [[.08,.06,1],[.095,-.035,2],[-.02,.095,3],[-.07,-.08,4]])put(A,pt,T(x,FY+.011,z,r,.2,0));
+      put(A,sprig(),T(.06,FY+.002,-.07,.8));put(A,sprig(),T(-.09,FY+.002,.05,2.6));}
+    else if(v===1){disc(A,th=>.06+.01*Math.sin(th*4),FY+.0008,24,3,(C,P,u,w)=>mixC(C,0x4a1a06,0x7a3410,w*.8),.92);
+      const sl=acc(),ew=.055,ed=.036,tk=.014,E=th=>[ew*Math.cos(th)*(1+.05*Math.sin(th*3)),ed*Math.sin(th)];
+      for(const f of [0,1])surf(sl,28,6,(u,w,P)=>{const e=E(u*TAU);P.set(e[0]*w,f*tk,e[1]*w);},(C,P,u,w)=>{mixC(C,0xd88a7a,0xb85a48,w*.8+vn(P.x*200,0,P.z*200)*.2);if(w>.82)mixC(C,0x8a4a2a,0x4a1e0a,(w-.82)*6);if(Math.abs(Math.sin(u*TAU*2+1)*w-.4)<.04&&w<.8)tint(C,0xf0d8c8,.5);},.55);
+      surf(sl,28,2,(u,w,P)=>{const e=E(u*TAU);P.set(e[0],w*tk,e[1]);},(C,P)=>{mixC(C,0x5a220a,0x8a3e14,vn(P.x*200,P.y*200,P.z*200));},.6);
+      for(let k=0;k<3;k++)put(A,sl,T(-.03+k*.032,FY+.002+k*.007,-.01+k*.008,.3,0,-.18));
+      const pt=potato(2);for(const [x,z,r] of [[.07,.06,1],[.085,-.04,2],[-.06,.07,3]])put(A,pt,T(x,FY+.011,z,r,.2,0));
+      const pea=acc();blob(pea,.005,.005,.005,7,5,null,(C,P)=>mixC(C,0x4a8a1e,0x80b840,P.y/.005*.5+.5),.65);for(let k=0;k<14;k++){const a=k*.9,r=.012*Math.sqrt(k);put(A,pea,T(-.07+Math.cos(a)*r*.6,FY+.006+(k%3)*.003,-.06+Math.sin(a)*r*.5));}
+      put(A,sprig(),T(.04,FY+.002,.085,-.3));}
+    else{put(A,apple(0,true),T(-.045,FY,.03,.3));put(A,apple(2),T(.03,FY,.055,2,.3,.2));put(A,pear(),T(.045,FY+.03,-.025,1.3,0,PI/2-.15));put(A,grapes(false),T(-.03,FY,-.05,.6));}
+    return A;};
+
+  /* ================= 시장 좌판에 올리는 것 ================= */
+  /* 과일 무더기: 상자 안(w×d)에 kind 과일을 빈틈없이 쌓는다 */
+  const FRUIT={apple0:()=>apple(0,0,1),apple1:()=>apple(1,0,1),apple2:()=>apple(2,0,1),orange:()=>orange(1),pear:()=>pear(1),lemon:()=>lemon(1)};
+  const _fc={};const fruitG=k=>_fc[k]||(_fc[k]=FRUIT[k]());
+  /* 과일 무더기: w×d 안에 한 켜를 빈틈없이 깔고, 위에 몇 알을 더 얹는다 (아래 켜는 어차피 안 보여 빚지 않는다) */
+  function heap(A,kind,w,d,y,m,s=1){const F=fruitG(kind),sp=(kind==='pear'?.075:.08)*s,nx=Math.max(1,Math.floor(w/sp)),nz=Math.max(1,Math.floor(d/sp)),tl=kind==='pear'||kind==='lemon'?.12:.45;
+    for(let L=0;L<2;L++)for(let a=0;a<nx-L;a++)for(let b=0;b<nz-L;b++){const h=hash3(a+L*.5,b,L+3);if(L&&h>.35)continue;const x=-w/2+sp*(a+.5+L*.5)+(hash3(a,b,1)-.5)*.014*s,z=-d/2+sp*(b+.5+L*.5)+(hash3(b,a,3)-.5)*.014*s;
+      const lift=L*.04*s+.006*(1-Math.min(1,(Math.abs(x)/(w/2))**4+(Math.abs(z)/(d/2))**4));put(A,F,new THREE.Matrix4().multiplyMatrices(m,T(x,y+lift,z,h*TAU,(hash3(a,b,5)-.5)*tl,(hash3(a,b,9)-.5)*tl,s)),hash3(a,b,11)>.8?0xf0e8e0:null);}}
+  /* 살 상자 */
+  function crate(A,w,d,h,m){const S=(x,y,z,sx,sy,sz,c)=>surf(A,4,1,(u,v,P)=>{const a=u*TAU+PI/4,cx=Math.cos(a)*Math.SQRT2*.5,cz=Math.sin(a)*Math.SQRT2*.5;P.set(x+cx*sx,y+(v-.5)*sy,z+cz*sz);},(C,P)=>mixC(C,c,0x5a3a1c,vn(P.x*20,P.y*20,P.z*90)*.5),.15,{m});
+    S(0,.006,0,w,.012,d,0x9a7a4a);for(const sd of [-1,1]){for(const y of [.03,.075])S(0,y,sd*(d/2-.006),w,.035,.012,0xa8844e);for(const y of [.03,.075])S(sd*(w/2-.006),y,0,.012,.035,d,0xa8844e);}
+    for(const sx of [-1,1])for(const sz of [-1,1])S(sx*(w/2-.012),h/2,sz*(d/2-.012),.024,h,.024,0x7a5a32);}
+  /* 좌판 위 (좌판 앞 +z, 판 윗면 y .9. 굽기에서 판이 깜빡임 막느라 몇 mm 커지므로 1cm쯤 띄워 얹는다) */
+  const ST={};
+  ST[0]=v=>{const A=acc(),K=[['apple0','orange','apple1','lemon'],['apple0','pear','orange','apple2']][v];
+    for(let k=0;k<4;k++){const m=T(-1+k*.66,.912,0,0,-.16,0);crate(A,.6,.78,.13,m);heap(A,K[k],.56,.74,.02,m);}return A;};
+  ST[3]=v=>{const A=acc();
+    surf(A,60,26,(u,w,P)=>{const x=-1.35+u*2.7;let y,z;if(w<.8){z=-.55+w/.8*1.15;y=.911+.002*Math.sin(x*9)*Math.sin(z*7);}else{const t=(w-.8)/.2;z=.6+.01*t;y=.911-t*.22;}P.set(x,y,z+.012*Math.sin(x*14)*sm(.8,1,w));},
+      (C,P,u,w)=>{mixC(C,0xe0d4b8,0xc8b896,vn(P.x*30,P.y*30,P.z*30));const gx=Math.abs(((P.x+5)*5)%1-.5)<.09,gz=Math.abs(((P.z+5)*5)%1-.5)<.09;if(gx||gz)tint(C,0xa83a30,gx&&gz?.8:.5);},.12,{wrap:false});
+    const Y=.914,bo=[boule(v*2,.1,.078,1),boule(v*2+1,.11,.085,1)],ba=batard(v,false,.17,.052,.05,1),br=braid(v,.2,1),R=roll(v);
+    /* 뒷줄: 높은 바구니 셋에 긴 빵을 세워 꽂았다 */
+    for(const bx of [-1.0,-.12,.78]){const m=T(bx,Y,-.36,bx);basket(A,.15,.2,m);for(let k=0;k<5;k++){const a=k/5*TAU+bx;put(A,ba,new THREE.Matrix4().multiplyMatrices(m,T(Math.cos(a)*.06,.17,Math.sin(a)*.06,-a,0,PI/2-.28)));}}
+    /* 가운데: 둥근 빵 줄 */
+    for(let k=0;k<6;k++){const h=hash3(k,v,2);put(A,bo[k%2],T(-1.12+k*.43+(h-.5)*.06,Y,-.02+(h-.5)*.08,h*6,0,0,.95+h*.25));}
+    /* 앞줄: 땋은 빵 둘, 작은 빵 무더기, 누운 긴 빵 둘 */
+    put(A,br,T(-.95,Y,.32,.15));put(A,br,T(-.45,Y,.34,-.1,0,0,.9));
+    for(let k=0;k<7;k++){const a=k*2.4,r=k?.06+.02*(k%2):0;put(A,R,T(.12+Math.cos(a)*r,Y+(k?0:.028),.3+Math.sin(a)*r*.8,a));}
+    put(A,ba,T(.62,Y,.3,.12));put(A,ba,T(.98,Y,.28,-.2));
+    return A;};
+  ST[4]=v=>{const A=acc(),G=[[0xd8a030,0xf4d46c],[0xe8dcc0,0xf8f0d8],[0xc06a20,0xf0b860],[0xb08a50,0xf0e0a8]];
+    const Y=.914;
+    /* 왼쪽: 큰 바퀴 셋을 쌓았다 */
+    for(let k=0;k<3;k++)wheel(A,.25,.13,0,TAU,G[(v+k)%2*2][0],G[(v+k)%2*2][1],0,T(-1.08+(k%2)*.02,Y+k*.132,-.12+(k%2)*.015,k*.7));
+    /* 둘: 가운데 크기 바퀴 */
+    wheel(A,.19,.1,0,TAU,G[1][0],G[1][1],0,T(-.6,Y,-.3,.3));wheel(A,.19,.1,0,TAU,G[3][0],G[3][1],0,T(-.62,Y,.2,1.2));wheel(A,.17,.09,0,TAU,G[2][0],G[2][1],0,T(-.6,Y+.1,-.28,2.2));
+    /* 가운데: 도마 위에 잘라 낸 바퀴와 조각, 칼 */
+    board(A,.66,.5,.02,T(.1,Y,0),0x9a6a3a);wheel(A,.21,.12,1.1,TAU,G[v][0],G[v][1],10,T(.06,Y+.02,-.06,.6));
+    const wg=acc();wheel(wg,.21,.12,0,.75,G[v][0],G[v][1],10,null);put(A,wg,T(.2,Y+.02,.14,-2.2));knife(A,T(-.08,Y+.021,.18,.4));
+    /* 오른쪽: 작은 바퀴 탑과 앞쪽 조각 셋 */
+    for(let k=0;k<4;k++)wheel(A,.11,.07,0,TAU,G[(k+v)%4][0],G[(k+v)%4][1],0,T(.74+(k%2)*.012,Y+k*.071,-.28,k));
+    for(let k=0;k<3;k++){const w=acc();wheel(w,.17,.1,0,.6,G[(k+1)%4][0],G[(k+1)%4][1],6,null);put(A,w,T(.6+k*.26,Y,.2,-PI/2-.3+k*.1));}
+    wheel(A,.15,.09,0,TAU,G[2][0],G[2][1],0,T(1.14,Y,-.2,2));
+    return A;};
+  /* 하레나 좌판: 판 위(y .8)에 과일 넷 무더기 */
+  ST.h=v=>{const A=acc(),K=['apple0','orange','apple1','lemon'];for(let k=0;k<4;k++)heap(A,K[(k+v)%4],.34,.34,.8,T(-.6+k*.4,0,0,0),.9);return A;};
+
+  /* ================= 꾸리기 ================= */
+  const done=A=>{const g=new THREE.BufferGeometry(),n=A.p.length/3,p=new Float32Array(A.p);for(let i=1;i<p.length;i+=3)p[i]+=.0015;   /* 밑면이 바닥과 딱 붙지 않게 1.5mm 띄운다 (굽기에서 밑면 붙은 모양을 내려 깜빡임을 막는 장치가 음식을 바닥에 묻지 않게) */
+    g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(A.n,3));g.setAttribute('color',new THREE.Float32BufferAttribute(A.c,3));g.setAttribute('mt',new THREE.Float32BufferAttribute(A.g,1));
+    g.computeBoundingSphere();g.computeBoundingBox();g.userData.fd=1;g.userData.n=n;return g;};
+  const cache=new Map();
+  const geo=key=>{let g=cache.get(key);if(!g){const [k,vs]=key.split(':'),v=+vs||0;const A=k[0]==='S'?ST[k.slice(1)](v):B[k](v);g=done(A);cache.set(key,g);}return g;};
+  let _m=null;const mat=()=>{if(_m)return _m;_m=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.9,metalness:0,side:THREE.DoubleSide});
+    _m.onBeforeCompile=s=>{s.vertexShader=s.vertexShader.replace('#include <common>','#include <common>\nattribute float mt;\nvarying float vGl;').replace('#include <begin_vertex>','#include <begin_vertex>\nvGl=mt;');
+      s.fragmentShader=s.fragmentShader.replace('#include <common>','#include <common>\nvarying float vGl;').replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(.95,.2,vGl);');};
+    _m.customProgramCacheKey=()=>'foodk';return _m;};
+  /* 같은 자리면 늘 같은 갈래 (무작위 수를 쓰지 않는다: 둘레의 배치가 바뀌지 않게) */
+  const pickV=(x,z,n)=>Math.floor(hash3(Math.round(x*10),Math.round(z*10),5.5)*n)%n;
+  return {geo,mat,pickV,VARS:{mug:3,wine:1,bread:3,cheese:2,stew:2,plate:3}};
+})();
 const colliders=[];
 /* 앉을 자리: 벤치·걸상·소파. {x,z,y:앉는 높이(세계), ry:앉아서 보는 방향} — F로 앉고, 움직이면 일어난다 */
 const SEATS=[];
@@ -8111,6 +8425,7 @@ const SFX_DEF={
   swing:(o,t,p)=>{_noise(o,'bandpass',1400*p,380*p,t,.2,.9,1.4,.03);},
   swing2:(o,t,p)=>{_noise(o,'bandpass',900*p,260*p,t,.32,1,1.2,.05);_tone(o,'sine',160*p,90*p,t+.05,.25,.25);},
   punch:(o,t,p)=>{_tone(o,'sine',140*p,60,t,.12,.7,.004);_noise(o,'lowpass',900*p,250,t,.1,.6,1,.004);},
+  chisel:(o,t,p)=>{_tone(o,'triangle',2350*p,2050*p,t,.06,.22,.001);_tone(o,'sine',1180*p,1050*p,t,.1,.14,.001);_noise(o,'highpass',4200,3200,t,.035,.28,1,.001);},   // 망치가 정을 때려 돌을 쪼는 소리
   block:(o,t,p)=>{_tone(o,'triangle',1250*p,900*p,t,.18,.5,.005);_tone(o,'square',620*p,520*p,t,.12,.18,.005);_noise(o,'highpass',3000,2000,t,.08,.5,1,.004);},
   stab:(o,t,p)=>{_noise(o,'bandpass',2600*p,1200*p,t,.1,.8,2,.01);},
   bow:(o,t,p)=>{_tone(o,'triangle',220*p,140*p,t,.16,.6);_noise(o,'highpass',3000,5000,t,.06,.5,1);_noise(o,'bandpass',1800,900,t+.02,.14,.35,2);},
@@ -8222,7 +8537,7 @@ function sfxSkill(S,id){
 /* ---------- NPC 목소리: 글자가 하나 나올 때마다 그 글자의 모음 소리로 짧게 웅얼거린다 ----------
    한글이면 모음(ㅏ·ㅔ·ㅓ·ㅗ·ㅜ·ㅡ·ㅣ)에 맞춘 두 공명(포먼트)으로 거른 소리를 낸다. 사람마다 높이·빠르기·거친 정도가 다르다 */
 /* vol: 목소리마다 들리는 크기를 튀르팽에 맞춘 값 (거친 숨소리가 없는 목소리는 더 작게 들려서 키운다) */
-const VOICE={kyle:{p:128,sp:46,vol:1.75},sera:{p:104,rasp:.35,sp:58,fs:.95,vol:1.06},turpin:{p:104,rasp:.35,sp:58,fs:.95},bron:{p:98,rasp:.3,sp:52,vol:1.13},torgan:{p:84,rasp:.22,sp:50,fs:.9,vol:1.23},
+const VOICE={zibben:{p:96,rasp:.28,sp:56,fs:.92,vol:1.15},kyle:{p:128,sp:46,vol:1.75},sera:{p:104,rasp:.35,sp:58,fs:.95,vol:1.06},turpin:{p:104,rasp:.35,sp:58,fs:.95},bron:{p:98,rasp:.3,sp:52,vol:1.13},torgan:{p:84,rasp:.22,sp:50,fs:.9,vol:1.23},
   rowen:{p:112,sp:46,vol:1.72},messenger:{p:132,sp:50,fs:1.02,vol:1.62},mina:{p:236,sp:42,fs:1.16,vol:1.31},hanna:{p:208,sp:45,fs:1.12,vol:1.51},elis:{p:252,sp:46,fs:1.18,air:.25},knight:{p:214,sp:46,fs:1.12,vol:1.48},
   timo:{p:320,sp:40,fs:1.32,vol:1.5},mentor:{p:118,sp:50,vol:1.72},
   lman:{p:86,sp:64,fs:.84,rasp:.16,vol:1.7,helm:1}};   /* S: 낮고 느리게, 투구 속에서 울리는 쇳소리 */
@@ -8887,6 +9202,32 @@ function stickNpcPose(g,pose,t){const S=g.userData.stick;if(!S)return;const AR=S
     case 'wallsit':{   /* 벽에 등을 기대고 바닥에 반쯤 누워 앉음: 왼다리는 뻗고 오른무릎은 세워 팔을 걸친다. 고개는 졸듯이 숙였다가 가끔 든다 */
       S.body.position.y=-.86;legs(-1.5,.06,-2.05,2.15);S.L.hip.rotation.z=.12;S.R.hip.rotation.z=-.08;S.upper.rotation.x=-.42+br*.5;
       arm(AR,-.4,0,-.3,-.8);arm(AL,.55,0,-.1,-1);const up=_sn(t*.09,5)>.55;S.head.rotation.set(up?.05:.38+Math.sin(t*.8)*.02,up?_sn(t*.3,2)*.3:0,0);break;}
+    /* 조각가 지븐: 돌 앞에 왼발을 내딛고 서서, 왼손 정을 돌에 대고 오른손 망치로 톡톡 두드린다 (천천히 들고 빠르게 내리침).
+       몇 번 두드리면 한 걸음 물러나 턱을 괴고 고개를 갸웃하며 살피고, 손바닥으로 돌가루를 털어 낸다. 망치가 정을 때리는 순간 u.zbHit이 하나 는다 */
+    case 'zbcarve':{const u=g.userData,cy=((t%11)+11)%11;
+      if(cy<7.2){const s=(t*1.6)%1,up=s<.7?Math.sin(s/.7*Math.PI/2):1-((s-.7)/.3)**2;
+        legs(-.34,.26,.16,.08);S.body.position.z=.03;
+        arm(AL,-1.12,.32,.02,-.72,-.25);
+        arm(AR,-.92-up*.42,-.38,.12,-1.2-up*.3,.15);
+        S.upper.rotation.set(br+.2+up*.03,-.1,0);S.head.rotation.set(.34,.06,0);
+        if(u.zbS!=null&&s<u.zbS)u.zbHit=(u.zbHit|0)+1;u.zbS=s;}
+      else if(cy<9.6){u.zbS=null;const k=Math.min(1,(cy-7.2)*2.5);legs(-.06,.05,.1,.04);
+        arm(AL,-.9,.1,-.2,-2.25,.1);arm(AR,-.12,0,.12,-.32);S.upper.rotation.set(br-.04*k,.05,0);S.head.rotation.set(.1,_sn(t*.3,1)*.12,.18*k*Math.sin(Math.min(1,(cy-7.2)*.7)*Math.PI));}
+      else{u.zbS=null;const w=Math.sin(t*9);legs(-.28,.2,.12,.06);
+        arm(AL,-1.15,.25+w*.18,.05,-.55,-.2);arm(AR,-.25,0,.15,-.6);S.upper.rotation.set(br+.24,-.05,0);S.head.rotation.set(.3,w*.04,0);}
+      break;}
+    /* 사람이 다가오면: 정과 망치를 내리고 허리를 펴서 쳐다본다. 이따금 팔뚝으로 이마의 땀을 훔치고, 망치를 살짝 들어 아는 척 */
+    case 'zbnear':{const k=((t%7)+7)%7;legs(-.05,.06,.08,.04);arm(AL,-.25,0,-.15,-.55);
+      if(k<1.4){const w=Math.sin(k/1.4*Math.PI);arm(AR,-1.9*w-.1,.2*w,.1+.3*w,-1.9*w-.3,.6*w);S.head.rotation.set(-.12*w,0,0);}
+      else if(k>4.6&&k<5.8){const w=Math.sin((k-4.6)/1.2*Math.PI);arm(AR,-.3-.9*w,0,.15+.25*w,-.6-.9*w,.3);look(.6);}
+      else{arm(AR,-.12,0,.12,-.3);look(.7);}
+      S.upper.rotation.set(br-.03,0,0);break;}
+    /* 이야기할 때: 정 끝으로 허공에 선을 그어 보이고, 가끔 돌 쪽을 가리킨다. 망치는 오른손에 늘어뜨리고 고개를 끄덕인다 */
+    case 'zbtalk':{const g1=_sn(t*.6,2);legs(-.04,.05,.06,.03);arm(AR,-.15,0,.12,-.45);
+      if(g1>.3){const d=Math.sin(t*2.4);arm(AL,-1.25+d*.12,.35+d*.2,-.1,-.7,-.2);}
+      else if(g1<-.35)arm(AL,-.55,.6,-.55,-.4);
+      else arm(AL,-.5,.15,-.1,-1.45,.1);
+      S.upper.rotation.set(br-.02,0,0);S.head.rotation.set(-.04+Math.max(0,_sn(t*1.5,4))*.1,_sn(t*.4,3)*.2,0);break;}
     case 'cross':arm(AR,-.29,-1.55,.38,-1.65);arm(AL,-1.81,1.46,1.08,-1.67);S.upper.rotation.x=br-.04;look(.8);break;
     case 'hips':arm(AR,.15,-.7,.6,-1.65);arm(AL,.15,.7,-.6,-1.65);S.upper.rotation.x=br-.05;look();break;
     case 'counter':{const wv=_sn(t*.15,2)>.25;if(wv){const u=Math.sin(t*7);arm(AR,-.2,0,1.95,-1.25+u*.3,1.3);}else arm(AR,-.95,0,.08,-.35);arm(AL,-.95,0,-.08,-.35);S.upper.rotation.x=br+(wv?.02:.18);look(wv?.5:1);break;}
@@ -9110,6 +9451,16 @@ function npcProp(S,k,m){const R=S.AR.hand,L=S.AL.hand,W=0x7a5232,DW=0x4a3020,ME=
     case 'crook':P(R,cyl(.022,1.7),W,0,.2,0);P(R,new THREE.TorusGeometry(.09,.02,5,10,Math.PI*1.3),W,.09,1.05,0);break;
     case 'rod':{const g=new THREE.Group();g.rotation.x=-.75;R.add(g);P(g,cyl(.014,2.4),W,0,.9,0);P(g,cyl(.003,.9),0xe8e0d0,0,1.6,.3,{rx:.9});break;}
     case 'hammer':P(R,cyl(.02,.4),W,0,-.12,0);P(R,box(.16,.08,.08),0x4a4a50,0,-.33,0);break;
+    /* 조각가 지븐: 왼손엔 정(끝이 납작한 쇠 끌), 오른손엔 쇠머리 돌망치. 손에 쥔 쪽(손 앞 z)으로 뻗는다 */
+    case 'chisel':{const c=new THREE.Group();c.position.set(0,-.05,.02);c.rotation.x=-.35;L.add(c);
+      P(c,new THREE.CylinderGeometry(.0095,.0105,.2,8),0x8a8e94,0,0,.03,{rx:Math.PI/2,mat:{metalness:.7,roughness:.35}});
+      P(c,new THREE.CylinderGeometry(.0135,.0105,.022,10),0x6a6e74,0,0,-.075,{rx:Math.PI/2,mat:{metalness:.7,roughness:.4}});   /* 망치에 맞아 살짝 퍼진 머리 */
+      P(c,new THREE.CylinderGeometry(.0105,.0016,.05,8),0xc8ccd2,0,0,.15,{rx:Math.PI/2,s:[1.5,1,.45],mat:{metalness:.8,roughness:.25}});break;}   /* 날: 납작하게 벼린 끝 */
+    case 'mallet':{const c=new THREE.Group();c.position.set(0,-.04,.02);R.add(c);
+      P(c,new THREE.CylinderGeometry(.0145,.017,.28,8),0x9a7448,0,0,.09,{rx:Math.PI/2});
+      P(c,new THREE.CylinderGeometry(.019,.019,.05,8),0x6a4a2a,0,0,-.03,{rx:Math.PI/2});   /* 손잡이 끝 감은 가죽 */
+      const hd=new THREE.LatheGeometry([[0,-.06],[.03,-.06],[.038,-.052],[.04,-.035],[.04,.035],[.038,.052],[.03,.06],[0,.06]].map(q=>new THREE.Vector2(q[0],q[1])),14);
+      P(c,hd,0x5a5e64,0,0,.24,{mat:{metalness:.75,roughness:.35}});break;}   /* 쇠머리: 양쪽 때리는 면이 둥글게 닳았다 */
     case 'potion':P(L,sph(.06),0x4ac87a,0,-.08,.04,{mat:{transparent:true,opacity:.85,emissive:0x2a8a4a,emissiveIntensity:.5}});P(L,cyl(.02,.06),0xc8c0a8,0,-.01,.04);break;
     case 'pipe':P(S.head,cyl(.008,.12),0x3a2a1a,.04,-.07,.25,{rx:Math.PI/2+.3});P(S.head,cyl(.022,.05),0x3a2a1a,.04,-.04,.31);break;
     case 'crutch':P(R,cyl(.022,1.25),W,0,-.05,.04);P(R,box(.18,.04,.05),W,0,.58,.04);break;
@@ -9596,6 +9947,8 @@ const NPC_FINE={
     cl:{buttons:{n:4,c:0xc8ccd4},gloves:0xf2f2ee}}},
   farmer:{cloth:{sleeve:'long',skirtC:0x6a4a3a,shoes:0x4a3020},fine:{hair:'braids',hairC:0x8a5a2a,tie:0xc84a3a,body:{bust:1,w:1.1},skin:0xe8c8a4,brow:{t:-.05},nose:'button',mouth:'grin',freck:true,blush:0xe08a7a,
     cl:{kerchief:0xc84a3a,rolled:0xd8c8a0,apronPockets:1},props:['basket']}},
+  zibben:{cloth:{sleeve:'short',pants:0x5a5248,apron:0x7a5434,shoes:0x3a2a1c},fine:{hair:'messy',hairC:0x9a9488,body:{w:1.1,limb:1.3},bareArms:1,skin:0xe2bf9c,brow:{c:0x9a9488,th:.022,bushy:1,t:.03},nose:'big',mouth:false,beard:'short',beardC:0x9a9488,age:1,eye:'narrow',
+    cl:{kerchief:0x4a6a8a,rolled:0xc8bca4,belt:0x3a2a1a,pouch:0x6a4a2a,boots:0x3a2a1c,apronPockets:1},props:['chisel','mallet']}},   /* 조각가 지븐: 돌가루 앉은 잿빛 머리·짧은 수염, 걷어붙인 팔, 가죽 앞치마, 목에 두른 푸른 손수건 */
   turpin:{look:{hat:'bald'},fine:{hair:'balding',hairC:0xf0f0f0,skin:0xf0d8bc,body:{hunch:.16,h:.97},brow:{c:0xf6f6f6,bushy:1,th:.024,t:-.12},nose:'big',mouth:'smile',beard:'long',beardC:0xf4f4f4,age:2,eye:'sleepy',
     cl:{rope:0x8a6a3a,pendant:0xfff0a0},props:['book']}},
   /* ── 하레나 ── */
@@ -11413,7 +11766,7 @@ async function buildMarcus(H){
     out(){return this.a.subarray(0,this.length);}});
   const nb=()=>({pos:fbuf(),nor:fbuf(),col:fbuf(),mt:fbuf()});
   const cell=(x,z)=>{const i=Math.floor((x-cx)/CELL),j=Math.floor((z-cz)/CELL),k=i+','+j;let C=MARCUS.cells.get(k);
-    if(!C){C={op:nb(),gl:nb(),sh:nb(),ip:nb(),dt:nb(),x:cx+(i+.5)*CELL,z:cz+(j+.5)*CELL,g:new THREE.Group()};C.g.userData.mc=1;scene.add(C.g);MARCUS.cells.set(k,C);}return C;};
+    if(!C){C={op:nb(),gl:nb(),sh:nb(),ip:nb(),dt:nb(),fd:nb(),x:cx+(i+.5)*CELL,z:cz+(j+.5)*CELL,g:new THREE.Group()};C.g.userData.mc=1;scene.add(C.g);MARCUS.cells.set(k,C);}return C;};
   const GC=new Map(),geoC=(key,mk)=>{if(!GC.has(key))GC.set(key,mk());return GC.get(key);};
   const BOX=geoC('b',()=>new THREE.BoxGeometry(1,1,1)),QUAD=geoC('q',()=>new THREE.PlaneGeometry(1,1));
   const CYL=(rt,rb,n,open)=>geoC('c'+rt+'_'+rb+'_'+n+(open?'o':''),()=>new THREE.CylinderGeometry(rt,rb,1,n,1,!!open));
@@ -11443,14 +11796,14 @@ async function buildMarcus(H){
   setMt([PAVE,PAVE2,CURB,0xc8bca4,0xb2a488,0x9a8c72,0xc0b296,0xae9e82,0xa8957a,0xb3a48a],4);setMt([WOOD,DARKW,0x6a4a32,0x8a6a4a,0x5a3d24,0x7a5232,0x9a7a4a,0x8a5a3a,0x7a4a2a],5);
   setMt([BRICK,0xa8603e],6);setMt([MAR,MAR2,0xe8e0d0,0xd8d0c0,0xeee8dc],7);
   const NI=new Map(),_c=new THREE.Color(),_nm=new THREE.Matrix3();
-  const flat=geo=>{let e=NI.get(geo);if(!e){const g=geo.index?geo.toNonIndexed():geo.clone();g.computeVertexNormals();e={p:g.attributes.position.array,n:g.attributes.normal.array};NI.set(geo,e);}return e;};
+  const flat=geo=>{let e=NI.get(geo);if(!e){if(geo.userData.fd){const a=geo.attributes;e={p:a.position.array,n:a.normal.array,c:a.color.array,g:a.mt.array};}else{const g=geo.index?geo.toNonIndexed():geo.clone();g.computeVertexNormals();e={p:g.attributes.position.array,n:g.attributes.normal.array};}NI.set(geo,e);}return e;};   /* 음식(FOODK)은 제 매끈한 법선·꼭짓점 색·윤기를 그대로 쓴다 */
   /* aoY: 그늘을 넣을 때의 바닥 높이 (벽 아래쪽과 처마 밑을 어둡게) */
-  const push=(b,geo,m,color,mt,aoY)=>{const e=flat(geo),me=m.elements;_c.set(color);_nm.getNormalMatrix(m);const ne=_nm.elements,P=e.p,N=e.n;const k=mt??MT.get(color)??0;
+  const push=(b,geo,m,color,mt,aoY)=>{const e=flat(geo),me=m.elements;_c.set(color);_nm.getNormalMatrix(m);const ne=_nm.elements,P=e.p,N=e.n,EC=e.c,EG=e.g;const k=mt??MT.get(color)??0;
     const nv=P.length/3;b.pos.grow(nv*3);b.nor.grow(nv*3);b.col.grow(nv*3);b.mt.grow(nv);const BP=b.pos.a,BN=b.nor.a,BC=b.col.a,BM=b.mt.a;let o3=b.pos.length,o1=b.mt.length;
     for(let i=0;i<P.length;i+=3){const x=P[i],y=P[i+1],z=P[i+2],wy=me[1]*x+me[5]*y+me[9]*z+me[13];BP[o3]=me[0]*x+me[4]*y+me[8]*z+me[12];BP[o3+1]=wy;BP[o3+2]=me[2]*x+me[6]*y+me[10]*z+me[14];
       const nx=N[i],ny=N[i+1],nz=N[i+2],ox=ne[0]*nx+ne[3]*ny+ne[6]*nz,oy=ne[1]*nx+ne[4]*ny+ne[7]*nz,oz=ne[2]*nx+ne[5]*ny+ne[8]*nz,l=Math.hypot(ox,oy,oz)||1;BN[o3]=ox/l;BN[o3+1]=oy/l;BN[o3+2]=oz/l;
       let a=1;if(aoY!=null){const dy=wy-aoY;if(dy<1.1&&oy/l<.5)a=.6+.4*Math.max(0,Math.min(1,dy/1.1))**.7;if(oy/l<-.5)a*=.72;}
-      BC[o3]=_c.r*a;BC[o3+1]=_c.g*a;BC[o3+2]=_c.b*a;BM[o1++]=k;o3+=3;}
+      if(EC){BC[o3]=_c.r*a*EC[i];BC[o3+1]=_c.g*a*EC[i+1];BC[o3+2]=_c.b*a*EC[i+2];BM[o1++]=EG[i/3];}else{BC[o3]=_c.r*a;BC[o3+1]=_c.g*a;BC[o3+2]=_c.b*a;BM[o1++]=k;}o3+=3;}
     b.pos.length=b.nor.length=b.col.length=o3;b.mt.length=o1;};
   const _q=new THREE.Quaternion(),_e=new THREE.Euler(),_v=new THREE.Vector3(),_s3=new THREE.Vector3(),_m=new THREE.Matrix4();
   const TRS=(x,y,z,ry,sx,sy,sz,rx=0,rz=0)=>new THREE.Matrix4().compose(_v.set(x,y,z),_q.setFromEuler(_e.set(rx,ry,rz,'YXZ')),_s3.set(sx,sy,sz));
@@ -11945,11 +12298,10 @@ async function buildMarcus(H){
     for(const [px,pz] of [[-1.35,-.55],[1.35,-.55],[-1.35,.65],[1.35,.65]])F.P(BOX,px,1.3,pz,.08,2.6,.08,WOOD);
     for(let k=0;k<6;k++)F.P(BOX,-1.25+k*.5,2.62,.1,.5,.06,1.9,k%2?c1:0xf2ece0,{rx:.2});F.P(BOX,0,2.5,1.05,3,.4,.04,c1);
     const G=GOODS[kind];
-    if(kind===0)for(let k=0;k<4;k++){F.P(BOX,-1+k*.66,1,0,.6,.22,.8,0x8a6a4a);for(let q=0;q<6;q++)F.P(SPH,-1.15+k*.66+(q%3)*.15,1.17,-.2+Math.floor(q/3)*.3,.09,.09,.09,G[k]);}
+    /* 과일 상자·빵·치즈는 FOODK가 빚은 좌판 짐 (자리마다 두 갈래) */
+    if(kind===0||kind===3||kind===4)F.P(FOODK.geo('S'+kind+':'+FOODK.pickV(x,z,2)),0,0,0,1,1,1,0xffffff,{b:'fd'});
     if(kind===1)for(let k=0;k<5;k++)F.P(CYL(.12,.12,8),-1+k*.5,1.05,0,1,.8,1,G[k%4],{rx:PI/2});
     if(kind===2)for(let k=0;k<5;k++){F.P(CYL(.14,.2,8),-1+k*.5,1.12,-.1,1,.45,1,G[k%4]);F.P(CYL(.08,.14,8),-1+k*.5,1.42,-.1,1,.15,1,G[k%4]);}
-    if(kind===3)for(let k=0;k<7;k++)F.P(SPH,-1.1+k*.36,1,-.05+(k%2)*.2,.18,.11,.12,G[k%4]);
-    if(kind===4)for(let k=0;k<4;k++)F.P(CYL(.25,.25,12),-1+k*.66,1.02,0,1,.2,1,G[k%4]);
     F.box(0,0,3,1.5,2.6);};
   const AW=[0xe0503a,0x3a78c8,0x4a9a44,0xf0b838,0xc0508a];   /* 시장 차양: 밝고 또렷한 빛깔 */
   const loggia=(x,z,W,D,Hh,roof)=>{const F=frame(x,z,0);const nx=Math.max(2,Math.round(W/6)),nz=Math.max(2,Math.round(D/6));
@@ -12318,12 +12670,12 @@ async function buildMarcus(H){
   /* ===== 칸 굽기 ===== */
   await BOOT.y();const MAT={op:MTEX.patch(new THREE.MeshStandardMaterial({vertexColors:true,roughness:.85,flatShading:true,side:THREE.DoubleSide}),'o'),
     gl:MTEX.patch(new THREE.MeshStandardMaterial({vertexColors:true,emissive:0xb08030,emissiveIntensity:.7,roughness:.3,side:THREE.DoubleSide}),'l')};
-  MAT.sh=MAT.op;MAT.ip=MAT.op;MAT.dt=MAT.op;
+  MAT.sh=MAT.op;MAT.ip=MAT.op;MAT.dt=MAT.op;MAT.fd=FOODK.mat();   /* fd: 음식. 매끈하게 그리고 mt 자리에 윤기를 담는다. 가까운 칸에서만 그린다(C.fm) */
   /* dt: 집 잔손질(창틀·덧문 살·처마 홈통·모서리 돌 등). 가까운 칸에서만 그린다(updateMarcus의 C.dm) */
-  const SHD={op:[true,true],gl:[false,false],sh:[true,false],ip:[false,false],dt:[false,true]};
+  const SHD={op:[true,true],gl:[false,false],sh:[true,false],ip:[false,false],dt:[false,true],fd:[false,false]};
   const bake=(b,key,parent)=>{if(!b.pos.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(b.pos.out(),3));g.setAttribute('normal',new THREE.Float32BufferAttribute(b.nor.out(),3));g.setAttribute('color',new THREE.Float32BufferAttribute(b.col.out(),3));g.setAttribute('mt',new THREE.Float32BufferAttribute(b.mt.out(),1));
     g.computeBoundingSphere();const m=new THREE.Mesh(g,MAT[key]);m.castShadow=SHD[key][0];m.receiveShadow=SHD[key][1];parent.add(m);b.pos=b.nor=b.col=b.mt=null;return m;};
-  for(const C of MARCUS.cells.values()){await BOOT.y();for(const k of ['op','gl','sh','ip'])bake(C[k],k,C.g);C.dm=bake(C.dt,'dt',C.g);if(C.dm)C.dm.visible=false;}
+  for(const C of MARCUS.cells.values()){await BOOT.y();for(const k of ['op','gl','sh','ip'])bake(C[k],k,C.g);C.dm=bake(C.dt,'dt',C.g);if(C.dm)C.dm.visible=false;C.fm=bake(C.fd,'fd',C.g);if(C.fm)C.fm.visible=false;}
   await BOOT.y();makeCitizens(cx,cz);
   await BOOT.y();if(typeof marcusLife==='function')marcusLife(cx,cz);
   MARCUS.ready=true;
@@ -12725,8 +13077,9 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
 let _mcT=0;
 /* 집 잔손질 칸을 그리는 거리: 그래픽 낮음이면 안 그림 (칸은 100m라 칸 가운데까지 거리로 잰다) */
 function DT_D(){const g=gfxLv();return g===0?0:g>=2?150:115;}
+function FD_D(){const g=gfxLv();return g===0?95:g>=2?160:125;}   /* 음식이 보이는 거리 (칸 가운데까지. 칸이 100m라 제 칸 안에 있으면 늘 보이게) */
 function marcusTick(dt){if(!MARCUS.ready||!player)return;if(typeof coachTick==='function')coachTick(dt);const p=player.position,inM=p.x>2000&&Math.abs(p.z)<700;
-  _mcT-=dt;if(_mcT<=0){_mcT=.25;for(const C of MARCUS.cells.values()){const dd=Math.hypot(C.x-p.x,C.z-p.z),v=inM&&dd<260;if(C.g.visible!==v)C.g.visible=v;if(C.dm){const dv=v&&dd<DT_D();if(C.dm.visible!==dv)C.dm.visible=dv;}}for(const D of MARCUS.details){const v=inM&&Math.hypot(D.x-p.x,D.z-p.z)<75;if(D.g.visible!==v)D.g.visible=v;}}
+  _mcT-=dt;if(_mcT<=0){_mcT=.25;for(const C of MARCUS.cells.values()){const dd=Math.hypot(C.x-p.x,C.z-p.z),v=inM&&dd<260;if(C.g.visible!==v)C.g.visible=v;if(C.dm){const dv=v&&dd<DT_D();if(C.dm.visible!==dv)C.dm.visible=dv;}if(C.fm){const fv=v&&dd<FD_D();if(C.fm.visible!==fv)C.fm.visible=fv;}}for(const D of MARCUS.details){const v=inM&&Math.hypot(D.x-p.x,D.z-p.z)<75;if(D.g.visible!==v)D.g.visible=v;}}
   if(MARCUS.inst)for(const m of MARCUS.inst)if(m.visible!==inM)m.visible=inM;
   /* 바다에는 걸어 들어가지 못한다: 깊은 바다(둑 너머)로 들어서면 마지막 뭍 자리로 되돌린다 */
   if(inM&&OR.isleAt(p.x,p.z).id==='marcus'){const PL=marcusPlan(),I=OR.ISLES.marcus,lx=p.x-I.x,lz=p.z-I.z;
@@ -12992,12 +13345,7 @@ function _marcusLife(cx,cz){
       ...Array.from({length:10},(_,i)=>[CYL(6),-.22+(i%5)*.11,.81,(i<5?-.24:.24)+rr(-.02,.02),.035,.06,.035,i<5?0xf0ece0:0x2a2420])]),VC,x,citGround(x,z),z,a);take(x,z,.6);
     for(const sd of [-1,1]){const [sx,sz]=fw(x,z,a,.75*sd);prop(merge([[CYL(8),0,.22,0,.36,.44,.36,0x7a5232]]),VC,sx,citGround(sx,sz),sz);
       const g=npc({robe:pick([0x5a5a6a,0x6a4a3a,0x3a4a5a]),robe2:0xc8c0b0,hat:sd<0?'hood':'hair',hatC:sd<0?0x4a4a5a:0xd8d8d8,beard:0xe0e0e0},'chess',sx,sz,faceTo(sx,sz,x,z));addAct({g,pose:sd<0?'chess':'chin',ph:rnd()*9});}}
-  // 조각가: 장인 지구
-  {const AZ=PL.zone('artisans');for(let k=0;k<60;k++){const x=cx+AZ.x+rr(-AZ.w/2,AZ.w/2),z=cz+AZ.y+rr(-AZ.h/2,AZ.h/2);if(!PL.nearStreet(x-cx,z-cz,2.6)||PL.nearStreet(x-cx,z-cz,.4))continue;
-      if(!free(x,z,1.8)||!clear(x,z,2))continue;const [bx,bz]=fw(x,z,0,1.1);if(!free(bx,bz,.8))continue;
-      prop(merge([[BOX,0,.35,0,.9,.7,.9,0xd8d0c0],[BOX,0,.95,0,.5,.5,.42,0xe0d8c8],[SPH,0,1.4,0,.32,.36,.3,0xe8e0d0],[BOX,.12,1.05,.1,.16,.4,.14,0xe0d8c8,0,0,.3]]),VC,bx,citGround(bx,bz),bz,.4);take(bx,bz,.8);
-      for(let c=0;c<5;c++)prop(new THREE.BoxGeometry(rr(.06,.14),rr(.04,.08),rr(.06,.12)),M(0xd8d0c0),bx+rr(-.9,.9),citGround(bx,bz)+.03,bz+rr(-.9,.9),rnd()*3);
-      const g=npc({robe:0x8a7a6a,robe2:0xe8e0d0,hat:'hair',hatC:0x5a4a3a,beard:0x5a4a3a},'hammer',x,z,0);take(x,z,.5);addAct({g,pose:'hammer',ph:rnd()*9});break;}}
+  /* 장인 지구의 조각가는 이름 있는 지븐 한 사람 (공방은 buildZibben) */
   // 꽃 파는 수레: 시장 가장자리, 광장
   for(const [x0,z0,R,a0] of [[(OR.ISLES.exmarket||{x:cx+PL.zone('market').x}).x,(OR.ISLES.exmarket||{z:cz+PL.zone('market').y}).z,Math.min(PL.zone('market').w,PL.zone('market').h)/2+3,1.2],[P0.x,P0.z,PZ.r-6,2.7]]){const s=spotRing(x0,z0,R,a0,2.2);if(!s)continue;const [x,z,ar]=s,a=ar+PI/2;
     const parts=[[BOX,0,.75,0,1.6,.12,.85,0x8a5a32],[BOX,0,.95,-.42,1.6,.32,.05,0x7a4a2a],[BOX,0,.95,.42,1.6,.32,.05,0x7a4a2a],[BOX,-.8,.95,0,.05,.32,.85,0x7a4a2a],[BOX,.8,.95,0,.05,.32,.85,0x7a4a2a],
@@ -14087,14 +14435,15 @@ function buildGuildHallMap(K){
     glight(x,y+1.35,z,.5,5.2,0xffb050);pool(x,y+.875,z,r+.35,.32);};
   /* 음식 소품: 탁자 윗면 높이 ty에 놓는다 */
   const TORS=new THREE.TorusGeometry(.5,.12,6,12),FOODS=['mug','mug','wine','bread','cheese','stew','plate'];
+  const FK=(k,v,x,ty,z,ry)=>P(FOODK.geo(k+':'+v),x,ty,z,1,1,1,0xffffff,{b:'fd',ry});
   const food=(kind,x,ty,z,ry)=>{const o={b:'ip',ry};switch(kind){
-    case 'mug':P(CYL(.07,.06,10),x,ty+.09,z,1,.18,1,pick([0xb8b0a0,0x8a6a48,0xc8c0b0]),o);P(TORS,x+.085,ty+.1,z,.09,.09,.09,0x8a6a48,{b:'ip',ry:PI/2});P(SPH,x,ty+.19,z,.13,.05,.13,0xfff4e0,o);break;   /* 손잡이 달린 맥주잔, 거품 */
-    case 'wine':P(CYL(.04,.045,10),x,ty+.11,z,1,.22,1,0x2a4a2a,o);P(CYL(.015,.02,8),x,ty+.27,z,1,.1,1,0x2a4a2a,o);P(CYL(.016,.016,6),x,ty+.33,z,1,.03,1,0xc8a060,o);   /* 병·목·코르크 */
-      P(CYL(.045,.025,10),x+.14,ty+.1,z+.04,1,.08,1,0x6a1a2a,o);P(CYL(.01,.01,6),x+.14,ty+.03,z+.04,1,.06,1,0xd8d0c0,o);P(CYL(.035,.035,8),x+.14,ty+.005,z+.04,1,.01,1,0xd8d0c0,o);break;   /* 잔: 술·다리·받침 */
-    case 'bread':P(SPH,x,ty+.05,z,.26,.1,.14,0xc89050,o);P(SPH,x,ty+.09,z,.22,.05,.11,0xe0b070,o);for(const q of [-.07,0,.07])P(BOX,x+q*Math.cos(ry),ty+.11,z-q*Math.sin(ry),.015,.01,.09,0x8a5a2a,o);break;   /* 둥근 빵, 칼집 세 줄 */
-    case 'cheese':P(PRISM,x,ty+.0,z,.18,.08,.14,0xe8c860,o);P(BOX,x,ty+.075,z,.17,.012,.13,0xf0d880,o);P(CYL(1,1,10),x+.12,ty+.005,z+.1,.11,.01,.11,0xd8c8b0,o);break;   /* 치즈 조각과 작은 접시 */
-    case 'stew':P(CYL(.11,.08,10),x,ty+.045,z,1,.09,1,0x5a3a22,o);P(CYL(.095,.095,10),x,ty+.085,z,1,.015,1,0x7a4a24,o);for(let q=0;q<3;q++)P(SPH,x+rr(-.05,.05),ty+.1,z+rr(-.05,.05),.03,.02,.03,pick([0xd8a050,0x8a5a3a,0xa8c070]),o);P(BOX,x+.08,ty+.1,z-.04,.015,.01,.16,0xb8b0a0,{b:'ip',ry:ry+.6});break;   /* 스튜 그릇과 숟가락 */
-    case 'plate':P(CYL(1,1,12),x,ty+.008,z,.15,.016,.15,0xe8e0d0,o);P(SPH,x-.02,ty+.04,z,.12,.05,.08,0xb86a5a,o);P(SPH,x+.07,ty+.03,z+.05,.04,.03,.04,0x6aa040,o);P(SPH,x+.08,ty+.03,z-.04,.04,.03,.04,0x6aa040,o);break;   /* 고기와 야채 접시 */
+    /* 음식은 FOODK가 빚은 모양 (갈래는 자리로 정한다). 무작위 수는 예전과 같은 개수만 쓴다: 잔 1번, 스튜 9번 (뒤의 배치가 바뀌지 않게) */
+    case 'mug':FK('mug',Math.floor(rnd()*3),x,ty,z,ry);break;   /* 돌잔·나무 통잔·흙잔, 넘치는 거품 */
+    case 'wine':FK('wine',0,x,ty,z,ry);break;   /* 밀랍 봉한 병과 백랍 잔 */
+    case 'bread':FK('bread',FOODK.pickV(x,z,3),x,ty,z,ry);break;   /* 둥근 빵·썬 긴 빵·땋은 빵 */
+    case 'cheese':FK('cheese',FOODK.pickV(x,z,2),x,ty,z,ry);break;   /* 도마 위 바퀴 치즈 */
+    case 'stew':for(let q=0;q<9;q++)rnd();FK('stew',FOODK.pickV(x,z,2),x,ty,z,ry);break;   /* 흙그릇 스튜와 나무 숟가락 */
+    case 'plate':FK('plate',FOODK.pickV(x,z,3),x,ty,z,ry);break;   /* 통닭구이·썬 고기·과일 접시 */
     case 'candle':P(CYL(.03,.03,8),x,ty+.01,z,1,.02,1,0x8a8a90,o);P(CYL(.012,.014,6),x,ty+.08,z,1,.12,1,0xf0e8d0,o);P(CONE(5),x,ty+.17,z,.03,.05,.03,0xffd070,{b:'ip',glow:true});halo(x,ty+.18,z,0);break;}};
   const tableL=(x,z,y,w,d)=>{P(BOX,x,y+.8,z,w,.1,d,WOOD,IP);for(const sx of [-1,1])for(const sz of [-1,1])P(BOX,x+sx*(w/2-.2),y+.38,z+sz*(d/2-.2),.12,.76,.12,DARKW,IP);objC(x,z,w,d,y,.9);};
   const benchL=(x,z,y,w,alongX=true)=>{P(BOX,x,y+.45,z,alongX?w:.4,.08,alongX?.4:w,WOOD,IP);for(const s of [-1,1])P(BOX,x+(alongX?s*(w/2-.2):0),y+.22,z+(alongX?0:s*(w/2-.2)),.08,.44,.36,DARKW,IP);};
@@ -16710,7 +17059,9 @@ function buildArtisans(K){
   const kinds=Object.keys(W);let n=0;
   for(const st of PL.streets){for(let i=0;i<st.p.length-1;i++){const [ax,ay]=st.p[i],[bx,by]=st.p[i+1],L=Math.hypot(bx-ax,by-ay);if(L<6)continue;const ux=(bx-ax)/L,uy=(by-ay)/L,nx=-uy,ny=ux;
     for(let t=6;t<L-6;t+=9){for(const sd of [-1,1]){const off=st.w/2+2.6,mx=ax+ux*t+nx*sd*off,my=ay+uy*t+ny*sd*off,wx=M.x+mx,wz=M.z+my,ry=Math.atan2(nx*sd,ny*sd)+PI;   /* 앞(+z)이 길을 본다 */
-      if(!freeAt(wx,wz,2.6,2.1,ry))continue;const k=kinds[n%kinds.length],F=frame(wx,wz,ry);const [hw,hd]=W[k](F);F.box(0,0,hw*2,hd*2,2.2);n++;}}}}
+      if(!freeAt(wx,wz,2.6,2.1,ry))continue;const k=kinds[n%kinds.length],F=frame(wx,wz,ry);
+      if(k==='mason'){(EXM.masons=EXM.masons||[]).push({x:wx,z:wz,ry,y:F.y});if(!EXM.zbn&&Math.hypot(mx+211.3,my-194.6)<4){EXM.zbn={x:wx,z:wz,ry,y:F.y};F.box(0,0,6.2,4.8,2.2,{zbRes:1});n++;continue;}}   /* 길모퉁이 석공 마당 한 곳은 조각가 지븐의 공방 자리로 비워 둔다 */
+      const [hw,hd]=W[k](F);F.box(0,0,hw*2,hd*2,2.2);n++;}}}}
   /* 집 사이 위로 물들인 천 줄 */
   for(let k=0;k<40;k++){const mx=Z.x+rr(-Z.w/2,Z.w/2),my=Z.y+rr(-Z.h/2,Z.h/2);if(!PL.nearStreet(mx,my,0)||PL.waterDepth(mx,my)>0)continue;let best=null;for(const st of PL.streets)for(let i=0;i<st.p.length-1;i++){const [ax,ay]=st.p[i],[bx,by]=st.p[i+1];if(PL.segDist(mx,my,st.p[i],st.p[i+1])<st.w/2){const L=Math.hypot(bx-ax,by-ay);best={nx:-(by-ay)/L,ny:(bx-ax)/L,w:st.w};}}
     if(!best||best.w>12)continue;const F=frame(M.x+mx,M.z+my,Math.atan2(best.nx,best.ny));F.P(BOX,0,6.2,0,.03,.03,best.w+3,0x3a2a1a);for(let q=0;q<5;q++)F.P(BOX,0,5.6,-best.w/2+.8+q*(best.w-1.6)/4,.02,1.2,.8,pick(DYE));}
@@ -18590,7 +18941,7 @@ await BOOT.y();(function buildDecor(){
   {const cx=C2.x,cz=C2.z;
     const stall=(a,r,c)=>{const x=cx+Math.cos(a)*r,z=cz+Math.sin(a)*r;
       grp(x,z,-a+Math.PI/2,[mesh(new THREE.BoxGeometry(1.8,.8,.8),wood,0,.4,0),...[[-.85,-.35],[.85,-.35],[-.85,.35],[.85,.35]].map(([px,pz])=>mesh(new THREE.BoxGeometry(.08,2,.08),dark,px,1,pz)),
-        mesh(new THREE.BoxGeometry(2,.06,1.1),mat(c),0,2.05,0,.15),...[0,1,2,3].map(k=>mesh(new THREE.SphereGeometry(.13,6,5),mat([0xd04a3a,0xe0c040,0x6ab04a,0xf09a40][k]),-.6+k*.4,.9,0))],.75);};
+        mesh(new THREE.BoxGeometry(2,.06,1.1),mat(c),0,2.05,0,.15),mesh(FOODK.geo('Sh:'+FOODK.pickV(x,z,2)),FOODK.mat(),0,0,0)],.75);};   /* 판 위 과일 무더기 넷 */
     stall(.55,11.5,0xc04a3a);stall(1.0,11.5,0x3a6ac0);stall(-.55,11.5,0xe0c040);stall(-1.0,11.5,0x4a9a5a);
     // 도시의 작은 소품은 걸리지 않고 지나갈 수 있다
     [[.8,13.6],[-.8,13.6],[2.2,12.8],[-2.2,12.8]].forEach(([a,r])=>barrel(cx+Math.cos(a)*r,cz+Math.sin(a)*r,false));
@@ -24480,7 +24831,7 @@ function updateWorld(dt){
   if(!it&&MARCUS.guildBook&&Math.hypot(player.position.x-MARCUS.guildBook.x,player.position.z-MARCUS.guildBook.z)<2.4&&Math.abs(player.position.y-MARCUS.guildBook.y)<2)it='gbook';
   if(!it&&Math.hypot(player.position.x-DOOR_IN.x,player.position.z-DOOR_IN.z)<2.8)it='door_in';
   if(!it&&Math.hypot(player.position.x-DOOR_OUT.x,player.position.z-DOOR_OUT.z)<2.6)it='door_out';
-  hdoorTick(dt);swingTick(dt);hearthTick(dt);if(gqTick.ok){gqSync();gqTick(dt);gqMarkTick();if(!it){const g=gqNear();if(g)it=g;}}if(!it&&HDOORS.length){const di=hdoorNear();if(di>=0)it='hdoor:'+di;}
+  hdoorTick(dt);swingTick(dt);hearthTick(dt);if(typeof zbTick==='function')zbTick(dt);if(gqTick.ok){gqSync();gqTick(dt);gqMarkTick();if(!it){const g=gqNear();if(g)it=g;}}if(!it&&HDOORS.length){const di=hdoorNear();if(di>=0)it='hdoor:'+di;}
   // 사람들: 머리 위 표시가 돈다 (말을 걸 때만 쳐다본다)
   let bestN=null,bd=3.3;
   for(const n of NPCS){const hid=!!(n.hideIf&&n.hideIf()),d=hid?1e9:Math.hypot(player.position.x-n.x,player.position.z-n.z);n.mesh.visible=d<110;{const ol=n.mesh.userData.outlines,on=d<20;if(ol&&ol.length&&ol[0].visible!==on)for(const m of ol)m.visible=on;}
@@ -26150,6 +26501,190 @@ function lqGanel(n){n.mqLock=true;
   {const u=Ln.mesh.userData;u.maxTurn=.4;u.markerY=1.75;if(u.marker)u.marker.position.y=1.75;}})();   /* 앉아 있어 말을 걸어도 몸은 조금만 돌리고, 머리 위 표시도 낮게 */
 for(const [k,f] of [['ex_smith',lqSmith],['ganel',lqGanel],['ganel_walk',lqGanel]]){const g=NPCS.find(n=>n.id===k);if(!g)continue;const prev=g.onOpen,want=k==='ex_smith'?'give':'info';
   g.onOpen=()=>{if(P&&lqStep()===want){f(g);return true;}return prev?prev():false;};}
+
+/* ---------- 조각가 지븐: 장인 지구 길모퉁이의 조각 공방 ----------
+   buildArtisans가 석공 마당 한 자리를 비워 두고(EXM.zbn) 여기서 지븐의 공방을 짓는다.
+   줄무늬 천 차양 아래 나무 받침대 위에서 가늘롱이 맡긴 흉상(실크해트를 쓴 얼굴, 아직 눈은 파지 않았다)을 깎는 중.
+   뒤로는 손질 안 한 대리석 덩이와 세 다리 들것, 작은 작품을 올린 선반, 연장을 늘어놓은 작업대, 길가 쪽엔 밑그림 판과 간판.
+   지븐은 돌 앞에서 망치로 정을 두드리고(망치가 닿을 때마다 돌가루가 튀고 작게 쨍 소리), 사람이 오면 손을 멈추고 쳐다본다 */
+const ZBN={g:null,n:null,dust:[],hit:0,tip:new THREE.Vector3()};
+(function buildZibben(){if(NPCS.some(n=>n.id==='zibben'))return;const Z0=EXM.zbn;if(!Z0)return;
+  for(const c of colliders)if(c.zbRes){c.x=c.z=-1e6;c.r=c.hw=c.hd=0;}   /* 길가 소품이 공방 자리에 놓이지 않게 잡아 둔 자리를 푼다 */
+  const g=new THREE.Group();g.position.set(Z0.x,Z0.y,Z0.z);g.rotation.y=Z0.ry;scene.add(g);ZBN.g=g;
+  let _s=7717;const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647,rr=(a,b)=>a+rnd()*(b-a);
+  const SM=(c,o={})=>mat(c,Object.assign({flatShading:false},o));
+  const MARB=SM(0xf0ece4,{roughness:.42}),MARB2=SM(0xe6e0d4,{roughness:.5}),ROUGH=mat(0xe2dccf,{roughness:.85}),ROUGH2=mat(0xd6cfc0,{roughness:.9}),
+    WOOD=SM(0x8a6440,{roughness:.8}),WOODD=SM(0x5a3e26,{roughness:.85}),WOODL=SM(0xa88458,{roughness:.75}),IRON=SM(0x3a3a3e,{metalness:.65,roughness:.42}),
+    STEEL=SM(0x9a9ea4,{metalness:.75,roughness:.3}),ROPE=SM(0xb8a07a,{roughness:1}),CHAR=SM(0x2a2622,{roughness:1});
+  const add=(geo,m,x,y,z,rx=0,ry=0,rz=0,sx=1,sy=1,sz=1,par=g)=>{const q=new THREE.Mesh(geo,m);q.position.set(x,y,z);q.rotation.set(rx,ry,rz);q.scale.set(sx,sy,sz);q.castShadow=true;q.receiveShadow=true;par.add(q);return q;};
+  const cyl=(a,b,h,n=12)=>new THREE.CylinderGeometry(a,b,h,n),sph=(r,w=16,h=12)=>new THREE.SphereGeometry(r,w,h),lathe=(pts,n=18)=>new THREE.LatheGeometry(pts.map(p=>new THREE.Vector2(p[0],p[1])),n);
+  /* 정으로 쪼아 낸 거친 돌: 꼭짓점을 자리마다 정해진 만큼 밀고 당겨 깎인 면이 각지게 (flatShading) */
+  const rough=(geo,amp,seed=1)=>{const p=geo.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),h=Math.sin(x*91.7+y*47.3+z*63.1+seed*12.9)*43758.5453,k=(h-Math.floor(h))-.5,l=Math.hypot(x,y,z)||1;
+    p.setXYZ(i,x+x/l*k*amp,y+y/l*k*amp,z+z/l*k*amp);}geo.computeVertexNormals();return geo;};
+  const tex=(w,h,f)=>{const c=document.createElement('canvas');c.width=w;c.height=h;f(c.getContext('2d'),w,h);const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;t.anisotropy=4;return t;};
+  const W=6,D=4.6,BX=-.25,BZ=-.15;   /* 공방 너비(길을 따라)·깊이, 받침대 자리 */
+  /* ── 바닥: 돌판에 하얀 돌가루가 받침대 둘레로 쌓였다 ── */
+  {const T=tex(768,588,(c,w,h)=>{c.fillStyle='#b9b0a0';c.fillRect(0,0,w,h);const sx=w/W,sz=h/D;let r2=4242;const R=()=>(r2=(r2*16807)%2147483647)/2147483647;
+      for(let y=0;y<h;){const rh=sz*(.55+R()*.35);for(let x=-R()*sx*.6;x<w;){const rw=sx*(.6+R()*.55),v=170+R()*30|0;c.fillStyle=`rgb(${v},${v-6},${v-16})`;c.fillRect(x+2,y+2,rw-4,rh-4);
+          c.fillStyle='rgba(255,255,255,.05)';c.fillRect(x+4,y+4,rw-8,(rh-8)*.4);x+=rw;}y+=rh;}
+      const bx=(BX+W/2)*sx,bz=(BZ+D/2)*sz,gr=c.createRadialGradient(bx,bz,0,bx,bz,sx*1.5);gr.addColorStop(0,'rgba(248,246,240,.95)');gr.addColorStop(.45,'rgba(244,240,232,.6)');gr.addColorStop(1,'rgba(244,240,232,0)');
+      c.fillStyle=gr;c.fillRect(0,0,w,h);
+      for(let k=0;k<900;k++){const a=R()*6.283,d=Math.pow(R(),1.8)*sx*2.2,x=bx+Math.cos(a)*d,y=bz+Math.sin(a)*d*.9;c.fillStyle=`rgba(250,248,242,${.35+R()*.5})`;c.fillRect(x,y,1+R()*3,1+R()*3);}
+      for(let k=0;k<7;k++){const x=bx+sx*(.6+k*.28),y=bz+sz*(.45+(k%2)*.16);c.fillStyle='rgba(240,236,228,.45)';c.beginPath();c.ellipse(x,y,9,16,.4,0,7);c.fill();}});   /* 돌가루 위 발자국 */
+    const fm=new THREE.MeshStandardMaterial({map:T,roughness:.95});const fl=add(new THREE.BoxGeometry(W,.04,D),[SM(0x9a9080),SM(0x9a9080),fm,SM(0x9a9080),SM(0x9a9080),SM(0x9a9080)],0,.02,0);fl.castShadow=false;}
+  /* ── 차양: 기둥 넷과 들보, 줄무늬 천이 앞으로 비스듬히 처진다 ── */
+  const PX=W/2-.18,PZb=-D/2+.15,PZf=D/2-.95,Hb=3.05,Hf=2.62;
+  for(const sx of [-1,1]){add(cyl(.075,.085,Hb,10),WOOD,sx*PX,Hb/2,PZb);add(cyl(.075,.085,Hf,10),WOOD,sx*PX,Hf/2,PZf);
+    add(cyl(.11,.13,.12,10),ROUGH2,sx*PX,.06,PZb);add(cyl(.11,.13,.12,10),ROUGH2,sx*PX,.06,PZf);   /* 기둥 받침돌 */
+    const L=Math.hypot(PZf-PZb,Hb-Hf);add(new THREE.BoxGeometry(.11,.13,L+.3),WOODD,sx*PX,(Hb+Hf)/2+.02,(PZb+PZf)/2,Math.atan2(Hb-Hf,PZf-PZb));
+    add(new THREE.BoxGeometry(.07,.07,.7),WOODD,sx*PX,Hf-.32,PZf-.28,-.8);}   /* 버팀목 */
+  add(new THREE.BoxGeometry(W-.2,.12,.12),WOODD,0,Hb+.02,PZb);add(new THREE.BoxGeometry(W-.2,.12,.12),WOODD,0,Hf+.02,PZf);
+  {const T=tex(512,128,(c,w,h)=>{const n=12;for(let i=0;i<n;i++){c.fillStyle=i%2?'#e8dcc0':'#b0583c';c.fillRect(i*w/n,0,w/n+1,h);}c.fillStyle='rgba(90,60,30,.12)';for(let k=0;k<400;k++)c.fillRect(Math.random()*w,Math.random()*h,2,2);});
+    const cm=new THREE.MeshStandardMaterial({map:T,roughness:.95,side:THREE.DoubleSide});
+    const L=Math.hypot(PZf-PZb+.55,Hb-Hf+.05),ge=new THREE.PlaneGeometry(W+.3,L,14,10),p=ge.attributes.position;
+    for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),u=x/(W/2+.15),v=y/(L/2);p.setZ(i,-(1-u*u)*.12*(1-v*v*.6)-(1-v*v)*.06);}ge.computeVertexNormals();
+    const cv=add(ge,cm,0,(Hb+Hf)/2+.14,(PZb+PZf)/2+.27,-Math.PI/2+Math.atan2(Hb-Hf,PZf-PZb));cv.castShadow=true;
+    /* 앞 자락: 물결 모양 단 */
+    const sh=new THREE.Shape();sh.moveTo(-W/2-.15,0);sh.lineTo(W/2+.15,0);sh.lineTo(W/2+.15,-.16);const nw=14;for(let i=nw;i>0;i--){const x1=-W/2-.15+(W+.3)*i/nw,x0=-W/2-.15+(W+.3)*(i-1)/nw;sh.quadraticCurveTo((x0+x1)/2,-.34,x0,-.16);}sh.lineTo(-W/2-.15,0);
+    const vg=new THREE.ShapeGeometry(sh,4),vu=vg.attributes.uv;for(let i=0;i<vu.count;i++)vu.setXY(i,(vg.attributes.position.getX(i)+W/2)/(W+.3),.5);add(vg,cm,0,Hf+.06,PZf+.44);}
+  /* ── 받침대(나무 작업대)와 깎는 중인 흉상 ── */
+  const bust=new THREE.Group();bust.position.set(BX,0,BZ);g.add(bust);
+  {const TOP=.8;add(cyl(.34,.34,.07,24),WOODL,0,TOP-.035,0,0,0,0,1,1,1,bust);add(cyl(.3,.3,.04,24),WOODD,0,TOP-.09,0,0,0,0,1,1,1,bust);   /* 돌리는 둥근 판 */
+    add(new THREE.BoxGeometry(.62,.06,.62),WOOD,0,TOP-.14,0,0,.785,0,1,1,1,bust);
+    for(let k=0;k<4;k++){const a=k*Math.PI/2+.785;add(new THREE.BoxGeometry(.075,TOP-.14,.075),WOOD,Math.sin(a)*.32,(TOP-.14)/2,Math.cos(a)*.32,Math.cos(a)*.1,0,-Math.sin(a)*.1,1,1,1,bust);}
+    for(let k=0;k<4;k++){const a=k*Math.PI/2;add(new THREE.BoxGeometry(.05,.05,.46),WOODD,Math.sin(a)*.25,.22,Math.cos(a)*.25,0,a+Math.PI/2,0,1,1,1,bust);}   /* 다리 사이 가로대 */
+    const S=new THREE.Group();S.position.y=TOP;S.rotation.y=1.0;bust.add(S);
+    add(rough(new THREE.BoxGeometry(.5,.24,.42,6,3,5),.035,3),ROUGH,0,.12,0,0,0,0,1,1,1,S);   /* 아직 쪼지 않은 밑동 */
+    add(rough(new THREE.SphereGeometry(.25,14,8,0,Math.PI*2,Math.PI*.42,Math.PI*.28),.03,5),ROUGH,0,.36,0,0,0,0,1.02,.9,.66,S);   /* 거칠게 쪼아 낸 어깨 아래 */
+    add(new THREE.SphereGeometry(.245,24,14,0,Math.PI*2,0,Math.PI*.46),MARB,0,.27,0,0,0,0,1,.78,.62,S);   /* 다듬은 어깨와 가슴 */
+    add(cyl(.05,.058,.12,16),MARB,0,.5,.01,0,0,0,1,1,1,S);
+    const H=new THREE.Group();H.position.set(0,.62,.015);S.add(H);
+    add(sph(.1,24,18),MARB,0,0,0,0,0,0,.9,1.14,1,H);add(sph(.06,16,12),MARB,0,-.065,.035,0,0,0,1.1,.8,1,H);   /* 머리·턱 */
+    add(new THREE.ConeGeometry(.017,.06,10),MARB,0,-.004,.098,1.35,0,0,1,1,.8,H);   /* 길고 곧은 코 */
+    add(sph(.08,16,8,0,Math.PI*2,0,Math.PI*.3),MARB,0,.03,.03,0,0,0,1,.55,1.05,H);   /* 이마·눈두덩: 눈은 아직 파지 않았다 */
+    for(const sx of [-1,1]){add(sph(.022,10,8),MARB,sx*.088,-.005,-.005,0,0,0,.5,1,.8,H);
+      const m=add(new THREE.TorusGeometry(.03,.007,6,14,Math.PI*1.3),MARB,sx*.035,-.042,.085,0,0,sx>0?-.5:Math.PI+.5,1,1,1,H);m.rotation.y=sx*.35;}   /* 귀·끝이 말린 콧수염 */
+    add(cyl(.145,.145,.012,28),MARB,0,.095,0,-.06,0,0,1,1,1,H);add(cyl(.082,.086,.25,24),MARB,0,.225,-.006,-.06,0,0,1,1,1,H);   /* 실크해트: 한 뼘 더 높게 해 달라 하셨다 */
+    add(cyl(.088,.088,.03,24),MARB2,0,.13,-.002,-.06,0,0,1,1,1,H);
+    add(rough(cyl(.082,.082,.07,12,2),.012,9),ROUGH,0,.37,-.015,-.06,0,0,1,1,1,H);   /* 새로 높인 모자 꼭대기: 아직 거칠다 */
+    add(new THREE.TorusGeometry(.083,.0025,4,24),CHAR,0,.345,-.014,Math.PI/2-.06,0,0,1,1,1,H);   /* 숯으로 그어 둔 선 */
+    }
+  /* 돌 부스러기: 받침대 둘레에 흩어지고, 아래에 수북하다 */
+  {const geo=new THREE.IcosahedronGeometry(.022,0),N=110,im=new THREE.InstancedMesh(geo,ROUGH,N),m4=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler();
+    for(let i=0;i<N;i++){const a=rr(0,6.283),d=i<60?rr(.05,.5):rr(.4,1.5),s=rr(.5,1.7);m4.compose(new THREE.Vector3(BX+Math.cos(a)*d,.04+s*.012,BZ+Math.sin(a)*d*.9),q.setFromEuler(e.set(rr(0,3),rr(0,3),rr(0,3))),new THREE.Vector3(s,s*rr(.5,1),s));im.setMatrixAt(i,m4);}
+    im.receiveShadow=true;g.add(im);}
+  /* ── 뒤쪽: 손질 안 한 대리석 덩이와 세 다리 들것(도르래·밧줄) ── */
+  {const ax=-W/2+1.1,az=-D/2+1.05;
+    add(rough(new THREE.BoxGeometry(.95,.6,.7,5,3,4),.05,11),ROUGH,ax,.32,az,0,.2);add(rough(new THREE.BoxGeometry(.7,.5,.55,4,3,3),.05,12),ROUGH2,ax+.08,.86,az-.02,0,-.15);
+    add(rough(new THREE.BoxGeometry(.55,.45,.5,4,3,3),.05,13),ROUGH,ax+.95,.25,az-.35,0,.5);
+    for(let k=0;k<3;k++)add(new THREE.BoxGeometry(.03,.04,.12),STEEL,ax+.45,.62,az-.2+k*.1,0,0,.1);   /* 돌을 쪼갤 쐐기 */
+    const top=new THREE.Vector3(ax+.05,2.55,az+.05);for(let k=0;k<3;k++){const a=k*2.094+.4,b=new THREE.Vector3(ax+Math.sin(a)*1.0,0,az+Math.cos(a)*.85),d=top.clone().sub(b),L=d.length();
+      const p=add(cyl(.045,.055,L,8),WOOD,(b.x+top.x)/2,L/2*d.y/L,(b.z+top.z)/2);p.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());}
+    add(new THREE.TorusGeometry(.09,.025,8,16),IRON,top.x,top.y-.12,top.z,0,.3);add(cyl(.012,.012,1.0,6),ROPE,top.x-.09,top.y-.65,top.z);add(cyl(.012,.012,1.2,6),ROPE,top.x+.09,top.y-.75,top.z+.02);
+    add(new THREE.TorusGeometry(.04,.01,6,12,Math.PI*1.4),IRON,top.x-.09,top.y-1.2,top.z,0,0,Math.PI*.8);
+    {const co=new THREE.TorusGeometry(.17,.035,6,18);for(let k=0;k<3;k++)add(co,ROPE,ax+.75,.04+k*.05,az+.55,Math.PI/2,0,0,1-k*.12,1-k*.12,1);}}   /* 감아 둔 밧줄 */
+  /* ── 뒤 선반: 작은 작품들 (고양이·새·손 습작·꽃잎 부조판·항아리·얼굴 습작) ── */
+  {const sx0=.75,sz0=-D/2+.32,SW=1.9;
+    for(const y of [.55,1.15,1.72])add(new THREE.BoxGeometry(SW,.05,.4),WOODL,sx0,y,sz0);
+    for(const x of [-1,1])add(new THREE.BoxGeometry(.06,1.8,.4),WOOD,sx0+x*(SW/2-.03),.9,sz0);add(new THREE.BoxGeometry(SW,1.75,.03),WOODD,sx0,.9,sz0-.2);
+    const sh=(x,y,f)=>{const q=new THREE.Group();q.position.set(sx0+x,y,sz0+.02);q.rotation.y=rr(-.3,.3);g.add(q);f(q);};
+    /* 앉은 고양이: 귀가 조금 크다 (처음 깎은 고양이를 다시 깎은 것) */
+    sh(-.6,1.175,q=>{add(lathe([[0,0],[.06,0],[.068,.03],[.06,.08],[.042,.12],[.03,.14],[0,.145]]),MARB,0,0,0,0,0,0,1,1,.9,q);add(sph(.042,14,10),MARB,0,.17,.012,0,0,0,1,.9,.95,q);
+      for(const s of [-1,1])add(new THREE.ConeGeometry(.018,.045,6),MARB,s*.024,.21,.008,0,0,-s*.25,1,1,.6,q);add(new THREE.TorusGeometry(.055,.011,6,14,Math.PI*1.1),MARB,.01,.012,.03,Math.PI/2,0,.3,1,1,1,q);});
+    /* 새 */
+    sh(-.15,1.175,q=>{add(rough(new THREE.BoxGeometry(.1,.04,.08,2,1,2),.008,21),ROUGH,0,.02,0,0,0,0,1,1,1,q);add(sph(.045,14,10),MARB,0,.075,0,0,0,-.35,1.35,.85,.85,q);add(sph(.026,12,8),MARB,.045,.11,0,0,0,0,1,1,1,q);
+      add(new THREE.ConeGeometry(.009,.03,6),MARB2,.075,.11,0,0,0,-Math.PI/2,1,1,1,q);add(new THREE.ConeGeometry(.025,.07,6),MARB,-.07,.07,0,0,0,1.9,1,1,.35,q);});
+    /* 손 습작 */
+    sh(.35,1.175,q=>{add(rough(new THREE.BoxGeometry(.11,.05,.09,2,1,2),.008,22),ROUGH,0,.025,0,0,0,0,1,1,1,q);add(sph(.04,14,10),MARB,0,.1,0,0,0,0,.9,1.2,.45,q);
+      for(let k=0;k<4;k++)add(cyl(.0085,.008,.07,8),MARB,-.025+k*.017,.17+Math.sin(k*1.1)*.006,0,0,0,(k-1.5)*.06,1,1,1,q);add(cyl(.009,.009,.05,8),MARB,.042,.12,.01,0,0,-.8,1,1,1,q);});
+    /* 꽃잎 부조판 */
+    sh(.72,1.2,q=>{q.rotation.y=0;add(new THREE.BoxGeometry(.22,.22,.03),MARB2,0,.11,-.06,-.12,0,0,1,1,1,q);add(new THREE.TorusGeometry(.07,.008,6,22),MARB,0,.11,-.04,-.12,0,0,1,1,1,q);
+      for(let k=0;k<6;k++){const a=k*1.047;add(sph(.022,10,8),MARB,Math.cos(a)*.035,.11+Math.sin(a)*.035,-.038,-.12,0,a,1.6,.8,.5,q);}add(sph(.014,10,8),MARB,0,.11,-.035,0,0,0,1,1,.6,q);});
+    /* 항아리 */
+    sh(-.45,.575,q=>{add(lathe([[0,0],[.05,0],[.08,.06],[.088,.12],[.07,.19],[.04,.22],[.045,.25],[0,.25]],20),MARB,0,0,0,0,0,0,1,1,1,q);});
+    /* 얼굴 습작 (반쯤 쪼아 낸) */
+    sh(.15,.575,q=>{add(rough(new THREE.BoxGeometry(.16,.08,.14,2,1,2),.012,23),ROUGH,0,.04,0,0,0,0,1,1,1,q);add(rough(sph(.075,10,8),.012,24),ROUGH,0,.15,0,0,0,0,.9,1.15,.95,q);add(sph(.06,16,12),MARB,0,.155,.022,0,0,0,.85,1.1,.8,q);});
+    /* 아래 칸: 쓰다 남은 돌 조각들 */
+    for(let k=0;k<4;k++)add(rough(new THREE.BoxGeometry(rr(.12,.22),rr(.1,.18),rr(.1,.16),2,2,2),.015,30+k),ROUGH2,sx0-.7+k*.45,.07,sz0+rr(-.05,.05),0,rr(0,1));}
+  /* ── 오른쪽 작업대: 정·끌·줄·나무 망치·컴퍼스·물그릇·해면·작은 점토 모형 ── */
+  {const tx=W/2-1.15,tz=-D/2+1.25,TH=.88;add(new THREE.BoxGeometry(1.5,.07,.66),WOODL,tx,TH,tz);add(new THREE.BoxGeometry(1.42,.05,.58),WOODD,tx,.2,tz);
+    for(const a of [-1,1])for(const b of [-1,1])add(new THREE.BoxGeometry(.07,TH,.07),WOOD,tx+a*.68,TH/2,tz+b*.27);
+    for(let k=0;k<6;k++){const L=.18+k%3*.03,x=tx-.55+k*.065,c=new THREE.Group();c.position.set(x,TH+.045,tz+.12);c.rotation.y=rr(-.08,.08);g.add(c);
+      add(cyl(.008,.009,L,8),STEEL,0,0,0,Math.PI/2,0,0,1,1,1,c);add(new THREE.ConeGeometry(.009,.04,k%3===1?4:8),STEEL,0,0,L/2+.018,Math.PI/2,0,0,k%3===2?1.7:1,1,k%3===2?.4:1,c);add(cyl(.012,.009,.02,8),IRON,0,0,-L/2,Math.PI/2,0,0,1,1,1,c);}
+    add(new THREE.BoxGeometry(.03,.012,.28),IRON,tx-.1,TH+.042,tz-.1,0,.2);add(new THREE.BoxGeometry(.035,.016,.12),WOODD,tx-.13,TH+.045,tz-.27,0,.2);   /* 줄 */
+    {const c=new THREE.Group();c.position.set(tx+.12,TH+.06,tz+.14);c.rotation.set(0,.7,Math.PI/2);g.add(c);add(cyl(.018,.02,.22,8),WOOD,0,-.11,0,0,0,0,1,1,1,c);add(lathe([[0,-.06],[.045,-.06],[.055,-.03],[.055,.03],[.045,.06],[0,.06]],14),WOODD,0,.06,0,Math.PI/2,0,0,1,1,1,c);}   /* 나무 망치 */
+    for(const s of [-1,1])add(new THREE.TorusGeometry(.09,.006,4,16,Math.PI*.55),IRON,tx+.38+s*.01,TH+.04,tz-.12,Math.PI/2,0,s*.3,1,1,1);   /* 컴퍼스 */
+    add(lathe([[0,0],[.1,0],[.13,.06],[.135,.07],[0,.07]],18),SM(0x9a6a48,{roughness:.8}),tx+.5,TH+.035,tz+.12);add(cyl(.12,.12,.005,18),SM(0x7a8a94,{roughness:.15,metalness:.1,transparent:true,opacity:.8}),tx+.5,TH+.095,tz+.12);   /* 물그릇 */
+    add(rough(sph(.04,8,6),.015,40),SM(0xd8b860,{roughness:1}),tx+.5,TH+.06,tz-.14,0,0,0,1.2,.6,1);   /* 해면 */
+    {const c=new THREE.Group();c.position.set(tx-.38,TH+.035,tz-.15);g.add(c);const CL=SM(0xa86a4a,{roughness:.9});add(new THREE.BoxGeometry(.12,.04,.1),WOODD,0,.02,0,0,0,0,1,1,1,c);add(sph(.05,12,8,0,Math.PI*2,0,Math.PI*.5),CL,0,.04,0,0,0,0,1,.7,.7,c);
+      add(sph(.025,12,10),CL,0,.09,.004,0,0,0,1,1.15,1,c);add(cyl(.027,.027,.008,12),CL,0,.117,0,0,0,0,1,1,1,c);add(cyl(.016,.016,.07,12),CL,0,.155,0,0,0,0,1,1,1,c);}}   /* 실크해트 흉상 점토 모형 */
+  /* ── 길가 쪽: 숯으로 그린 밑그림 판 (실크해트 흉상의 앞·옆 모습, 재어 둔 줄) ── */
+  {const ex=-W/2+.7,ez=D/2-1.15;const T=tex(384,512,(c,w,h)=>{c.fillStyle='#efe6d2';c.fillRect(0,0,w,h);c.fillStyle='rgba(120,100,70,.08)';for(let k=0;k<600;k++)c.fillRect(Math.random()*w,Math.random()*h,2,2);
+      c.strokeStyle='#2a2622';c.lineCap='round';const bust=(cx,sc,side)=>{c.lineWidth=3;c.beginPath();c.ellipse(cx,250,38*sc*(side?.9:1),46*sc,0,0,7);c.stroke();
+        c.beginPath();c.moveTo(cx-62*sc,214);c.lineTo(cx+62*sc,214);c.stroke();c.beginPath();c.rect(cx-34*sc,92,68*sc,120);c.stroke();
+        c.lineWidth=1.5;c.setLineDash([6,5]);c.beginPath();c.rect(cx-34*sc,60,68*sc,32);c.stroke();c.setLineDash([]);
+        c.lineWidth=3;c.beginPath();c.moveTo(cx-16*sc,300);c.lineTo(cx-20*sc,330);c.moveTo(cx+16*sc,300);c.lineTo(cx+20*sc,330);c.stroke();
+        c.beginPath();c.moveTo(cx-120*sc,420);c.quadraticCurveTo(cx-80*sc,340,cx-22*sc,332);c.moveTo(cx+120*sc,420);c.quadraticCurveTo(cx+80*sc,340,cx+22*sc,332);c.stroke();
+        if(!side){c.lineWidth=2;c.beginPath();c.moveTo(cx-4,262);c.quadraticCurveTo(cx-24,272,cx-30,262);c.moveTo(cx+4,262);c.quadraticCurveTo(cx+24,272,cx+30,262);c.stroke();}
+        else{c.beginPath();c.moveTo(cx+30*sc,246);c.lineTo(cx+44*sc,258);c.lineTo(cx+33*sc,262);c.stroke();}};
+      bust(110,1,0);bust(285,.9,1);c.lineWidth=1.5;c.strokeStyle='rgba(42,38,34,.7)';for(const y of [60,92,214,330]){c.beginPath();c.moveTo(14,y);c.lineTo(36,y);c.stroke();}
+      c.beginPath();c.moveTo(25,60);c.lineTo(25,330);c.stroke();c.font='bold 26px "KMUSunggokSerif","Gowun Batang",serif';c.fillStyle='#2a2622';c.fillText('+ 한 뼘',150,52);});
+    const bd=new THREE.Group();bd.position.set(ex,0,ez);bd.rotation.y=.55;g.add(bd);
+    for(const s of [-1,1])add(new THREE.BoxGeometry(.05,1.6,.05),WOOD,s*.32,.8,-.05,-.12,0,0,1,1,1,bd);add(new THREE.BoxGeometry(.05,1.55,.05),WOOD,0,.76,-.42,.4,0,0,1,1,1,bd);
+    add(new THREE.BoxGeometry(.7,.04,.08),WOODD,0,.62,.04,-.12,0,0,1,1,1,bd);
+    add(new THREE.BoxGeometry(.6,.8,.02),[WOODD,WOODD,WOODD,WOODD,new THREE.MeshStandardMaterial({map:T,roughness:1}),WOODD],0,1.04,.03,-.12,0,0,1,1,1,bd);
+    add(new THREE.BoxGeometry(.06,.012,.012),CHAR,.22,.645,.07,0,0,.2,1,1,1,bd);}   /* 숯 토막 */
+  /* ── 그 밖: 의자·물통·빗자루·등불·간판 ── */
+  add(cyl(.17,.15,.04,14),WOODL,BX+1.2,.45,BZ-.75);for(let k=0;k<3;k++){const a=k*2.094;add(cyl(.02,.025,.45,6),WOOD,BX+1.2+Math.sin(a)*.11,.225,BZ-.75+Math.cos(a)*.11,Math.cos(a)*.15,0,-Math.sin(a)*.15);}
+  {const bx=BX-.95,bz=BZ+.45;add(lathe([[0,0],[.15,0],[.17,.3],[.155,.3],[.138,.025],[0,.025]],16),WOOD,bx,0,bz);for(const y of [.06,.24])add(new THREE.TorusGeometry(.16+y*.06,.008,4,18),IRON,bx,y,bz,Math.PI/2);
+    add(cyl(.162,.162,.004,16),SM(0x8a9aa4,{roughness:.1,metalness:.1}),bx,.27,bz);add(new THREE.TorusGeometry(.14,.006,4,14,Math.PI),IRON,bx,.3,bz,0,.4);}   /* 돌을 적실 물통 */
+  {const b=new THREE.Group();b.position.set(-PX+.12,0,PZb+.14);b.rotation.set(-.12,0,.2);g.add(b);add(cyl(.016,.016,1.25,6),WOOD,0,.78,0,0,0,0,1,1,1,b);add(new THREE.ConeGeometry(.13,.32,10),SM(0xc8a860,{roughness:1}),0,.12,0,0,0,0,1,1,.45,b);}
+  {const lx=-1.0,lz=PZf+.02,ly=Hf-.04;add(cyl(.006,.006,.3,4),IRON,lx,ly-.15,lz);const lg=new THREE.Group();lg.position.set(lx,ly-.42,lz);g.add(lg);
+    add(new THREE.ConeGeometry(.08,.08,4),IRON,0,.15,0,0,.785,0,1,1,1,lg);add(new THREE.BoxGeometry(.11,.18,.11),SM(0xffd890,{emissive:0xffb050,emissiveIntensity:.9,transparent:true,opacity:.85}),0,.03,0,0,0,0,1,1,1,lg);
+    for(const a of [-1,1])for(const b of [-1,1])add(new THREE.BoxGeometry(.012,.2,.012),IRON,a*.056,.03,b*.056,0,0,0,1,1,1,lg);add(new THREE.BoxGeometry(.13,.02,.13),IRON,0,-.07,0,0,0,0,1,1,1,lg);}
+  {const T=tex(256,160,(c,w,h)=>{c.fillStyle='#5e4026';c.fillRect(0,0,w,h);for(let k=0;k<9;k++){c.strokeStyle='rgba(30,18,8,.3)';c.lineWidth=2;c.beginPath();c.moveTo(0,10+k*17);c.bezierCurveTo(80,6+k*17,170,16+k*17,w,10+k*17);c.stroke();}
+      c.strokeStyle='#e8dcc0';c.lineWidth=7;c.lineCap='round';c.beginPath();c.moveTo(60,118);c.lineTo(112,62);c.stroke();c.lineWidth=13;c.beginPath();c.moveTo(102,52);c.lineTo(124,74);c.stroke();   /* 망치 */
+      c.lineWidth=5;c.beginPath();c.moveTo(196,118);c.lineTo(150,64);c.stroke();c.lineWidth=3;c.beginPath();c.moveTo(150,64);c.lineTo(140,52);c.stroke();   /* 정 */
+      c.fillStyle='#f0e4c8';c.font='bold 30px "KMUSunggokSerif","Gowun Batang",serif';c.textAlign='center';c.fillText('지븐',128,148);});
+    const sx=PX+.02,sz=PZf+.05;add(new THREE.BoxGeometry(.04,.04,.7),IRON,sx,Hf-.32,sz+.32);const sg=new THREE.Group();sg.position.set(sx,Hf-.36,sz+.52);g.add(sg);
+    for(const s of [-1,1])add(cyl(.004,.004,.14,4),IRON,0,-.07,s*.12,0,0,0,1,1,1,sg);
+    const sm=new THREE.MeshStandardMaterial({map:T,roughness:.85});add(new THREE.BoxGeometry(.035,.32,.5),[sm,sm,WOODD,WOODD,WOODD,WOODD],0,-.3,0,0,0,0,1,1,1,sg);ZBN.sign=sg;}
+  /* 부딪힘: 기둥·받침대·작업대·선반·돌덩이·밑그림 판 (앞쪽 길가는 비워 들어와 말을 걸 수 있게) */
+  const col=(lx,lz,r,h=2.4)=>{const v=new THREE.Vector3(lx,0,lz).applyAxisAngle(new THREE.Vector3(0,1,0),Z0.ry);colliders.push({x:Z0.x+v.x,z:Z0.z+v.z,r,h});};
+  for(const sx of [-1,1]){col(sx*PX,PZb,.15,3.1);col(sx*PX,PZf,.15,2.7);}
+  col(BX,BZ,.42,1.5);col(W/2-1.15,-D/2+1.25,.55,1);col(W/2-1.85,-D/2+1.25,.4,1);col(.75,-D/2+.32,.3,1.8);col(.05,-D/2+.32,.3,1.8);col(1.45,-D/2+.32,.3,1.8);
+  col(-W/2+1.1,-D/2+1.05,.62,1.2);col(-W/2+2.05,-D/2+.7,.35,.5);col(-W/2+.7,D/2-1.15,.36,1.6);col(BX-.95,BZ+.45,.2,.4);
+  mergeRigid(g,[ZBN.sign]);g.traverse(o=>{if(o.isMesh)o.castShadow=o.receiveShadow=true;});
+  if(MARCUS.details)MARCUS.details.push({g,x:Z0.x,z:Z0.z});
+  /* 지븐: 흉상 얼굴 앞(길에서 보면 옆모습)에 서서 얼굴을 깎는다 */
+  const nl=new THREE.Vector3(BX+.68,0,BZ+.2).applyAxisAngle(new THREE.Vector3(0,1,0),Z0.ry),fl=new THREE.Vector3(BX,0,BZ).applyAxisAngle(new THREE.Vector3(0,1,0),Z0.ry);
+  NPC_POSE.zibben='zbcarve';
+  ZBN.n=addNpc({id:'zibben',name:'지븐',role:'조각가',x:Z0.x+nl.x,z:Z0.z+nl.z,y:Z0.y+.04,faceX:Z0.x+fl.x,faceZ:Z0.z+fl.z,poses:{far:'zbcarve',near:'zbnear',talk:'zbtalk',r:3.6},
+    look:{robe:0xb4a68e,robe2:0x6a5a48,hat:'hair',hatC:0x9a9488,beard:0x9a9488,cloth:{sleeve:'short',pants:0x5a5248,apron:0x7a5434,shoes:0x3a2a1c}},
+    lines:['어, 거기. 잠깐 그대로 있어 보게. …아니야, 됐네. 해가 그새 옮겨 갔어.',
+      '돌은 서두르는 손을 싫어하지. 정 끝을 한 번 잘못 대면 그 자리는 다시는 돌아오지 않거든.',
+      '이 흉상 말인가? 가늘롱 나리가 맡기셨네. 모자를 한 뼘만 더 높여 달라고 벌써 세 번째야. 이러다 얼굴보다 모자가 더 커지겠어.',
+      '얼굴을 깎을 땐 눈을 맨 마지막에 파네. 눈을 먼저 파 놓으면 돌이 나를 빤히 쳐다보는 것 같아서 손이 떨리거든.',
+      '내 머리가 하얗게 센 줄 아는 사람이 많은데, 반은 돌가루일세. 허허.',
+      '망치는 쇠를 때리고, 쇠는 돌을 깨우지. 서두르면 돌이 깨어나기도 전에 부서져 버려.',
+      '이 대리석은 남쪽 채석장에서 왔네. 결이 고와서 손톱으로 튕겨도 소리가 맑아.',
+      '광장 분수의 바다의 신은 우리 스승님의 스승님이 깎으셨지. 나는 아직도 그 앞을 지날 때면 고개를 숙이네.',
+      '대장장이 그레고르가 내 정을 벼려 주고, 나는 그 집 간판에 모루를 새겨 줬지. 장인 지구는 다 그렇게 굴러가.',
+      '오늘은 어깨선까지만. 욕심내면 내일 할 일이 없지 않은가.'],
+    acts:[],
+    story:[['열두 살 때 처음 깎은 게 뭔 줄 아나? 고양이였네. 스승님 공방 앞에서 늘 졸던 얼룩 고양이.','귀를 너무 크게 깎아서 다들 여우라고 놀렸지. 그런데 그 고양이는 그 돌 옆에서만 낮잠을 자더군.','그때 알았네. 닮게 깎는 것보다, 곁에 있고 싶게 깎는 게 훨씬 어렵다는 걸. 저 선반 위 고양이가 그 녀석을 다시 깎은 걸세.'],
+      ['몇 해 전, 석 달을 깎은 흉상에 금이 간 적이 있지. 돌 속에 숨은 결이 있었던 게야.','버릴까 하다가 그 금을 따라 흉터를 새겼네. 늙은 뱃사람 얼굴이었으니까.','항구 술집 주인이 그걸 사 갔는데, 뱃사람들이 그 앞에 모여 저마다 제 흉터 이야기를 늘어놓는다더군. 금이 이야기를 만든 셈이지.'],
+      ['분수 바다의 신 왼손을 자세히 보게. 새끼손가락이 조금 짧아.','깎던 날 망치가 미끄러졌다는 말도 있고, 일부러 그랬다는 말도 있네. 흠 하나 없는 건 신에게도 어울리지 않는다나.','나는 일부러 그랬다고 믿네. 그래야 내 실수도 조금은 덜 부끄럽거든. 허허.']]});
+  ZBN.n.mesh.userData.maxTurn=1.3;})();
+/* 망치가 정을 때릴 때마다: 정 끝에서 돌가루가 튀고 작게 쨍 (가까이 있을 때만) */
+const _zbV=new THREE.Vector3();
+function zbTick(dt){const Z=ZBN;if(!Z.n||!player)return;const n=Z.n,u=n.mesh.userData,d=Math.hypot(player.position.x-n.x,player.position.z-n.z);
+  if(d<26&&n.mesh.visible&&u.zbHit!==Z.hit){Z.hit=u.zbHit;const S=u.stick,c=S&&S.AL.hand.children.find(q=>q.isGroup);
+    if(c){_zbV.set(0,0,.17).applyMatrix4(c.matrixWorld);sfx('chisel',_zbV,.55,1+Math.random()*.15);
+      for(let k=0;k<4;k++){let p=Z.dust.find(q=>!q.visible);if(!p){if(Z.dust.length>24)break;p=new THREE.Mesh(new THREE.IcosahedronGeometry(.012,0),new THREE.MeshBasicMaterial({color:0xf2eee6,transparent:true,depthWrite:false}));scene.add(p);Z.dust.push(p);}
+        p.visible=true;p.position.copy(_zbV);p.userData.v=new THREE.Vector3((Math.random()-.5)*1.1,Math.random()*.9+.2,(Math.random()-.5)*1.1);p.userData.t=0;p.scale.setScalar(.6+Math.random());}}}
+  for(const p of Z.dust){if(!p.visible)continue;const q=p.userData;q.t+=dt;q.v.y-=3.2*dt;p.position.addScaledVector(q.v,dt);p.material.opacity=Math.max(0,1-q.t/.7);if(q.t>.7)p.visible=false;}
+  if(Z.sign)Z.sign.rotation.x=Math.sin(tAll*1.3)*.04;}
 
 /* ---------- 새 집: 버키를 만난 뒤 왕국이 엑시즈 시내 살림집 하나를 내어 준다 ----------
    MARCUS.homes = 배정할 수 있는 시내 집들의 앞문 자리 (buildHouse에서 적어 둔다).
