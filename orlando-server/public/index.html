@@ -15134,7 +15134,10 @@ function buildKnightsHQ(K){
   /* 벽 한 면: axis 'x'면 z 고정. holes: [가운데, 폭, 아래, 위] */
   const face=(axis,fx,from,to,y0,y1,holes,col,th=T,o=IP)=>{const cuts=[...holes].sort((a,b)=>a[0]-b[0]);let cur=from;
     const piece=(a,b,ya,yb)=>{if(b-a<.02||yb-ya<.02)return;const m=(a+b)/2,len=b-a;if(axis==='x')P(BOX,m,(ya+yb)/2,fx,len,yb-ya,th,col,o);else P(BOX,fx,(ya+yb)/2,m,th,yb-ya,len,col,o);};
-    for(const [c,w,ha,hb] of cuts){const a=c-w/2,b=c+w/2;piece(cur,a,y0,y1);piece(a,b,y0,ha);piece(a,b,hb,y1);cur=b;}piece(cur,to,y0,y1);};
+    /* 같은 자리에 위아래로 구멍이 둘 있어도 (아래층 창·위층 창) 서로 메우지 않게, 구멍 가장자리마다 끊어 세로로 채운다 */
+    const xs=[...new Set([from,to,...cuts.flatMap(([c,w])=>[c-w/2,c+w/2])])].filter(v=>v>=from&&v<=to).sort((p,q)=>p-q);
+    for(let i=0;i<xs.length-1;i++){const a=xs[i],b=xs[i+1],m=(a+b)/2;let ya=y0;
+      for(const [c,w,ha,hb] of cuts.filter(([c,w])=>m>c-w/2&&m<c+w/2).sort((p,q)=>p[2]-q[2])){piece(a,b,ya,ha);ya=Math.max(ya,hb);}piece(a,b,ya,y1);}};
 
   /* ===== 모양 (뾰족 아치·방패·뾰족 창유리) ===== */
   const GK=new Map(),geo=(k,mk)=>{if(!GK.has(k))GK.set(k,mk());return GK.get(k);};
@@ -25296,7 +25299,7 @@ function updateOthers(dt){
 var roomStatus='연결 중…',presErr='',pageViewers=0;
 function setRoomStatus(t){roomStatus=t;renderOnline();}
 // 자체 서버(WebSocket)용 연결: claude room과 같은 모양으로 감싼다
-const SERVER_VER=24;let srvVer=null,monsGot=0;
+const SERVER_VER=25;let srvVer=null,monsGot=0;
 function makeWsRoom(){
   const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
   let ws=null,myId=null,ok=false,retry=1000;const peers=new Map(),peerFns=[],topicFns={},connFns=[];const mine={};
