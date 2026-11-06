@@ -82,10 +82,14 @@
   // 2026-11-05 원호: 문마다 첫 땅 하나씩, 네 곳만 남긴다 (모래톱·들판·숲·고개). 2026-11-06 원호 "사냥터 조금만 추가하자" → 문마다 두 번째 땅을 하나씩 더 (해안 들판·호숫가·강가·해안 절벽).
   //   한 문의 두 땅은 넓은 목으로 이어지고, 다른 문의 땅과는 이어지지 않는다. 자리(k = (줄-1)·5 + 순번)는 말굽 위 예전 그대로라 줄 사이에 빈 산이 있다. 밀골은 마차로만 간다
   const MLINES_ALL = [
-    { n: 1, gate: '남문', zones: [['mfield', 'beach', 'c'], ['mhill', 'field', 'c']] },
-    { n: 2, gate: '서문', zones: [['m2a', 'field'], ['m2b', 'lake']] },
-    { n: 3, gate: '북문', zones: [['m3a', 'wood'], ['m3b', 'river']] },
-    { n: 4, gate: '동문', zones: [['m4a', 'pass'], ['m4b', 'cliff', 'c']] },
+    // 2026-11-06 원호: 북문·남문·동문은 나중에 고레벨 땅으로 열 곳이라 지금은 닫아 둔다 (성문을 경비병이 막는다). off를 지우면 다시 켜진다
+    { n: 1, off: true, gate: '남문', zones: [['mfield', 'beach', 'c'], ['mhill', 'field', 'c']] },
+    // 2026-11-06 원호: 서문 → 숲 가는 길(60–70) → 엑시즈 숲(70–80) → 깊은 숲(80–90) → 추운 계곡(90–100) → 허칠 산장.
+    //   sep: 땅마다 따로 된 맵 (목으로 잇지 않고, 땅 끝 문을 지나면 다음 땅으로 넘어간다). ks: 말굽 위 자리(한 칸씩 띄워 산으로 멀리 떨어뜨린다). names: 네 번째 칸이 온 이름. lv: 땅마다 적정레벨
+    { n: 2, gate: '서문', sep: true, names: true, ks: [5, 7, 9, 11], lv: [[60, 70], [70, 80], [80, 90], [90, 100]],
+      zones: [['m2a', 'trail', 0, '숲 가는 길'], ['m2b', 'wood', 0, '엑시즈 숲'], ['m2c', 'deep', 0, '깊은 숲'], ['m2d', 'cold', 0, '추운 계곡']] },
+    { n: 3, off: true, gate: '북문', zones: [['m3a', 'wood'], ['m3b', 'river']] },
+    { n: 4, off: true, gate: '동문', zones: [['m4a', 'pass'], ['m4b', 'cliff', 'c']] },
     // 고리 밖으로 뻗은 가지: 4E에서 이어지는 새 지역 (엑시즈로 가는 문은 없다)
     // off: 게임에서 잠시 뺀 줄 (2026-11-03 원호: 몬스터가 예전과 똑같이 생겨서 다시 만들 때까지 뺀다). off를 지우면 다시 켜진다
     { n: 5, off: true, region: '불타는 협곡', branch: [162, 130, 100, 70, 40], zones: [['m5a', 'ash'], ['m5b', 'vale'], ['m5c', 'lava'], ['m5d', 'vale'], ['m5e', 'pass']] },
@@ -100,7 +104,7 @@
   MH.SEA = 45 * PI / 180;                // 바다가 트인 쪽 (남동)
   // 가지(branch): 앞 땅에서 정한 방향(도, 지도에서 x 오른쪽 0 · z 아래 90)으로 MH.STEP씩 나아간다. th는 나아가는 방향에서 90도 뺀 값 (고리 땅처럼 th의 접선이 길 방향)
   MH.STEP = 360;
-  MLINES.forEach((L) => L.zones.forEach(([id, kind, cst], i) => { const k = (L.n - 1) * 5 + i; const I = ISLES[id] || (ISLES[id] = { R: MH.R }); I.R = MH.R; I.kind = kind; I.coast = cst === 'c' ? 1 : 0; I.line = L.n; I.seq = i; I.k = k;
+  MLINES.forEach((L) => L.zones.forEach(([id, kind, cst], i) => { const k = L.ks ? L.ks[i] : (L.n - 1) * 5 + i; const I = ISLES[id] || (ISLES[id] = { R: MH.R }); I.R = MH.R; I.kind = kind; I.coast = cst === 'c' ? 1 : 0; I.line = L.n; I.seq = i; I.k = k; I.sep = L.sep ? 1 : 0;
     if (L.branch) { const prev = i ? ISLES[L.zones[i - 1][0]] : ISLES[MLINES[L.n - 2].zones[MLINES[L.n - 2].zones.length - 1][0]], h = L.branch[i] * PI / 180; I.x = prev.x + Math.cos(h) * MH.STEP; I.z = prev.z + Math.sin(h) * MH.STEP; I.th = h - PI / 2; I.branch = 1; }
     else { const th = MH.TH0 + k * MH.DTH; I.x = MH.cx + Math.cos(th) * MH.RR; I.z = MH.cz + Math.sin(th) * MH.RR; I.th = th; } }));
   const MHUNT = MLINES.flatMap((L) => L.zones.map((q) => q[0]));
@@ -229,7 +233,7 @@
       I.entry = tw(A, I.R - 14); I.exit = B ? tw(B, I.R - 14) : { x: I.x - Math.sin(I.th) * (I.R - 14), z: I.z + Math.cos(I.th) * (I.R - 14) }; } }   // 사냥터: 레벨이 낮은 쪽(고리 반시계)에서 들어와 높은 쪽(시계)으로 나간다
   // 걸어 다닐 수 있는 사냥터 모양: 둥근 땅들 + 이웃 땅을 잇는 넓은 목(neck) + 문마다 엑시즈 쪽(안쪽)으로 난 고갯길(gate), 밀골로 가는 바깥 고갯길
   MH.links = [];
-  for (let i = 0; i + 1 < MHUNT.length; i++) { const A = ISLES[MHUNT[i]], B = ISLES[MHUNT[i + 1]]; if (A.line !== B.line && !B.branch) continue;   // 다른 문의 땅끼리는 잇지 않는다
+  for (let i = 0; i + 1 < MHUNT.length; i++) { const A = ISLES[MHUNT[i]], B = ISLES[MHUNT[i + 1]]; if ((A.line !== B.line && !B.branch) || A.sep || B.sep) continue;   // 다른 문의 땅끼리는 잇지 않는다. 따로 된 맵(sep)도 목 없이 땅 끝 문으로만 넘어간다
     MH.links.push({ a: A.id, b: B.id, ax: A.x, az: A.z, bx: B.x, bz: B.z, hw: MH.neckHW, k: 'neck' }); }
   // gate: 고갯길 끝의 문(엑시즈·밀골로 넘어가는 자리)과 넘어왔을 때 서는 자리(arr), 바라보는 방향(ux, uz)
   for (const L of MLINES) { if (!L.gate) continue; const F = ISLES[L.zones[0][0]], e = ringP(F.th, MH.RR - F.R - MH.gateLen); F.gate = { ...ringP(F.th, MH.RR - F.R - MH.gateLen + 6), arr: ringP(F.th, MH.RR - F.R - MH.gateLen + 14), ux: Math.cos(F.th), uz: Math.sin(F.th) }; MH.links.push({ a: F.id, b: null, ax: F.x, az: F.z, bx: e.x, bz: e.z, hw: MH.gateHW, k: 'gate' });
@@ -237,8 +241,16 @@
   // 지도에 밀골을 그릴 자리: 예전 남문 줄 끝(1E) 바깥 고갯길 문 자리 (지금은 걸어서 가는 길이 없다)
   { const th = MH.TH0 + 4 * MH.DTH; MH.milgolMark = { ...ringP(th, MH.RR + MH.R + MH.gateLen - 6), ux: -Math.cos(th), uz: -Math.sin(th) }; }
   // 사냥터 땅 바깥쪽으로 난 산길: 끝의 문을 넘으면 따로 떨어진 땅으로 간다 (허칠산: 북문 밖 숲 3A의 바깥 = 엑시즈 북서쪽)
-  MH.trails = [{ from: 'm3a', to: 'hechil' }].filter((T) => MHUNT.includes(T.from) && ISLES[T.to]);
+  MH.trails = [{ from: 'm2d', to: 'hechil' }].filter((T) => MHUNT.includes(T.from) && ISLES[T.to]);
   for (const T of MH.trails) { const F = ISLES[T.from], o = ringP(F.th, MH.RR + F.R + MH.gateLen); F.tgate = { ...ringP(F.th, MH.RR + F.R + MH.gateLen - 6), arr: ringP(F.th, MH.RR + F.R + MH.gateLen - 14), ux: -Math.cos(F.th), uz: -Math.sin(F.th), to: T.to }; MH.links.push({ a: F.id, b: null, ax: F.x, az: F.z, bx: o.x, bz: o.z, hw: MH.gateHW, k: 'gate', trail: T.to }); }
+  // 따로 된 맵(sep) 줄: 땅마다 고리 방향 앞뒤 끝에 짧은 길과 문. 앞 땅의 '다음 문'(ngate)을 넘으면 다음 땅의 '앞 문'(pgate) 안쪽(arr)에 선다.
+  //   들어오는 자리(entry)는 들어온 문 안쪽, 나가는 자리(exit)는 다음 문 (허칠로 가는 마지막 땅은 바깥 산길 문)
+  for (const L of MLINES) { if (!L.sep) continue; const Z = L.zones.map((q) => ISLES[q[0]]);
+    Z.forEach((I, i) => { const tx = -Math.sin(I.th), tz = Math.cos(I.th), door = (sg) => { const at = (d) => ({ x: I.x + tx * sg * d, z: I.z + tz * sg * d }), e = at(I.R + MH.gateLen); MH.links.push({ a: I.id, b: null, ax: I.x, az: I.z, bx: e.x, bz: e.z, hw: MH.gateHW, k: 'gate', sep: 1 }); return { ...at(I.R + MH.gateLen - 6), arr: at(I.R + MH.gateLen - 14), ux: -tx * sg, uz: -tz * sg }; };
+      if (i) { I.pgate = door(-1); I.pgate.to = Z[i - 1].id; I.entry = { x: I.pgate.arr.x, z: I.pgate.arr.z }; }
+      else if (I.gate) I.entry = { x: I.gate.arr.x, z: I.gate.arr.z };
+      if (i + 1 < Z.length) { I.ngate = door(1); I.ngate.to = Z[i + 1].id; I.exit = { x: I.ngate.x, z: I.ngate.z }; }
+      else if (I.tgate) I.exit = { x: I.tgate.x, z: I.tgate.z }; }); }
   const segQ = (L, x, z) => { const dx = L.bx - L.ax, dz = L.bz - L.az, t = clampN(((x - L.ax) * dx + (z - L.az) * dz) / (dx * dx + dz * dz), 0, 1), qx = L.ax + dx * t, qz = L.az + dz * t; return { x: qx, z: qz, t, d: Math.hypot(x - qx, z - qz) }; };
   // 걸을 수 있는 곳 경계까지의 거리 (안쪽은 음수)
   // (빠르게: 가장 가까울 수 없는 땅은 Math.hypot 없이 건너뛴다. hypot(a,b) >= max(|a|,|b|) 이라 결과는 똑같다. 목 거리는 segQ와 같은 계산을 객체 없이)
@@ -507,16 +519,17 @@
     wwest: ['jackal', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
     silva: ['silvawolf', 'mossslime'], arbus: ['snowwolf', 'frostslime'], kaolis: ['mackerel', 'tideslime', 'octopus'], subcus: ['darkhound', 'crystalslime'],
     // 엑시즈 사냥터: 첫 땅 = 예전 그 줄 1·2번째 땅 몬스터, 두 번째 땅 = 3·4·5번째 땅 몬스터
-    mfield: ['fieldwolf', 'fieldwolf', 'mudslime', 'hillboar', 'meadowviper'], mhill: ['woodbear', 'thornslime', 'woodtroll', 'stonehound', 'valleyogre', 'windwolf', 'mistslime', 'cliffgiant'],
-    m2a: ['pinewolf', 'pinewolf', 'barkslime', 'hornboar', 'rockviper'], m2b: ['greybear', 'resinslime', 'pinetroll', 'cragdog', 'rockogre', 'icewolf', 'snowslime', 'frostgiant'],
-    m3a: ['steppewolf', 'steppewolf', 'clayslime', 'wildram', 'reedviper'], m3b: ['warboar', 'pollenslime', 'fieldogre', 'ashwolf', 'brownbear', 'hilltroll', 'stoneslime', 'hillgiant'],
-    m4a: ['shadewolf', 'shadewolf', 'leafslime', 'cliffboar', 'pitviper'], m4b: ['moonbear', 'rotslime', 'oldtroll', 'gorgehound', 'gorgeogre', 'stormwolf', 'cloudslime', 'peakgiant'],
+    // 2026-11-06 서문 길 네 땅: 예전 여덟 땅의 몬스터 48종을 땅 생김새에 맞게 나눴다 (레벨은 아래 SEP_LV로 그 땅 적정레벨 안에 고르게)
+    m2a: ['fieldwolf', 'mudslime', 'hillboar', 'meadowviper', 'steppewolf', 'clayslime', 'stonehound', 'wildram', 'reedviper', 'pollenslime', 'warboar', 'fieldogre'],   /* 숲 가는 길: 들판 짐승 */
+    m2b: ['pinewolf', 'barkslime', 'hornboar', 'woodbear', 'thornslime', 'rockviper', 'resinslime', 'greybear', 'woodtroll', 'pinetroll', 'leafslime', 'brownbear'],   /* 엑시즈 숲: 솔숲 짐승 */
+    m2c: ['shadewolf', 'mistslime', 'rotslime', 'ashwolf', 'pitviper', 'cragdog', 'moonbear', 'cliffboar', 'gorgehound', 'hilltroll', 'valleyogre', 'oldtroll'],   /* 깊은 숲: 어두운 숲 짐승 */
+    m2d: ['icewolf', 'snowslime', 'windwolf', 'stoneslime', 'stormwolf', 'cloudslime', 'rockogre', 'cliffgiant', 'gorgeogre', 'frostgiant', 'hillgiant', 'peakgiant'],   /* 추운 계곡: 바람 찬 골짜기 짐승 */
     /* 허칠: 사냥터 맵마다 제 종 (산장은 몬스터 없음) */
     hwood: ['frostfox'], hlake: ['snowgoat'], hcave: ['cavebat'], hcrys: ['snowleopard'], hfall: ['cavebear'], hden: ['elderbear'],
     hpeak: ['snowyeti'], hscree: ['icewisp'], hridge: ['avagolem', 'snowowl'], htop: ['frostmammoth'],
     m5a: ['cinderhound', 'cinderhound', 'cinderslime'], m5b: ['scorchboar', 'magmaviper'], m5c: ['ashbear', 'lavaslime', 'lavatroll'], m5d: ['flamehound', 'flameogre'], m5e: ['firewolf', 'smokeslime', 'firegiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 60, mhill: 60, m2a: 60, m2b: 60, m3a: 60, m3b: 60, m4a: 60, m4b: 60, hwood: 36, hlake: 40, hcave: 26, hcrys: 26, hfall: 26, hden: 26, hpeak: 32, hscree: 30, hridge: 30, htop: 22,   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, m2a: 60, m2b: 60, m2c: 60, m2d: 60, hwood: 36, hlake: 40, hcave: 26, hcrys: 26, hfall: 26, hden: 26, hpeak: 32, hscree: 30, hridge: 30, htop: 22,   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
   for (const L of MLINES_ALL) if (L.off) for (const [id] of L.zones) { delete ZONE_COUNT[id]; delete ZONE_MON[id]; }   // 꺼 둔 땅에는 몬스터가 나오지 않는다
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
@@ -531,9 +544,12 @@
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hechil: [0, 0], ...Object.fromEntries(HCH.AREAS.map((A) => [A.zone, A.lv])), mfield: [60, 67] };
-  MLINES.forEach((L) => { if (L.branch) { L.zones.forEach(([id], i) => { const a = 60 + (L.n - 1) * 35 + i * 7; ZONE_LEVELS[id] = [a, a + 7]; }); return; }
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hechil: [0, 0], ...Object.fromEntries(HCH.AREAS.map((A) => [A.zone, A.lv])) };
+  MLINES.forEach((L) => { if (L.lv) { L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = L.lv[i].slice(); }); return; }
+    if (L.branch) { L.zones.forEach(([id], i) => { const a = 60 + (L.n - 1) * 35 + i * 7; ZONE_LEVELS[id] = [a, a + 7]; }); return; }
     const a = 60 + (L.n - 1) * 10, w = 10 / L.zones.length; L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = [Math.round(a + i * w), Math.round(a + (i + 1) * w)]; }); });   /* 엑시즈 사냥터: 60레벨부터 문 하나에 10레벨, 그 문의 땅들이 나눠 맡는다 (2026-11-06 원호: 60–100. 100–150은 허칠산) */
+  /* 따로 된 맵 줄(서문 길): 그 땅 몬스터 종들의 레벨을 땅 적정레벨 안에 고르게 (같은 종은 늘 같은 레벨) */
+  MLINES.forEach((L) => { if (!L.sep || !L.lv) return; L.zones.forEach(([id], i) => { const T = ZONE_MON[id], [lo, hi] = L.lv[i]; if (T) T.forEach((ty, j) => { if (MON[ty]) MON[ty].lv = Math.round(lo + (hi - lo) * j / Math.max(1, T.length - 1)); }); }); });
 
   // ---------- 의뢰 게시판 포스터 ----------
   // 의뢰를 주는 NPC마다 게시판이 따로 있다. 포스터는 마을 사람(실제 NPC)이 이유를 적어 붙인 것
