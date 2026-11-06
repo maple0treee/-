@@ -1,10 +1,18 @@
 # 매일 오전 4시(한국 시간)에 시험용 브랜치 dev 의 변경을 본 서버 브랜치 main 으로 한 번에 올린다
 # main 에 올라가면 Render 가 본 서버(orlando.io.kr)를 새로 배포한다
-# GitHub 예약 작업은 붐빌 때 몇 분~수십 분 늦게 돌 수 있다
+# GitHub 예약 작업은 자주 늦거나 건너뛰어서, 04:00 부터 08:30 사이에 여러 번 걸어 둔다
+# (이미 올렸으면 할 일이 없어서 그냥 끝나고, 한국 시간 04~08시가 아니면 예약 실행은 아무것도 안 한다)
 name: nightly-release
 on:
   schedule:
-    - cron: '0 19 * * *'   # UTC 19:00 = 한국 시간 04:00
+    - cron: '0 19 * * *'    # UTC 19:00 = 한국 시간 04:00
+    - cron: '17 19 * * *'
+    - cron: '41 19 * * *'
+    - cron: '13 20 * * *'
+    - cron: '47 20 * * *'
+    - cron: '23 21 * * *'
+    - cron: '7 22 * * *'
+    - cron: '37 23 * * *'   # 한국 시간 08:37 (마지막)
   workflow_dispatch:        # Actions 탭에서 손으로 바로 돌릴 수도 있음
 permissions:
   contents: write
@@ -21,15 +29,29 @@ jobs:
           ref: dev
           fetch-depth: 0
       - name: dev 를 main 으로 합치기
+        env:
+          EVENT: ${{ github.event_name }}
         run: |
+          H=$(TZ=Asia/Seoul date +%H)
+          if [ "$EVENT" = "schedule" ] && { [ "$H" -lt 4 ] || [ "$H" -ge 9 ]; }; then
+            echo "한국 시간 ${H}시: 오전 4~8시가 아니라서 건너뛰어요"; exit 0
+          fi
           git config user.name "orlando-release"
           git config user.email "orlando-release@users.noreply.github.com"
-          git fetch origin main
-          if git merge-base --is-ancestor origin/dev origin/main; then
+          git fetch origin main dev
+          # 예약 실행은 오늘 오전 4시 전까지 dev 에 들어온 것만 올린다 (4시 뒤에 들어온 것은 내일 4시에)
+          T=origin/dev
+          if [ "$EVENT" = "schedule" ]; then
+            T=$(git rev-list -1 --first-parent --before="$(TZ=Asia/Seoul date +%Y-%m-%d)T04:00:00+09:00" origin/dev)
+            [ -n "$T" ] || { echo "올릴 것이 없어요"; exit 0; }
+          fi
+          if git merge-base --is-ancestor "$T" origin/main; then
             echo "dev 에 새 변경이 없어서 올릴 것이 없어요"; exit 0
           fi
-          # 그동안 main 에 바로 올린 급한 고침이 있으면 먼저 dev 에 섞는다
+          git checkout -q --detach "$T"
+          # 그동안 main 에 바로 올린 급한 고침이 있으면 함께 섞는다
           git merge --no-edit origin/main -m "본 서버의 급한 고침을 시험판에 합치기"
-          git push origin HEAD:dev
+          echo "올리는 변경:"; git log --oneline origin/main..HEAD
           git push origin HEAD:main
-          echo "올린 변경:"; git log --oneline origin/main..HEAD
+          # dev 에 4시 뒤 변경이 없을 때만 dev 도 같은 곳으로 (있으면 sync-dev 가 섞는다)
+          git push origin HEAD:dev || true
