@@ -1577,10 +1577,14 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   // 2026-11-05 원호: 문마다 첫 땅 하나씩, 네 곳만 남긴다 (모래톱·들판·숲·고개). 2026-11-06 원호 "사냥터 조금만 추가하자" → 문마다 두 번째 땅을 하나씩 더 (해안 들판·호숫가·강가·해안 절벽).
   //   한 문의 두 땅은 넓은 목으로 이어지고, 다른 문의 땅과는 이어지지 않는다. 자리(k = (줄-1)·5 + 순번)는 말굽 위 예전 그대로라 줄 사이에 빈 산이 있다. 밀골은 마차로만 간다
   const MLINES_ALL = [
-    { n: 1, gate: '남문', zones: [['mfield', 'beach', 'c'], ['mhill', 'field', 'c']] },
-    { n: 2, gate: '서문', zones: [['m2a', 'field'], ['m2b', 'lake']] },
-    { n: 3, gate: '북문', zones: [['m3a', 'wood'], ['m3b', 'river']] },
-    { n: 4, gate: '동문', zones: [['m4a', 'pass'], ['m4b', 'cliff', 'c']] },
+    // 2026-11-06 원호: 북문·남문·동문은 나중에 고레벨 땅으로 열 곳이라 지금은 닫아 둔다 (성문을 경비병이 막는다). off를 지우면 다시 켜진다
+    { n: 1, off: true, gate: '남문', zones: [['mfield', 'beach', 'c'], ['mhill', 'field', 'c']] },
+    // 2026-11-06 원호: 서문 → 숲 가는 길(60–70) → 엑시즈 숲(70–80) → 깊은 숲(80–90) → 추운 계곡(90–100) → 허칠 산장.
+    //   sep: 땅마다 따로 된 맵 (목으로 잇지 않고, 땅 끝 문을 지나면 다음 땅으로 넘어간다). ks: 말굽 위 자리(한 칸씩 띄워 산으로 멀리 떨어뜨린다). names: 네 번째 칸이 온 이름. lv: 땅마다 적정레벨
+    { n: 2, gate: '서문', sep: true, names: true, ks: [5, 7, 9, 11], lv: [[60, 70], [70, 80], [80, 90], [90, 100]],
+      zones: [['m2a', 'trail', 0, '숲 가는 길'], ['m2b', 'wood', 0, '엑시즈 숲'], ['m2c', 'deep', 0, '깊은 숲'], ['m2d', 'cold', 0, '추운 계곡']] },
+    { n: 3, off: true, gate: '북문', zones: [['m3a', 'wood'], ['m3b', 'river']] },
+    { n: 4, off: true, gate: '동문', zones: [['m4a', 'pass'], ['m4b', 'cliff', 'c']] },
     // 고리 밖으로 뻗은 가지: 4E에서 이어지는 새 지역 (엑시즈로 가는 문은 없다)
     // off: 게임에서 잠시 뺀 줄 (2026-11-03 원호: 몬스터가 예전과 똑같이 생겨서 다시 만들 때까지 뺀다). off를 지우면 다시 켜진다
     { n: 5, off: true, region: '불타는 협곡', branch: [162, 130, 100, 70, 40], zones: [['m5a', 'ash'], ['m5b', 'vale'], ['m5c', 'lava'], ['m5d', 'vale'], ['m5e', 'pass']] },
@@ -1595,7 +1599,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   MH.SEA = 45 * PI / 180;                // 바다가 트인 쪽 (남동)
   // 가지(branch): 앞 땅에서 정한 방향(도, 지도에서 x 오른쪽 0 · z 아래 90)으로 MH.STEP씩 나아간다. th는 나아가는 방향에서 90도 뺀 값 (고리 땅처럼 th의 접선이 길 방향)
   MH.STEP = 360;
-  MLINES.forEach((L) => L.zones.forEach(([id, kind, cst], i) => { const k = (L.n - 1) * 5 + i; const I = ISLES[id] || (ISLES[id] = { R: MH.R }); I.R = MH.R; I.kind = kind; I.coast = cst === 'c' ? 1 : 0; I.line = L.n; I.seq = i; I.k = k;
+  MLINES.forEach((L) => L.zones.forEach(([id, kind, cst], i) => { const k = L.ks ? L.ks[i] : (L.n - 1) * 5 + i; const I = ISLES[id] || (ISLES[id] = { R: MH.R }); I.R = MH.R; I.kind = kind; I.coast = cst === 'c' ? 1 : 0; I.line = L.n; I.seq = i; I.k = k; I.sep = L.sep ? 1 : 0;
     if (L.branch) { const prev = i ? ISLES[L.zones[i - 1][0]] : ISLES[MLINES[L.n - 2].zones[MLINES[L.n - 2].zones.length - 1][0]], h = L.branch[i] * PI / 180; I.x = prev.x + Math.cos(h) * MH.STEP; I.z = prev.z + Math.sin(h) * MH.STEP; I.th = h - PI / 2; I.branch = 1; }
     else { const th = MH.TH0 + k * MH.DTH; I.x = MH.cx + Math.cos(th) * MH.RR; I.z = MH.cz + Math.sin(th) * MH.RR; I.th = th; } }));
   const MHUNT = MLINES.flatMap((L) => L.zones.map((q) => q[0]));
@@ -1666,7 +1670,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
       I.entry = tw(A, I.R - 14); I.exit = B ? tw(B, I.R - 14) : { x: I.x - Math.sin(I.th) * (I.R - 14), z: I.z + Math.cos(I.th) * (I.R - 14) }; } }   // 사냥터: 레벨이 낮은 쪽(고리 반시계)에서 들어와 높은 쪽(시계)으로 나간다
   // 걸어 다닐 수 있는 사냥터 모양: 둥근 땅들 + 이웃 땅을 잇는 넓은 목(neck) + 문마다 엑시즈 쪽(안쪽)으로 난 고갯길(gate), 밀골로 가는 바깥 고갯길
   MH.links = [];
-  for (let i = 0; i + 1 < MHUNT.length; i++) { const A = ISLES[MHUNT[i]], B = ISLES[MHUNT[i + 1]]; if (A.line !== B.line && !B.branch) continue;   // 다른 문의 땅끼리는 잇지 않는다
+  for (let i = 0; i + 1 < MHUNT.length; i++) { const A = ISLES[MHUNT[i]], B = ISLES[MHUNT[i + 1]]; if ((A.line !== B.line && !B.branch) || A.sep || B.sep) continue;   // 다른 문의 땅끼리는 잇지 않는다. 따로 된 맵(sep)도 목 없이 땅 끝 문으로만 넘어간다
     MH.links.push({ a: A.id, b: B.id, ax: A.x, az: A.z, bx: B.x, bz: B.z, hw: MH.neckHW, k: 'neck' }); }
   // gate: 고갯길 끝의 문(엑시즈·밀골로 넘어가는 자리)과 넘어왔을 때 서는 자리(arr), 바라보는 방향(ux, uz)
   for (const L of MLINES) { if (!L.gate) continue; const F = ISLES[L.zones[0][0]], e = ringP(F.th, MH.RR - F.R - MH.gateLen); F.gate = { ...ringP(F.th, MH.RR - F.R - MH.gateLen + 6), arr: ringP(F.th, MH.RR - F.R - MH.gateLen + 14), ux: Math.cos(F.th), uz: Math.sin(F.th) }; MH.links.push({ a: F.id, b: null, ax: F.x, az: F.z, bx: e.x, bz: e.z, hw: MH.gateHW, k: 'gate' });
@@ -1674,8 +1678,16 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
   // 지도에 밀골을 그릴 자리: 예전 남문 줄 끝(1E) 바깥 고갯길 문 자리 (지금은 걸어서 가는 길이 없다)
   { const th = MH.TH0 + 4 * MH.DTH; MH.milgolMark = { ...ringP(th, MH.RR + MH.R + MH.gateLen - 6), ux: -Math.cos(th), uz: -Math.sin(th) }; }
   // 사냥터 땅 바깥쪽으로 난 산길: 끝의 문을 넘으면 따로 떨어진 땅으로 간다 (허칠산: 북문 밖 숲 3A의 바깥 = 엑시즈 북서쪽)
-  MH.trails = [{ from: 'm3a', to: 'hechil' }].filter((T) => MHUNT.includes(T.from) && ISLES[T.to]);
+  MH.trails = [{ from: 'm2d', to: 'hechil' }].filter((T) => MHUNT.includes(T.from) && ISLES[T.to]);
   for (const T of MH.trails) { const F = ISLES[T.from], o = ringP(F.th, MH.RR + F.R + MH.gateLen); F.tgate = { ...ringP(F.th, MH.RR + F.R + MH.gateLen - 6), arr: ringP(F.th, MH.RR + F.R + MH.gateLen - 14), ux: -Math.cos(F.th), uz: -Math.sin(F.th), to: T.to }; MH.links.push({ a: F.id, b: null, ax: F.x, az: F.z, bx: o.x, bz: o.z, hw: MH.gateHW, k: 'gate', trail: T.to }); }
+  // 따로 된 맵(sep) 줄: 땅마다 고리 방향 앞뒤 끝에 짧은 길과 문. 앞 땅의 '다음 문'(ngate)을 넘으면 다음 땅의 '앞 문'(pgate) 안쪽(arr)에 선다.
+  //   들어오는 자리(entry)는 들어온 문 안쪽, 나가는 자리(exit)는 다음 문 (허칠로 가는 마지막 땅은 바깥 산길 문)
+  for (const L of MLINES) { if (!L.sep) continue; const Z = L.zones.map((q) => ISLES[q[0]]);
+    Z.forEach((I, i) => { const tx = -Math.sin(I.th), tz = Math.cos(I.th), door = (sg) => { const at = (d) => ({ x: I.x + tx * sg * d, z: I.z + tz * sg * d }), e = at(I.R + MH.gateLen); MH.links.push({ a: I.id, b: null, ax: I.x, az: I.z, bx: e.x, bz: e.z, hw: MH.gateHW, k: 'gate', sep: 1 }); return { ...at(I.R + MH.gateLen - 6), arr: at(I.R + MH.gateLen - 14), ux: -tx * sg, uz: -tz * sg }; };
+      if (i) { I.pgate = door(-1); I.pgate.to = Z[i - 1].id; I.entry = { x: I.pgate.arr.x, z: I.pgate.arr.z }; }
+      else if (I.gate) I.entry = { x: I.gate.arr.x, z: I.gate.arr.z };
+      if (i + 1 < Z.length) { I.ngate = door(1); I.ngate.to = Z[i + 1].id; I.exit = { x: I.ngate.x, z: I.ngate.z }; }
+      else if (I.tgate) I.exit = { x: I.tgate.x, z: I.tgate.z }; }); }
   const segQ = (L, x, z) => { const dx = L.bx - L.ax, dz = L.bz - L.az, t = clampN(((x - L.ax) * dx + (z - L.az) * dz) / (dx * dx + dz * dz), 0, 1), qx = L.ax + dx * t, qz = L.az + dz * t; return { x: qx, z: qz, t, d: Math.hypot(x - qx, z - qz) }; };
   // 걸을 수 있는 곳 경계까지의 거리 (안쪽은 음수)
   // (빠르게: 가장 가까울 수 없는 땅은 Math.hypot 없이 건너뛴다. hypot(a,b) >= max(|a|,|b|) 이라 결과는 똑같다. 목 거리는 segQ와 같은 계산을 객체 없이)
@@ -1944,16 +1956,17 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     wwest: ['jackal', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
     silva: ['silvawolf', 'mossslime'], arbus: ['snowwolf', 'frostslime'], kaolis: ['mackerel', 'tideslime', 'octopus'], subcus: ['darkhound', 'crystalslime'],
     // 엑시즈 사냥터: 첫 땅 = 예전 그 줄 1·2번째 땅 몬스터, 두 번째 땅 = 3·4·5번째 땅 몬스터
-    mfield: ['fieldwolf', 'fieldwolf', 'mudslime', 'hillboar', 'meadowviper'], mhill: ['woodbear', 'thornslime', 'woodtroll', 'stonehound', 'valleyogre', 'windwolf', 'mistslime', 'cliffgiant'],
-    m2a: ['pinewolf', 'pinewolf', 'barkslime', 'hornboar', 'rockviper'], m2b: ['greybear', 'resinslime', 'pinetroll', 'cragdog', 'rockogre', 'icewolf', 'snowslime', 'frostgiant'],
-    m3a: ['steppewolf', 'steppewolf', 'clayslime', 'wildram', 'reedviper'], m3b: ['warboar', 'pollenslime', 'fieldogre', 'ashwolf', 'brownbear', 'hilltroll', 'stoneslime', 'hillgiant'],
-    m4a: ['shadewolf', 'shadewolf', 'leafslime', 'cliffboar', 'pitviper'], m4b: ['moonbear', 'rotslime', 'oldtroll', 'gorgehound', 'gorgeogre', 'stormwolf', 'cloudslime', 'peakgiant'],
+    // 2026-11-06 서문 길 네 땅: 예전 여덟 땅의 몬스터 48종을 땅 생김새에 맞게 나눴다 (레벨은 아래 SEP_LV로 그 땅 적정레벨 안에 고르게)
+    m2a: ['fieldwolf', 'mudslime', 'hillboar', 'meadowviper', 'steppewolf', 'clayslime', 'stonehound', 'wildram', 'reedviper', 'pollenslime', 'warboar', 'fieldogre'],   /* 숲 가는 길: 들판 짐승 */
+    m2b: ['pinewolf', 'barkslime', 'hornboar', 'woodbear', 'thornslime', 'rockviper', 'resinslime', 'greybear', 'woodtroll', 'pinetroll', 'leafslime', 'brownbear'],   /* 엑시즈 숲: 솔숲 짐승 */
+    m2c: ['shadewolf', 'mistslime', 'rotslime', 'ashwolf', 'pitviper', 'cragdog', 'moonbear', 'cliffboar', 'gorgehound', 'hilltroll', 'valleyogre', 'oldtroll'],   /* 깊은 숲: 어두운 숲 짐승 */
+    m2d: ['icewolf', 'snowslime', 'windwolf', 'stoneslime', 'stormwolf', 'cloudslime', 'rockogre', 'cliffgiant', 'gorgeogre', 'frostgiant', 'hillgiant', 'peakgiant'],   /* 추운 계곡: 바람 찬 골짜기 짐승 */
     hechil: ['frostfox', 'snowgoat'],   /* 골짜기: 숲길 여우 · 호숫가 산양 */
     hpeak: ['snowyeti', 'snowyeti', 'icewisp', 'icewisp', 'avagolem', 'avagolem', 'snowowl', 'frostmammoth'],   /* 봉우리: 눈 비탈 설인 · 바위밭 정령 · 능선 골렘·부엉이 · 꼭대기 매머드 */   /* 사냥터마다 제 종: 숲길 여우 · 호숫가 산양 · 눈 비탈 설인 · 바위밭 정령 · 능선 골렘·부엉이 · 꼭대기 매머드 */
     hcave: ['cavebat', 'cavebat', 'snowleopard', 'snowleopard', 'cavebear', 'cavebear', 'elderbear', 'elderbear'],   /* 방마다 한 종씩 같은 수 */
     m5a: ['cinderhound', 'cinderhound', 'cinderslime'], m5b: ['scorchboar', 'magmaviper'], m5c: ['ashbear', 'lavaslime', 'lavatroll'], m5d: ['flamehound', 'flameogre'], m5e: ['firewolf', 'smokeslime', 'firegiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 60, mhill: 60, m2a: 60, m2b: 60, m3a: 60, m3b: 60, m4a: 60, m4b: 60, hechil: 60, hcave: 80, hpeak: 80,   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, m2a: 60, m2b: 60, m2c: 60, m2d: 60, hechil: 60, hcave: 80, hpeak: 80,   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
   for (const L of MLINES_ALL) if (L.off) for (const [id] of L.zones) { delete ZONE_COUNT[id]; delete ZONE_MON[id]; }   // 꺼 둔 땅에는 몬스터가 나오지 않는다
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
@@ -1968,9 +1981,12 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hechil: [100, 110], hcave: [110, 130], hpeak: [130, 150], mfield: [60, 67] };
-  MLINES.forEach((L) => { if (L.branch) { L.zones.forEach(([id], i) => { const a = 60 + (L.n - 1) * 35 + i * 7; ZONE_LEVELS[id] = [a, a + 7]; }); return; }
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hechil: [100, 110], hcave: [110, 130], hpeak: [130, 150] };
+  MLINES.forEach((L) => { if (L.lv) { L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = L.lv[i].slice(); }); return; }
+    if (L.branch) { L.zones.forEach(([id], i) => { const a = 60 + (L.n - 1) * 35 + i * 7; ZONE_LEVELS[id] = [a, a + 7]; }); return; }
     const a = 60 + (L.n - 1) * 10, w = 10 / L.zones.length; L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = [Math.round(a + i * w), Math.round(a + (i + 1) * w)]; }); });   /* 엑시즈 사냥터: 60레벨부터 문 하나에 10레벨, 그 문의 땅들이 나눠 맡는다 (2026-11-06 원호: 60–100. 100–150은 허칠산) */
+  /* 따로 된 맵 줄(서문 길): 그 땅 몬스터 종들의 레벨을 땅 적정레벨 안에 고르게 (같은 종은 늘 같은 레벨) */
+  MLINES.forEach((L) => { if (!L.sep || !L.lv) return; L.zones.forEach(([id], i) => { const T = ZONE_MON[id], [lo, hi] = L.lv[i]; if (T) T.forEach((ty, j) => { if (MON[ty]) MON[ty].lv = Math.round(lo + (hi - lo) * j / Math.max(1, T.length - 1)); }); }); });
 
   // ---------- 의뢰 게시판 포스터 ----------
   // 의뢰를 주는 NPC마다 게시판이 따로 있다. 포스터는 마을 사람(실제 NPC)이 이유를 적어 붙인 것
@@ -2749,8 +2765,8 @@ const ZONES={
   khq:{name:'기사단 본부',diff:0,rec:'',sky:0xe4e6e2,mm:'#b0a890'},
 };
 /* 엑시즈 문 밖 사냥터: 이름 = 마르쿠스 + 땅 생김새 (예: 마르쿠스 숲). 2026-11-05 원호: 번호(2A 등)는 붙이지 않는다 */
-(function(){const KN={field:'들판',hill:'구릉',wood:'숲',vale:'계곡',pass:'고개',lake:'호숫가',river:'강가',marsh:'늪지',ash:'잿더미',lava:'용암지',beach:'모래톱',rocks:'갯바위',cliff:'해안 절벽',cape:'곶'},CN={field:'해안 들판',wood:'바닷가 숲'},KS={beach:[0xdde8ee,'#cdbb88'],rocks:[0xd0dce4,'#7e7a70'],cliff:[0xd0dde6,'#748c52'],cape:[0xd4e2ea,'#86a056'],ash:[0xd4ccc6,'#5e5650'],lava:[0xe2cbbd,'#4e3a32'],field:[0xd8e4ea,'#8aac52'],hill:[0xd4e0e6,'#7a9a48'],wood:[0xc4d4c8,'#4a7038'],vale:[0xc8d2d8,'#7a8268'],pass:[0xc0c8d0,'#8a8478'],lake:[0xd0e0e8,'#6a9a6a'],river:[0xcfdfe6,'#6f9a52'],marsh:[0xc4ccc4,'#6a7448']};
-  for(const L of OR.MLINES)L.zones.forEach(([id,k,cst,nm],i)=>{ZONES[id]={name:(L.region||'마르쿠스')+' '+(nm||(cst==='c'&&CN[k])||KN[k])+(L.branch?L.n+'ABCDE'[i]:''),diff:6,sky:KS[k][0],mm:KS[k][1]};});})();
+(function(){const KN={trail:'숲길',deep:'깊은 숲',cold:'추운 계곡',field:'들판',hill:'구릉',wood:'숲',vale:'계곡',pass:'고개',lake:'호숫가',river:'강가',marsh:'늪지',ash:'잿더미',lava:'용암지',beach:'모래톱',rocks:'갯바위',cliff:'해안 절벽',cape:'곶'},CN={field:'해안 들판',wood:'바닷가 숲'},KS={beach:[0xdde8ee,'#cdbb88'],rocks:[0xd0dce4,'#7e7a70'],cliff:[0xd0dde6,'#748c52'],cape:[0xd4e2ea,'#86a056'],ash:[0xd4ccc6,'#5e5650'],lava:[0xe2cbbd,'#4e3a32'],field:[0xd8e4ea,'#8aac52'],trail:[0xd6e2e6,'#86a64e'],deep:[0xa8b8b0,'#36582e'],cold:[0xd8e0ea,'#a8b4b8'],hill:[0xd4e0e6,'#7a9a48'],wood:[0xc4d4c8,'#4a7038'],vale:[0xc8d2d8,'#7a8268'],pass:[0xc0c8d0,'#8a8478'],lake:[0xd0e0e8,'#6a9a6a'],river:[0xcfdfe6,'#6f9a52'],marsh:[0xc4ccc4,'#6a7448']};
+  for(const L of OR.MLINES)L.zones.forEach(([id,k,cst,nm],i)=>{ZONES[id]={name:L.names&&nm?nm:(L.region||'마르쿠스')+' '+(nm||(cst==='c'&&CN[k])||KN[k])+(L.branch?L.n+'ABCDE'[i]:''),diff:6,sky:KS[k][0],mm:KS[k][1]};});})();
 for(const k in ZONES){const L=ZL[k];ZONES[k].min=L?L[0]:0;if(ZONES[k].rec==null)ZONES[k].rec=`Lv ${L[0]}–${L[1]}`;}
 const JOBS={
   warrior:{name:'전사',hp:70,atk:9,def:5,mp:30,grow:[13,2,2,3],color:0x9c3d2f,weapon:'sword',sub:'shield',crit:.08,adv:['swordsman','guardian'],intro:'검과 방패'},
@@ -12897,6 +12913,24 @@ async function buildMarcus(H){
         if(a0>0&&a1>a0+8){const Lc=a1-a0,B=frame(cx+g.x+ux*(a0+Lc/2),cz+g.y+uz*(a0+Lc/2),ry,0);B.P(BOX,0,.04,0,11,.1,Lc,PAVE);
           for(const sx of [-1,1]){B.P(BOX,sx*5.9,-1.55,0,1.6,3.3,Lc,PIETRA2);B.P(BOX,sx*5.4,.45,0,.5,.9,Lc,PIETRA);B.P(BOX,sx*5.4,.96,0,.62,.12,Lc,SERENA);B.box(sx*5.4,0,.5,Lc,1.1);
             for(let t=-Lc/2+8;t<Lc/2-4;t+=16)B.P(BOX,sx*6.85,-1.1,t,.5,2.4,.9,PIETRA);}}}}}
+  /* 닫아 둔 성문 (2026-11-06 원호: 북문·남문·동문은 나중에 고레벨 땅으로 열 곳. 지금은 보이지 않는 벽으로 막고 성벽 경비병이 지킨다).
+     문 밖 길 끝(예전에 사냥터로 넘어가던 자리)에 미늘창 둘을 엇갈려 세우고 양옆으로 나무 방책, 그 앞에 경비병 둘, 길가에 경비대장 하나.
+     성문 아치는 그대로 연다 (북문 밖 마차 정류장·남문 밖 돌둑 길 도착 자리를 쓸 수 있게). 열린 문(사냥터로 가는 줄이 있는 문)은 그대로 */
+  {const open=new Set(OR.MLINES.filter(L=>L.gate).map(L=>L.gate));
+    for(const g of PL.gates){if(open.has(g.name))continue;const ux=Math.cos(g.out),uz=Math.sin(g.out),ry=Math.atan2(ux,uz),A=Math.asin(2.25/3.75);
+      let L=0;for(let t=0;t<400;t+=2){const qx=g.x+ux*t,qy=g.y+uz*t;if(Math.hypot(qx,qy)>OR.isleEdge(I,Math.atan2(qy,qx))-14)break;L=t;}
+      const bx=cx+g.x+ux*(L-4),bz=cz+g.y+uz*(L-4),F=frame(bx,bz,ry,heightAt(bx,bz));
+      for(const sd of [-1,1]){F.P(CYL(.03,.035,6),sd*.125,1.5,0,1,3.75,1,DARKW,{rz:sd*A});const hx=-sd*1.0,hy=3.0;F.P(CONE(4),hx-sd*.12,hy+.25,0,.06,.5,.06,0xc8ccd4,{rz:sd*A});F.P(BOX,hx+sd*.02,hy-.12,0,.36,.3,.03,0xc8ccd4,{rz:sd*A});F.P(BOX,hx-sd*.24,hy-.2,0,.16,.08,.03,0xc8ccd4,{rz:sd*A});
+        F.P(BOX,hx+sd*.08,hy-.55,0,.06,.4,.06,0x8a1822,{rz:sd*A});
+        /* 나무 방책: 가로 통나무에 뾰족한 말뚝을 엇갈려 */
+        for(let q=0;q<3;q++){const lx=sd*(3.2+q*2.4);F.P(BOX,lx,.95,0,2.3,.22,.22,WOOD);for(const k of [-1,1])F.P(CYL(.06,.08,6),lx+k*.55,.95,0,1,2.2,1,DARKW,{rx:k*.75});}}
+      /* 보이지 않는 벽: 길과 그 둘레를 가로질러 */
+      for(let k=-12;k<=12;k++){const q=F.W(k*.9,0);colliders.push({x:q.x,z:q.z,r:.62,wallg:1});}
+      const W0=F.W(0,0);WALLG.at.push({x:W0.x,z:W0.z,ux,uz,name:g.name});
+      const gl=CIT_OUTFIT.c_guard,look={...gl,cloth:{...(gl.cloth||{}),prop:'spear'}};
+      for(const [lx,lz,pose] of [[-1.9,-.9,'guard'],[1.9,-.9,'guard'],[6,-6,'hips']]){const o=typeof npcMaybeGear==='function'?npcMaybeGear(look,1,4,7,['warrior','swordsman']):look,n=makeNpcStick(o),u=n.userData;if(u.marker){n.remove(u.marker);u.marker=null;}if(typeof stickSlim==='function')stickSlim(n);
+        const q=F.W(lx,lz);n.position.set(q.x,heightAt(q.x,q.z),q.z);n.rotation.y=ry+PI;n.visible=false;scene.add(n);const it={g:n,pose,ph:Math.random()*9,gate:g.name};WALLG.g.push(it);
+        if(typeof chatterAdd==='function')chatterAdd({kind:'wallguard',name:pose==='hips'?'경비대장':'성문 경비병',pos:()=>n.position,visible:()=>n.visible,look:o,pose,seed:WALLG.g.length*37+g.name.charCodeAt(0)});}}}
   /* ===== 등불 ===== */
   /* 가로등 모양은 FOODK ST.lamp (깎은 돌 받침·홈 판 쇠기둥·소용돌이 받침쇠·육각 등): 칸 굽기 뒤 PLOD 묶음으로 (가까우면 정교한 것, 멀면 ST.lamplo). 등 유리만 빛나는 칸에 굽는다 */
   const LAMPM=[];const lamp=(x,z,ry)=>{const F=frame(x,z,ry);F.P(FOODK.geo('Slampg:0'),0,0,0,1,1,1,0xffffff,{glow:true});
@@ -15995,6 +16029,7 @@ function ghInside(){if(!player||!GHALL.ready)return false;const I=OR.ISLES.guild
    2층: 회당을 ㄷ자로 두르는 회랑 (서쪽 기록실, 남쪽 악대석, 동쪽 기도실·기사단장실). 계단은 서쪽 벽을 따라 남에서 북으로 오른다
    기둥은 회당 양옆(x ±NX)에 6m마다, 아래층·위층 모두 뾰족 아치로 잇는다.
    좌표: 섬 중심 기준 (+z = 남쪽). 바깥벽 가운데 = HW-T/2, 안쪽 면 = HW-T */
+const WALLG={g:[],at:[],on:false,say:0};   /* 닫아 둔 성문의 경비병과 막는 자리 (buildMarcus) */
 const KHQ={HW:22,HD:18,T:.8,Y2:6,YR:15.5,NX:8.5,CZ:[-12,-6,0,6,12],YX:50,palaceShut:true,gate:[],npcs:[],plights:[],halos:[],pools:[],glass:[],fx:null,ready:false};
 function khqInside(){if(!player||!KHQ.ready)return false;const I=OR.ISLES.khq,p=player.position;return Math.abs(p.x-I.x)<KHQ.HW+.3&&Math.abs(p.z-I.z)<KHQ.HD+.3;}
 function khqFloor(){if(!player)return 1;const I=OR.ISLES.khq;if(!I)return 1;const p=player.position;if(Math.abs(p.x-I.x)>I.R||Math.abs(p.z-I.z)>I.R)return 1;return p.y>KHQ.Y2-1.2?2:1;}
@@ -16593,6 +16628,17 @@ function buildKnightsHQ(K){
   KHQ.ready=true;}
 /* 맵 안에 있을 때만 사람들을 움직이고 보인다. 색유리는 바깥 해에 따라 밝기가 바뀐다 */
 function khqTick(t,dt){if(!player)return;
+  if(WALLG.g.length){const p=player.position,nr=WALLG.at.some(A=>Math.abs(p.x-A.x)+Math.abs(p.z-A.z)<110);if(WALLG.on!==nr){WALLG.on=nr;for(const n of WALLG.g)n.g.visible=nr;}
+    if(nr){for(const n of WALLG.g)stickNpcPose(n.g,n.pose,t+n.ph);
+      /* 막힌 문에 바짝 다가서면 가까운 경비병이 한마디 한다 (몇 초에 한 번) */
+      if(mode==='world'&&tAll>WALLG.say)for(const A of WALLG.at){const dx=p.x-A.x,dz=p.z-A.z,al=dx*A.ux+dz*A.uz,pe=Math.abs(-dx*A.uz+dz*A.ux);if(al>-2.6&&al<1.5&&pe<5.5){WALLG.say=tAll+7;wallGuardSay(A);break;}}}}
+  khqTick0(t,dt);}
+function wallGuardSay(A){let b=null,bd=1e9;for(const n of WALLG.g){if(n.gate!==A.name)continue;const d=Math.hypot(n.g.position.x-A.x,n.g.position.z-A.z);if(d<bd){bd=d;b=n;}}if(!b)return;
+  const L=CHAT_LINES.wallguard,text=L[Math.floor(Math.random()*L.length)],el=document.createElement('div');el.textContent=text;
+  el.style.cssText='position:fixed;transform:translate(-50%,-100%);pointer-events:none;z-index:25;max-width:300px;padding:5px 10px;border-radius:12px;background:rgba(255,248,232,.93);color:#3a2616;font:600 13px "KMUSunggokSemiSerif","Gowun Batang",serif;box-shadow:0 2px 6px rgba(0,0,0,.35);opacity:0;white-space:normal;text-align:center';
+  document.body.appendChild(el);BUBBLES.push({el,c:{pos:()=>b.g.position,h:2.2},t0:tAll,t1:tAll+4.2});
+  const X=SFX&&SFX.ctx;if(!X||typeof npcVoice!=='function'||typeof citVoice!=='function')return;const cc=CHATTER.find(q=>q.kind==='wallguard'&&q.pos()===b.g.position),v=cc?citVoice(cc):voiceMake('wallg',false,'adult');let tt=X.currentTime+.05;for(const ch of text){if(ch===' '){tt+=.05;continue;}if(/[!,.?]/.test(ch)){tt+=.14;continue;}npcVoice(ch,v,false,tt);tt+=.06;}}
+function khqTick0(t,dt){
   if(KHQ.gate.length){const G=typeof MARCUS!=='undefined'&&MARCUS.palaceGate,p=player.position,nr=!!G&&Math.abs(p.x-G.x)+Math.abs(p.z-G.z)<110;if(KHQ.gateOn!==nr){KHQ.gateOn=nr;for(const n of KHQ.gate)n.g.visible=nr;}if(nr)for(const n of KHQ.gate)stickNpcPose(n.g,n.pose,t+n.ph);}
   if(!KHQ.ready)return;const I=OR.ISLES.khq,p=player.position,inK=Math.abs(p.x-I.x)<I.R&&Math.abs(p.z-I.z)<I.R;
   if(KHQ.inK!==inK){KHQ.inK=inK;for(const n of KHQ.npcs)n.g.visible=inK;if(KHQ.fx)KHQ.fx.visible=inK;}
@@ -17089,6 +17135,7 @@ const CHAT_LINES={
   cook:['오늘 수프는 양파예요.','소금이 금값이에요, 요즘.','왕궁 주방에서 일했었죠. 소문은 내지 마세요.','맛보기는 한 번만.','간은 마지막에 보는 거예요.','손님이 남긴 접시를 보면 다 알아요.','양파 썰다 우는 거 아니에요. 진짜예요.'],
   butcher:['오늘 잡은 거예요. 신선해요.','멧돼지 고기는 오래 삶아야 해요.','피 냄새 때문에 사람들이 멀리 돌아가요. 억울해요.','사냥꾼이 멧돼지를 가져오면 제값 쳐 드려요.','칼은 매일 갈아요. 무딘 칼이 더 위험해요.','뼈는 개 키우는 집에서 사 가요.','오늘 갈비가 좋아요. 금방 나가요.'],
   guard:['순찰 중이오. 볼일 보시오.','밤에는 성문이 닫히니 서두르시오.','요즘 서쪽 길에 도적이 는다고 하오.','별일 없소?','무기는 칼집에 넣고 다니시오.','교대까지 한 시간… 길군.','성벽 위에서 보면 바다까지 보이지.','취해서 소란 피우면 지하실에서 자게 되오.','어제 광장에서 소매치기를 잡았소.','대장은 깐깐하지만 공정하오.','창 손질을 하루라도 거르면 티가 나지.'],
+  wallguard:['이 문은 지금 닫혀 있소. 성 밖 사냥은 서문으로 나가시오.','이 너머 땅은 짐승이 너무 사납소. 솜씨가 더 무르익으면 그때 오시오.','대장의 명이오. 당분간 이 문으로는 아무도 내보낼 수 없소.','서문 밖 숲 가는 길부터 걸어 보시오. 숲을 지나 계곡을 넘으면 허칠까지 이어지오.','이 문 밖 길은 아직 다 닦이지 않았소. 측량대가 돌아오면 열릴 거요.','성벽을 지키는 게 우리 일이오. 미늘창 너머로는 한 걸음도 안 되오.','저 너머에서 무슨 소리가 들려도 문은 열지 않소. 그게 명령이오.','훗날 이 문이 열리면 성문에 방이 붙을 거요. 그때 다시 오시오.'],
   gateknight:['폐하의 명이오. 당분간 왕궁에는 아무도 들일 수 없소.','돌아가시오. 오늘은 이 문이 열리지 않소.','왕궁에 볼일이 있다면 훗날 다시 오시오.','이 문을 지키는 것이 지금 우리 기사단의 일이오.','미늘창 너머로는 한 걸음도 안 되오.','기사단 본부를 찾는다면 동쪽 길로 가시오.','문이 다시 열리면 성문에 방이 붙을 거요.'],
   knight:['기사단은 아무나 들어오는 데가 아니네.','말 손질은 종자가 하지만 검 손질은 내가 하지.','명예는 칼보다 무겁다네.','투기장은 구경거리지, 진짜 싸움이 아니야.','왕의 행차 때는 길을 비우게.','기사의 맹세는 셋이지. 지키고, 따르고, 물러서지 않는다.','갑옷 무게가 내 몸무게 절반이라네.'],
   merc:['돈만 맞으면 어디든 가.','길드 의뢰는 보수가 짜. 그래도 꾸준하지.','상처 자국 하나에 이야기 하나야. 들을래?','늑대 가죽 갑옷이 제일 가벼워.','뒤에서 찌르는 놈은 믿지 마. 내가 그랬거든.','다음 일은 요새 경비야. 춥겠지.','칼은 싸구려라도 신발은 좋은 걸로 신어.'],
@@ -17565,7 +17612,7 @@ function chatDlgFits(D,ppl,area){const lines=chatDlgLines(D);
 function chatPickDlg(list,ppl,area,k){const ok=list.filter(D=>chatDlgFits(D,ppl,area));if(!ok.length)return null;
   const special=ok.filter(D=>D.tags||D.area||D.sv),pool=special.length&&(k%2)?special:ok;return pool[((k%pool.length)+pool.length)%pool.length];}
 /* 한 마디 고르기: 직업 말이 가장 많고, 그 곳의 말·옆 사람에 따른 말·그 사람만의 사정이 섞인다 */
-function chatLineFor(c,ppl,area,want){if(c.kind==='server'||c.kind==='gateknight')return chatPick(c,CHAT_LINES[c.kind]);   /* 서빙 직원은 제 일 이야기만 */
+function chatLineFor(c,ppl,area,want){if(c.kind==='server'||c.kind==='gateknight'||c.kind==='wallguard')return chatPick(c,CHAT_LINES[c.kind]);   /* 서빙 직원은 제 일 이야기만 */
 const v=chatVoice(c),r=Math.floor((c.seed||0)*13+(c.n||0)*7)%10,fit=a=>(a||[]).filter(s=>chatFitsArea(s,area)&&chatFitsSpeaker(s,c,false)),fitP=a=>(a||[]).filter(s=>chatFitsArea(s,area)&&chatFitsSpeaker(s,c,true));
   const A=CHAT_AREA[area]||{},X=CHAT_IN_EXIS[area]&&area!=='exis'?CHAT_AREA.exis:{},slot={kid:'k',elder:'e',noble:'n',armed:'m'}[v]||'a';
   let areaL=(A[slot]||[]).concat(X[slot]||[]);if(!areaL.length&&slot!=='k')areaL=(A.a||[]).concat(X.a||[]);
@@ -17605,8 +17652,8 @@ function chatterTalk(i){const c=CHATTER[i];if(!c||mode!=='world')return;const p=
   const ppl=grp.map(k=>CHATTER[k]),people=grp.map((gi,k)=>chatPerson(CHATTER[gi],k));
   if(!M){c.n=(c.n||0)+1;const r=Math.floor((c.seed||0)*31+c.n*17)%10,area=chatArea(p);
     if(c.kind!=='server'&&c.kind!=='guild'&&citHash(c.seed,c.n*3+1)%3===0){const t=chatLineFor(c,ppl,area,'p');if(t)M={type:'line',line:t};}   /* 셋에 한 번쯤은 그 사람 성격대로 말한다 */
-    if(!M&&r<5&&c.kind!=='server'){const D=chatPickDlg(CHAT_ASK,ppl,area,Math.floor(((c.seed||0)+c.n)*13));if(D)M={type:'ask',D,grp:grp.slice()};}   /* 플레이어에게 묻는다 */
-    if(!M&&grp.length>=2&&r<8&&c.kind!=='server'){const G=CHAT_GROUP.map(d=>Array.isArray(d)?{d}:d);const D=chatPickDlg(G,ppl,area,Math.floor(((c.seed||0)+c.n)*7));if(D)M={type:'group',D,grp:grp.slice()};}
+    if(!M&&r<5&&c.kind!=='server'&&c.kind!=='wallguard'){const D=chatPickDlg(CHAT_ASK,ppl,area,Math.floor(((c.seed||0)+c.n)*13));if(D)M={type:'ask',D,grp:grp.slice()};}   /* 플레이어에게 묻는다 */
+    if(!M&&grp.length>=2&&r<8&&c.kind!=='server'&&c.kind!=='wallguard'){const G=CHAT_GROUP.map(d=>Array.isArray(d)?{d}:d);const D=chatPickDlg(G,ppl,area,Math.floor(((c.seed||0)+c.n)*7));if(D)M={type:'group',D,grp:grp.slice()};}
     if(!M)M={type:'line',line:chatLineFor(c,ppl,area)};
     M.until=now+CHAT_KEEP;if(M.type==='group')for(const k of M.grp)CHATTER[k].memo=M;else c.memo=M;}
   if(M.type==='ask')people[0].onOpen=()=>{chatAsk(M.D,people);return true;};
@@ -19421,8 +19468,9 @@ const KAOLIS_WY=-.35;   /* 카올리스 바닷물 높이 */
    길(MHR)은 땅마다 고리 방향으로 가로지르는 흙길 + 엑시즈 문 쪽 고갯길, 땅 생김새는 땅마다(mhBase), 두 땅 사이에서는 섞고(mhHeight), 걸을 수 없는 바깥은 산비탈로 솟는다 */
 const MHR=(()=>{const MH=OR.MH,ISL=OR.ISLES,Zs=OR.MHUNT.map(k=>ISL[k]).filter(I=>!I.branch),cx=MH.cx,cz=MH.cz,TAU=Math.PI*2;
   /* 고리 길: 문마다(한 줄의 땅들을) 고리 방향으로 가로지르는 한 토막 (양 끝 땅 가장자리 조금 안까지). th0~th1은 말굽 뭍(1A부터 동쪽 끝까지), 그 너머 남동은 바다 */
-  const th0=Zs[0].th,th1=MH.TH1;
-  const arcs=[];for(const I of Zs){const da=(I.R-12)/MH.RR,A=arcs.find(q=>q.line===I.line);if(A){A[0]=Math.min(A[0],I.th-da);A[1]=Math.max(A[1],I.th+da);}else{const q=[I.th-da,I.th+da];q.line=I.line;arcs.push(q);}}
+  const th0=MH.TH0,th1=MH.TH1;   /* 말굽 뭍은 늘 옛 1A 자리부터 (남문 줄을 꺼 두어도 바다가 뭍 안쪽으로 들어오지 않게) */
+  /* 따로 된 맵(sep) 땅은 땅마다 한 토막 (산 너머 이웃 땅까지 길이 이어지지 않게) */
+  const arcs=[];for(const I of Zs){const da=(I.R-12)/MH.RR,A=arcs.find(q=>q.line===I.line&&!I.sep);if(A){A[0]=Math.min(A[0],I.th-da);A[1]=Math.max(A[1],I.th+da);}else{const q=[I.th-da,I.th+da];q.line=I.line;if(I.sep)q.line+=':'+I.id;arcs.push(q);}}
   const angN=a=>{while(a<th0-.6)a+=TAU;while(a>=th0-.6+TAU)a-=TAU;return a;};   /* 첫 땅 조금 앞부터 한 바퀴 */
   const rr=a=>MH.RR+9*Math.sin(a*7+1)+5*Math.sin(a*17+.3);
   const ringPt=a=>{const r=rr(a);return {x:cx+Math.cos(a)*r,z:cz+Math.sin(a)*r};};
@@ -19462,6 +19510,7 @@ const MHR=(()=>{const MH=OR.MH,ISL=OR.ISLES,Zs=OR.MHUNT.map(k=>ISL[k]).filter(I=
   const lakes=[],rivers=[],marshes=[],streams=[];
   for(const I of Zs){if(I.kind==='lake'){const sd=(I.line+I.seq)%2?1:-1,r=MH.RR+sd*76;lakes.push({I,x:cx+Math.cos(I.th)*r,z:cz+Math.sin(I.th)*r,th:I.th,rx:64,rz:40});}
     if(I.kind==='river')rivers.push({I,th:I.th,hw:6.5,len:225,f:s=>16*Math.sin(s*.027+I.th)+5*Math.sin(s*.071)});
+    if(I.kind==='cold')rivers.push({I,th:I.th,hw:4.5,len:200,cold:1,f:s=>11*Math.sin(s*.031+I.th*2)+4*Math.sin(s*.083)});   /* 추운 계곡: 눈 녹은 찬 시냇물이 골짜기를 가로지른다 */
     if(I.kind==='marsh')marshes.push({I,x:I.x,z:I.z});}
   OR.MH.links.forEach((l,i)=>{if(l.k==='neck'&&(i%2===0)&&!ISL[l.a].branch&&!ISL[l.b].branch){const th=(ISL[l.a].th+ISL[l.b].th)/2;streams.push({th,hw:2.8,len:110,x:(l.ax+l.bx)/2,z:(l.az+l.bz)/2,f:s=>4*Math.sin(s*.06+th*3)+2*Math.sin(s*.17)});}});
   /* 용암지: 길에서 떨어진 둥근 용암 웅덩이 (들어갈 수 없다) */
@@ -19496,6 +19545,9 @@ function mhBase(I,x,z,dr){const mx=x-I.x,my=z-I.z,R=I.R;
     case 'field':return Math.sin(x*.045)*Math.cos(z*.05)*1.1+Math.sin(x*.12+z*.08)*.45+Math.cos(z*.19-x*.07)*.2;
     case 'hill':return (Math.sin(mx*.032+.6)*Math.cos(my*.036)+1)*2.4+Math.sin(x*.07-z*.05)*1.6+Math.sin(x*.19+z*.15)*.35;
     case 'wood':return Math.sin(x*.05)*Math.cos(z*.06)*1.5+Math.sin(x*.13+z*.1)*.6;
+    case 'trail':return Math.sin(x*.045)*Math.cos(z*.05)*1.25+Math.sin(x*.12+z*.08)*.45+Math.cos(z*.19-x*.07)*.2;   /* 숲 가는 길: 들판이 숲으로 이어지는 낮은 둔덕 */
+    case 'deep':return Math.sin(x*.04)*Math.cos(z*.05)*2.1+Math.sin(x*.11+z*.09)*.8+Math.abs(Math.sin(x*.07-z*.05))*.9;   /* 깊은 숲: 굴곡진 숲 바닥 */
+    case 'cold':return 12*smooth(30,95,dr)+Math.abs(Math.sin(x*.08)*Math.cos(z*.07))*2.6*smooth(24,70,dr)+Math.sin(x*.09)*Math.cos(z*.1)*.5;   /* 추운 계곡: 양옆이 솟은 골짜기 */
     case 'vale':return 17*smooth(26,88,dr)+Math.abs(Math.sin(x*.08)*Math.cos(z*.07))*3.2*smooth(24,70,dr)+Math.sin(x*.09)*Math.cos(z*.1)*.5;
     case 'pass':{const t=Math.max(-1.3,Math.min(1.3,(-mx*Math.sin(I.th)+my*Math.cos(I.th))/R));return 7*(1-t*t)+15*smooth(18,78,dr)+Math.abs(Math.sin(x*.17)*Math.cos(z*.15))*1.8*smooth(10,60,dr)+Math.sin(x*.11+z*.09)*.4;}
     case 'lake':return .3+Math.sin(x*.04)*Math.cos(z*.045)*.9+Math.sin(x*.11+z*.07)*.35;
@@ -19509,7 +19561,7 @@ function mhBase(I,x,z,dr){const mx=x-I.x,my=z-I.z,R=I.R;
     case 'lava':return 6*smooth(30,95,dr)+Math.sin(x*.06)*Math.cos(z*.07)*.9+Math.abs(Math.sin(x*.2+z*.17))*.45*smooth(4,14,dr);   /* 용암지: 거친 검은 바위 */
   }return 0;}
 /* 바깥 산비탈이 솟는 세기 (땅 생김새마다) */
-const MH_SLOPE={field:.55,hill:.8,wood:.7,vale:1.25,pass:1.3,lake:.6,river:.85,marsh:.45,ash:.7,lava:.95,beach:.45,rocks:.65,cliff:1.1,cape:.9};
+const MH_SLOPE={trail:.6,deep:.85,cold:1.25,field:.55,hill:.8,wood:.7,vale:1.25,pass:1.3,lake:.6,river:.85,marsh:.45,ash:.7,lava:.95,beach:.45,rocks:.65,cliff:1.1,cape:.9};
 /* 그 자리에 섞이는 땅들과 비율: 가까운 땅일수록 크게 (땅 가장자리 안은 거의 그 땅 하나, 목 한가운데는 반반). 여러 땅이 만나는 산속에서도 끊기지 않게 모두 부드럽게 섞는다 */
 const _mhW=[];
 /* 같은 자리를 잇달아 물으면(땅 높이 → 땅 색) 지난 답을 그대로 준다 (받는 쪽은 읽기만 한다) */
@@ -19531,6 +19583,7 @@ function mhHeight(x,z){const mix=mhMix(x,z),r=MHR.near(x,z);
   /* 엑시즈·밀골로 넘어가는 고갯길 끝의 문 자리는 평평하게 */
   for(const T of OR.MH.trails||[]){const I=OR.ISLES[T.from],G=I.tgate;if(!G)continue;const e=Math.hypot(x-G.x,z-G.z);if(e<20){const k=smooth(9,20,e);h=h*k+(mhBase(I,G.x,G.z,0)+1.2)*(1-k);}
     {const ax=G.x-I.x,az=G.z-I.z,L2=ax*ax+az*az,t=Math.max(0,Math.min(1,((x-I.x)*ax+(z-I.z)*az)/L2)),d=Math.hypot(x-I.x-ax*t,z-I.z-az*t);if(t>.3&&d<16){const lo=MH_WY+.45;if(h<lo)h+=(lo-h)*smooth(16,8,d);}}}   /* 허칠산 가는 바깥 산길 끝 (길에 물이 고이지 않게) */
+  for(const id of OR.MHUNT){const I=OR.ISLES[id];for(const G of [I.pgate,I.ngate]){if(!G)continue;const e=Math.hypot(x-G.x,z-G.z);if(e<22){const k=smooth(10,22,e);h=h*k+(mhBase(I,G.x,G.z,0)+.6)*(1-k);}}}   /* 따로 된 땅 끝 문 자리는 평평하게 (문을 세운다) */
   for(const L of OR.MLINES){for(const [I,G] of [[OR.ISLES[L.zones[0][0]],OR.ISLES[L.zones[0][0]].gate],[OR.ISLES[L.zones[L.zones.length-1][0]],OR.ISLES[L.zones[L.zones.length-1][0]].mgate]]){if(!G)continue;const e=Math.hypot(x-G.x,z-G.z);if(e<20){const k=smooth(9,20,e);h=h*k+(mhBase(I,G.x,G.z,0)+1.2)*(1-k);}}}
   return h;}
 /* ---------- 허칠산: 엑시즈 북서쪽 눈 덮인 산 (땅 높이) ----------
@@ -19762,6 +19815,10 @@ await BOOT.y();await (async function buildIsles(){
     const pines=(list,lit,sh=true)=>{if(!list.length)return;draw(list,14);
       split(list,2).forEach((L,vi)=>{if(!L.length)return;const T=NAT.pine(vi),TL=NAT.lo(()=>NAT.pine(vi)),f=(t,e,sv,v)=>put(t,e,sv,v,1,-.1,t.r[0],t.r[1]);
         lodInst(T.trunk,TL.trunk,NAT.bark(0x4e3a26),L,f,null,sh);lodInst(T.crown,TL.crown,NAT.leaf(0xffffff),L,f,(t,c)=>c.setHSL(.33+(t.r[2]-.5)*.04,.4,lit+.03+(t.r[3]-.5)*.06),sh);});};
+    /* 눈 맞은 전나무 (추운 계곡): 잎이 희끗하다. 셋에 하나는 짙은 초록에 서리만 */
+    const snowPines=(list,sh=true)=>{if(!list.length)return;draw(list,14);
+      split(list,2).forEach((L,vi)=>{if(!L.length)return;const T=NAT.pine(vi),TL=NAT.lo(()=>NAT.pine(vi)),f=(t,e,sv,v)=>put(t,e,sv,v,1,-.1,t.r[0],t.r[1]);
+        lodInst(T.trunk,TL.trunk,NAT.bark(0x4a3a2c),L,f,null,sh);lodInst(T.crown,TL.crown,NAT.leaf(0xffffff),L,f,(t,c)=>t.r[2]<.34?c.setHSL(.4,.2,.28+t.r[3]*.06):c.setHSL(.58,.12,.8+(t.r[3]-.5)*.1),sh);});};
     const rocks=(list,col,jump=true)=>{if(list.length){draw(list,2);split(list,2).forEach((L,vi)=>lodInst(NAT.rock(vi),NAT.lo(()=>NAT.rock(vi)),NAT.stone(col),L,(t,e,sv,v)=>{e.set((t.r[1]-.5)*.3,t.r[0]*6.283,(t.r[1]-.5)*.2);sv.set(t.s*1.3,t.s*.85,t.s*1.1);v.set(t.x,heightAt(t.x,t.z)+t.s*.12,t.z);}));}
       if(jump)for(const r of list)jumpable(r.x,r.z,r.s*1.05,heightAt(r.x,r.z)+r.s*.9);};
     const bushes=(list,hue,lit)=>{if(!list.length)return null;draw(list,4);return lodInst(NAT.bush(0),NAT.lo(()=>NAT.bush(0)),NAT.leaf(0xffffff),list,(t,e,sv,v)=>{e.set(0,t.r[0]*6.283,0);sv.set(t.s*1.05,t.s*(.7+t.r[1]*.3),t.s*1.05);v.set(t.x,heightAt(t.x,t.z)-.15,t.z);},(t,c)=>c.setHSL(hue+(t.r[2]-.5)*.06,.45,lit+.04+(t.r[3]-.5)*.1));};
@@ -19786,7 +19843,7 @@ await BOOT.y();await (async function buildIsles(){
       for(let i=0;i<=N;i++){const a=i/N*Math.PI*2,rp=MHR.ringPt(a),gk=MHR.gapK(rp.x,rp.z);let c=0;for(const o of mhMix(rp.x,rp.z))if(o.I.coast)c+=o.w;
         ri0[i]=gk>.02?MH.RR*.45+(MH.RR+MH.R*.8-MH.RR*.45)*(1-gk):-1;}
       for(let i=0;i<=N;i+=N/NA){if(ri0[i]>0)continue;const a=i/N*Math.PI*2,ca=Math.cos(a),sa=Math.sin(a);let r=MH.RR,hit=RMAX;   /* 고리 길에서 바깥으로 가며 땅이 물에 닿는 곳을 찾는다 (걷는 땅 안의 호수·강은 빼고) */
-        for(;r<RMAX;r+=6){const x=MH.cx+ca*r,z=MH.cz+sa*r;if(mhHeight(x,z)<MH_WY+.25&&OR.MH.walkD(x,z)>-25){hit=r-10;break;}}
+        for(;r<RMAX;r+=6){const x=MH.cx+ca*r,z=MH.cz+sa*r;if(mhHeight(x,z)<MH_WY+.25&&OR.MH.walkD(x,z)>-1){hit=r-10;break;}   /* 걷는 땅(사냥터·땅 끝 길) 안의 낮은 곳은 바다로 치지 않는다 */}
         for(let k=0;k<N/NA&&i+k<=N;k++)ri0[i+k]=ri0[i+k]>0?ri0[i+k]:hit;}
       for(let i=0;i<=N;i++){let m=1e9;for(let k=-5;k<=5;k++){const v=ri0[((i+k)%N+N)%N];if(v>0&&v<m)m=v;}riA[i]=m;}   /* 이웃 각도 중 가장 안쪽까지 (사이가 벌어지지 않게) */
       for(let i=0;i<=N;i++){const a=i/N*Math.PI*2,ri=riA[i];pos.push(MH.cx+Math.cos(a)*ri,0,MH.cz+Math.sin(a)*ri,MH.cx+Math.cos(a)*RO,0,MH.cz+Math.sin(a)*RO);
@@ -19811,11 +19868,14 @@ await BOOT.y();await (async function buildIsles(){
       for(const L of MHR.lavas){const g=new THREE.CircleGeometry(L.r+1.2,28);g.rotateX(-Math.PI/2);const pos=g.attributes.position;for(let i=0;i<pos.count;i++)pos.setY(i,Math.sin(pos.getX(i)*.9)*Math.cos(pos.getZ(i)*.8)*.06);
         g.translate(L.x,-.45,L.z);const m=new THREE.Mesh(g,lavaM);scene.add(m);colliders.push({x:L.x,z:L.z,r:L.r-.5,h:8});}}
     /* 땅 색: 땅 생김새마다 풀빛, 줄마다 조금씩 다르게. 두 땅 사이에서는 섞는다 */
-    const GRASS={field:[.22,.42,.42],hill:[.24,.4,.36],wood:[.27,.42,.27],vale:[.24,.32,.34],pass:[.2,.2,.38],lake:[.25,.4,.36],river:[.26,.42,.34],marsh:[.2,.3,.27],ash:[.25,.14,.27],lava:[.21,.2,.2],beach:[.12,.4,.7],rocks:[.1,.07,.44],cliff:[.24,.36,.38],cape:[.23,.38,.41]},TINT=[[0,0,0],[0,0,0],[.02,-.04,-.02],[-.03,.04,.03],[.03,.02,-.03],[-.18,-.16,-.1]];   /* 5줄(불타는 협곡): 그을린 흙빛 */
+    const GRASS={trail:[.23,.42,.4],deep:[.3,.38,.2],cold:[.4,.12,.62],field:[.22,.42,.42],hill:[.24,.4,.36],wood:[.27,.42,.27],vale:[.24,.32,.34],pass:[.2,.2,.38],lake:[.25,.4,.36],river:[.26,.42,.34],marsh:[.2,.3,.27],ash:[.25,.14,.27],lava:[.21,.2,.2],beach:[.12,.4,.7],rocks:[.1,.07,.44],cliff:[.24,.36,.38],cape:[.23,.38,.41]},TINT=[[0,0,0],[0,0,0],[.02,-.04,-.02],[-.03,.04,.03],[.03,.02,-.03],[-.18,-.16,-.1]];   /* 5줄(불타는 협곡): 그을린 흙빛 */
     const zoneCol=(I,x,z,h,r,c)=>{const kd=I.kind,g=GRASS[kd],t=TINT[I.line]||[0,0,0],n=Math.sin(x*.21)*Math.cos(z*.17)*.5+Math.sin(x*.05+z*.07)*.5;
       c.setHSL(g[0]+t[0]+n*.02,g[1]+t[1],g[2]+t[2]+n*.04);
       if(kd==='vale'||kd==='pass'){const rk=smooth(kd==='pass'?7:6,kd==='pass'?14:13,h-(kd==='pass'?mhBase(I,r.x,r.z,0):0));c.lerp(C2.set(kd==='pass'?0x8a8478:0x7e7a6c),rk*.6);}
       if(kd==='field'){const w=Math.sin(x*.035+z*.02);if(w>.55&&r.d>12)c.lerp(C2.set(0xc8a858),.55*smooth(.55,.75,w));}
+      if(kd==='trail'){const fw=((x-I.x)*-Math.sin(I.th)+(z-I.z)*Math.cos(I.th))/I.R,w=Math.sin(x*.035+z*.02);if(w>.6&&r.d>12&&fw<.2)c.lerp(C2.set(0xc8a858),.45*smooth(.6,.8,w));c.lerp(C2.setHSL(.29,.4,.22),smooth(-.2,1,fw)*.45);}   /* 숲 가는 길: 들어온 쪽은 마른 풀빛, 숲 쪽(다음 문)으로 갈수록 짙은 숲빛 */
+      if(kd==='deep'){const w=Math.sin(x*.06+z*.05)*Math.cos(z*.07-x*.04);c.lerp(C2.set(w>0?0x3e3a24:0x24361e),Math.abs(w)*.5);}   /* 깊은 숲: 낙엽 쌓인 흙과 이끼 */
+      if(kd==='cold'){const w=Math.sin(x*.05+z*.04)*Math.cos(z*.06-x*.03)+.35*Math.sin(x*.17+z*.13);if(w>.15)c.lerp(C2.set(0xeef2f6),smooth(.15,.5,w)*.85);c.lerp(C2.set(0xdfe6ee),smooth(4,12,h-mhBase(I,r.x,r.z,0))*.7);}   /* 추운 계곡: 언 풀 사이 눈 얼룩, 비탈은 눈 */
       if(kd==='marsh')c.lerp(C2.set(0x5a5a3a),.25+.2*Math.sin(x*.05+z*.04));
       if(kd==='beach'){const w=Math.sin(x*.06+z*.05)*Math.cos(z*.04-x*.03);if(w>.4&&r.d>8)c.lerp(C2.set(0x9aa860),.5*smooth(.4,.7,w));}   /* 모래톱 안쪽 군데군데 갯풀 */
       if(kd==='rocks'){const w=Math.abs(Math.sin(x*.11+z*.09)*Math.cos(z*.13-x*.05));c.lerp(C2.set(0x4e4a46),w*.45);if(r.d>8&&w<.15)c.lerp(C2.set(0xc8b88e),.4);}   /* 갯바위: 검은 바위 틈에 모래 */
@@ -19826,14 +19886,18 @@ await BOOT.y();await (async function buildIsles(){
       /* 산비탈: 아래는 짙은 풀숲, 높이 오를수록 바위, 높은 고개·계곡 능선은 눈 */
       if(wd>-3){const k=smooth(-3,30,wd);if(A.branch){c.lerp(C2.set(0x2e2826),k*.72);if(h>16)c.lerp(C2.set(0x5a504a),smooth(16,36,h)*.4);}
         else{c.lerp(C2.setHSL(.29,.36,.25),k*.55);if(h>16)c.lerp(C2.set(0x6e6c62),smooth(16,36,h)*.45);
-        if(A.kind==='pass'&&h>40)c.lerp(C2.set(0xe6e8ea),smooth(40,48,h)*.85);}}   /* 높은 고개 꼭대기에만 눈 */
+        if(A.kind==='pass'&&h>40)c.lerp(C2.set(0xe6e8ea),smooth(40,48,h)*.85);
+        if(A.kind==='cold')c.lerp(C2.set(0xe8edf2),smooth(6,22,h)*.9);
+        if(A.kind==='deep')c.lerp(C2.set(0x1e2e1a),k*.4);}}   /* 높은 고개 꼭대기에만 눈. 추운 계곡 둘레 산은 눈으로 덮였다 */
       if(r.d<6)c.lerp(C2.set(A.branch?0x7a6a5a:0x9a8462),(1-smooth(3.2,6,r.d))*.9);
       {const wk=MHR.wetK(x,z,r.d);if(wk>0)c.lerp(C2.set(0x6a6248),wk*(.35+.5*smooth(.2,-.6,h)));}   /* 물가 진흙 (물이 있는 곳 둘레만) */
       {const sk=MHR.seaK(x,z,mix);if(sk>.02){   /* 바닷가: 물 가까운 곳은 모래, 물밑은 젖은 모래, 높은 벼랑은 바위 */
         if(h<MH_WY+1.1)c.lerp(C2.set(0xd6c494),smooth(MH_WY+1.1,MH_WY+.3,h)*sk);
         if(h<MH_WY-.2)c.lerp(C2.set(0x8a7c5e),smooth(MH_WY-.2,MH_WY-2.5,h)*sk);
         if(wd>-1.5&&h>MH_WY+1.1)c.lerp(C2.set(0x7c766c),sk*smooth(-1.5,1.5,wd)*.85);}}
-      for(const id of OR.MHUNT){for(const G of [OR.ISLES[id].gate||OR.ISLES[id].mgate,OR.ISLES[id].tgate]){if(!G)continue;const e2=Math.hypot(x-G.x,z-G.z);if(e2<12)c.lerp(C2.set(0x9a8462),(1-smooth(6,12,e2))*.8);}}};
+      /* 추운 계곡 눈: 땅 무늬가 흙빛이라 흰 칠도 누렇게 보인다 → 밝은 곳은 1보다 밝게 칠해 눈처럼 희게 */
+      {let wc=0;for(const o of mix)if(o.I.kind==='cold')wc+=o.w;if(wc>0){const L=(c.r+c.g+c.b)/3;if(L>.55){const k=1+(L-.55)*2.4*wc;c.r*=k;c.g*=k;c.b*=k*1.04;}}}
+      for(const id of OR.MHUNT){for(const G of [OR.ISLES[id].gate||OR.ISLES[id].mgate,OR.ISLES[id].tgate,OR.ISLES[id].pgate,OR.ISLES[id].ngate]){if(!G)continue;const e2=Math.hypot(x-G.x,z-G.z);if(e2<12)c.lerp(C2.set(0x9a8462),(1-smooth(6,12,e2))*.8);}}};
     /* 땅 판: 땅마다 450m 네모 (가장자리 줄·칸은 바깥으로 더 넓게). 이웃 판과 꼭짓점이 딱 맞물린다 */
     const TS=450,TN=9,TX0=OR.MH.cx-TS*TN/2,TZ0=OR.MH.cz-TS*TN/2,TILES=[];
     for(let ti=0;ti<TN;ti++)for(let tj=0;tj<TN;tj++){const x0=TX0+ti*TS,z0=TZ0+tj*TS;let m=1e9;for(let a=0;a<=8;a++)for(let b=0;b<=8;b++)m=Math.min(m,OR.MH.walkD(x0+a*TS/8,z0+b*TS/8));if(m<250)TILES.push({x0,z0,x1:x0+TS,z1:z0+TS});}
@@ -19859,6 +19923,31 @@ await BOOT.y();await (async function buildIsles(){
       if(kd==='hill'){roundTrees(P.place(38,3.2,.5,off(8),6),.25,.27);bushes(P.place(200,1.4,0,off(5)),.25,.27);rocks(P.place(46,2.6,0,off(6)),0x7e7a70);flowers(P.place(160,.5,0,off(4)));}
       if(kd==='wood'){roundTrees(P.place(330,1.9,.5,off(6),6),.28,.24);pines(P.place(80,2,.45,off(6),5),.2);bushes(P.place(160,1.2,0,off(4.5)),.28,.22);rocks(P.place(24,2.2,0,off(6)),0x6e7266);
         const logs=P.place(16,3,0,off(7));inst(logG,mat(0x5a4029),logs,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)+.3,t.z);});}
+      /* 숲 가는 길 (서문 첫 땅): 들어온 쪽은 들판(건초·꽃·나무 울타리), 다음 문 쪽으로 갈수록 나무가 빽빽해져 숲으로 이어진다 */
+      if(kd==='trail'){const fw=(x,z)=>((x-I.x)*-Math.sin(I.th)+(z-I.z)*Math.cos(I.th))/I.R,dens=(x,z,a,b)=>hsh(x*.37+11,z*.53)<a+b*smooth(-.7,.9,fw(x,z));
+        roundTrees(P.place(150,2.6,.5,(x,z)=>off(7)(x,z)&&dens(x,z,.12,.85),6),.28,.27);pines(P.place(60,2.4,.45,(x,z)=>off(7)(x,z)&&fw(x,z)>.15,5),.2);
+        bushes(P.place(150,1.3,0,off(4.5)),.26,.28);flowers(P.place(320,.5,0,(x,z)=>off(4)(x,z)&&fw(x,z)<.4));rocks(P.place(22,2.4,0,off(6)),0x868276);
+        const hay=P.place(8,3,1.2,(x,z)=>off(9)(x,z)&&fw(x,z)<-.2,2.6);inst(hayG,mat(0xd8b860),hay,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)-.05,t.z);});inst(hayT,mat(0xc8a850),hay,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)-.05,t.z);});
+        /* 길가 나무 울타리: 들어온 쪽 절반에 길 양옆으로 (군데군데 끊긴다) */
+        {const posts=[],rails=[],da=(I.R-14)/OR.MH.RR;for(let a=I.th-da;a<I.th+da*.15;a+=2.6/OR.MH.RR){for(const sd of [-1,1]){const rp=MHR.ringPt(a),ox=Math.cos(a)*sd*6.2,oz=Math.sin(a)*sd*6.2,x=rp.x+ox,z=rp.z+oz;if(hsh(a*977,sd)<.18||!dry(x,z))continue;posts.push({x,z,s:1,a});
+          const a2=a+1.3/OR.MH.RR,r2=MHR.ringPt(a2);rails.push({x:r2.x+Math.cos(a2)*sd*6.2,z:r2.z+Math.sin(a2)*sd*6.2,a:a2});}}
+          const pm=mat(0x6a4a2e);inst(new THREE.BoxGeometry(.16,1.15,.16).translate(0,.57,0),pm,posts,(t,e,sv,v)=>{e.set(0,-t.a,0);sv.set(1,1,1);v.set(t.x,heightAt(t.x,t.z)-.05,t.z);});
+          const rg=new THREE.BoxGeometry(.07,.09,2.75);inst(rg,pm,rails,(t,e,sv,v)=>{e.set(0,-t.a,0);sv.set(1,1,1);v.set(t.x,heightAt(t.x,t.z)+.82,t.z);});inst(rg,pm,rails,(t,e,sv,v)=>{e.set(0,-t.a,0);sv.set(1,1,1);v.set(t.x,heightAt(t.x,t.z)+.42,t.z);});}}
+      /* 깊은 숲: 햇빛이 잘 들지 않는 빽빽한 숲. 굵은 전나무와 활엽수, 이끼 낀 바위와 쓰러진 통나무, 버섯, 죽은 나무 */
+      if(kd==='deep'){pines(P.place(340,1.6,.5,off(5.5),6),.12);roundTrees(P.place(300,1.6,.55,off(5.5),6),.3,.16);deadTrees(P.place(26,3,.4,off(7),5));
+        bushes(P.place(200,1.1,0,off(4)),.3,.16);rocks(P.place(46,2.4,0,off(6)),0x56604e);
+        const logs=P.place(28,3,0,off(7));inst(logG,mat(0x3e3222),logs,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)+.3,t.z);});
+        const msh=P.place(170,.6,0,off(3.5)),mstem=new THREE.CylinderGeometry(.05,.07,.28,6).translate(0,.14,0),mcap=new THREE.SphereGeometry(.16,8,5,0,Math.PI*2,0,Math.PI/2).scale(1,.6,1).translate(0,.27,0);
+        inst(mstem,mat(0xe8e0cc),msh,(t,e,sv,v)=>{e.set(0,0,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)-.02,t.z);});
+        inst(mcap,new THREE.MeshStandardMaterial({color:0xffffff,roughness:.7,emissive:0x302010,emissiveIntensity:.25}),msh,(t,e,sv,v)=>{e.set(0,0,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)-.02,t.z);},(t,c)=>c.set(hsh(t.x,t.z)<.6?0xb83a26:0xc8a070));}
+      /* 추운 계곡: 눈 맞은 전나무, 서리 낀 바위와 큰 바위, 눈 더미, 찬 시냇물엔 징검돌 (계곡 끝 바깥 산길을 오르면 허칠) */
+      if(kd==='cold'){const V=MHR.rivers.find(q=>q.I===I),rd=(x,z)=>V?MHR.crossD(V,x,z).d:99;
+        snowPines(P.place(120,2.6,.45,(x,z)=>off(9)(x,z)&&rd(x,z)>10,5));rocks(P.place(100,2.6,0,(x,z)=>off(6)(x,z)&&rd(x,z)>6),0x8a8e94);bushes(P.place(60,1.3,0,(x,z)=>off(5)(x,z)&&rd(x,z)>7),.45,.5);
+        const big=P.place(26,6,0,(x,z)=>dr(x,z)>28&&rd(x,z)>12);lodInst(NAT.rock(0),NAT.lo(()=>NAT.rock(0)),NAT.stone(0x7a7e86),big,(t,e,sv,v)=>{e.set(srand()*3,srand()*3,0);sv.set(t.s*3.2,t.s*2.4,t.s*2.8);v.set(t.x,heightAt(t.x,t.z)+t.s*.6,t.z);});
+        const mounds=P.place(70,2.6,0,(x,z)=>off(5)(x,z)&&rd(x,z)>8),mg=new THREE.SphereGeometry(1,10,6,0,Math.PI*2,0,Math.PI/2);
+        inst(mg,new THREE.MeshStandardMaterial({color:0xf2f5f8,roughness:.95}),mounds,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s*1.6,t.s*.45,t.s*1.2);v.set(t.x,heightAt(t.x,t.z)-.15,t.z);});
+        if(V){const F=MHR.ford(V);const st=[];for(let k=-2;k<=2;k++){const x=F.x+F.tx*k*2.05,z=F.z+F.tz*k*2.05+Math.sin(k*1.7)*.4;st.push({x,z,s:sr(.9,1.1)});}
+          inst(stoneG,mat(0x8a8e94),st,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,1,t.s);v.set(t.x,MH_WY+.1,t.z);});for(const t of st)jumpable(t.x,t.z,.75*t.s,MH_WY+.28);}}
       const burnt=!!I.branch,dark=0x4a4442;
       /* 불타는 협곡: 그을린 계곡·고개 (마른 나무와 검은 바위), 잿더미, 용암지 */
       if(burnt&&(kd==='vale'||kd==='pass')){deadTrees(P.place(70,2.6,.4,(x,z)=>off(9)(x,z),5));rocks(P.place(110,2.6,0,off(6)),dark);
@@ -19904,20 +19993,22 @@ await BOOT.y();await (async function buildIsles(){
       inst(stoneG,mat(0x8a8678),st,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,1,t.s);v.set(t.x,MH_WY+.1,t.z);});for(const t of st)jumpable(t.x,t.z,.7*t.s,MH_WY+.28);
       reeds(Array.from({length:40},()=>{const s0=sr(-60,60),p=MHR.crossPt(S,s0),t=MHR.tan(p.a),sd=(srand()<.5?-1:1)*sr(S.hw-.5,S.hw+2.5);return {x:p.x+t.x*sd,z:p.z+t.z*sd,s:sr(.35,.5),s0};}).filter(o=>Math.abs(o.s0)>5&&OR.MH.walkD(o.x,o.z)<-2));}
     /* 산비탈 숲: 걸을 수 없는 바깥 비탈을 나무와 바위로 덮는다 (그림자 없이, 부딪힘 없이) */
-    {const out={rt:[],pn:[],dd:[],rk:[]};
-      const DEN={field:.45,hill:.5,wood:.95,vale:.5,pass:.45,lake:.65,river:.75,marsh:.35,ash:.3,lava:.25,beach:.3,rocks:.4,cliff:.6,cape:.55};
+    {const out={rt:[],pn:[],dd:[],rk:[],sn:[]};
+      const DEN={trail:.7,deep:1,cold:.55,field:.45,hill:.5,wood:.95,vale:.5,pass:.45,lake:.65,river:.75,marsh:.35,ash:.3,lava:.25,beach:.3,rocks:.4,cliff:.6,cape:.55};
       for(const T of TILES)for(let gx=T.x0;gx<T.x1;gx+=7)for(let gz=T.z0;gz<T.z1;gz+=7){const x=gx+sr(0,7),z=gz+sr(0,7),wd=OR.MH.walkD(x,z);if(wd<2||wd>95)continue;
           const mx2=mhMix(x,z),A=mx2[0].I,kd=A.kind;if(srand()>DEN[kd]*(1-smooth(60,95,wd)))continue;if(MHR.seaK(x,z,mx2)>.2)continue;   /* 바다 쪽 비탈엔 나무를 두지 않는다 */
           const h=mhHeight(x,z),o={x,z,s:sr(.9,1.5)};
           if(A.branch){if(srand()<(h>30?.25:.45))(srand()<.5?out.rk:out.dd).push(o);continue;}   /* 불타는 협곡 비탈: 검은 바위와 마른 나무만 드문드문 */
-          if(h>30&&(kd==='pass'||kd==='vale')){if(srand()<.3)out.rk.push(o);continue;}
+          if(h>30&&(kd==='pass'||kd==='vale'||kd==='cold')){if(srand()<.3)out.rk.push(o);continue;}
+          if(kd==='cold'){if(srand()<.2)out.rk.push(o);else out.sn.push(o);continue;}   /* 추운 계곡 비탈: 눈 맞은 전나무 */
+          if(kd==='deep'){(srand()<.55?out.pn:out.rt).push(o);continue;}
           if(srand()<.12){out.rk.push(o);continue;}
           if(kd==='marsh')(srand()<.5?out.dd:out.rt).push(o);else if(kd==='pass'||kd==='vale'||h>16)out.pn.push(o);else if(kd==='wood'||kd==='river')(srand()<.7?out.rt:out.pn).push(o);else out.rt.push(o);}
-      roundTrees(out.rt,.27,.25,false);pines(out.pn,.19,false);deadTrees(out.dd);MH_DECOR=out.rt.length+out.pn.length+out.dd.length+out.rk.length;
+      roundTrees(out.rt,.27,.25,false);pines(out.pn,.19,false);deadTrees(out.dd);snowPines(out.sn,false);MH_DECOR=out.rt.length+out.pn.length+out.dd.length+out.rk.length+out.sn.length;
       noSh(lodInst(NAT.rock(0),NAT.lo(()=>NAT.rock(0)),NAT.stone(0x7a766c),out.rk,(t,e,sv,v)=>{e.set(srand()*3,srand()*3,0);sv.set(t.s*2.2,t.s*1.6,t.s*2);v.set(t.x,heightAt(t.x,t.z)+t.s*.3,t.z);}));}
     /* 풀 무더기: 걷는 땅의 풀밭에 촘촘히 (길·물·모래·바위 위는 피한다). 가까운 곳만 그린다(InstChunks가 64m 칸으로 나눠 60m 안만).
        자리는 GFX.hs로 정한다 (srand를 쓰지 않아 다른 것들의 자리가 바뀌지 않는다) */
-    {const TD={field:1,hill:.9,wood:.55,vale:.7,pass:.45,lake:.85,river:.8,marsh:.7,cliff:.75,cape:.85},TH={field:0,hill:.01,wood:.03,vale:.01,pass:.02,lake:.01,river:.02,marsh:-.02,cliff:0,cape:0};
+    {const TD={trail:1,deep:.4,cold:.35,field:1,hill:.9,wood:.55,vale:.7,pass:.45,lake:.85,river:.8,marsh:.7,cliff:.75,cape:.85},TH={trail:0,deep:.04,cold:-.05,field:0,hill:.01,wood:.03,vale:.01,pass:.02,lake:.01,river:.02,marsh:-.02,cliff:0,cape:0};
       ISLE_FX.tuftQ={};
       for(const id of OR.MHUNT){const I=ISLES[id];if(I.branch)continue;ISLE_FX.tuftQ[id]=()=>{
         for(let gx=I.x-I.R;gx<I.x+I.R;gx+=1.8)for(let gz=I.z-I.R;gz<I.z+I.R;gz+=1.8){const x=gx+GFX.hs(gx,gz)*1.8,z=gz+GFX.hs(gz,gx)*1.8;if(Math.hypot(x-I.x,z-I.z)>I.R+20)continue;
@@ -19955,6 +20046,37 @@ await BOOT.y();await (async function buildIsles(){
     /* 엑시즈 문과 사냥터 끝 (밀골): 가장자리 보이지 않는 문 */
     const face=(dx,dz)=>Math.atan2(-dx,-dz),Z=k=>ZONES[k].name;
     const ro=w=>{const c=(w.charCodeAt(w.length-1)-0xac00)%28;return w+(c>0&&c!==8?'으로':'로');};   /* 받침 있으면 '으로' (모래톱으로, 숲으로, 고개로) */
+    /* 땅 끝 문 (2026-11-06 원호: 사냥터 끝이 안 보이고 알아볼 수 없다): 돌기둥 둘에 나무 들보, 가운데 걸린 현판(갈 곳 이름·적정레벨), 기둥마다 등롱과 깃발,
+       기둥 사이엔 아른거리는 빛 막. (x,z) = 넘어가는 선, (ux,uz) = 땅 안쪽(다가오는 사람 쪽)을 향한 방향 */
+    const mhDoor=(x,z,ux,uz,title,sub,col)=>{const g=new THREE.Group();g.position.set(x,heightAt(x,z),z);g.rotation.y=Math.atan2(ux,uz);scene.add(g);
+      const stone=mat(0x8a8478),stone2=mat(0x6e6a62),wood=mat(0x5a3d24),iron=mat(0x2e2a28),W=5.6,H=6.4;
+      const P=(geo,m,px,py,pz,sh=true)=>{const o=new THREE.Mesh(geo,m);o.position.set(px,py,pz);o.castShadow=sh;o.receiveShadow=true;g.add(o);return o;};
+      P(new THREE.BoxGeometry(W*2+3.4,.3,4.4),stone2,0,.05,0,false);   /* 문 밑 돌바닥 */
+      for(const sd of [-1,1]){P(new THREE.BoxGeometry(1.9,.9,1.9),stone2,sd*W,.45,0);P(new THREE.BoxGeometry(1.4,H,1.4),stone,sd*W,H/2+.4,0);P(new THREE.BoxGeometry(1.8,.5,1.8),stone2,sd*W,H+.6,0);P(new THREE.ConeGeometry(1.15,1.1,4).rotateY(Math.PI/4),stone2,sd*W,H+1.4,0);
+        const lp=g.localToWorld(new THREE.Vector3(sd*W,0,0));colliders.push({x:lp.x,z:lp.z,r:1.05,h:H+1});
+        /* 등롱: 기둥 안쪽 쇠고리에 */
+        P(new THREE.BoxGeometry(.08,.6,.08),iron,sd*(W-.9),H-1,.9,false);const ln=new THREE.Mesh(new THREE.BoxGeometry(.42,.55,.42),new THREE.MeshStandardMaterial({color:0xffd890,emissive:0xffb050,emissiveIntensity:1.6}));ln.position.set(sd*(W-.9),H-1.6,.9);g.add(ln);
+        P(new THREE.BoxGeometry(.5,.08,.5),iron,sd*(W-.9),H-1.3,.9,false);P(new THREE.BoxGeometry(.5,.08,.5),iron,sd*(W-.9),H-1.88,.9,false);
+        /* 깃발 */
+        const fl=new THREE.Mesh(new THREE.PlaneGeometry(1.1,2.4),new THREE.MeshStandardMaterial({color:col===0x9ad8ff?0x2e5a8a:col===0xcfe8ff?0x5a7a9a:0x8a2a22,roughness:.9,side:THREE.DoubleSide}));fl.position.set(sd*W,H-1.4,.73);g.add(fl);}
+      P(new THREE.BoxGeometry(W*2+2.6,.75,.95),wood,0,H+.05,0);P(new THREE.BoxGeometry(W*2+3.4,.3,1.3),wood,0,H+.55,0);
+      /* 현판: 앞뒤 두 면 */
+      const cv=document.createElement('canvas');cv.width=512;cv.height=200;const c=cv.getContext('2d');c.fillStyle='#d2a868';c.fillRect(0,0,512,200);c.strokeStyle='#5a3a1c';c.lineWidth=12;c.strokeRect(6,6,500,188);
+      c.fillStyle='rgba(90,58,28,.18)';for(let i=0;i<14;i++)c.fillRect(12,14+i*13,488,3);
+      c.textAlign='center';c.textBaseline='middle';c.fillStyle='#2a1808';let fs=82;c.font=`700 ${fs}px "KMUSunggokSerif","Gowun Batang",serif`;while(c.measureText(title).width>470&&fs>40){fs-=4;c.font=`700 ${fs}px "KMUSunggokSerif","Gowun Batang",serif`;}c.fillText(title,256,sub?72:100);
+      if(sub){let f2=50;c.font=`600 ${f2}px "KMUSunggokSemiSerif","Gowun Batang",serif`;while(c.measureText(sub).width>470&&f2>20){f2-=2;c.font=`600 ${f2}px "KMUSunggokSemiSerif","Gowun Batang",serif`;}c.fillStyle='#6a2a12';c.fillText(sub,256,150);}
+      const tx=new THREE.CanvasTexture(cv);tx.anisotropy=8;tx.encoding=THREE.sRGBEncoding;
+      for(const sd of [1,-1]){const b=new THREE.Mesh(new THREE.PlaneGeometry(6,2.35),new THREE.MeshStandardMaterial({map:tx,roughness:.85,emissive:0x3a2a18,emissiveIntensity:.45}));b.position.set(0,H-1.6,sd*.08);if(sd<0)b.rotation.y=Math.PI;g.add(b);}
+      P(new THREE.BoxGeometry(6.2,.12,.2),wood,0,H-.4,0,false);for(const sx of [-2.6,2.6])P(new THREE.BoxGeometry(.05,.5,.05),iron,sx,H-.42,0,false);
+      /* 빛 막: 아래가 진하고 위로 갈수록 옅어지는 세로 띠 (천천히 아른거린다) */
+      const vc=document.createElement('canvas');vc.width=64;vc.height=128;const v=vc.getContext('2d'),gr=v.createLinearGradient(0,128,0,0);gr.addColorStop(0,'rgba(255,255,255,.95)');gr.addColorStop(.6,'rgba(255,255,255,.35)');gr.addColorStop(1,'rgba(255,255,255,0)');v.fillStyle=gr;v.fillRect(0,0,64,128);
+      for(let i=0;i<9;i++){v.fillStyle='rgba(255,255,255,.25)';v.fillRect(i*7+2,0,2,128);}
+      const vt=new THREE.CanvasTexture(vc);vt.wrapS=THREE.RepeatWrapping;vt.repeat.set(2,1);
+      const vm=new THREE.MeshBasicMaterial({map:vt,color:col,transparent:true,opacity:.42,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,fog:true});
+      const ve=new THREE.Mesh(new THREE.PlaneGeometry(W*2-1.4,H-.9),vm);ve.position.set(0,(H-.9)/2+.2,0);ve.userData.ph=x*.13;g.add(ve);(ISLE_FX.veils||(ISLE_FX.veils=[])).push(ve);
+      /* 땅에 깐 빛 (멀리서도 문 자리가 보이게) */
+      const gm=new THREE.Mesh(new THREE.PlaneGeometry(W*2-1,6).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({map:vt,color:col,transparent:true,opacity:.3,depthWrite:false,blending:THREE.AdditiveBlending}));gm.position.set(0,.22,1.6);g.add(gm);
+      return g;};
     const edge=(id,x,z,ry,hw,label,to)=>{const g=new THREE.Group();g.position.set(x,heightAt(x,z),z);scene.add(g);PORTALS.push({id,x,z,ry,hw,minLv:0,label,to,msg:null,color:0x9ad06a,door:1,edge:1,fx:{g,cols:[]}});};
     /* 고갯길 끝의 문: 줄(고리 방향)에 걸쳐 놓인 보이지 않는 선. 넘어오면 고리 쪽을 바라보고 선다 */
     const ryOf=G=>Math.PI/2-Math.atan2(G.uz,G.ux),arr=G=>({x:G.arr.x,z:G.arr.z,yaw:face(G.ux,G.uz)});
@@ -19970,7 +20092,17 @@ await BOOT.y();await (async function buildIsles(){
     /* 사냥터 바깥 산길 끝 문 ↔ 따로 떨어진 땅 (허칠산) */
     for(const T of OR.MH.trails||[]){const F=ISLES[T.from],G=F.tgate,D=ISLES[T.to];if(!G||!D)continue;const gz=D.z+D.R-6;
       edge('mh_to_'+T.to,G.x,G.z,ryOf(G),9,`${ro(Z(T.to))} 가기`,{x:D.x,z:gz-10,yaw:0});
-      edge(T.to+'_to_mh',D.x,gz,0,7,`${ro(Z(F.id))} 가기`,arr(G));}}
+      edge(T.to+'_to_mh',D.x,gz,0,7,`${ro(Z(F.id))} 가기`,arr(G));}
+    /* 따로 된 맵(서문 길) 땅 끝 문: 다음 땅 / 앞 땅으로 넘어간다 */
+    const lvT=k=>{const L=OR.ZONE_LEVELS[k];return L?`적정레벨 ${L[0]}–${L[1]}`:'';};
+    for(const id of OR.MHUNT){const I=ISLES[id];
+      if(I.ngate){const N=ISLES[I.ngate.to],G=I.ngate;edge('mhs_'+id+'_next',G.x,G.z,ryOf(G),9,`${ro(Z(N.id))} 가기`,arr(N.pgate));mhDoor(G.x,G.z,G.ux,G.uz,Z(N.id),lvT(N.id),0x9ad8ff);}
+      if(I.pgate){const B=ISLES[I.pgate.to],G=I.pgate;edge('mhs_'+id+'_prev',G.x,G.z,ryOf(G),9,`${ro(Z(B.id))} 돌아가기`,arr(B.ngate));mhDoor(G.x,G.z,G.ux,G.uz,Z(B.id),lvT(B.id),0xffd8a0);}
+      if(I.sep&&I.gate)mhDoor(I.gate.x,I.gate.z,I.gate.ux,I.gate.uz,'엑시즈','서문',0xffd8a0);
+      if(I.sep&&I.tgate)mhDoor(I.tgate.x,I.tgate.z,I.tgate.ux,I.tgate.uz,Z(I.tgate.to),'산장 가는 산길 · '+lvT(I.tgate.to),0xcfe8ff);}
+    /* 엑시즈 서문 밖 길 끝: 첫 땅으로 넘어가는 문 */
+    for(const LN of OR.MLINES){if(!LN.gate||!LN.sep)continue;const g=PL.gates.find(q=>q.name===LN.gate),ux=Math.cos(g.out),uz=Math.sin(g.out);let L=0;for(let t=0;t<400;t+=2){const qx=g.x+ux*t,qy=g.y+uz*t;if(Math.hypot(qx,qy)>OR.isleEdge(M,Math.atan2(qy,qx))-14)break;L=t;}
+      const F=LN.zones[0][0];mhDoor(M.x+g.x+ux*L,M.z+g.y+uz*L,-ux,-uz,Z(F),lvT(F),0x9ad8ff);}}
 
   await BOOT.y();/* ===== 지하실 위층의 작은 방 (Lv 60 계단) ===== */
   {const H=OR.HALL_ROOM,C={x:OR.HALL.x,z:OR.HALL.z},R=OR.HALL.R,z0=C.z-R+.3,sx=C.x;
@@ -20477,6 +20609,7 @@ function updateIsles(t,dt){
      그래서 사냥터 안에 있을 때만 그린다 */
   {const I=x>=800?OR.isleAt(x,player.position.z):null,on=!!(I&&OR.MHUNT.includes(I.id));for(const m of ISLE_FX.mhTiles)if(m.visible!==on)m.visible=on;
     if(on&&ISLE_FX.tuftQ&&ISLE_FX.tuftQ[I.id]){const f=ISLE_FX.tuftQ[I.id];delete ISLE_FX.tuftQ[I.id];try{f();}catch(e){console.warn('tufts',e);}}}   /* 사냥터 풀 무더기는 그 땅에 처음 들어설 때 만든다 */
+  if(ISLE_FX.veils)for(const v of ISLE_FX.veils){v.material.opacity=.36+.12*Math.sin(t*1.7+v.userData.ph);v.material.map.offset.x=t*.04;}   /* 땅 끝 문 빛 막 */
   if(ISLE_FX.edgeFog){ISLE_FX.edgeFogU.uT.value=t;const here=x>=800?OR.isleAt(x,player.position.z).id:null;for(const F of ISLE_FX.edgeFog){const v=F.id===here;if(F.set[0].visible!==v)for(const m of F.set)m.visible=v;
       if(v)for(const m of F.set){const M=m.userData.mist;if(!M)continue;m.material.color.copy(scene.fog.color).lerp(_whiteC,.25);
         const P=M.pp,S=M.seed;for(let i=0;i<S.length/3;i++){const a=S[i*3]+t*.004*(1+(i%3)*.4),r=S[i*3+1]+Math.sin(t*.07+S[i*3+2])*5;P[i*3]=M.I.x+Math.cos(a)*r;P[i*3+2]=M.I.z+Math.sin(a)*r;}
@@ -22390,7 +22523,7 @@ function movLayout(W,H,mini){const MH=OR.MH,u=Math.min(W,H)/2,zones={};
   let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;const mg=mini?60:250;const bb=I=>{x0=Math.min(x0,I.x-I.R-mg);x1=Math.max(x1,I.x+I.R+mg);z0=Math.min(z0,I.z-I.R-mg*.8);z1=Math.max(z1,I.z+I.R+mg*.8);};for(const id of OR.MHUNT)bb(OR.ISLES[id]);
   for(let a=MH.TH0;a<=MH.TH1+1e-6;a+=MH.DTH)bb({...MH.ringP(a,MH.RR),R:MH.R});   /* 땅이 빈 말굽 자리까지 넣어서 지도 테두리가 예전과 같게 */
   if(!mini){const h=MOV_HARENA;x0=Math.min(x0,h.x-h.R*3.2);z0-=120;z1+=60;}   /* 큰 지도엔 서쪽 사막 너머 하레나까지 */
-  if(!mini){const G=OR.ISLES.m3a&&OR.ISLES.m3a.tgate;if(G&&OR.ISLES.hechil){const s=.72,hz=G.z-(HECH.EZ+46)*s-MOV_HECH_DZ,e=(OR.ISLES.hechil.R+70)*s;x0=Math.min(x0,G.x-MOV_HECH_DX-e-40);z0=Math.min(z0,hz-e-200);}}   /* 큰 지도엔 북서쪽 허칠산까지 */
+  if(!mini){const G=movTrailG();if(G&&OR.ISLES.hechil){const s=.72,hz=G.z-(HECH.EZ+46)*s-MOV_HECH_DZ,e=(OR.ISLES.hechil.R+70)*s;x0=Math.min(x0,G.x-MOV_HECH_DX-e-40);z0=Math.min(z0,hz-e-200);}}   /* 큰 지도엔 북서쪽 허칠산까지 */
   const k=Math.min(W*.98/(x1-x0),H*.98/(z1-z0)),cx=W/2+(MH.cx-(x0+x1)/2)*k,cy=H/2+(MH.cz-(z0+z1)/2)*k,ringR=MH.RR*k,rc=ringR*.42;
   for(const id of OR.MHUNT){const I=OR.ISLES[id];zones[id]={x:cx+(I.x-MH.cx)*k,y:cy+(I.z-MH.cz)*k,r:I.R*k,th:Math.atan2(I.z-MH.cz,I.x-MH.cx),line:I.line,i:I.seq};}
   return {u,cx,cy,rc,k,ringR,zones,mini,f:mini?1:Math.max(1,u/300)};}
@@ -22407,7 +22540,7 @@ function movPos(Lo,x,z){if(x<800)return null;const I=OR.isleAt(x,z);if(!I)return
   if(I.id==='milgol'){const q=movRealm(Lo)[I.id];return q?{x:q.x,y:q.y,rot:0}:null;}
   if(!Lo.zones[I.id])return null;return {x:Lo.cx+(x-OR.MH.cx)*Lo.k,y:Lo.cy+(z-OR.MH.cz)*Lo.k,rot:0,id:I.id};}
 /* 옛 지도 느낌: 양피지 바탕 위에 잉크 선과 옅은 물감. 도형이 드러나지 않게 땅·물가는 들쭉날쭉, 사냥터는 숲·언덕 같은 그림으로 */
-const MOV_TINT={beach:'#e6d29c',rocks:'#c4b9a0',cliff:'#b3bb84',cape:'#bcc088',field:'#cfcf90',hill:'#c9bd86',wood:'#9fb87e',vale:'#b4c592',pass:'#c0b294',lake:'#b2c7a0',river:'#b2c897',marsh:'#a9b086',ash:'#b0a69c',lava:'#bf8e74',bvale:'#b9a084',bpass:'#b3a395'};
+const MOV_TINT={trail:'#c8cc8c',deep:'#87a070',cold:'#d4dcd8',beach:'#e6d29c',rocks:'#c4b9a0',cliff:'#b3bb84',cape:'#bcc088',field:'#cfcf90',hill:'#c9bd86',wood:'#9fb87e',vale:'#b4c592',pass:'#c0b294',lake:'#b2c7a0',river:'#b2c897',marsh:'#a9b086',ash:'#b0a69c',lava:'#bf8e74',bvale:'#b9a084',bpass:'#b3a395'};
 const MOV_INK='#4a3622',MOV_INK2='#6b5236',MOV_SEA='#a9c3bd',MOV_SEA2='#7fa3a0';
 /* 같은 자리에 늘 같은 값 (지도가 다시 그려져도 흔들리지 않게) */
 const movRnd=s=>{const x=Math.sin(s*127.1+311.7)*43758.5453;return x-Math.floor(x);};
@@ -22541,7 +22674,7 @@ function movStatic(c,W,H,mini,Lo,hunt,curZ){const {u,cx,cy,rc,k}=Lo,zones=movSho
       const h=MOV_HARENA,[hx,hy]=P2(h.x,h.z);if(Math.hypot(hx-x,hy-y)<h.R*k*3.6)continue;
       c.globalAlpha=.55;const s=(5+movRnd(i)*2.5)*f;movRnd(i+5)<.62?movGlyph.tree(c,x,y,s,i):movRnd(i+6)<.5?movGlyph.hill(c,x,y,s*1.2):movGlyph.grass(c,x,y,s);c.globalAlpha=1;}}
   /* 산: 엑시즈와 고리 사이 (바다 쪽은 비운다). 뒤(위)에 있는 것부터 */
-  {const ms=[];const s0=(mini?3.5:8)*f;for(let i=0;i<(mini?60:150);i++){const a=movRnd(i+3000)*Math.PI*2,rp=MHR.ringPt(a);if(MHR.gapK(rp.x,rp.z)>0)continue;const t=.25+movRnd(i+3100)*.6,r=rc+(Lo.ringR-Lo.zones.mfield.r*1.05-rc)*t,x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;
+  {const ms=[];const s0=(mini?3.5:8)*f;for(let i=0;i<(mini?60:150);i++){const a=movRnd(i+3000)*Math.PI*2,rp=MHR.ringPt(a);if(MHR.gapK(rp.x,rp.z)>0)continue;const t=.25+movRnd(i+3100)*.6,r=rc+(Lo.ringR-Lo.zones[OR.MHUNT[0]].r*1.05-rc)*t,x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;
       if(onSea(x,y))continue;ms.push([x,y,s0*(.75+movRnd(i)*.6),i]);}
     ms.sort((A,B)=>A[1]-B[1]);for(const [x,y,s,i] of ms)movGlyph.mtn(c,x,y,s,i);}
   /* 사냥터: 물감 번진 땅 + 그 땅 생김새 그림 + 점선 경계 */
@@ -22549,13 +22682,16 @@ function movStatic(c,W,H,mini,Lo,hunt,curZ){const {u,cx,cy,rc,k}=Lo,zones=movSho
     c.save();movBlob(c,Z.x,Z.y,Z.r*1.12,sd,.1);c.globalAlpha=.75;const g=c.createRadialGradient(Z.x,Z.y,Z.r*.3,Z.x,Z.y,Z.r*1.25);g.addColorStop(0,MOV_TINT[kd]||'#c4c48c');g.addColorStop(.8,MOV_TINT[kd]||'#c4c48c');g.addColorStop(1,'rgba(200,200,140,0)');c.fillStyle=g;c.fill();c.restore();
     if(I.kind==='lake'){c.fillStyle=MOV_SEA;movBlob(c,Z.x+Math.cos(Z.th)*Z.r*.35,Z.y+Math.sin(Z.th)*Z.r*.35,Z.r*.42,sd,.18);c.fill();c.strokeStyle=MOV_INK2;c.lineWidth=1*f;c.stroke();}
     if(I.kind==='river'){c.strokeStyle=MOV_SEA2;c.lineWidth=Math.max(1.5,Z.r*.07);c.beginPath();for(let q=-10;q<=10;q++){const s=q/10*Z.r*1.5,lat=Math.sin(q*.6+sd)*Z.r*.12,ux=Math.cos(Z.th),uy=Math.sin(Z.th),x=Z.x+ux*s-uy*lat,y=Z.y+uy*s+ux*lat;q>-10?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();}
-    if(mini){if(I.kind==='wood'||I.kind==='cape'){for(let q=0;q<5;q++){const a=q*1.3+sd,r=Z.r*.5*movRnd(q+sd);movGlyph.tree(c,Z.x+Math.cos(a)*r,Z.y+Math.sin(a)*r+Z.r*.2,Z.r*.3,q);}}continue;}
-    const N=I.kind==='wood'?26:I.kind==='beach'||I.kind==='lake'||I.kind==='river'?10:14,gl=[];
+    if(mini){if(I.kind==='wood'||I.kind==='cape'||I.kind==='deep'){for(let q=0;q<5;q++){const a=q*1.3+sd,r=Z.r*.5*movRnd(q+sd);movGlyph.tree(c,Z.x+Math.cos(a)*r,Z.y+Math.sin(a)*r+Z.r*.2,Z.r*.3,q);}}continue;}
+    const N=I.kind==='wood'||I.kind==='deep'?(I.kind==='deep'?34:26):I.kind==='beach'||I.kind==='lake'||I.kind==='river'?10:14,gl=[];
     for(let q=0;q<N;q++){const a=movRnd(q*7+sd)*Math.PI*2,r=Math.sqrt(movRnd(q*11+sd))*Z.r*.86,x=Z.x+Math.cos(a)*r,y=Z.y+Math.sin(a)*r;
       if(I.kind==='lake'&&Math.hypot(x-(Z.x+Math.cos(Z.th)*Z.r*.35),y-(Z.y+Math.sin(Z.th)*Z.r*.35))<Z.r*.5)continue;gl.push([x,y,q]);}
     gl.sort((A,B)=>A[1]-B[1]);const s=Math.max(4*f,Z.r*.13);
     for(const [x,y,q] of gl){switch(I.kind){
       case 'wood':case 'cape':movRnd(q+sd)<.35?movGlyph.pine(c,x,y,s*1.1):movGlyph.tree(c,x,y,s,q+sd);break;
+      case 'deep':movRnd(q+sd)<.6?movGlyph.pine(c,x,y,s*1.15):movGlyph.tree(c,x,y,s*1.05,q+sd);break;
+      case 'trail':q%2?movGlyph.grass(c,x,y,s):movGlyph.tree(c,x,y,s*.9,q+sd);break;
+      case 'cold':q%3===0?movGlyph.mtn(c,x,y,s*.9,q+sd):movGlyph.pine(c,x,y,s);break;
       case 'hill':case 'cliff':movGlyph.hill(c,x,y,s*1.3);break;
       case 'pass':case 'bpass':case 'vale':q%2?movGlyph.mtn(c,x,y,s*.9,q+sd):movGlyph.hill(c,x,y,s*1.2);break;
       case 'rocks':case 'ash':movGlyph.rock(c,x,y,s*.9,q+sd);break;
@@ -22585,7 +22721,9 @@ function movStatic(c,W,H,mini,Lo,hunt,curZ){const {u,cx,cy,rc,k}=Lo,zones=movSho
     c.strokeStyle=MOV_INK;c.lineWidth=2.2*f;c.strokeRect(7*f,7*f,W-14*f,H-14*f);c.lineWidth=.8*f;c.strokeRect(11*f,11*f,W-22*f,H-22*f);}}
 /* 왕국 지도 위 허칠산: 숲(3A) 바깥 산길 끝에서 북쪽으로. 지도에서는 북쪽이 위인 채 허칠산 땅을 줄여 그린다 (산길 끝 = 들어오는 자리).
    멀리서 보면 눈 덮인 봉우리 그림, 확대해 화면을 채우면 허칠산 지도(hechPlanImg)가 그 자리에 겹쳐 자세히 보인다 */
-function movHechilT(Lo){const F=OR.ISLES.m3a,G=F&&F.tgate;if(!G||!OR.ISLES.hechil)return null;const MH=OR.MH,gx=Lo.cx+(G.x-MH.cx)*Lo.k,gy=Lo.cy+(G.z-MH.cz)*Lo.k,s=Lo.k*.72,ox=gx-MOV_HECH_DX*Lo.k,oy=gy-(HECH.EZ+46)*s-MOV_HECH_DZ*Lo.k;
+/* 허칠로 넘어가는 산길 끝 문 (2026-11-06부터 서문 길 마지막 땅 추운 계곡 바깥) */
+function movTrailG(){const T=(OR.MH.trails||[]).find(q=>q.to==='hechil'),F=T&&OR.ISLES[T.from];return F&&F.tgate||null;}
+function movHechilT(Lo){const G=movTrailG();if(!G||!OR.ISLES.hechil)return null;const MH=OR.MH,gx=Lo.cx+(G.x-MH.cx)*Lo.k,gy=Lo.cy+(G.z-MH.cz)*Lo.k,s=Lo.k*.72,ox=gx-MOV_HECH_DX*Lo.k,oy=gy-(HECH.EZ+46)*s-MOV_HECH_DZ*Lo.k;
   return {s,gx,gy,cx:ox,cy:oy,P:(lx,lz)=>[ox+lx*s,oy+lz*s],L:(px,py)=>[(px-ox)/s,(py-oy)/s]};}
 const MOV_HECH_DX=210,MOV_HECH_DZ=40;   /* 숲에서 산길을 따라 왼쪽 위로 (강가와 겹치지 않게) */
 function movHechilHit(Lo,x,y,pad){const T=!mini0(Lo)&&movHechilT(Lo);if(!T)return false;const [hx,hy]=T.P(0,0);return Math.hypot(x-hx,y-hy)<OR.ISLES.hechil.R*T.s+pad;}   /* 이름표가 허칠산 그림에 겹치는지 */
@@ -22601,7 +22739,7 @@ movGlyph.snowMtn=(c,x,y,s,sd)=>{const h=s*(1+.2*movRnd(sd)),w=s*(.85+.25*movRnd(
   c.beginPath();c.moveTo(px,y-h);c.lineTo(px-w*.05,y-h*.62);c.lineTo(px+w*.04,y-h*.4);c.stroke();};   /* 능선 */
 function movHechil(c,W,H,Lo,hunt){const T=movHechilT(Lo);if(!T)return;const f=Math.max(1,Lo.u/300),I=OR.ISLES.hechil,dt=movHechilDetail(c,W,H,T),E=HECH.R0+70;
   /* 산길: 숲 바깥 문에서 들어오는 자리까지 */
-  {const G=OR.ISLES.m3a.tgate,[ax,ay]=[T.gx,T.gy],[bx,by]=T.P(0,HECH.EZ);c.beginPath();c.moveTo(ax,ay);c.bezierCurveTo(ax-4*f,ay-(ay-by)*.55,bx+(ax-bx)*.55,by+10*f,bx,by);
+  {const G=movTrailG(),[ax,ay]=[T.gx,T.gy],[bx,by]=T.P(0,HECH.EZ);c.beginPath();c.moveTo(ax,ay);c.bezierCurveTo(ax-4*f,ay-(ay-by)*.55,bx+(ax-bx)*.55,by+10*f,bx,by);
     c.strokeStyle='rgba(239,226,191,.9)';c.lineWidth=5*f;c.stroke();c.strokeStyle='#7a5532';c.lineWidth=1.6*f;c.setLineDash([3*f,4*f]);c.stroke();c.setLineDash([]);}
   if(dt>=1)return;
   c.save();c.globalAlpha=1-dt;
@@ -23601,8 +23739,13 @@ function mhPlanImg(id){const C=mhPlanImg.c||(mhPlanImg.c={});if(C[id])return C[i
   for(const o of (typeof colliders!=='undefined'?colliders:[])){if(Math.abs(o.x-I.x)>E||Math.abs(o.z-I.z)>E||o.box)continue;const x=o.x-I.x+E,y=o.z-I.z+E;if(Math.hypot(x-E,y-E)>E-6)continue;
     if(o.r<1.3&&(o.h==null||o.h>3)){const sz=2.2+o.r*1.6;c.fillStyle='rgba(84,112,72,.8)';c.strokeStyle='rgba(52,62,40,.85)';c.lineWidth=.8;c.beginPath();c.arc(x,y-sz*.5,sz*.7,0,7);c.fill();c.stroke();c.beginPath();c.moveTo(x,y-sz*.1);c.lineTo(x,y+sz*.6);c.stroke();}
     else if(o.r<6){c.fillStyle='rgba(140,130,116,.85)';c.strokeStyle='rgba(60,50,40,.8)';c.lineWidth=.8;c.beginPath();c.ellipse(x,y,o.r,o.r*.75,0,0,7);c.fill();c.stroke();}}
+  /* 땅 끝 문: 금빛 문 표시와 갈 곳 이름 (가장자리 흐림 뒤에 그린다) */
+  const doors=[[I.ngate,I.ngate&&ZONES[I.ngate.to]],[I.pgate,I.pgate&&ZONES[I.pgate.to]],[I.sep&&I.gate,{name:'엑시즈'}],[I.sep&&I.tgate,I.tgate&&ZONES[I.tgate.to]]].filter(q=>q[0]&&q[1]);
   /* 가장자리: 둥글게 흐려진다 (들쭉날쭉) */
   {const g=c.createRadialGradient(E,E,I.R+10,E,E,E*.98);g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');c.globalCompositeOperation='destination-in';c.fillStyle=g;c.fillRect(0,0,S,S);c.globalCompositeOperation='source-over';}
+  for(const [G,Zn] of doors){const x=G.x-I.x+E,y=G.z-I.z+E,a=Math.atan2(G.uz,G.ux);c.save();c.translate(x,y);c.rotate(a+Math.PI/2);
+    c.fillStyle='#e8c060';c.strokeStyle='#3a2410';c.lineWidth=2;c.fillRect(-11,-4,22,8);c.strokeRect(-11,-4,22,8);c.fillStyle='#3a2410';c.fillRect(-11,-4,4,8);c.fillRect(7,-4,4,8);c.restore();
+    const lx=x+G.ux*26,ly=y+G.uz*26;c.font='700 17px "KMUSunggokSemiSerif","Gowun Batang",serif';c.textAlign='center';c.textBaseline='middle';c.lineWidth=4;c.strokeStyle='rgba(250,240,215,.95)';c.strokeText(Zn.name,lx,ly);c.fillStyle='#4a2410';c.fillText(Zn.name,lx,ly);}
   return C[id]=cv;}
 /* 큰 지도에서 그 땅이 화면을 넉넉히 채울 만큼 확대하면 자세한 지도로 (0 → 1) */
 const movDetailK=(r,R)=>smooth(R*.26,R*.4,r);
@@ -24321,7 +24464,7 @@ function renderChars(){
     row.append(b,d);box.appendChild(row);
   }
 }
-function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:spAll(),skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mhv:5,mentorReady:P.mentorReady,faith:P.faith|0||undefined,needBook:P.needBook||undefined,mq:P.mq||undefined,mqDone:P.mqDone||undefined,myHome:P.myHome||undefined,gq:P.gq&&Object.keys(P.gq).length?P.gq:undefined,gqDone:P.gqDone||undefined,gqPin:P.gqPin&&Object.keys(P.gqPin).length?P.gqPin:undefined,spc:P.spc&&Object.keys(P.spc).length?P.spc:undefined,poff:P.poff&&Object.keys(P.poff).length?P.poff:undefined,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap),gk:P.gk,guild:P.guild||undefined,gApply:P.gApply||undefined,gApps:P.gApps&&P.gApps.list.length?{gid:P.gApps.gid,list:P.gApps.list.map(a=>({n:a.n,k:a.k,t:a.t,no:a.no?1:undefined}))}:undefined,wbk:P.wbk&&Object.keys(P.wbk).length?P.wbk:undefined,shelf:P.shelf&&P.shelf.length?P.shelf:undefined,lak:P.lak||undefined}:null;}
+function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:spAll(),skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mhv:6,mentorReady:P.mentorReady,faith:P.faith|0||undefined,needBook:P.needBook||undefined,mq:P.mq||undefined,mqDone:P.mqDone||undefined,myHome:P.myHome||undefined,gq:P.gq&&Object.keys(P.gq).length?P.gq:undefined,gqDone:P.gqDone||undefined,gqPin:P.gqPin&&Object.keys(P.gqPin).length?P.gqPin:undefined,spc:P.spc&&Object.keys(P.spc).length?P.spc:undefined,poff:P.poff&&Object.keys(P.poff).length?P.poff:undefined,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap),gk:P.gk,guild:P.guild||undefined,gApply:P.gApply||undefined,gApps:P.gApps&&P.gApps.list.length?{gid:P.gApps.gid,list:P.gApps.list.map(a=>({n:a.n,k:a.k,t:a.t,no:a.no?1:undefined}))}:undefined,wbk:P.wbk&&Object.keys(P.wbk).length?P.wbk:undefined,shelf:P.shelf&&P.shelf.length?P.shelf:undefined,lak:P.lak||undefined}:null;}
 /* 같은 캐릭터를 창 두 개(또는 휴대폰에 남아 있던 옛 탭)에서 켜 두면, 옛 창이 나중에 저장하면서 새 창의 기록을 덮어썼다.
    만든 길드처럼 옛 창에 없던 것이 통째로 사라졌다. 그래서 저장할 때 이 창의 표(tab)를 남기고,
    이 창이 캐릭터를 불러온 뒤에 다른 창이 같은 캐릭터를 저장했으면 이 창은 더 저장하지 않는다. */
@@ -24432,15 +24575,15 @@ function startGameNow(data){
   if(data.x!=null&&OR.ISLES.arena&&Math.hypot(data.x-OR.ISLES.arena.x,(data.z||0)-OR.ISLES.arena.z)<OR.ISLES.arena.R){data.x=null;data.z=null;data.y=null;}   /* 투기장에서 끊겼으면 하레나로 */   /* 옛 첫 지역에 저장된 자리는 하레나로 */
   /* 사냥터를 고리로 다시 놓기 전(mhv 3 아님)에 사냥터에 저장된 자리는 같은 땅의 새 자리로 옮긴다.
      옛 배치: 5칸×4줄 판 (x 2700부터, z 900부터 450m 간격). mhv 2는 2·4줄이 동→서(지그재그), 그 전은 모두 서→동 */
-  if(data.x!=null&&data.mhv!==3&&data.mhv!==4&&data.mhv!==5&&data.x>=2400&&data.x<4800&&(data.z||0)>=600&&(data.z||0)<2500){const col=Math.max(0,Math.min(4,Math.round((data.x-2700)/450))),row=Math.max(0,Math.min(3,Math.round((data.z-900)/450))),
-    L=OR.MLINES[row],I=OR.ISLES[L.zones[0][0]];   /* 2026-11-05부터 줄마다 첫 땅만 남았다: 그 줄 첫 땅 들어오는 자리로 */
+  if(data.x!=null&&!(data.mhv>=3)&&data.x>=2400&&data.x<4800&&(data.z||0)>=600&&(data.z||0)<2500){const col=Math.max(0,Math.min(4,Math.round((data.x-2700)/450))),row=Math.max(0,Math.min(3,Math.round((data.z-900)/450))),
+    L=OR.MLINES[row]||OR.MLINES[0],I=OR.ISLES[L.zones[0][0]];   /* 2026-11-05부터 줄마다 첫 땅만 남았다: 그 줄 첫 땅 들어오는 자리로 */
     data.x=I.entry.x;data.z=I.entry.z;data.y=null;}
   /* mhv 3 (둥근 고리, 2026-11-03까지): 가운데 (3600,1750) 반지름 1150, 서쪽부터 시계 방향 18도 간격. 같은 땅(같은 순서)의 새 말굽 자리로 옮긴다 */
   if(data.x!=null&&data.mhv===3&&(data.z||0)>440){let bk=-1,bd=1e9,bx=0,bz=0;for(let k=0;k<20;k++){const th=Math.PI+k*Math.PI/10,ox=3600+Math.cos(th)*1150,oz=1750+Math.sin(th)*1150,d=Math.hypot(data.x-ox,data.z-oz);if(d<bd){bd=d;bk=k;bx=ox;bz=oz;}}
-    if(bd<400){const L=OR.MLINES[Math.floor(bk/5)];if(L){const I=OR.ISLES[L.zones[0][0]];data.x=I.entry.x;data.z=I.entry.z;data.y=null;}}}
+    if(bd<400){const L=OR.MLINES[Math.floor(bk/5)]||OR.MLINES[0];if(L){const I=OR.ISLES[L.zones[0][0]];data.x=I.entry.x;data.z=I.entry.z;data.y=null;}}}
   /* mhv 4 (말굽 스무 곳, 2026-11-05까지): 없어진 땅에 저장된 자리는 같은 문의 남은 땅(줄 첫 땅) 들어오는 자리로 */
-  if(data.x!=null&&data.mhv===4&&(data.z||0)>440&&OR.MH.walkD(data.x,data.z)>2){const MH=OR.MH,TAU=Math.PI*2;let a=Math.atan2(data.z-MH.cz,data.x-MH.cx)-MH.TH0;a=((a%TAU)+TAU+MH.DTH/2)%TAU;const kk=Math.floor(a/MH.DTH),dr=Math.abs(Math.hypot(data.x-MH.cx,data.z-MH.cz)-MH.RR);
-    if(kk<20&&dr<400){const L=OR.MLINES[Math.floor(kk/5)];if(L){const I=OR.ISLES[L.zones[0][0]];data.x=I.entry.x;data.z=I.entry.z;data.y=null;}}}
+  if(data.x!=null&&(data.mhv===4||data.mhv===5)&&(data.z||0)>440&&OR.MH.walkD(data.x,data.z)>2){   /* mhv 5 (문마다 두 땅, 2026-11-06까지): 닫은 문의 땅·옮긴 땅에 저장된 자리는 서문 첫 땅(숲 가는 길) 들어오는 자리로 */const MH=OR.MH,TAU=Math.PI*2;let a=Math.atan2(data.z-MH.cz,data.x-MH.cx)-MH.TH0;a=((a%TAU)+TAU+MH.DTH/2)%TAU;const kk=Math.floor(a/MH.DTH),dr=Math.abs(Math.hypot(data.x-MH.cx,data.z-MH.cz)-MH.RR);
+    if(kk<20&&dr<400){const L=data.mhv===5?OR.MLINES[0]:OR.MLINES[Math.floor(kk/5)]||OR.MLINES[0];if(L){const I=OR.ISLES[L.zones[0][0]];data.x=I.entry.x;data.z=I.entry.z;data.y=null;}}}
   if(data.x!=null&&Math.hypot(data.x-4150,(data.z||0))<230){const I=OR.ISLES.milgol;data.x=I.x;data.z=I.z+50;data.y=null;}   /* 없앤 통로 요새(2026-11-06)에서 끊겼으면 밀골로 */
   player.position.set(data.x??(OR.C2.x-6),0,data.z??(OR.C2.z+4));
   /* 내 집 안에서 끊겼으면(새로고침·업데이트) 집 바닥·계단을 먼저 지어 둔다. 전엔 바닥이 생기기 전에 높이를 재서 캐릭터가 바닥 아래로 꺼졌다 */
@@ -26675,7 +26818,7 @@ function updateOthers(dt){
 var roomStatus='연결 중…',presErr='',pageViewers=0;
 function setRoomStatus(t){roomStatus=t;renderOnline();}
 // 자체 서버(WebSocket)용 연결: claude room과 같은 모양으로 감싼다
-const SERVER_VER=33;let srvVer=null,monsGot=0;
+const SERVER_VER=34;let srvVer=null,monsGot=0;
 function makeWsRoom(){
   const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
   let ws=null,myId=null,ok=false,retry=1000;const peers=new Map(),peerFns=[],topicFns={},connFns=[];const mine={};
@@ -28476,7 +28619,7 @@ const LIB_BOOKS={
     '엑시즈에 온 것을 환영한다. 길을 잃었다면 먼저 북서쪽을 보라. 높은 바위 언덕 위의 왕궁이 언제나 그 자리에 있다.',
     '도시 한가운데로는 강이 흐른다. 강은 서문 아래에서 들어와 남동쪽 항구까지 이어지며, 다리 위는 늘 사람으로 붐빈다.',
     '중앙 광장에서 남쪽으로 내려가면 시장이다. 아침에는 생선과 빵, 저녁에는 등불과 노랫소리가 가득하다.',
-    '성문은 넷이다. 북문, 서문, 남문, 그리고 사냥꾼들이 드나드는 동문. 동문 밖은 위험하니 준비 없이 나서지 말 것.',
+    '성문은 넷이다. 북문, 서문, 남문, 동문. 사냥꾼들은 서문으로 드나든다. 서문 밖 숲길은 깊어질수록 위험하니 준비 없이 나서지 말 것.',
     '다리가 아프다면 마차를 타라. 성문과 광장, 왕궁과 도서관을 잇는 고리 길을 마차가 정해진 시간표대로 돈다.',
     '그리고 조용한 곳이 필요하다면, 지금 그대가 서 있는 이 왕립 도서관이 있다. 책은 제자리에 꽂아 주길.']},
   lib_bestiary:{title:'몬스터 도감 — 모래 편',sub:'하레나 사냥꾼들의 증언을 모아',pages:[
@@ -28825,7 +28968,7 @@ const GN_TALES=[
   {pages:['기사단 본부 이야기요. 귀족 집안의 둘째 아들들은 대개 기사단에 들어간다오. 집은 맏이가 잇고, 칼은 둘째가 드는 셈이지.',
     '내 조카도 그랬소. 첫 달 훈련장에서 돌아온 날, 녀석은 흙투성이 얼굴로 은 포크도 못 들 만큼 팔이 떨렸지.',
     '그 아이 어머니는 기겁을 했지만, 나는 그날 처음으로 녀석이 제대로 저녁을 먹는 걸 보았소. 귀족 식탁에서 그렇게 맛있게 먹는 얼굴은 드물다오.',
-    '지금은 동문 밖 사냥터까지 순찰을 나가오. 가끔 저택에 들러 모험가들 무용담을 늘어놓는데, 그대 이야기가 나올 날도 머지않았겠지.'],
+    '지금은 서문 밖 숲길까지 순찰을 나가오. 가끔 저택에 들러 모험가들 무용담을 늘어놓는데, 그대 이야기가 나올 날도 머지않았겠지.'],
    q:'그 조카에게 모험가로서 한마디 해 준다면?',
    a:[['쉬는 것도 싸움의 일부라고요','길드 수칙 다섯째 줄이로군! 녀석은 쉬는 걸 지는 것으로 아니, 꼭 전해 주리다.'],
       ['동료를 먼저 챙기라고요','훌륭하오. 기사의 칼보다 그 말이 오래 남지. 녀석의 방패에 새겨 주고 싶구려.'],
