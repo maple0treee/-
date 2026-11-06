@@ -130,16 +130,28 @@
     /* 적정레벨: 봉우리 벼랑 안은 130→150 (꼭대기로 갈수록), 그 밖 골짜기는 산장→갈림길 100→110, 동굴은 굴 길이 따라 110→130 */
     H.lvOut = (lx, lz) => { const d = Math.hypot(lx - H.TOP.x, lz - H.TOP.z), r = H.rb(Math.atan2(lz - H.TOP.z, lx - H.TOP.x)); if (d < r) return Math.round(130 + 20 * Math.pow(Math.max(0, Math.min(1, (r - d) / (r - 14))), 0.75));
       const ax = H.FORK.x - H.HUT.x, az = H.FORK.z - H.HUT.z, t = ((lx - H.HUT.x) * ax + (lz - H.HUT.z) * az) / (ax * ax + az * az); return Math.round(100 + 10 * Math.max(0, Math.min(1, t))); };
-    H.lvCave = (lx, lz) => Math.round(110 + 20 * Math.max(0, Math.min(1, H.near(H.T, lx, lz).s / (H.TL - 16))));
+    /* 사냥터 (2026-11-06 원호: 레벨별로 나눠서 여러 곳): 골짜기 둘, 동굴 넷(방마다 하나, 좁은 굴목에서 나뉨), 봉우리 넷(벼랑 안 둘레 띠) */
+    H.AREAS = [
+      { id: 'wood', name: '산장 숲길', lv: [100, 105] }, { id: 'lake', name: '호숫가 골짜기', lv: [105, 110] },
+      { id: 'bat', name: '박쥐 굴', lv: [110, 115], cave: 1, s: [0, 170] }, { id: 'crys', name: '수정 굴', lv: [115, 120], cave: 1, s: [170, 315] },
+      { id: 'fall', name: '얼음 폭포 굴', lv: [120, 125], cave: 1, s: [315, 470] }, { id: 'den', name: '곰 굴', lv: [125, 130], cave: 1, s: [470, H.TL - 16] },
+      { id: 'slope', name: '눈 비탈', lv: [130, 135] }, { id: 'scree', name: '서리 바위밭', lv: [135, 140] }, { id: 'ridge', name: '바람 능선', lv: [140, 145] }, { id: 'top', name: '꼭대기', lv: [145, 150] }];
+    H.areaOfLv = (lv, cave) => { const L = H.AREAS.filter((A) => !!A.cave === !!cave); for (const A of L) if (lv < A.lv[1] || (lv === A.lv[1] && A.id === 'lake')) return A; return L[L.length - 1]; };
+    H.caveArea = (s) => { let A = null; for (const B of H.AREAS) if (B.cave) { A = B; if (s < B.s[1]) break; } return A; };
+    /* 동굴 적정레벨: 사냥터마다 굴 길이 따라 5씩 */
+    H.lvCave = (lx, lz) => { const s = H.near(H.T, lx, lz).s, A = H.caveArea(s); return Math.min(A.lv[1], Math.floor(A.lv[0] + 5 * Math.max(0, Math.min(1, (s - A.s[0]) / (A.s[1] - A.s[0]))))); };
+    H.areaAt = (lx, lz, cave) => cave ? H.caveArea(H.near(H.T, lx, lz).s) : H.areaOfLv(H.lvOut(lx, lz));
+    /* 봉우리 띠 경계: 벼랑 안에서 적정레벨 lv가 되는 꼭대기까지 거리 (각도 a) */
+    H.ringR = (a, lv) => { const r = H.rb(a); return r - Math.pow((lv - 130) / 20, 1 / 0.75) * (r - 14); };
     /* 봉우리 벼랑: 틈이 아니면 벽 두께 안에 들어온 것을 가까운 쪽으로 밀어낸다 */
     H.wall = (p, rad, I) => { const dx = p.x - I.x - H.TOP.x, dz = p.z - I.z - H.TOP.z, d = Math.hypot(dx, dz) || 1, w = H.WT + rad, a = Math.atan2(dz, dx), r0 = H.rb(a); if (Math.abs(d - r0) >= w) return;
       let da = a - H.aG; da = Math.atan2(Math.sin(da), Math.cos(da)); if (Math.abs(da) * r0 < H.GW - rad) return;
       const r = d < r0 ? r0 - w : r0 + w; p.x = I.x + H.TOP.x + dx / d * r; p.z = I.z + H.TOP.z + dz / d * r; };
     return H; })();
-  { const I = ISLES.hechil; I.lvAt = (x, z) => HCH.lvOut(x - I.x, z - I.z); I.clamp = (p, rad) => HCH.wall(p, rad, I); }
-  { const I = ISLES.hcave, T = HCH.T; I.entry = { x: I.x + T[0].x, z: I.z + T[0].z - 8 }; I.lvAt = (x, z) => HCH.lvCave(x - I.x, z - I.z);
+  { const I = ISLES.hechil; I.lvAt = (x, z) => HCH.lvOut(x - I.x, z - I.z); I.clamp = (p, rad) => HCH.wall(p, rad, I); I.areaLv = (x, z) => HCH.areaAt(x - I.x, z - I.z).lv; }
+  { const I = ISLES.hcave, T = HCH.T; I.entry = { x: I.x + T[0].x, z: I.z + T[0].z - 8 }; I.lvAt = (x, z) => HCH.lvCave(x - I.x, z - I.z); I.areaLv = (x, z) => HCH.areaAt(x - I.x, z - I.z, 1).lv;
     I.clamp = (p, rad) => { const q = HCH.near(T, p.x - I.x, p.z - I.z), m = Math.max(0.3, q.w - rad - 0.4); if (q.d > m) { p.x = I.x + q.x + (p.x - I.x - q.x) * m / q.d; p.z = I.z + q.z + (p.z - I.z - q.z) * m / q.d; } return true; };   /* 굴 벽 안으로만 */
-    I.randPt = (rnd, lv) => { const f = lv ? Math.max(0, Math.min(1, (lv - 110) / 20 + rnd(-0.16, 0.16))) : rnd(0.06, 1), s = 30 + f * (HCHL() - 46); let i = 0; while (i < T.length - 2 && T[i + 1].s < s) i++; const A = T[i], B = T[i + 1], k = (s - A.s) / (B.s - A.s || 1), w = A.w + (B.w - A.w) * k, L = B.s - A.s || 1, ux = (B.x - A.x) / L, uz = (B.z - A.z) / L, u = rnd(-1, 1) * Math.max(0, w - 2.2);
+    I.randPt = (rnd, lv) => { const Q = lv ? HCH.areaOfLv(lv, 1) : null, s = Q ? rnd(Math.max(30, Q.s[0] + 8), Q.s[1] - 8) : rnd(30, HCHL() - 16);   /* 종마다 제 사냥터(방) 안에서 */ let i = 0; while (i < T.length - 2 && T[i + 1].s < s) i++; const A = T[i], B = T[i + 1], k = (s - A.s) / (B.s - A.s || 1), w = A.w + (B.w - A.w) * k, L = B.s - A.s || 1, ux = (B.x - A.x) / L, uz = (B.z - A.z) / L, u = rnd(-1, 1) * Math.max(0, w - 2.2);
       return { x: I.x + A.x + (B.x - A.x) * k - uz * u, z: I.z + A.z + (B.z - A.z) * k + ux * u }; }; }
   function HCHL() { return HCH.TL; }
   // 고리 위의 자리 (각도 th, 중심에서 거리 r)
@@ -383,7 +395,7 @@
     snowgoat: { name: '눈 산양', lv: 108, build: 'quad', color: 0xe8e4da, hpM: 1.5, atkM: 1.35 },
     snowyeti: { name: '설인', lv: 132, build: 'biped', color: 0xe9edf0, hpM: 2.2, atkM: 1.6 },
     icewisp:  { name: '얼음 정령', lv: 136, build: 'wisp', color: 0xcfeaf8, hpM: 1.25, atkM: 1.5 },
-    avagolem: { name: '눈사태 골렘', lv: 140, build: 'biped', color: 0xe6ecf2, hpM: 2.7, atkM: 1.65, defM: 1.3 },
+    avagolem: { name: '눈사태 골렘', lv: 141, build: 'biped', color: 0xe6ecf2, hpM: 2.7, atkM: 1.65, defM: 1.3 },
     snowowl:  { name: '눈부엉이', lv: 144, build: 'bird', color: 0xf4f6f8, hpM: 1.45, atkM: 1.75 },
     frostmammoth:{ name: '얼음 매머드', lv: 148, build: 'quad', color: 0x8a7a6a, hpM: 3.0, atkM: 1.8 },
     // 허칠산 동굴 (Lv 110–130): 설산 굴에 사는 짐승 — 박쥐 떼, 굴을 보금자리 삼는 눈표범, 겨울잠 자는 동굴곰
@@ -431,11 +443,11 @@
     m2a: ['pinewolf', 'pinewolf', 'barkslime', 'hornboar', 'rockviper'], m2b: ['greybear', 'resinslime', 'pinetroll', 'cragdog', 'rockogre', 'icewolf', 'snowslime', 'frostgiant'],
     m3a: ['steppewolf', 'steppewolf', 'clayslime', 'wildram', 'reedviper'], m3b: ['warboar', 'pollenslime', 'fieldogre', 'ashwolf', 'brownbear', 'hilltroll', 'stoneslime', 'hillgiant'],
     m4a: ['shadewolf', 'shadewolf', 'leafslime', 'cliffboar', 'pitviper'], m4b: ['moonbear', 'rotslime', 'oldtroll', 'gorgehound', 'gorgeogre', 'stormwolf', 'cloudslime', 'peakgiant'],
-    hechil: ['frostfox', 'frostfox', 'frostfox', 'snowgoat', 'snowgoat', 'snowgoat', 'snowyeti', 'snowyeti', 'icewisp', 'avagolem', 'snowowl', 'frostmammoth'],
-    hcave: ['cavebat', 'cavebat', 'cavebat', 'snowleopard', 'snowleopard', 'snowleopard', 'cavebear', 'cavebear', 'elderbear'],
+    hechil: ['frostfox', 'frostfox', 'frostfox', 'snowgoat', 'snowgoat', 'snowgoat', 'snowyeti', 'snowyeti', 'icewisp', 'icewisp', 'avagolem', 'avagolem', 'snowowl', 'frostmammoth'],   /* 사냥터마다 제 종: 숲길 여우 · 호숫가 산양 · 눈 비탈 설인 · 바위밭 정령 · 능선 골렘·부엉이 · 꼭대기 매머드 */
+    hcave: ['cavebat', 'cavebat', 'snowleopard', 'snowleopard', 'cavebear', 'cavebear', 'elderbear', 'elderbear'],   /* 방마다 한 종씩 같은 수 */
     m5a: ['cinderhound', 'cinderhound', 'cinderslime'], m5b: ['scorchboar', 'magmaviper'], m5c: ['ashbear', 'lavaslime', 'lavatroll'], m5d: ['flamehound', 'flameogre'], m5e: ['firewolf', 'smokeslime', 'firegiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 60, mhill: 60, m2a: 60, m2b: 60, m3a: 60, m3b: 60, m4a: 60, m4b: 60, hechil: 120, hcave: 80,   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 60, mhill: 60, m2a: 60, m2b: 60, m3a: 60, m3b: 60, m4a: 60, m4b: 60, hechil: 140, hcave: 80,   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
   for (const L of MLINES_ALL) if (L.off) for (const [id] of L.zones) { delete ZONE_COUNT[id]; delete ZONE_MON[id]; }   // 꺼 둔 땅에는 몬스터가 나오지 않는다
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {

@@ -329,6 +329,7 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 #jobs button[aria-pressed="true"]{border-color:var(--brass);background:#3d3122;box-shadow:inset 0 0 0 1px var(--brass)}
 #jobs .sw{width:22px;height:22px;border-radius:50%;border:1px solid rgba(0,0,0,.4)}
 .cta{padding:13px;font-size:17px;background:var(--brass);color:#22190f;border:0;border-radius:6px;font-weight:700;letter-spacing:.06em}
+#go:disabled,#go:disabled:hover{filter:grayscale(.85) brightness(.6);cursor:default}
 .ghost{padding:11px;font-size:15px;background:transparent;border:1px solid var(--line);border-radius:6px}
 .btns{display:grid;gap:8px}
 .newh{margin:0;font-family:var(--f-display);font-weight:400;font-size:20px;color:var(--parch)}
@@ -1291,13 +1292,13 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     <div class="card panel" id="stepNew" hidden>
       <h2 class="newh">새 캐릭터 만들기</h2>
       <label class="f" for="nick">모험가 이름
-        <input id="nick" maxlength="10" autocomplete="off" placeholder="이름을 입력하세요" value="떠돌이">
+        <input id="nick" maxlength="10" autocomplete="off" placeholder="이름을 입력하세요">
       </label>
       <div class="f">외모
         <div class="apwrap"><div id="apBox"></div><div class="apprev"><canvas id="apPrev"></canvas><span id="apWait">불러오는 중…</span></div></div>
       </div>
       <div class="btns">
-        <button class="cta" id="go">모험 시작</button>
+        <button class="cta" id="go" disabled>모험 시작</button>
         <button class="ghost" id="backList">뒤로</button>
       </div>
     </div>
@@ -1608,16 +1609,28 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     /* 적정레벨: 봉우리 벼랑 안은 130→150 (꼭대기로 갈수록), 그 밖 골짜기는 산장→갈림길 100→110, 동굴은 굴 길이 따라 110→130 */
     H.lvOut = (lx, lz) => { const d = Math.hypot(lx - H.TOP.x, lz - H.TOP.z), r = H.rb(Math.atan2(lz - H.TOP.z, lx - H.TOP.x)); if (d < r) return Math.round(130 + 20 * Math.pow(Math.max(0, Math.min(1, (r - d) / (r - 14))), 0.75));
       const ax = H.FORK.x - H.HUT.x, az = H.FORK.z - H.HUT.z, t = ((lx - H.HUT.x) * ax + (lz - H.HUT.z) * az) / (ax * ax + az * az); return Math.round(100 + 10 * Math.max(0, Math.min(1, t))); };
-    H.lvCave = (lx, lz) => Math.round(110 + 20 * Math.max(0, Math.min(1, H.near(H.T, lx, lz).s / (H.TL - 16))));
+    /* 사냥터 (2026-11-06 원호: 레벨별로 나눠서 여러 곳): 골짜기 둘, 동굴 넷(방마다 하나, 좁은 굴목에서 나뉨), 봉우리 넷(벼랑 안 둘레 띠) */
+    H.AREAS = [
+      { id: 'wood', name: '산장 숲길', lv: [100, 105] }, { id: 'lake', name: '호숫가 골짜기', lv: [105, 110] },
+      { id: 'bat', name: '박쥐 굴', lv: [110, 115], cave: 1, s: [0, 170] }, { id: 'crys', name: '수정 굴', lv: [115, 120], cave: 1, s: [170, 315] },
+      { id: 'fall', name: '얼음 폭포 굴', lv: [120, 125], cave: 1, s: [315, 470] }, { id: 'den', name: '곰 굴', lv: [125, 130], cave: 1, s: [470, H.TL - 16] },
+      { id: 'slope', name: '눈 비탈', lv: [130, 135] }, { id: 'scree', name: '서리 바위밭', lv: [135, 140] }, { id: 'ridge', name: '바람 능선', lv: [140, 145] }, { id: 'top', name: '꼭대기', lv: [145, 150] }];
+    H.areaOfLv = (lv, cave) => { const L = H.AREAS.filter((A) => !!A.cave === !!cave); for (const A of L) if (lv < A.lv[1] || (lv === A.lv[1] && A.id === 'lake')) return A; return L[L.length - 1]; };
+    H.caveArea = (s) => { let A = null; for (const B of H.AREAS) if (B.cave) { A = B; if (s < B.s[1]) break; } return A; };
+    /* 동굴 적정레벨: 사냥터마다 굴 길이 따라 5씩 */
+    H.lvCave = (lx, lz) => { const s = H.near(H.T, lx, lz).s, A = H.caveArea(s); return Math.min(A.lv[1], Math.floor(A.lv[0] + 5 * Math.max(0, Math.min(1, (s - A.s[0]) / (A.s[1] - A.s[0]))))); };
+    H.areaAt = (lx, lz, cave) => cave ? H.caveArea(H.near(H.T, lx, lz).s) : H.areaOfLv(H.lvOut(lx, lz));
+    /* 봉우리 띠 경계: 벼랑 안에서 적정레벨 lv가 되는 꼭대기까지 거리 (각도 a) */
+    H.ringR = (a, lv) => { const r = H.rb(a); return r - Math.pow((lv - 130) / 20, 1 / 0.75) * (r - 14); };
     /* 봉우리 벼랑: 틈이 아니면 벽 두께 안에 들어온 것을 가까운 쪽으로 밀어낸다 */
     H.wall = (p, rad, I) => { const dx = p.x - I.x - H.TOP.x, dz = p.z - I.z - H.TOP.z, d = Math.hypot(dx, dz) || 1, w = H.WT + rad, a = Math.atan2(dz, dx), r0 = H.rb(a); if (Math.abs(d - r0) >= w) return;
       let da = a - H.aG; da = Math.atan2(Math.sin(da), Math.cos(da)); if (Math.abs(da) * r0 < H.GW - rad) return;
       const r = d < r0 ? r0 - w : r0 + w; p.x = I.x + H.TOP.x + dx / d * r; p.z = I.z + H.TOP.z + dz / d * r; };
     return H; })();
-  { const I = ISLES.hechil; I.lvAt = (x, z) => HCH.lvOut(x - I.x, z - I.z); I.clamp = (p, rad) => HCH.wall(p, rad, I); }
-  { const I = ISLES.hcave, T = HCH.T; I.entry = { x: I.x + T[0].x, z: I.z + T[0].z - 8 }; I.lvAt = (x, z) => HCH.lvCave(x - I.x, z - I.z);
+  { const I = ISLES.hechil; I.lvAt = (x, z) => HCH.lvOut(x - I.x, z - I.z); I.clamp = (p, rad) => HCH.wall(p, rad, I); I.areaLv = (x, z) => HCH.areaAt(x - I.x, z - I.z).lv; }
+  { const I = ISLES.hcave, T = HCH.T; I.entry = { x: I.x + T[0].x, z: I.z + T[0].z - 8 }; I.lvAt = (x, z) => HCH.lvCave(x - I.x, z - I.z); I.areaLv = (x, z) => HCH.areaAt(x - I.x, z - I.z, 1).lv;
     I.clamp = (p, rad) => { const q = HCH.near(T, p.x - I.x, p.z - I.z), m = Math.max(0.3, q.w - rad - 0.4); if (q.d > m) { p.x = I.x + q.x + (p.x - I.x - q.x) * m / q.d; p.z = I.z + q.z + (p.z - I.z - q.z) * m / q.d; } return true; };   /* 굴 벽 안으로만 */
-    I.randPt = (rnd, lv) => { const f = lv ? Math.max(0, Math.min(1, (lv - 110) / 20 + rnd(-0.16, 0.16))) : rnd(0.06, 1), s = 30 + f * (HCHL() - 46); let i = 0; while (i < T.length - 2 && T[i + 1].s < s) i++; const A = T[i], B = T[i + 1], k = (s - A.s) / (B.s - A.s || 1), w = A.w + (B.w - A.w) * k, L = B.s - A.s || 1, ux = (B.x - A.x) / L, uz = (B.z - A.z) / L, u = rnd(-1, 1) * Math.max(0, w - 2.2);
+    I.randPt = (rnd, lv) => { const Q = lv ? HCH.areaOfLv(lv, 1) : null, s = Q ? rnd(Math.max(30, Q.s[0] + 8), Q.s[1] - 8) : rnd(30, HCHL() - 16);   /* 종마다 제 사냥터(방) 안에서 */ let i = 0; while (i < T.length - 2 && T[i + 1].s < s) i++; const A = T[i], B = T[i + 1], k = (s - A.s) / (B.s - A.s || 1), w = A.w + (B.w - A.w) * k, L = B.s - A.s || 1, ux = (B.x - A.x) / L, uz = (B.z - A.z) / L, u = rnd(-1, 1) * Math.max(0, w - 2.2);
       return { x: I.x + A.x + (B.x - A.x) * k - uz * u, z: I.z + A.z + (B.z - A.z) * k + ux * u }; }; }
   function HCHL() { return HCH.TL; }
   // 고리 위의 자리 (각도 th, 중심에서 거리 r)
@@ -1861,7 +1874,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     snowgoat: { name: '눈 산양', lv: 108, build: 'quad', color: 0xe8e4da, hpM: 1.5, atkM: 1.35 },
     snowyeti: { name: '설인', lv: 132, build: 'biped', color: 0xe9edf0, hpM: 2.2, atkM: 1.6 },
     icewisp:  { name: '얼음 정령', lv: 136, build: 'wisp', color: 0xcfeaf8, hpM: 1.25, atkM: 1.5 },
-    avagolem: { name: '눈사태 골렘', lv: 140, build: 'biped', color: 0xe6ecf2, hpM: 2.7, atkM: 1.65, defM: 1.3 },
+    avagolem: { name: '눈사태 골렘', lv: 141, build: 'biped', color: 0xe6ecf2, hpM: 2.7, atkM: 1.65, defM: 1.3 },
     snowowl:  { name: '눈부엉이', lv: 144, build: 'bird', color: 0xf4f6f8, hpM: 1.45, atkM: 1.75 },
     frostmammoth:{ name: '얼음 매머드', lv: 148, build: 'quad', color: 0x8a7a6a, hpM: 3.0, atkM: 1.8 },
     // 허칠산 동굴 (Lv 110–130): 설산 굴에 사는 짐승 — 박쥐 떼, 굴을 보금자리 삼는 눈표범, 겨울잠 자는 동굴곰
@@ -1909,11 +1922,11 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     m2a: ['pinewolf', 'pinewolf', 'barkslime', 'hornboar', 'rockviper'], m2b: ['greybear', 'resinslime', 'pinetroll', 'cragdog', 'rockogre', 'icewolf', 'snowslime', 'frostgiant'],
     m3a: ['steppewolf', 'steppewolf', 'clayslime', 'wildram', 'reedviper'], m3b: ['warboar', 'pollenslime', 'fieldogre', 'ashwolf', 'brownbear', 'hilltroll', 'stoneslime', 'hillgiant'],
     m4a: ['shadewolf', 'shadewolf', 'leafslime', 'cliffboar', 'pitviper'], m4b: ['moonbear', 'rotslime', 'oldtroll', 'gorgehound', 'gorgeogre', 'stormwolf', 'cloudslime', 'peakgiant'],
-    hechil: ['frostfox', 'frostfox', 'frostfox', 'snowgoat', 'snowgoat', 'snowgoat', 'snowyeti', 'snowyeti', 'icewisp', 'avagolem', 'snowowl', 'frostmammoth'],
-    hcave: ['cavebat', 'cavebat', 'cavebat', 'snowleopard', 'snowleopard', 'snowleopard', 'cavebear', 'cavebear', 'elderbear'],
+    hechil: ['frostfox', 'frostfox', 'frostfox', 'snowgoat', 'snowgoat', 'snowgoat', 'snowyeti', 'snowyeti', 'icewisp', 'icewisp', 'avagolem', 'avagolem', 'snowowl', 'frostmammoth'],   /* 사냥터마다 제 종: 숲길 여우 · 호숫가 산양 · 눈 비탈 설인 · 바위밭 정령 · 능선 골렘·부엉이 · 꼭대기 매머드 */
+    hcave: ['cavebat', 'cavebat', 'snowleopard', 'snowleopard', 'cavebear', 'cavebear', 'elderbear', 'elderbear'],   /* 방마다 한 종씩 같은 수 */
     m5a: ['cinderhound', 'cinderhound', 'cinderslime'], m5b: ['scorchboar', 'magmaviper'], m5c: ['ashbear', 'lavaslime', 'lavatroll'], m5d: ['flamehound', 'flameogre'], m5e: ['firewolf', 'smokeslime', 'firegiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 60, mhill: 60, m2a: 60, m2b: 60, m3a: 60, m3b: 60, m4a: 60, m4b: 60, hechil: 120, hcave: 80,   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 60, mhill: 60, m2a: 60, m2b: 60, m3a: 60, m3b: 60, m4a: 60, m4b: 60, hechil: 140, hcave: 80,   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
   for (const L of MLINES_ALL) if (L.off) for (const [id] of L.zones) { delete ZONE_COUNT[id]; delete ZONE_MON[id]; }   // 꺼 둔 땅에는 몬스터가 나오지 않는다
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
@@ -2047,7 +2060,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
       for (let i = 0; i < 400; i++) {
         let x, z;
         if (OR.ISLES[zone]) { const I = OR.ISLES[zone]; if (I.randPt) { const q = I.randPt(rnd, lv); x = q.x; z = q.z; } else { const a = rnd(-Math.PI, Math.PI), d = rnd(6, I.R - 8); x = I.x + Math.cos(a) * d; z = I.z + Math.sin(a) * d; }   /* 동굴: 굴 길 안에서 고른다 */ if (Math.hypot(x - I.entry.x, z - I.entry.z) < 16) continue; if (I.exit && Math.hypot(x - I.exit.x, z - I.exit.z) < 16) continue; if (I.noSpawn && I.noSpawn.some((q) => Math.hypot(x - I.x - q.x, z - I.z - q.z) < q.r)) continue;
-          if (lv && I.band && i < 360 && Math.abs(levelAt(zone, x, z) - lv) > I.band) continue; }   // 허칠산: 종마다 제 레벨에 맞는 높이에서
+          if (lv && i < 360) { if (I.areaLv) { const A = I.areaLv(x, z); if (lv < A[0] || lv > A[1]) continue; } else if (I.band && Math.abs(levelAt(zone, x, z) - lv) > I.band) continue; } }   // 허칠산: 종마다 제 사냥터에서   // 허칠산: 종마다 제 레벨에 맞는 높이에서
         else {   // 하레나 둘레 길: 그 구역의 4분의 1 바퀴 안에서 고른다
           const SP = OR.SP, i = SP.ZONES.indexOf(zone); if (i < 0) return null;
           const t = i * SP.Q + rnd(0.12, SP.Q - 0.12), q = OR.spPos(t, rnd(-(SP.HW - 3), SP.HW - 3)); x = q.x; z = q.z;
@@ -11780,7 +11793,7 @@ function portalWalk(){if(!player||mode!=='world'||warping)return;let hit=-1;
   if(hit<0){_portalIn=-1;return;}
   if(hit===_portalIn)return;_portalIn=hit;usePortal(hit);}
 /* 도착하면 지역 이름과 나라 이름을 한 번 띄운다 */
-const COUNTRY_OF={mfield:'마르쿠스 왕국',thouse:'마르쿠스 왕국',myhome:'마르쿠스 왕국',ghouse:'마르쿠스 왕국',bakery:'마르쿠스 왕국',mshop:'마르쿠스 왕국',town:'마르쿠스 왕국',forest:'마르쿠스 왕국',plains:'마르쿠스 왕국',swamp:'마르쿠스 왕국',ruins:'마르쿠스 왕국',wwest:'마르쿠스 왕국',wnorth:'마르쿠스 왕국',wsouth:'마르쿠스 왕국',weast:'마르쿠스 왕국',marcus:'마르쿠스 왕국',milgol:'마르쿠스 왕국',fort:'마르쿠스 왕국',coachway:'마르쿠스 왕국',castle:'마르쿠스 왕국',guildhall:'마르쿠스 왕국',hechil:'마르쿠스 왕국',khq:'마르쿠스 왕국'};
+const COUNTRY_OF={mfield:'마르쿠스 왕국',thouse:'마르쿠스 왕국',myhome:'마르쿠스 왕국',ghouse:'마르쿠스 왕국',bakery:'마르쿠스 왕국',mshop:'마르쿠스 왕국',town:'마르쿠스 왕국',forest:'마르쿠스 왕국',plains:'마르쿠스 왕국',swamp:'마르쿠스 왕국',ruins:'마르쿠스 왕국',wwest:'마르쿠스 왕국',wnorth:'마르쿠스 왕국',wsouth:'마르쿠스 왕국',weast:'마르쿠스 왕국',marcus:'마르쿠스 왕국',milgol:'마르쿠스 왕국',fort:'마르쿠스 왕국',coachway:'마르쿠스 왕국',castle:'마르쿠스 왕국',guildhall:'마르쿠스 왕국',hechil:'마르쿠스 왕국',hcave:'마르쿠스 왕국',khq:'마르쿠스 왕국'};
 for(const k of OR.MHUNT)COUNTRY_OF[k]='마르쿠스 왕국';
 function arriveBanner(x,z){const zn=zoneAt(x,z),Z=ZONES[zn];if(!Z)return;arriveBanner.at=performance.now();$('#banner').classList.remove('on');
   let el=document.getElementById('arrive');if(!el){el=document.createElement('div');el.id='arrive';
@@ -20159,6 +20172,13 @@ float sn=smoothstep(.62,.8,iA.g*.6+iB.b*.4)*.85;diffuseColor.rgb=mix(diffuseColo
     signPost(9,H.EZ-22,-.35,[{t:'↑ 갈림길 · 얼음 호수',s:58,b:1,y:.32},{t:'← 산장',s:58,b:1,y:.72}],1.7,.8,2.1);
     signPost(-30,264,.5,[{t:'← 산장',s:70,b:1,y:.5}],1.1,.42,1.8);
     {const F=H.HC.FORK;signPost(F.x-5,F.z+6,.3,[{t:'↑ 봉우리',s:66,b:1,y:.32},{t:'→ 동굴',s:66,b:1,y:.72}],1.5,.8,2.1);}}   /* 갈림길 푯말 */
+  HECH.signTex=signTex;
+  /* 사냥터 경계 푯말: 산길이 경계를 지나는 자리, 길 서쪽 옆에 (오르는 쪽 이름 위, 내려가는 쪽 이름 아래) */
+  {const C=H.HC,AR=C.AREAS,nm=id=>AR.find(A=>A.id===id).name,cross=(P,f)=>{for(let i=0;i+1<P.length;i++){const a=f(P[i][0],P[i][1]),b=f(P[i+1][0],P[i+1][1]);if((a<0)!==(b<0)){const k=a/(a-b),x=P[i][0]+(P[i+1][0]-P[i][0])*k,z=P[i][1]+(P[i+1][1]-P[i][1])*k,dx=P[i+1][0]-P[i][0],dz=P[i+1][1]-P[i][1],d=Math.hypot(dx,dz)||1;return {x,z,ux:dx/d,uz:dz/d};}}return null;};
+    const put=(q,up,dn)=>{if(!q)return;const x=q.x+q.uz*3.6,z=q.z-q.ux*3.6;signPost(x,z,Math.atan2(-q.ux,-q.uz),[{t:'↑ '+up,s:60,b:1,y:.32},{t:'↓ '+dn,s:52,y:.72}],1.5,.74,2.05);};
+    put(cross(C.MAIN,(x,z)=>C.lvOut(x,z)-104.5),nm('lake'),nm('wood'));
+    for(const [lv,up,dn] of [[134.5,'scree','slope'],[139.5,'ridge','scree'],[144.5,'top','ridge']])put(cross(C.PEAK,(x,z)=>C.lvOut(x,z)-lv),nm(up),nm(dn));
+    put(cross(C.PEAK,(x,z)=>C.lvOut(x,z)-131.5),nm('slope'),'갈림길');}
   /* ===== 봉우리 벼랑: 큰 바위가 둘러 막아 선다. 갈림길에서 오르는 산길 틈만 열렸다 (막힘은 OR.HCH.wall) ===== */
   {const C=H.HC,wl=[[],[],[]];for(let a=0;a<Math.PI*2;a+=.04){let da=a-C.aG;da=Math.atan2(Math.sin(da),Math.cos(da));const r0=C.rb(a);if(Math.abs(da)*r0<C.GW+2.2||rnd()<.3)continue;
       const n=rnd()<.35?2:1;for(let q=0;q<n;q++){const r=r0+rr(-2.5,2),aa=a+rr(-.015,.015),lx=C.TOP.x+Math.cos(aa)*r,lz=C.TOP.z+Math.sin(aa)*r;if(Math.hypot(lx,lz)>I.R+40)continue;const s=rr(2,6.5);
@@ -20261,6 +20281,30 @@ await BOOT.y();await (async function buildHCave(){
   {const g=new THREE.OctahedronGeometry(.5,0);g.scale(.45,1.6,.45);const cm=new THREE.MeshStandardMaterial({color:0x9ad8ff,emissive:0x2a9ae0,emissiveIntensity:1.5,roughness:.2,metalness:.1});const L=[];
     for(let k=0;k<70;k++){const s=rr(18,C.TL-6),u=(rnd()<.5?-1:1)*rr(.72,.92),q=spot(s,u),y=H.fl(q.x,q.z);for(let n=0;n<5;n++){const sz=rr(.25,.75)*(q.p.w>10?1.5:1);L.push({x:q.x+rr(-.6,.6),y:y+sz*.5,z:q.z+rr(-.6,.6),s:sz,rx:rr(-.5,.5),rz:rr(-.5,.5),ry:rr(0,6)});}}
     inst(g,cm,L);}
+  /* ===== 사냥터마다 방 꾸밈 ===== */
+  {const RM=k=>C.near(T,C.TUN[k][0],C.TUN[k][1]).s;
+    /* 박쥐 굴: 천장에 거꾸로 매달려 자는 서리 박쥐 떼 */
+    {const g=new THREE.SphereGeometry(.5,7,5);g.scale(.42,1,.34);g.translate(0,-.5,0);const bm=new THREE.MeshStandardMaterial({color:0x2c2830,roughness:.9}),L=[],s0=RM(4);
+      for(let k=0;k<70;k++){const q=spot(s0+rr(-26,26),rr(-.75,.75));if(q.p.w<8&&rnd()<.6)continue;const sz=rr(.34,.5);L.push({x:q.x,y:H.ce(q.x,q.z)+.05,z:q.z,s:sz,ry:rr(0,6),rz:rr(-.08,.08)});}
+      inst(g,bm,L);}
+    /* 수정 굴: 벽마다 크고 푸른 수정 무리, 바닥에도 솟는다 */
+    {const g=new THREE.OctahedronGeometry(.5,0);g.scale(.45,1.6,.45);const cm=new THREE.MeshStandardMaterial({color:0xb6e6ff,emissive:0x3aa8f0,emissiveIntensity:1.8,roughness:.15,metalness:.1});const L=[],s0=RM(9);
+      for(let k=0;k<46;k++){const s=s0+rr(-30,30),u=(rnd()<.5?-1:1)*rr(.45,.9),q=spot(s,u),y=H.fl(q.x,q.z),big=rr(.8,1.9);for(let n=0;n<6;n++){const sz=rr(.35,.95)*big;L.push({x:q.x+rr(-.8,.8),y:y+sz*.5,z:q.z+rr(-.8,.8),s:sz,rx:rr(-.5,.5),rz:rr(-.5,.5),ry:rr(0,6)});}if(big>1.3)colliders.push({x:cx+q.x,z:cz+q.z,r:.9*big,h:2});}
+      inst(g,cm,L);const pl=new THREE.PointLight(0x7cc8ff,.9,46,1.6);const q=at(s0);pl.position.set(cx+q.x,H.fl(q.x,q.z)+4,cz+q.z);root.add(pl);}
+    /* 얼음 폭포 굴: 둥근 벽을 타고 흘러내리다 그대로 얼어붙은 폭포 (벽 굽이를 따라 굵고 가는 얼음 줄기), 밑에는 언 웅덩이 */
+    {const s0=RM(15),fm=new THREE.MeshStandardMaterial({color:0xd8f0ff,roughness:.08,metalness:.05,emissive:0x1a4a6a,emissiveIntensity:.6,transparent:true,opacity:.92});
+      for(let k=0;k<56;k++){const t=rr(-1,1),s=s0+t*7,p=at(s),[ux,uz]=dir(s),nx=-uz,nz=ux,b=H.base(s),th0=rr(.32,.55)*(1-Math.abs(t)*.35),r=rr(.16,.5)*(1.15-Math.abs(t)*.5),pts=[];
+        for(let j=0;j<=10;j++){const th=th0*(1-j/10),cs=Math.cos(th),sn=Math.sin(th),lat=cs*p.w-.35-r,y=b+1.3+(p.c-1.3)*Math.pow(sn,.45);pts.push(new THREE.Vector3(cx+p.x+nx*lat,y,cz+p.z+nz*lat));}
+        {const q=pts[pts.length-1];const lat=p.w-.35-r;for(const d of [1.2,2.6]){const L=lat-d,fx=p.x+nx*L,fz=p.z+nz*L;pts.push(new THREE.Vector3(cx+fx,Math.max(H.fl(fx,fz)+r*.4,q.y-1.1*d/2.6),cz+fz));}}
+        const g=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),24,r,6,false),m=new THREE.Mesh(g,fm);m.castShadow=true;root.add(m);}
+      const p=at(s0),[ux,uz]=dir(s0),nx=-uz,nz=ux,L=p.w-6,px=p.x+nx*L,pz=p.z+nz*L;
+      const pool=new THREE.Mesh(new THREE.CircleGeometry(1,28),new THREE.MeshStandardMaterial({color:0x9ccbe6,roughness:.05,metalness:.2,emissive:0x0e2a3e,emissiveIntensity:.5}));pool.rotation.x=-Math.PI/2;pool.scale.set(4.5,8,1);pool.rotation.z=-Math.atan2(nz,nx);pool.position.set(cx+px,H.fl(px,pz)+.05,cz+pz);root.add(pool);
+      for(const t of [-6,-3,0,3,6]){const q=at(s0+t),[a,b2]=dir(s0+t),L2=q.w-2.2;colliders.push({x:cx+q.x-b2*L2,z:cz+q.z+a*L2,r:1.6,h:8});}}
+    /* 사냥터 경계 푯말: 굴목 벽 옆 나무 판 (앞쪽 방 이름) */
+    if(HECH.signTex){const wd=new THREE.MeshStandardMaterial({color:0x5e4026,roughness:.9});
+      for(const A of C.AREAS){if(!A.cave)continue;const s=A.s[0]+(A.s[0]?3:14),q=spot(s,.68),[ux,uz]=dir(s),y=H.fl(q.x,q.z),g=new THREE.Group();g.position.set(cx+q.x,y,cz+q.z);g.rotation.y=Math.atan2(-ux,-uz);root.add(g);
+        const post=new THREE.Mesh(new THREE.CylinderGeometry(.09,.12,1.9,7),wd);post.position.y=.75;g.add(post);const tex=HECH.signTex([{t:A.name,s:72,b:1,y:.5}],512,180),tm=new THREE.MeshStandardMaterial({map:tex,roughness:.85,emissive:0xffffff,emissiveMap:tex,emissiveIntensity:.22});
+        const bd=new THREE.Mesh(new THREE.BoxGeometry(1.3,.46,.08),[wd,wd,wd,wd,tm,tm]);bd.position.set(0,1.45,.1);g.add(bd);colliders.push({x:cx+q.x,z:cz+q.z,r:.22,h:1.9});}}}
   /* ===== 가장 깊은 방: 늙은 동굴곰의 굴 (뼈와 마른 풀 잠자리) ===== */
   {const p=at(C.TL-18),y=H.fl(p.x,p.z),bm=new THREE.MeshStandardMaterial({color:0xe6dfcc,roughness:.6});
     for(let k=0;k<26;k++){const a=rr(0,6.28),r=rr(3,11),x=p.x+Math.cos(a)*r,z=p.z+Math.sin(a)*r,b=new THREE.Mesh(new THREE.CylinderGeometry(.05,.06,rr(.4,.9),6),bm);b.rotation.set(Math.PI/2,0,rr(0,6));b.position.set(cx+x,H.fl(x,z)+.06,cz+z);root.add(b);}
@@ -20286,7 +20330,13 @@ function drawHCavePlan(c,X,Z,sc,I){const C=OR.HCH,T=C.T,raw=c.__raw||c;raw.fillS
   for(const [col,add] of [['#4a5460',3.2],['#9aa6b2',0]]){raw.strokeStyle=col;raw.fillStyle=col;for(let s=0;s<=C.TL;s+=2){let i=0;while(i<T.length-2&&T[i+1].s<s)i++;const A=T[i],B=T[i+1],k=(s-A.s)/((B.s-A.s)||1),x=A.x+(B.x-A.x)*k,z=A.z+(B.z-A.z)*k,w=A.w+(B.w-A.w)*k;raw.beginPath();raw.arc(X(I.x+x),Z(I.z+z),Math.max(1,(w+add)*sc),0,7);raw.fill();}}
   const f=Math.max(.8,Math.min(2.2,sc*.9));raw.textAlign='center';raw.textBaseline='middle';
   const lab=(t,lx,lz)=>{raw.font=`500 ${Math.round(11*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;raw.lineWidth=3*f;raw.strokeStyle='rgba(20,24,30,.9)';raw.fillStyle='#e8eef4';raw.strokeText(t,X(I.x+lx),Z(I.z+lz));raw.fillText(t,X(I.x+lx),Z(I.z+lz));};
-  lab('굴 입구',T[0].x,T[0].z+12);{const E=T[T.length-6];lab('가장 깊은 방',E.x+44,E.z+6);}raw.restore();}
+  lab('굴 입구',T[0].x,T[0].z+12);
+  /* 사냥터: 방마다 이름과 적정레벨, 좁은 굴목에 경계 금 */
+  const at=s=>{let i=0;while(i<T.length-2&&T[i+1].s<s)i++;const A=T[i],B=T[i+1],k=(s-A.s)/((B.s-A.s)||1);return {x:A.x+(B.x-A.x)*k,z:A.z+(B.z-A.z)*k,w:A.w+(B.w-A.w)*k,ux:(B.x-A.x)/((B.s-A.s)||1),uz:(B.z-A.z)/((B.s-A.s)||1)};};
+  raw.strokeStyle='#e0a070';raw.lineWidth=2*f;raw.setLineDash([3*f,3*f]);for(const A of C.AREAS){if(!A.cave||!A.s[0])continue;const p=at(A.s[0]),w=p.w+4;raw.beginPath();raw.moveTo(X(I.x+p.x+p.uz*w),Z(I.z+p.z-p.ux*w));raw.lineTo(X(I.x+p.x-p.uz*w),Z(I.z+p.z+p.ux*w));raw.stroke();}raw.setLineDash([]);
+  const ROOM={bat:4,crys:9,fall:15,den:20},OFF={bat:[34,0],crys:[40,4],fall:[-44,4],den:[46,8]};
+  for(const A of C.AREAS){if(!A.cave)continue;const r=C.TUN[ROOM[A.id]],[ox,oz]=OFF[A.id];lab(A.name,r[0]+ox,r[1]+oz-5);raw.font=`500 ${Math.round(9*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;raw.fillStyle='#f0b88a';raw.strokeText(`Lv ${A.lv[0]}–${A.lv[1]}`,X(I.x+r[0]+ox),Z(I.z+r[1]+oz-5)+13*f);raw.fillText(`Lv ${A.lv[0]}–${A.lv[1]}`,X(I.x+r[0]+ox),Z(I.z+r[1]+oz-5)+13*f);}
+  raw.restore();}
 /* ---------- 길드홀 지하 창고: 포탈 방에서 계단을 올라오면 나오는 곳. 통·상자·술병 선반, 작은 탁자.
    북쪽 벽의 짧은 계단을 올라 문을 열면 길드홀 1층 ---------- */
 function buildGuildCellar(sx,y,zS,K){const C=OR.CELLAR,{brick,stone2,iron,gold,mat,add}=K,W=C.hw*2,D=C.z1-C.z0,RH=4.8,cz=(C.z0+C.z1)/2;
@@ -22510,7 +22560,8 @@ function drawMarcusOverview(c,W,H,o={}){const mini=!!o.mini,Lo=movLayout(W,H,min
         {const C=OR.HCH,sm2=`${Math.round(8.5*f)}px ${SEMI}`,lv=(t,lx,lz)=>{const [x,y]=T.P(lx,lz);ink(t,x,y,sm2,'#7a5a32',2.5);};
           {const [x,y]=T.P(C.FORK.x+16,C.FORK.z+4);c.textAlign='left';ink('갈림길',x,y,`${Math.round(10*f)}px ${SEMI}`);c.textAlign='center';}
           {const [x,y]=T.P(C.MOUTH.x-4,C.MOUTH.z+16);ink('동굴',x,y,`700 ${Math.round(11*f)}px ${SER}`);}
-          lv('Lv 100–110',(C.HUT.x+C.FORK.x)/2+34,(C.HUT.z+C.FORK.z)/2);lv('Lv 110–130',C.MOUTH.x-4,C.MOUTH.z+28);lv('Lv 130–150',C.TOP.x,C.TOP.z+4);}
+          lv('Lv 110–130',C.MOUTH.x-4,C.MOUTH.z+28);
+          for(const q of hechAreaLabels()){const [x,y]=T.P(q.x,q.z);ink(q.A.name,x,y,`${Math.round(9*f)}px ${SEMI}`,MOV_INK,2.8);lv(`Lv ${q.A.lv[0]}–${q.A.lv[1]}`,q.x,q.z+16);}}
         {const [x,y]=T.P(0,-I.R-34);ink(nm,x,y,`700 ${Math.round(19*f)}px ${SER}`,MOV_INK,4);}c.restore();}}}
     c.textBaseline='middle';}
   /* 사냥터 이름·레벨, 지금 있는 땅 */
@@ -23240,10 +23291,12 @@ let curPlace=null;
 const PLACES=[
   {id:'explaza',name:'중앙 광장',zone:'marcus',test(x,z){const PL=marcusPlan(),m=PL.zone('plaza'),M=OR.ISLES.marcus;return !!m&&Math.hypot(x-M.x-m.x,z-M.z-m.y)<m.r+4;},map(){const PL=marcusPlan(),m=PL.zone('plaza'),M=OR.ISLES.marcus;return {x:M.x+m.x,z:M.z+m.y,R:m.r+75};}},
 ];
+/* 허칠산·동굴 사냥터: 들어서면 이름과 적정레벨이 뜬다 */
+for(const A of OR.HCH.AREAS){const zone=A.cave?'hcave':'hechil';PLACES.push({id:'hc_'+A.id,name:A.name,zone,sub:'허칠산',rec:`Lv ${A.lv[0]}–${A.lv[1]}`,test(x,z){const I=OR.ISLES[zone];return OR.HCH.areaAt(x-I.x,z-I.z,A.cave)===A;}});}
 function placeAt(x,z){if(typeof marcusPlan!=='function')return null;for(const p of PLACES)if(p.zone===curZone&&p.test(x,z))return p;return null;}
 function placeTick(quiet){if(!player||!P)return;const p=placeAt(player.position.x,player.position.z);if(p===curPlace)return;curPlace=p;
-  const Z=ZONES[curZone];if(!Z)return;$('#wName').textContent=p?p.name:Z.name;
-  if(quiet||!p)return;$('#bT').textContent=p.name;$('#bS').textContent=Z.name;$('#banner').classList.add('on');clearTimeout(bannerT);bannerT=setTimeout(()=>$('#banner').classList.remove('on'),2000);}
+  const Z=ZONES[curZone];if(!Z)return;$('#wName').textContent=p?p.name:Z.name;$('#wRec').textContent=p&&p.rec||Z.rec;{const C=COUNTRY_OF[curZone]||'';$('#wCountry').textContent=p&&p.sub?(C?`${C} · ${p.sub}`:p.sub):C;}
+  if(quiet||!p)return;$('#bT').textContent=p.name;$('#bS').textContent=p.rec?`${Z.name}  ${p.rec}`:Z.name;$('#banner').classList.add('on');clearTimeout(bannerT);bannerT=setTimeout(()=>$('#banner').classList.remove('on'),2000);}
 
 // 단축바
 const hotEls=[];
@@ -23839,6 +23892,10 @@ function hechPlanImg(){if(hechPlanImg.c)return hechPlanImg.c;const H=HECH,E=H.R0
   /* 동굴: 벼랑의 굴 입구(검은 반달)와 산속으로 이어진 굴 (가는 점선) */
   {const C=H.HC,T=C.T;c.strokeStyle='rgba(40,34,30,.75)';c.lineWidth=1.1;c.setLineDash([2,3]);c.beginPath();T.forEach((q,i)=>{const [x,z]=HCAVE.toHech(q.x,q.z);i?c.lineTo(x+E,z+E):c.moveTo(x+E,z+E);});c.stroke();c.setLineDash([]);
     const M=C.MOUTH;c.fillStyle='#1e1a16';c.beginPath();c.ellipse(M.x+6+E,M.z+E,2.4,4.2,0,-Math.PI/2,Math.PI/2);c.fill();}
+  /* 봉우리 사냥터 경계: 벼랑 안 둘레 띠를 가는 갈색 점선으로 */
+  {const C=H.HC;c.strokeStyle='rgba(110,62,34,.55)';c.lineWidth=1;c.setLineDash([1.5,3.5]);for(const lv of [135,140,145]){c.beginPath();for(let i=0;i<=120;i++){const a=i/120*Math.PI*2,r=C.ringR(a,lv),x=C.TOP.x+Math.cos(a)*r+E,y=C.TOP.z+Math.sin(a)*r+E;i?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();}
+    /* 골짜기 두 사냥터 경계: 산장과 갈림길 사이를 가로지르는 점선 */
+    const ax=C.FORK.x-C.HUT.x,az=C.FORK.z-C.HUT.z,L=Math.hypot(ax,az),mx=(C.HUT.x+C.FORK.x)/2,mz=(C.HUT.z+C.FORK.z)/2;c.beginPath();for(let k=-11;k<=11;k++){const u=k*9,x=mx-az/L*u+Math.sin(k*1.7)*2+E,y=mz+ax/L*u+Math.cos(k*1.3)*2+E;k>-11?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();c.setLineDash([]);}
   /* 꼭대기 표시: 잉크 십자와 돌탑 점 */
   for(const P of H.PK){const x=P.x+E,y=P.z+E;c.strokeStyle='#3b2a18';c.lineWidth=1.6;c.beginPath();c.moveTo(x-4,y);c.lineTo(x+4,y);c.moveTo(x,y-4);c.lineTo(x,y+4);c.stroke();}
   /* 가장자리: 양피지로 흐려진다 */
@@ -23848,7 +23905,15 @@ function drawHechilPlan(c,X,Z,sc,I){const H=HECH,E=H.R0+70,cv=hechPlanImg(),raw=
   raw.fillStyle='#d6c49a';raw.fillRect(-9999,-9999,99999,99999);raw.drawImage(cv,X(I.x-E),Z(I.z-E),E*2*sc,E*2*sc);
   const f=Math.max(.8,Math.min(2.2,sc*.9));raw.save();raw.textAlign='center';raw.textBaseline='middle';
   const lab=(t,lx,lz,sz,b)=>{raw.font=`${b?700:500} ${Math.round(sz*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;raw.lineWidth=3.2*f;raw.strokeStyle='rgba(241,229,198,.9)';raw.fillStyle='#3b2a18';raw.strokeText(t,X(I.x+lx),Z(I.z+lz));raw.fillText(t,X(I.x+lx),Z(I.z+lz));};
-  for(const P of H.PK)lab(P.name,P.x,P.z-14,13,1);lab('얼음 호수',H.LAKE.x,H.LAKE.z,10);lab('산장',H.HUT.x,H.HUT.z-14,10);lab('갈림길',H.HC.FORK.x+18,H.HC.FORK.z+4,10);lab('동굴',H.HC.MOUTH.x-6,H.HC.MOUTH.z+14,11,1);raw.restore();}
+  for(const P of H.PK)lab(P.name,P.x,P.z-14,13,1);lab('얼음 호수',H.LAKE.x,H.LAKE.z,10);lab('산장',H.HUT.x,H.HUT.z-14,10);lab('갈림길',H.HC.FORK.x+18,H.HC.FORK.z+4,10);
+  {const lvl=(t,lx,lz)=>{raw.font=`500 ${Math.round(8.5*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;raw.lineWidth=2.6*f;raw.strokeStyle='rgba(241,229,198,.9)';raw.fillStyle='#8a3a22';raw.strokeText(t,X(I.x+lx),Z(I.z+lz));raw.fillText(t,X(I.x+lx),Z(I.z+lz));};
+    for(const q of hechAreaLabels()){lab(q.A.name,q.x,q.z,q.A.id==='top'?9.5:10);lvl(`Lv ${q.A.lv[0]}–${q.A.lv[1]}`,q.x,q.z+11/Math.max(.5,sc));}
+    lab('동굴',H.HC.MOUTH.x-6,H.HC.MOUTH.z+14,11,1);lvl('Lv 110–130',H.HC.MOUTH.x-6,H.HC.MOUTH.z+14+11/Math.max(.5,sc));}
+  raw.restore();}
+/* 허칠산 사냥터 이름 자리 (허칠산 땅 가운데 기준): 골짜기 둘, 봉우리 넷 (봉우리 산길 서쪽 옆) */
+function hechAreaLabels(){if(hechAreaLabels.L)return hechAreaLabels.L;const C=OR.HCH,L=[],AD={slope:1.25,scree:-.75,ridge:.55};   /* 띠마다 각도를 엇갈려 이름이 겹치지 않게 */
+  for(const A of C.AREAS){if(A.cave)continue;let x,z;if(A.id==='wood'){x=-58;z=186;}else if(A.id==='lake'){x=-4;z=118;}else if(A.id==='top'){x=C.TOP.x;z=C.TOP.z+16;}else{const a=C.aG+AD[A.id],r=(C.ringR(a,A.lv[0])+C.ringR(a,A.lv[1]))/2;x=C.TOP.x+Math.cos(a)*r;z=C.TOP.z+Math.sin(a)*r;}L.push({A,x,z});}
+  return hechAreaLabels.L=L;}
 function drawIslePlan(c,X,Z,sc,I,skipName){const Zd=ZONES[I.id];
   c.fillStyle=I.id==='kaolis'?'#1f4e6e':I.id==='subcus'?'#0e0c12':I.id==='hcave'?'#1c222a':'#d6c49a';c.fillRect(-9999,-9999,99999,99999);
   c.fillStyle=Zd.mm;c.beginPath();if(I.id==='marcus'){for(let i=0;i<=96;i++){const a=i/96*Math.PI*2,r=OR.isleEdge(I,a);i?c.lineTo(X(I.x+Math.cos(a)*r),Z(I.z+Math.sin(a)*r)):c.moveTo(X(I.x+Math.cos(a)*r),Z(I.z+Math.sin(a)*r));}c.closePath();}else c.arc(X(I.x),Z(I.z),I.R*sc,0,7);c.fill();   /* 엑시즈 땅은 성벽을 따라 들쭉날쭉 */
@@ -24136,7 +24201,10 @@ function startStep(n){$('#stepList').hidden=n!==0;$('#stepNew').hidden=n!==1;if(
 $('#toCreate').onclick=()=>startStep(1);$('#backList').onclick=()=>startStep(0);
 (function(){
   renderChars();
-  $('#go').onclick=()=>{const name=($('#nick').value||'').trim()||'떠돌이',T=OR.THOUSE;
+  /* 이름이 비어 있으면 캐릭터를 만들 수 없다 */
+  const nickOk=()=>{const ok=!!($('#nick').value||'').trim();$('#go').disabled=!ok;return ok;};
+  $('#nick').addEventListener('input',nickOk);nickOk();
+  $('#go').onclick=()=>{if(!nickOk()){$('#nick').focus();return;}const name=$('#nick').value.trim(),T=OR.THOUSE;
     startGame({id:'c'+Date.now().toString(36)+Math.floor(Math.random()*1e4),name,job:chosen,needBook:true,lv:1,exp:0,sp:0,skills:{},slots:Array(NSK).fill(null),x:T.x-2.9,z:T.z-2.5,y:0,ap:apCode(newAp)});};
   $('#nick').addEventListener('keydown',e=>{if(e.key==='Enter')$('#go').click();});
 })();
@@ -24345,7 +24413,7 @@ function renderSkills(){
 function renderSpecialSkills(body){
   $('#skTitle').textContent='특수 스킬';$('#skSp').hidden=true;
   const wrap=document.createElement('div');wrap.className='sk-list';body.appendChild(wrap);
-  for(const S of SPECIAL){const has=hasSpc(S.id);
+  for(const S of SPECIAL){const has=hasSpc(S.id);if(!has)continue;
     const card=document.createElement('div');card.className='sk'+(has?'':' locked');
     const nm=document.createElement('div');nm.className='nm';const b=document.createElement('b');b.textContent=S.name;
     const meta=document.createElement('span');meta.textContent=S.type==='passive'?`패시브 · 재사용 ${S.cd}초`:`재사용 ${S.cd}초`;nm.append(b,meta);
@@ -26505,7 +26573,7 @@ function updateOthers(dt){
 var roomStatus='연결 중…',presErr='',pageViewers=0;
 function setRoomStatus(t){roomStatus=t;renderOnline();}
 // 자체 서버(WebSocket)용 연결: claude room과 같은 모양으로 감싼다
-const SERVER_VER=31;let srvVer=null,monsGot=0;
+const SERVER_VER=32;let srvVer=null,monsGot=0;
 function makeWsRoom(){
   const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
   let ws=null,myId=null,ok=false,retry=1000;const peers=new Map(),peerFns=[],topicFns={},connFns=[];const mine={};
