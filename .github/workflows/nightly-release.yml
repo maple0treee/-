@@ -1,0 +1,35 @@
+# 매일 오전 4시(한국 시간)에 시험용 브랜치 dev 의 변경을 본 서버 브랜치 main 으로 한 번에 올린다
+# main 에 올라가면 Render 가 본 서버(orlando.io.kr)를 새로 배포한다
+# GitHub 예약 작업은 붐빌 때 몇 분~수십 분 늦게 돌 수 있다
+name: nightly-release
+on:
+  schedule:
+    - cron: '0 19 * * *'   # UTC 19:00 = 한국 시간 04:00
+  workflow_dispatch:        # Actions 탭에서 손으로 바로 돌릴 수도 있음
+permissions:
+  contents: write
+concurrency:
+  group: release-branches
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+      - name: dev 를 main 으로 합치기
+        run: |
+          git config user.name "orlando-release"
+          git config user.email "orlando-release@users.noreply.github.com"
+          git fetch origin main
+          if git merge-base --is-ancestor origin/dev origin/main; then
+            echo "dev 에 새 변경이 없어서 올릴 것이 없어요"; exit 0
+          fi
+          # 그동안 main 에 바로 올린 급한 고침이 있으면 먼저 dev 에 섞는다
+          git merge --no-edit origin/main -m "본 서버의 급한 고침을 시험판에 합치기"
+          git push origin HEAD:dev
+          git push origin HEAD:main
+          echo "올린 변경:"; git log --oneline origin/main..HEAD
