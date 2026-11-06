@@ -12274,6 +12274,14 @@ const MARCUS_STREETS_PX=[
   [9,[[1000,560],[1060,640]],'시장 동쪽 길'],[9,[[800,560],[760,590]],'길드 골목'],
   [9,[[1290,780],[1290,860],[1250,880]],'무역 공회 길'],
   [8,[[300,440],[600,440]],'성벽 안 길(서)'],[8,[[560,860],[760,880],[960,920]],'성벽 안 길(남)'],
+  /* 막다른 골목 (폭 5m): 큰 길에서 집 덩어리 속으로 들어가다 집과 담에 막혀 끝난다. 첫 점이 어귀(길 위), 끝 점이 막힌 곳. 넷째 값 1 = 막다른 골목 */
+  [5,[[440,300],[441,345]],'여관 막다른 골목',1],[5,[[480,356],[524,355]],'여관 뒷골목',1],[5,[[556,302],[546,250]],'목장 막다른 골목',1],
+  [5,[[475,490],[476,527]],'우물 골목',1],[5,[[560,490],[561,527]],'빵집 뒷골목',1],[5,[[430,600],[396,601]],'강둑 골목',1],
+  [5,[[435,700],[436,738]],'대장간 골목',1],[5,[[510,770],[511,733]],'가죽 골목',1],[5,[[435,770],[436,807]],'통 골목',1],[5,[[510,700],[511,668]],'물레 골목',1],
+  [5,[[722,720],[723,758]],'저울 골목',1],[5,[[810,800],[811,763]],'천 골목',1],[5,[[722,800],[723,838]],'초 골목',1],[5,[[700,720],[701,686]],'향신료 골목',1],
+  [5,[[1400,590],[1452,592]],'성벽 밑 골목',1],
+  [5,[[1240,155],[1182,141]],'북쪽 막다른 골목',1],[5,[[1218,207],[1268,204]],'제재소 골목',1],
+  [5,[[1290,800],[1340,801]],'부두 뒷골목',1],[5,[[1331,696],[1334,744]],'동쪽 막다른 골목',1],
 ];
 /* 작은 광장 [그림 x, y, 반지름 m] */
 const MARCUS_PIAZZE_PX=[[560,410,9],[640,490,7],[470,700,8],[760,760,9],[1300,355,9],[1160,700,8],[1300,560,8],[780,840,9]];
@@ -12284,7 +12292,7 @@ function marcusPlan(){if(MARCUS.plan)return MARCUS.plan;
   const zones=MARCUS_ZONES_PX.map(z=>{const o={id:z.id,name:z.name,kind:z.kind,shape:z.shape,nolabel:z.nolabel};
     if(z.shape==='poly')o.pts=GP(z.pts);else{const [x,y]=G(z.x,z.y);o.x=x;o.y=y;if(z.shape==='circle')o.r=Math.round(z.r*MPX*10)/10;else{o.w=Math.round(z.w*MPX*10)/10;o.h=Math.round(z.h*MPX*10)/10;o.rot=z.rot||0;}}
     if(z.label){const [lx,ly]=G(z.label[0],z.label[1]);o.lx=lx;o.ly=ly;}return o;});
-  const streets=MARCUS_STREETS_PX.map(s=>({w:s[0],p:GP(s[1]),name:s[2]}));
+  const streets=MARCUS_STREETS_PX.map(s=>({w:s[0],p:GP(s[1]),name:s[2],dead:!!s[3]}));
   const piazze=MARCUS_PIAZZE_PX.map(p=>{const [x,y]=G(p[0],p[1]);return [x,y,p[2]];});
   const bridges=MARCUS_BRIDGES_PX.map(px=>G(px,0)[0]);
   const inPoly=(P,x,y)=>{let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const [xi,yi]=P[i],[xj,yj]=P[j];if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))c=!c;}return c;};
@@ -12321,7 +12329,7 @@ function marcusPlan(){if(MARCUS.plan)return MARCUS.plan;
     for(const q of hillStairs()){const dx=x-q.x,dy=y-q.y,t=(dx*q.ux+dy*q.uy)/q.L,lat=Math.abs(-dx*q.uy+dy*q.ux);if(t>=-.02&&t<=1&&lat<q.w/2)return MARCUS_HILL_H*(1-Math.max(0,t));}
     return 0;};
   const onPlateau=(x,y)=>inPoly(hill,x,y);
-  const nearStreet=(x,y,m)=>{for(const st of streets)for(let i=0;i<st.p.length-1;i++)if(segDist(x,y,st.p[i],st.p[i+1])<st.w/2+m)return true;for(const [px,py,r] of piazze)if(Math.hypot(x-px,y-py)<r+m)return true;return false;};
+  const nearStreet=(x,y,m,noDead)=>{for(const st of streets){if(noDead&&st.dead)continue;for(let i=0;i<st.p.length-1;i++)if(segDist(x,y,st.p[i],st.p[i+1])<st.w/2+m)return true;}for(const [px,py,r] of piazze)if(Math.hypot(x-px,y-py)<r+m)return true;return false;};
   const zone=id=>zones.find(z=>z.id===id);
   const waterDepth=(x,y)=>{if(inHarbor(x,y,0)){if(wallDist(x,y)>-2)return 3.2;const d=polyDist(harbor,x,y);return 3.2*smooth(0,1.8,d);}   /* 부두 바로 아래부터 깊게 (얕은 둔덕이 포석처럼 보이지 않게) */   /* 성벽 밖으로 나간 항구 가장자리는 얕은 둔덕 없이 깊게 */
     const wd=wallDist(x,y);if(wd<0){const rd=riverDist(x,y);if(rd<MARCUS_RIVER_W/2+2&&!bridgeAt(x,y))return MARCUS_RIVER_DEEP*smooth(MARCUS_RIVER_W/2-1,MARCUS_RIVER_W/2-4.5,rd);   /* 둑 선(W/2+.5) 안쪽에서부터 내려간다: 땅 그물이 성겨도 둑 뒤 땅은 평평하게 */return 0;}
@@ -12343,12 +12351,12 @@ function marcusPlan(){if(MARCUS.plan)return MARCUS.plan;
           wasWet=w;}
         if(!wasWet){if(!cur.length)cur.push([ax,ay]);cur.push([bx,by]);}}
       if(cur.length>=2)runs.push(cur);
-      for(const r of runs){let len=0;for(let i=0;i<r.length-1;i++)len+=Math.hypot(r[i+1][0]-r[i][0],r[i+1][1]-r[i][1]);if(len>=4)out.push({w:st.w,p:r,name:st.name});}}
+      for(const r of runs){let len=0;for(let i=0;i<r.length-1;i++)len+=Math.hypot(r[i+1][0]-r[i][0],r[i+1][1]-r[i][1]);if(len>=4)out.push({w:st.w,p:r,name:st.name,dead:st.dead&&r===runs[runs.length-1]});}}
     streets.length=0;for(const s of out)streets.push(s);}
   /* 끝이 다른 길 바로 앞에서 끊긴 길: 가장 가까운 길까지 이어 붙인다 (광장·작은 광장·성문에 닿은 끝은 그대로) */
   {const near=(x,y,skip)=>{let best=1e9,bp=null,bw=0;streets.forEach((o,j)=>{if(j===skip)return;const P=o.p;for(let k=0;k<P.length-1;k++){const [ax,ay]=P[k],[bx,by]=P[k+1],vx=bx-ax,vy=by-ay,L=vx*vx+vy*vy||1,t=Math.max(0,Math.min(1,((x-ax)*vx+(y-ay)*vy)/L)),px=ax+vx*t,py=ay+vy*t,d=Math.hypot(px-x,py-y);if(d<best){best=d;bp=[px,py];bw=o.w;}}});return {d:best,p:bp,w:bw};};
     const atPlace=(x,y)=>piazze.some(([px,py,r])=>Math.hypot(x-px,y-py)<r+3)||zones.some(z=>z.shape==='circle'&&Math.hypot(x-z.x,y-z.y)<z.r+3)||gates.some(g=>Math.hypot(g.x-x,g.y-y)<14);
-    streets.forEach((st,i)=>{for(const e of [0,1]){const P=st.p,idx=e?P.length-1:0,[x,y]=P[idx];if(atPlace(x,y)||wallDist(x,y)>-3)continue;const n=near(x,y,i);if(!n.p)continue;const gap=n.d-n.w/2;if(gap<=.3||gap>14)continue;
+    streets.forEach((st,i)=>{for(const e of [0,1]){if(e&&st.dead)continue;   /* 막다른 골목의 막힌 끝은 잇지 않는다 */const P=st.p,idx=e?P.length-1:0,[x,y]=P[idx];if(atPlace(x,y)||wallDist(x,y)>-3)continue;const n=near(x,y,i);if(!n.p)continue;const gap=n.d-n.w/2;if(gap<=.3||gap>14)continue;
       let wet=false;for(let t=0;t<=1;t+=.1){const qx=x+(n.p[0]-x)*t,qy=y+(n.p[1]-y)*t;if(waterDepth(qx,qy)>0&&!bridgeAt(qx,qy))wet=true;}if(wet)continue;
       if(e)P.push([n.p[0],n.p[1]]);else P.unshift([n.p[0],n.p[1]]);}});}
   /* 꺾이는 모퉁이를 둥글게: 꺾인 각이 크면 그 자리에 짧은 호를 넣는다 (반지름은 길 폭에 맞추되 앞뒤 토막의 40%를 넘지 않게) */
@@ -12545,15 +12553,31 @@ async function buildMarcus(H){
   /* ===== 길: 돌을 깐 바닥 (평지에만; 언덕 위는 땅 색으로) ===== */
   /* 길은 짧은 토막으로 깔고, 토막마다 양옆이 물 위로 나가면 그만큼 폭을 줄인다 (강가 길 가장자리가 물 위에 떠 있지 않게). 꺾이는 마디에는 둥근 판을 깔아 이음매를 메운다 */
   {const dry=(x,y)=>PL.waterDepth(x,y)<=0||PL.bridgeAt(x,y);
-    for(const st of PL.streets){const P=st.p,hw=st.w/2,big=st.w>=10;for(let i=0;i<P.length-1;i++){const [ax,ay]=P[i],[bx,by]=P[i+1],L=Math.hypot(bx-ax,by-ay);if(L<.3)continue;if(PL.hillH(ax,ay)>.05||PL.hillH(bx,by)>.05)continue;
+    for(const st of PL.streets){const P=st.p,hw=st.w/2,big=st.w>=10,PV=PAVE2,PY=st.dead?.054:.06;   /* 막다른 골목은 어둡고 낮은 돌판: 큰 길 돌판 밑으로 들어가 이음매가 깜빡이지 않게 */for(let i=0;i<P.length-1;i++){const [ax,ay]=P[i],[bx,by]=P[i+1],L=Math.hypot(bx-ax,by-ay);if(L<.3)continue;if(PL.hillH(ax,ay)>.05||PL.hillH(bx,by)>.05)continue;
       const ux=(bx-ax)/L,uy=(by-ay)/L,nx=-uy,ny=ux,n=Math.max(1,Math.ceil(L/3)),pl=L/n;
       for(let k=0;k<n;k++){const t=(k+.5)*pl,mx=ax+ux*t,my=ay+uy*t;let l=hw,r=hw;
         for(const sd of [-1,1]){let e=hw;while(e>.6&&!(dry(mx+nx*sd*e,my+ny*sd*e)&&dry(mx+ux*pl/2+nx*sd*e,my+uy*pl/2+ny*sd*e)&&dry(mx-ux*pl/2+nx*sd*e,my-uy*pl/2+ny*sd*e)))e-=.5;if(sd<0)l=e;else r=e;}
         if(l<=.6&&r<=.6)continue;const off=(r-l)/2,wd=l+r,F=frame(cx+mx+nx*off,cz+my+ny*off,Math.atan2(ux,uy),0);
         if(big){F.P(BOX,0,.025,0,wd+(l>=hw?.45:0)+(r>=hw?.45:0),.05,pl+.06,SERENA);if(l>.8&&r>.8)F.P(BOX,-off,.1,0,1.2,.03,pl+.02,0xc8bca4);}
-        F.P(BOX,0,big?.0675:.06,0,wd,.06,pl+.04,big?PAVE:PAVE2);}}   /* 큰길은 7.5mm 높게: 큰길과 골목이 만나는 곳에서 두 돌판 윗면이 겹쳐 걸을 때 바닥이 깜빡이지 않게 */
+        F.P(BOX,0,big?.0675:PY,0,wd,.06,pl+.04,big?PAVE:PV);}}   /* 큰길은 7.5mm 높게: 큰길과 골목이 만나는 곳에서 두 돌판 윗면이 겹쳐 걸을 때 바닥이 깜빡이지 않게 */
       for(let i=1;i<P.length-1;i++){const [x,y]=P[i];if(PL.hillH(x,y)>.05)continue;let ok=true;for(let a=0;a<8&&ok;a++){const q=a/8*PI*2;if(!dry(x+Math.cos(q)*hw,y+Math.sin(q)*hw))ok=false;}if(!ok)continue;
-        const F=frame(cx+x,cz+y,0,0);if(big)F.P(CYL(1,1,16),0,.025,0,hw+.45,.05,hw+.45,SERENA);F.P(CYL(1,1,16),0,big?.0675:.06,0,hw,.06,hw,big?PAVE:PAVE2);}}}
+        const F=frame(cx+x,cz+y,0,0);if(big)F.P(CYL(1,1,16),0,.025,0,hw+.45,.05,hw+.45,SERENA);F.P(CYL(1,1,16),0,big?.0675:PY,0,hw,.06,hw,big?PAVE:PV);}}}
+  /* ===== 막다른 골목의 막힌 끝: 집과 집 사이를 막는 돌담(갓돌·담쟁이·벽 등)과 그 앞에 쌓아 둔 통·상자 ===== */
+  for(const st of PL.streets){if(!st.dead)continue;const P=st.p,[ax,ay]=P[P.length-2],[bx,by]=P[P.length-1],L=Math.hypot(bx-ax,by-ay),ux=(bx-ax)/L,uy=(by-ay)/L,W=st.w+1.6,H=3.2;
+    let h=0;for(const ch of st.name)h=(h*31+ch.charCodeAt(0))%9973;const r=k=>{const v=Math.sin((h+k)*12.9898)*43758.5453;return v-Math.floor(v);};
+    const F=frame(cx+bx+ux*.45,cz+by+uy*.45,Math.atan2(ux,uy),0);   /* 앞(+z)이 골목 안쪽(막힌 쪽)을 본다 → 담 앞면은 -z */
+    const WC=[0xb8a888,0xc4b494,0xa89a7e,0xd0c0a0][Math.floor(r(1)*4)];
+    F.P(BOX,0,H/2-.3,0,W,H+.6,.7,WC);F.P(BOX,0,H+.06,0,W+.2,.16,.9,0x8e8272);F.P(BOX,0,.25,-.38,W,.5,.08,0x8a7e6c);   /* 담·갓돌·밑 띠 */
+    for(let k=0;k<5;k++)F.P(BOX,-W/2+.5+r(10+k)*(W-1),.6+r(20+k)*(H-1),-.36,.5+r(30+k)*.5,.22,.04,0x9a8c76);   /* 군데군데 드러난 돌 */
+    if(r(2)<.7){const vx=(r(3)-.5)*(W-2.2);for(let k=0;k<9;k++)F.P(SPH,vx+(r(40+k)-.5)*1.6,H-.2-r(50+k)*1.9,-.4,.42,.42,.16,[0x3e6a34,0x4a7a3c,0x35602e][k%3]);}   /* 담쟁이 */
+    if(r(4)<.6){const lx=(r(5)<.5?-1:1)*(W/2-.6);F.P(BOX,lx,2.45,-.55,.06,.06,.5,IRON);F.P(BOX,lx,2.15,-.8,.26,.36,.26,0xffe0a0,{glow:true});F.P(CONE(4),lx,2.42,-.8,.24,.2,.24,IRON,{ry:PI/4});}   /* 벽 등 */
+    F.box(0,0,W,.7,H+.2);
+    /* 담 앞 잡동사니: 한쪽 구석에만 (지나갈 자리는 남긴다) */
+    const sx=r(6)<.5?-1:1,kind=Math.floor(r(7)*3);
+    if(kind===0){for(const [lx,lz] of [[0,-.85],[.85,-.9],[.42,-1.6]])F.P(CYL(.4,.4,10),sx*(W/2-1.2)+sx*-lx*.6,.48,lz,1,.95,1,0x7a5232);}   /* 술통 */
+    else if(kind===1){F.P(BOX,sx*(W/2-1.2),.45,-.9,.9,.9,.9,0x9a7a4a,{ry:.2});F.P(BOX,sx*(W/2-1.2),1.2,-.9,.6,.6,.6,0x8a6a3a,{ry:-.3});F.P(BOX,sx*(W/2-2),.35,-1.1,.7,.7,.7,0xa88a5a,{ry:.5});}   /* 상자 */
+    else{for(let k=0;k<6;k++)F.P(CYL(.13,.13,7),sx*(W/2-1.4)+(k%3-1)*.28,.15+Math.floor(k/3)*.26,-.85,1,1.4,1,0x6a4a2a,{rx:PI/2,rz:PI/2});F.P(CYL(.42,.42,10),sx*(W/2-2.4),.4,-.9,1,.8,1,0x6a6a70);}   /* 장작·물통 */
+    {const q=F.W(sx*(W/2-1.4),-1.1);colliders.push({x:q.x,z:q.z,r:.9,h:1.5});}}
   for(const [px,py,r] of PL.piazze){const F=frame(cx+px,cz+py,0,0);F.P(CYL(1,1,32),0,.03,0,r+.6,.05,r+.6,SERENA);F.P(CYL(1,1,32),0,.05,0,r,.06,r,PAVE);F.P(RING,0,.1,0,r*.6,1,r*.6,MAR2);}
   /* 성 밖 길: 네 문에서 바깥으로, 남쪽 길은 입구까지 */
   /* 성 밖 흙길: 땅 높이를 따라 2m 토막으로 (평평한 판 하나로 깔면 비탈에서 뜨거나 묻힌다) */
@@ -12686,11 +12710,29 @@ async function buildMarcus(H){
   await BOOT.y();const houses=[];
   {const r2=(()=>{let s=11;return()=>(s=(s*16807)%2147483647)/2147483647;})(),S=11;
     for(let gy=-300;gy<300;gy+=S)for(let gx=-400;gx<400;gx+=S){const x=gx+S/2+(r2()-.5)*2,y=gy+S/2+(r2()-.5)*2;if(!inWall(x,y,9))continue;
-      if(PL.nearStreet(x,y,3))continue;if(PL.waterDepth(x,y)>0||PL.riverDist(x,y)<RVW/2+4||PL.inHarbor(x,y,5))continue;if(PL.hillH(x,y)>.3||PL.polyDist(PL.hill,x,y)<16)continue;
+      if(PL.nearStreet(x,y,3,1))continue;if(PL.waterDepth(x,y)>0||PL.riverDist(x,y)<RVW/2+4||PL.inHarbor(x,y,5))continue;if(PL.hillH(x,y)>.3||PL.polyDist(PL.hill,x,y)<16)continue;
       if(bigZone(x,y,12))continue;   /* 큰 건물 앞은 비워 둔다 */if(PL.gates.some(g=>Math.hypot(g.x-x,g.y-y)<16))continue;if(r2()<.05)continue;
       const dk=districtOf(x,y);if(dk==='nobles'&&(Math.floor(gx/S)%2||Math.floor(gy/S)%2))continue;
       const w=S-1-r2()*2.5,h=S-1.5-r2()*3,rot=(r2()-.5)*2,roof=TERRA[Math.floor(r2()*TERRA.length)];r2();
       houses.push({mx:x,my:y,w,d:h,rot:-rot*PI/180,roof,dk});}}
+  /* 막다른 골목: 집 자리는 골목 없이 정한 그대로 두고(집 번호·생김새가 바뀌지 않게), 골목에 걸친 집은 골목 쪽 벽을 잘라 물린다 (너무 작아지면 뺀다).
+     골목 돌판 양옆 0.4m, 막힌 끝 담(0.9m) 뒤까지 비운다 */
+  const DEAD=PL.streets.filter(st=>st.dead).map(st=>{const a=st.p[0],b=st.p[st.p.length-1],L=Math.hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/L,uy=(b[1]-a[1])/L,hw=st.w/2+.4;
+    return {st,x0:Math.min(a[0],b[0]+ux*.9)-(Math.abs(uy)>.7?hw:0),x1:Math.max(a[0],b[0]+ux*.9)+(Math.abs(uy)>.7?hw:0),y0:Math.min(a[1],b[1]+uy*.9)-(Math.abs(ux)>.7?hw:0),y1:Math.max(a[1],b[1]+uy*.9)+(Math.abs(ux)>.7?hw:0)};});
+  houses.forEach((hs,i)=>{for(const D of DEAD){
+      if(hs.dk==='nobles'){const r=Math.max(hs.w,hs.d)*.85;if(!(hs.mx+r<=D.x0||hs.mx-r>=D.x1||hs.my+r<=D.y0||hs.my-r>=D.y1)){delete houses[i];return;}continue;}   /* 귀족 집은 지을 때 1.7배로 커져서 자르지 않고 뺀다 */
+      const hx0=hs.mx-hs.w/2,hx1=hs.mx+hs.w/2,hy0=hs.my-hs.d/2,hy1=hs.my+hs.d/2;if(hx1<=D.x0||hx0>=D.x1||hy1<=D.y0||hy0>=D.y1)continue;
+      const cuts=[[D.x1-hx0,'L'],[hx1-D.x0,'R'],[D.y1-hy0,'T'],[hy1-D.y0,'B']].sort((a,b)=>a[0]-b[0]),[c,sd]=cuts[0];
+      if(sd==='L'||sd==='R'){const nw=hs.w-c;if(nw<4.5){delete houses[i];return;}hs.mx+=(sd==='L'?1:-1)*c/2;hs.w=nw;}
+      else{const nd=hs.d-c;if(nd<4.5){delete houses[i];return;}hs.my+=(sd==='T'?1:-1)*c/2;hs.d=nd;}}});
+  /* 막다른 골목 양옆과 막힌 끝 뒤 빈 땅에 집을 더 세워 골목을 집 벽으로 둘러싼다. 맨 뒤에 붙여서 예전 집 번호는 그대로이고, 이미 선 집과 겹치면 buildHouse(houseRoom)가 알아서 건너뛴다 */
+  {const inRect=(x0,x1,y0,y1)=>DEAD.some(D=>!(x1<=D.x0||x0>=D.x1||y1<=D.y0||y0>=D.y1));
+    const okAt=(x,y,w,d)=>{for(const [qx,qy] of [[-1,-1],[1,-1],[-1,1],[1,1],[0,0]]){const px=x+qx*w/2,py=y+qy*d/2;if(!inWall(px,py,5)||PL.nearStreet(px,py,.3,1)||PL.waterDepth(px,py)>0||PL.riverDist(px,py)<RVW/2+3||PL.inHarbor(px,py,4)||PL.hillH(px,py)>.05||bigZone(px,py,2)||PL.gates.some(g=>Math.hypot(g.x-px,g.y-py)<16))return false;}
+      return !inRect(x-w/2+.9,x+w/2-.9,y-d/2+.9,y+d/2-.9)&&districtOf(x,y)!=='nobles';};   /* 살짝 기운 골목은 네모 범위가 조금 넓어서 0.9m 봐준다 */
+    const add=(x,y,w,d,k)=>{if(!okAt(x,y,w,d))return;const dk=districtOf(x,y);houses.push({mx:x,my:y,w,d,rot:0,roof:TERRA[k%TERRA.length],dk});};
+    DEAD.forEach((D,j)=>{const P=D.st.p,a=P[0],e=P[P.length-1],L=Math.hypot(e[0]-a[0],e[1]-a[1]),ux=(e[0]-a[0])/L,uy=(e[1]-a[1])/L,nx=-uy,ny=ux,vert=Math.abs(uy)>Math.abs(ux),hw=D.st.w/2+.45,DP=7.6,AL=8.4;
+      for(const sd of [-1,1])for(let t=AL/2+1;t<L-.5;t+=AL+.3){const x=a[0]+ux*t+nx*sd*(hw+DP/2),y=a[1]+uy*t+ny*sd*(hw+DP/2);add(x,y,vert?DP:AL,vert?AL:DP,j*7+t|0);}
+      {const x=e[0]+ux*(.95+DP/2),y=e[1]+uy*(.95+DP/2),W=D.st.w+5;add(x,y,vert?W:DP,vert?DP:W,j*3);}});}
   const dirs=[[0,1],[1,0],[0,-1],[-1,0]];
   /* 집이 이미 선 건물이나 자리 잡아 둔 관청과 파고들면 짓지 않는다: 전에는 집 벽이 옆집·길드홀·도서관 벽을 뚫고 나와 건물이 군데군데 뚫려 보였다 */
   const PALAZZO_AT=[['archive',PI],['chamber',PI],['admin',0],['treasury',0],['library',PI/2],['clinic',0],['trade',-PI/2]];   /* 관청 자리와 돌린 각도 (아래에서 이대로 짓는다) */
@@ -18797,7 +18839,7 @@ function buildStreetProps(K){
     (F)=>{F.P(BOX,0,.3,0,1.8,.6,.7,0x6a6a70);F.P(BOX,0,.56,0,1.6,.04,.5,0x4f7d86);return 1.0;},   /* 물통 */
     (F)=>{F.P(BOX,0,1.5,0,.12,3,.12,DARKW);F.P(BOX,.5,2.8,0,1.0,.08,.08,DARKW);F.P(BOX,.6,2.3,0,.9,.6,.05,pick([0x8a2a2a,0x2a4a7a,0x3a6a3a,0xc8a030]));F.P(SPH,.6,2.3,.04,.18,.18,.04,0xe8d8a0);return .35;}];   /* 가게 간판 */
   let n=0;
-  for(const st of PL.streets){if(st.w<5)continue;for(let i=0;i<st.p.length-1;i++){const [ax,ay]=st.p[i],[bx,by]=st.p[i+1],L=Math.hypot(bx-ax,by-ay),ux=(bx-ax)/L,uy=(by-ay)/L;
+  for(const st of PL.streets){if(st.w<5||st.dead)continue;   /* 막다른 골목 안은 막힌 끝 잡동사니만 */for(let i=0;i<st.p.length-1;i++){const [ax,ay]=st.p[i],[bx,by]=st.p[i+1],L=Math.hypot(bx-ax,by-ay),ux=(bx-ax)/L,uy=(by-ay)/L;
     for(let t=9;t<L-6;t+=14+rnd()*10){const sd=rnd()<.5?-1:1,mx=ax+ux*t-uy*sd*(st.w/2-1.3),my=ay+uy*t+ux*sd*(st.w/2-1.3);
       if(PL.waterDepth(mx,my)>0||PL.hillH(mx,my)>.3||PL.wallDist(mx,my)>-6||PL.riverDist(mx,my)<MARCUS_RIVER_W/2+3.5||PL.inHarbor(mx,my,3.5))continue;   /* 강둑·부두 가장자리에는 놓지 않는다 (물 위에 뜨지 않게) */{const MR=MARCUS.marketRect;if(MR&&Math.abs(M.x+mx-MR.x)<MR.w/2+22&&Math.abs(M.z+my-MR.z)<MR.d/2+22)continue;}   /* 시장 길목은 비운다 */
       const wx=M.x+mx,wz=M.z+my;if(!free(wx,wz,1.6))continue;
@@ -18834,7 +18876,7 @@ function buildArtisans(K){
   const kinds=Object.keys(W);let n=0;
   for(const st of PL.streets){for(let i=0;i<st.p.length-1;i++){const [ax,ay]=st.p[i],[bx,by]=st.p[i+1],L=Math.hypot(bx-ax,by-ay);if(L<6)continue;const ux=(bx-ax)/L,uy=(by-ay)/L,nx=-uy,ny=ux;
     for(let t=6;t<L-6;t+=9){for(const sd of [-1,1]){const off=st.w/2+2.6,mx=ax+ux*t+nx*sd*off,my=ay+uy*t+ny*sd*off,wx=M.x+mx,wz=M.z+my,ry=Math.atan2(nx*sd,ny*sd)+PI;   /* 앞(+z)이 길을 본다 */
-      if(!freeAt(wx,wz,2.6,2.1,ry))continue;const k=kinds[n%kinds.length],F=frame(wx,wz,ry);
+      if(!freeAt(wx,wz,2.6,2.1,ry))continue;const k=!EXM.zbn&&Math.hypot(mx+211.3,my-194.6)<4?'mason':kinds[n%kinds.length],F=frame(wx,wz,ry);   /* 지븐 공방 자리는 차례와 상관없이 늘 석공 마당 (골목이 늘어 앞의 공방 수가 바뀌어도) */
       if(k==='mason'){(EXM.masons=EXM.masons||[]).push({x:wx,z:wz,ry,y:F.y});if(!EXM.zbn&&Math.hypot(mx+211.3,my-194.6)<4){EXM.zbn={x:wx,z:wz,ry,y:F.y};F.box(0,0,6.2,4.8,2.2,{zbRes:1});n++;continue;}}   /* 길모퉁이 석공 마당 한 곳은 조각가 지븐의 공방 자리로 비워 둔다 */
       const [hw,hd]=W[k](F);F.box(0,0,hw*2,hd*2,2.2);n++;}}}}
   /* 집 사이 위로 물들인 천 줄 */
