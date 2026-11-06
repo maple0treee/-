@@ -57,7 +57,7 @@
     function randPointIn(zone, lv) {
       for (let i = 0; i < 400; i++) {
         let x, z;
-        if (OR.ISLES[zone]) { const I = OR.ISLES[zone]; const a = rnd(-Math.PI, Math.PI), d = rnd(6, I.R - 8); x = I.x + Math.cos(a) * d; z = I.z + Math.sin(a) * d; if (Math.hypot(x - I.entry.x, z - I.entry.z) < 16) continue; if (I.exit && Math.hypot(x - I.exit.x, z - I.exit.z) < 16) continue; if (I.noSpawn && I.noSpawn.some((q) => Math.hypot(x - I.x - q.x, z - I.z - q.z) < q.r)) continue;
+        if (OR.ISLES[zone]) { const I = OR.ISLES[zone]; if (I.randPt) { const q = I.randPt(rnd, lv); x = q.x; z = q.z; } else { const a = rnd(-Math.PI, Math.PI), d = rnd(6, I.R - 8); x = I.x + Math.cos(a) * d; z = I.z + Math.sin(a) * d; }   /* 동굴: 굴 길 안에서 고른다 */ if (Math.hypot(x - I.entry.x, z - I.entry.z) < 16) continue; if (I.exit && Math.hypot(x - I.exit.x, z - I.exit.z) < 16) continue; if (I.noSpawn && I.noSpawn.some((q) => Math.hypot(x - I.x - q.x, z - I.z - q.z) < q.r)) continue;
           if (lv && I.band && i < 360 && Math.abs(levelAt(zone, x, z) - lv) > I.band) continue; }   // 허칠산: 종마다 제 레벨에 맞는 높이에서
         else {   // 하레나 둘레 길: 그 구역의 4분의 1 바퀴 안에서 고른다
           const SP = OR.SP, i = SP.ZONES.indexOf(zone); if (i < 0) return null;
@@ -340,6 +340,10 @@
       avagolem:  { k: 'smash', sh: 'c', at: 'front', range: [0, 4.5], tele: 1.1, r: 3.0, mul: 1.8, cd: [7, 10], jump: 1, pool: [3, 0.3], col: 3 },
       snowowl:   { k: 'dash',  sh: 'l', range: [0, 12], tele: 0.75, len: 11, w: 1.2, mul: 1.4, cd: [6, 9] },
       frostmammoth:{ k: 'smash', sh: 'c', at: 'front', range: [0, 5], tele: 1.15, r: 3.4, mul: 1.85, cd: [7, 10], jump: 1 },
+      cavebat:   { k: 'dash',  sh: 'l', range: [0, 10], tele: 0.55, len: 9, w: 1.0, mul: 1.2, cd: [5, 7] },
+      snowleopard:{ k: 'dash', sh: 'l', range: [0, 12], tele: 0.6, len: 11, w: 1.0, mul: 1.45, cd: [5, 8] },
+      cavebear:  { k: 'smash', sh: 'c', at: 'front', range: [0, 4], tele: 1.0, r: 2.8, mul: 1.7, cd: [6, 9], jump: 1 },
+      elderbear: { k: 'smash', sh: 'c', at: 'front', range: [0, 4.5], tele: 1.05, r: 3.2, mul: 1.8, cd: [6, 9], jump: 1 },
       whitewolf: { k: 'dash',  sh: 'l', range: [0, 10], tele: 0.65, len: 9, w: 0.9, mul: 1.25, cd: [6, 9] },
       shadowwolf:{ k: 'dash',  sh: 'l', range: [0, 10], tele: 0.6, len: 10, w: 1.0, mul: 1.3, cd: [5, 8] },
       boar:      { k: 'dash',  sh: 'l', range: [0, 11], tele: 0.95, len: 11, w: 1.1, mul: 1.5, cd: [6, 9] },
