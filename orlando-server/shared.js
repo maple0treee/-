@@ -67,7 +67,7 @@
     exmarket: { x: 7700, z: 0, R: 110 }, // 중앙 시장: 엑시즈 시내 시장 문으로 들어가면 나온다 (좌판·회랑·장비점·마구간)
     arena: { x: 8200, z: 0, R: 70 },     // 투기장: 어느 땅과도 이어지지 않는 둥근 콜로세움. 결투가 시작되면 둘이 옮겨 가고 끝나면 돌아온다
     library: { x: 8600, z: 0, R: 22 },   // 엑시즈 왕립 도서관: 시내 도서관 문으로 들어가면 나온다 (5층 원통 건물 안, R = 바깥벽 안쪽 면)
-    hechil: { x: 10200, z: 0, R: 430 },   // 허칠산: 엑시즈 북서쪽 눈 덮인 산. 북문 밖 숲(3A) 바깥 산길 끝에서 넘어온다 (남쪽 가장자리로 들어온다)
+    hechil: { x: 10200, z: 0, R: 430, noSpawn: [{ x: -96, z: 300, r: 30 }, { x: 150, z: 150, r: 58 }], band: 7 },   /* noSpawn: 산장·얼음 호수 (가운데 기준). band: 종마다 제 레벨 자리(±7)에서 나온다 */   // 허칠산: 엑시즈 북서쪽 눈 덮인 산. 북문 밖 숲(3A) 바깥 산길 끝에서 넘어온다 (남쪽 가장자리로 들어온다)
     khq: { x: 9100, z: 0, R: 90 },       // 기사단 본부: 엑시즈 시내 기사단 본부 정문으로 들어가면 나온다 (2층 회당 건물과 동쪽 훈련 마당)
     // 엑시즈 남문 밖 사냥터 (모래톱, Lv 60–67). 자리는 아래 MLINES에서 정한다
     mfield: { x: 2700, z: 900, R: 150 },
@@ -176,7 +176,7 @@
     const n = spNear(x, z); const i = n ? clampN(Math.floor(n.t / SP.Q), 0, 7) : 0;
     return SP.ZONES[i];
   }
-  const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, myhome: 1, ghouse: 1, bakery: 1, mshop: 1, marcus: 1, milgol: 1, fort: 1, coachway: 1, castle: 1, guildhall: 1, exmarket: 1, arena: 1, library: 1, hechil: 1, khq: 1 };
+  const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, myhome: 1, ghouse: 1, bakery: 1, mshop: 1, marcus: 1, milgol: 1, fort: 1, coachway: 1, castle: 1, guildhall: 1, exmarket: 1, arena: 1, library: 1, khq: 1 };
 
   // 걸어 다닐 수 있는 곳 안으로 붙잡는다 (첫 지역 원, 길, 두 번째 지역 원, 석굴)
   function roomClamp(p, rad) {
@@ -279,57 +279,57 @@
     crystalslime:{ name: '수정 슬라임', lv: 96, build: 'slime', color: 0x9a60e0, hpM: 1.5, atkM: 1.15, scale: 1.5, glow: 0xb070ff },
     cavetroll:{ name: '동굴 트롤', lv: 99, build: 'biped', color: 0x5a5a62, hpM: 2.1, atkM: 1.45, scale: 2.2, club: true },
     // 엑시즈 남문 밖 사냥터 (Lv 60–95)
-    fieldwolf:{ name: '들늑대', lv: 61, build: 'quad', color: 0x8a6e4e, hpM: 1.1, atkM: 1.25, scale: 1.2 },
-    mudslime: { name: '진흙 슬라임', lv: 66, build: 'slime', color: 0x7a5e3e, hpM: 1.5, atkM: 1.15, scale: 1.55 },
-    hillboar: { name: '큰 멧돼지', lv: 68, build: 'quad', color: 0x4e3626, hpM: 1.4, atkM: 1.35, scale: 1.45, tusk: true },
-    meadowviper:{ name: '풀뱀', lv: 73, build: 'snake', color: 0x5a8a3e, hpM: 1.1, atkM: 1.45, scale: 1.8 },
-    woodbear: { name: '흑곰', lv: 75, build: 'quad', color: 0x2c2420, hpM: 1.7, atkM: 1.4, scale: 1.7 },
-    thornslime:{ name: '가시 슬라임', lv: 78, build: 'slime', color: 0x3e6a2a, hpM: 1.55, atkM: 1.25, scale: 1.55, glow: 0x9ad040 },
-    woodtroll:{ name: '숲 트롤', lv: 81, build: 'biped', color: 0x4e5e3a, hpM: 2.2, atkM: 1.5, scale: 2.25, club: true },
-    stonehound:{ name: '돌개', lv: 82, build: 'quad', color: 0x7a7670, hpM: 1.35, atkM: 1.4, scale: 1.3 },
-    valleyogre:{ name: '계곡 오우거', lv: 87, build: 'biped', color: 0x8a6a4a, hpM: 2.3, atkM: 1.55, scale: 2.3, club: true },
-    windwolf: { name: '바람 늑대', lv: 89, build: 'quad', color: 0xb8c4cc, hpM: 1.3, atkM: 1.5, scale: 1.3 },
-    mistslime:{ name: '안개 슬라임', lv: 92, build: 'slime', color: 0xc8d4dc, hpM: 1.6, atkM: 1.3, scale: 1.6, glow: 0xa0c8e8 },
-    cliffgiant:{ name: '벼랑 거인', lv: 95, build: 'biped', color: 0x6a6662, hpM: 2.5, atkM: 1.6, scale: 2.5, club: true },
+    fieldwolf:{ name: '들늑대', lv: 60, build: 'quad', color: 0x8a6e4e, hpM: 1.1, atkM: 1.25, scale: 1.2 },
+    mudslime: { name: '진흙 슬라임', lv: 62, build: 'slime', color: 0x7a5e3e, hpM: 1.5, atkM: 1.15, scale: 1.55 },
+    hillboar: { name: '큰 멧돼지', lv: 62, build: 'quad', color: 0x4e3626, hpM: 1.4, atkM: 1.35, scale: 1.45, tusk: true },
+    meadowviper:{ name: '풀뱀', lv: 64, build: 'snake', color: 0x5a8a3e, hpM: 1.1, atkM: 1.45, scale: 1.8 },
+    woodbear: { name: '흑곰', lv: 64, build: 'quad', color: 0x2c2420, hpM: 1.7, atkM: 1.4, scale: 1.7 },
+    thornslime:{ name: '가시 슬라임', lv: 65, build: 'slime', color: 0x3e6a2a, hpM: 1.55, atkM: 1.25, scale: 1.55, glow: 0x9ad040 },
+    woodtroll:{ name: '숲 트롤', lv: 66, build: 'biped', color: 0x4e5e3a, hpM: 2.2, atkM: 1.5, scale: 2.25, club: true },
+    stonehound:{ name: '돌개', lv: 66, build: 'quad', color: 0x7a7670, hpM: 1.35, atkM: 1.4, scale: 1.3 },
+    valleyogre:{ name: '계곡 오우거', lv: 68, build: 'biped', color: 0x8a6a4a, hpM: 2.3, atkM: 1.55, scale: 2.3, club: true },
+    windwolf: { name: '바람 늑대', lv: 68, build: 'quad', color: 0xb8c4cc, hpM: 1.3, atkM: 1.5, scale: 1.3 },
+    mistslime:{ name: '안개 슬라임', lv: 69, build: 'slime', color: 0xc8d4dc, hpM: 1.6, atkM: 1.3, scale: 1.6, glow: 0xa0c8e8 },
+    cliffgiant:{ name: '벼랑 거인', lv: 70, build: 'biped', color: 0x6a6662, hpM: 2.5, atkM: 1.6, scale: 2.5, club: true },
     // 엑시즈 서문 밖 (Lv 95–130)
-    pinewolf: { name: '솔늑대', lv: 96, build: 'quad', color: 0x5a4a3a, hpM: 1.2, atkM: 1.4, scale: 1.25 },
-    barkslime:{ name: '나무껍질 슬라임', lv: 99, build: 'slime', color: 0x6a4e32, hpM: 1.6, atkM: 1.3, scale: 1.6 },
-    hornboar: { name: '뿔멧돼지', lv: 103, build: 'quad', color: 0x3e2e22, hpM: 1.5, atkM: 1.45, scale: 1.5, tusk: true },
-    rockviper:{ name: '바위뱀', lv: 108, build: 'snake', color: 0x6e6a60, hpM: 1.2, atkM: 1.55, scale: 1.9 },
-    greybear: { name: '회색곰', lv: 110, build: 'quad', color: 0x6a645c, hpM: 1.8, atkM: 1.5, scale: 1.75 },
-    resinslime:{ name: '송진 슬라임', lv: 113, build: 'slime', color: 0xc8902a, hpM: 1.6, atkM: 1.35, scale: 1.6, glow: 0xffb040 },
-    pinetroll:{ name: '솔숲 트롤', lv: 116, build: 'biped', color: 0x3e4a32, hpM: 2.3, atkM: 1.6, scale: 2.3, club: true },
-    cragdog:  { name: '바위개', lv: 117, build: 'quad', color: 0x5e5a54, hpM: 1.4, atkM: 1.5, scale: 1.35 },
-    rockogre: { name: '바위 오우거', lv: 122, build: 'biped', color: 0x7a7266, hpM: 2.4, atkM: 1.65, scale: 2.35, club: true },
-    icewolf:  { name: '얼음 늑대', lv: 124, build: 'quad', color: 0xd0e0ea, hpM: 1.35, atkM: 1.6, scale: 1.35 },
-    snowslime:{ name: '눈 슬라임', lv: 127, build: 'slime', color: 0xeef4f8, hpM: 1.7, atkM: 1.4, scale: 1.65, glow: 0xc0e0ff },
-    frostgiant:{ name: '서리 거인', lv: 130, build: 'biped', color: 0x9ab0c0, hpM: 2.6, atkM: 1.7, scale: 2.6, club: true },
+    pinewolf: { name: '솔늑대', lv: 70, build: 'quad', color: 0x5a4a3a, hpM: 1.2, atkM: 1.4, scale: 1.25 },
+    barkslime:{ name: '나무껍질 슬라임', lv: 71, build: 'slime', color: 0x6a4e32, hpM: 1.6, atkM: 1.3, scale: 1.6 },
+    hornboar: { name: '뿔멧돼지', lv: 72, build: 'quad', color: 0x3e2e22, hpM: 1.5, atkM: 1.45, scale: 1.5, tusk: true },
+    rockviper:{ name: '바위뱀', lv: 74, build: 'snake', color: 0x6e6a60, hpM: 1.2, atkM: 1.55, scale: 1.9 },
+    greybear: { name: '회색곰', lv: 74, build: 'quad', color: 0x6a645c, hpM: 1.8, atkM: 1.5, scale: 1.75 },
+    resinslime:{ name: '송진 슬라임', lv: 75, build: 'slime', color: 0xc8902a, hpM: 1.6, atkM: 1.35, scale: 1.6, glow: 0xffb040 },
+    pinetroll:{ name: '솔숲 트롤', lv: 76, build: 'biped', color: 0x3e4a32, hpM: 2.3, atkM: 1.6, scale: 2.3, club: true },
+    cragdog:  { name: '바위개', lv: 76, build: 'quad', color: 0x5e5a54, hpM: 1.4, atkM: 1.5, scale: 1.35 },
+    rockogre: { name: '바위 오우거', lv: 78, build: 'biped', color: 0x7a7266, hpM: 2.4, atkM: 1.65, scale: 2.35, club: true },
+    icewolf:  { name: '얼음 늑대', lv: 78, build: 'quad', color: 0xd0e0ea, hpM: 1.35, atkM: 1.6, scale: 1.35 },
+    snowslime:{ name: '눈 슬라임', lv: 79, build: 'slime', color: 0xeef4f8, hpM: 1.7, atkM: 1.4, scale: 1.65, glow: 0xc0e0ff },
+    frostgiant:{ name: '서리 거인', lv: 80, build: 'biped', color: 0x9ab0c0, hpM: 2.6, atkM: 1.7, scale: 2.6, club: true },
     // 엑시즈 북문 밖 (Lv 130–165)
-    steppewolf:{ name: '초원 늑대', lv: 131, build: 'quad', color: 0x9a8058, hpM: 1.25, atkM: 1.5, scale: 1.3 },
-    clayslime:{ name: '점토 슬라임', lv: 136, build: 'slime', color: 0xa86a48, hpM: 1.7, atkM: 1.35, scale: 1.65 },
-    wildram:  { name: '들양', lv: 138, build: 'quad', color: 0xd8ccb0, hpM: 1.5, atkM: 1.5, scale: 1.4, tusk: true },
-    reedviper:{ name: '갈대뱀', lv: 143, build: 'snake', color: 0x8a9a4a, hpM: 1.25, atkM: 1.65, scale: 2.0 },
-    warboar:  { name: '싸움 멧돼지', lv: 145, build: 'quad', color: 0x5a3626, hpM: 1.6, atkM: 1.6, scale: 1.55, tusk: true },
-    pollenslime:{ name: '꽃가루 슬라임', lv: 148, build: 'slime', color: 0xe8d050, hpM: 1.7, atkM: 1.4, scale: 1.65, glow: 0xfff070 },
-    fieldogre:{ name: '들판 오우거', lv: 151, build: 'biped', color: 0x9a7a52, hpM: 2.5, atkM: 1.7, scale: 2.4, club: true },
-    ashwolf:  { name: '잿빛 늑대', lv: 152, build: 'quad', color: 0x6a6866, hpM: 1.4, atkM: 1.65, scale: 1.35 },
-    brownbear:{ name: '불곰', lv: 157, build: 'quad', color: 0x5a3a22, hpM: 1.9, atkM: 1.6, scale: 1.85 },
-    hilltroll:{ name: '언덕 트롤', lv: 159, build: 'biped', color: 0x6a7a4a, hpM: 2.5, atkM: 1.7, scale: 2.35, club: true },
-    stoneslime:{ name: '돌 슬라임', lv: 162, build: 'slime', color: 0x8a8680, hpM: 1.9, atkM: 1.45, scale: 1.7 },
-    hillgiant:{ name: '언덕 거인', lv: 165, build: 'biped', color: 0x8a7a62, hpM: 2.7, atkM: 1.75, scale: 2.65, club: true },
+    steppewolf:{ name: '초원 늑대', lv: 80, build: 'quad', color: 0x9a8058, hpM: 1.25, atkM: 1.5, scale: 1.3 },
+    clayslime:{ name: '점토 슬라임', lv: 82, build: 'slime', color: 0xa86a48, hpM: 1.7, atkM: 1.35, scale: 1.65 },
+    wildram:  { name: '들양', lv: 82, build: 'quad', color: 0xd8ccb0, hpM: 1.5, atkM: 1.5, scale: 1.4, tusk: true },
+    reedviper:{ name: '갈대뱀', lv: 84, build: 'snake', color: 0x8a9a4a, hpM: 1.25, atkM: 1.65, scale: 2.0 },
+    warboar:  { name: '싸움 멧돼지', lv: 84, build: 'quad', color: 0x5a3626, hpM: 1.6, atkM: 1.6, scale: 1.55, tusk: true },
+    pollenslime:{ name: '꽃가루 슬라임', lv: 85, build: 'slime', color: 0xe8d050, hpM: 1.7, atkM: 1.4, scale: 1.65, glow: 0xfff070 },
+    fieldogre:{ name: '들판 오우거', lv: 86, build: 'biped', color: 0x9a7a52, hpM: 2.5, atkM: 1.7, scale: 2.4, club: true },
+    ashwolf:  { name: '잿빛 늑대', lv: 86, build: 'quad', color: 0x6a6866, hpM: 1.4, atkM: 1.65, scale: 1.35 },
+    brownbear:{ name: '불곰', lv: 88, build: 'quad', color: 0x5a3a22, hpM: 1.9, atkM: 1.6, scale: 1.85 },
+    hilltroll:{ name: '언덕 트롤', lv: 88, build: 'biped', color: 0x6a7a4a, hpM: 2.5, atkM: 1.7, scale: 2.35, club: true },
+    stoneslime:{ name: '돌 슬라임', lv: 89, build: 'slime', color: 0x8a8680, hpM: 1.9, atkM: 1.45, scale: 1.7 },
+    hillgiant:{ name: '언덕 거인', lv: 90, build: 'biped', color: 0x8a7a62, hpM: 2.7, atkM: 1.75, scale: 2.65, club: true },
     // 엑시즈 동문 밖 (Lv 165–200)
-    shadewolf:{ name: '그늘 늑대', lv: 166, build: 'quad', color: 0x3a3a3e, hpM: 1.4, atkM: 1.7, scale: 1.35 },
-    leafslime:{ name: '잎 슬라임', lv: 169, build: 'slime', color: 0x4a8a3a, hpM: 1.8, atkM: 1.5, scale: 1.7, glow: 0x80e060 },
-    cliffboar:{ name: '벼랑 멧돼지', lv: 173, build: 'quad', color: 0x4a3a30, hpM: 1.7, atkM: 1.7, scale: 1.6, tusk: true },
-    pitviper: { name: '살무사', lv: 178, build: 'snake', color: 0x5a4a32, hpM: 1.3, atkM: 1.8, scale: 2.0 },
-    moonbear: { name: '반달곰', lv: 180, build: 'quad', color: 0x1e1a1a, hpM: 2.0, atkM: 1.7, scale: 1.85 },
-    rotslime: { name: '썩은 잎 슬라임', lv: 183, build: 'slime', color: 0x5a5a2a, hpM: 1.9, atkM: 1.55, scale: 1.7 },
-    oldtroll: { name: '늙은 트롤', lv: 186, build: 'biped', color: 0x4a5a4a, hpM: 2.7, atkM: 1.8, scale: 2.45, club: true },
-    gorgehound:{ name: '협곡 사냥개', lv: 187, build: 'quad', color: 0x7a5e48, hpM: 1.55, atkM: 1.75, scale: 1.4 },
-    gorgeogre:{ name: '협곡 오우거', lv: 192, build: 'biped', color: 0x7a5a42, hpM: 2.8, atkM: 1.85, scale: 2.5, club: true },
-    stormwolf:{ name: '폭풍 늑대', lv: 194, build: 'quad', color: 0x7a8a9a, hpM: 1.6, atkM: 1.85, scale: 1.45 },
-    cloudslime:{ name: '구름 슬라임', lv: 197, build: 'slime', color: 0xf0f2f6, hpM: 2.0, atkM: 1.6, scale: 1.75, glow: 0xd8e8ff },
-    peakgiant:{ name: '봉우리 거인', lv: 200, build: 'biped', color: 0x8a8a92, hpM: 3.0, atkM: 1.9, scale: 2.8, club: true },
+    shadewolf:{ name: '그늘 늑대', lv: 90, build: 'quad', color: 0x3a3a3e, hpM: 1.4, atkM: 1.7, scale: 1.35 },
+    leafslime:{ name: '잎 슬라임', lv: 91, build: 'slime', color: 0x4a8a3a, hpM: 1.8, atkM: 1.5, scale: 1.7, glow: 0x80e060 },
+    cliffboar:{ name: '벼랑 멧돼지', lv: 92, build: 'quad', color: 0x4a3a30, hpM: 1.7, atkM: 1.7, scale: 1.6, tusk: true },
+    pitviper: { name: '살무사', lv: 94, build: 'snake', color: 0x5a4a32, hpM: 1.3, atkM: 1.8, scale: 2.0 },
+    moonbear: { name: '반달곰', lv: 94, build: 'quad', color: 0x1e1a1a, hpM: 2.0, atkM: 1.7, scale: 1.85 },
+    rotslime: { name: '썩은 잎 슬라임', lv: 95, build: 'slime', color: 0x5a5a2a, hpM: 1.9, atkM: 1.55, scale: 1.7 },
+    oldtroll: { name: '늙은 트롤', lv: 96, build: 'biped', color: 0x4a5a4a, hpM: 2.7, atkM: 1.8, scale: 2.45, club: true },
+    gorgehound:{ name: '협곡 사냥개', lv: 96, build: 'quad', color: 0x7a5e48, hpM: 1.55, atkM: 1.75, scale: 1.4 },
+    gorgeogre:{ name: '협곡 오우거', lv: 98, build: 'biped', color: 0x7a5a42, hpM: 2.8, atkM: 1.85, scale: 2.5, club: true },
+    stormwolf:{ name: '폭풍 늑대', lv: 98, build: 'quad', color: 0x7a8a9a, hpM: 1.6, atkM: 1.85, scale: 1.45 },
+    cloudslime:{ name: '구름 슬라임', lv: 99, build: 'slime', color: 0xf0f2f6, hpM: 2.0, atkM: 1.6, scale: 1.75, glow: 0xd8e8ff },
+    peakgiant:{ name: '봉우리 거인', lv: 100, build: 'biped', color: 0x8a8a92, hpM: 3.0, atkM: 1.9, scale: 2.8, club: true },
     // 불타는 협곡 (4E 너머, Lv 200–235)
     cinderhound:{ name: '잿빛 사냥개', lv: 202, build: 'quad', color: 0x4a4440, hpM: 1.5, atkM: 1.85, scale: 1.4 },
     cinderslime:{ name: '불씨 슬라임', lv: 205, build: 'slime', color: 0x3a2a26, hpM: 2.0, atkM: 1.6, scale: 1.75, glow: 0xff7a30 },
@@ -343,6 +343,14 @@
     firewolf: { name: '불꽃 늑대', lv: 230, build: 'quad', color: 0xb04a1e, hpM: 1.7, atkM: 2.0, scale: 1.5 },
     smokeslime:{ name: '연기 슬라임', lv: 233, build: 'slime', color: 0x6a6662, hpM: 2.2, atkM: 1.75, scale: 1.85, glow: 0xffb070 },
     firegiant:{ name: '불의 거인', lv: 235, build: 'biped', color: 0x6a2a1e, hpM: 3.2, atkM: 2.0, scale: 2.9, club: true },
+    // 허칠산 (설산, Lv 100–150): 산 어귀에서 꼭대기로 갈수록 센 것이 산다
+    frostfox: { name: '서리 여우', lv: 101, build: 'quad', color: 0xeef2f6, hpM: 1.15, atkM: 1.3 },
+    snowgoat: { name: '눈 산양', lv: 108, build: 'quad', color: 0xe8e4da, hpM: 1.5, atkM: 1.35 },
+    icewisp:  { name: '얼음 정령', lv: 115, build: 'wisp', color: 0xcfeaf8, hpM: 1.25, atkM: 1.5 },
+    snowyeti: { name: '설인', lv: 122, build: 'biped', color: 0xe9edf0, hpM: 2.2, atkM: 1.6 },
+    avagolem: { name: '눈사태 골렘', lv: 130, build: 'biped', color: 0xe6ecf2, hpM: 2.7, atkM: 1.65, defM: 1.3 },
+    snowowl:  { name: '눈부엉이', lv: 138, build: 'bird', color: 0xf4f6f8, hpM: 1.45, atkM: 1.75 },
+    frostmammoth:{ name: '얼음 매머드', lv: 146, build: 'quad', color: 0x8a7a6a, hpM: 3.0, atkM: 1.8 },
     reddragon:{ name: '붉은 용 이그니스', lv: 100, fixed: { hp: 450000, atk: 900, def: 60, exp: 80000 }, gold: 80000, build: 'dragon', color: 0xa8231a, scale: 1, dragon: true },
   };
   /* ---------- 몬스터 능력치 (밸런스) ----------
@@ -383,9 +391,10 @@
     m2a: ['pinewolf', 'pinewolf', 'barkslime', 'hornboar', 'rockviper'], m2b: ['greybear', 'resinslime', 'pinetroll', 'cragdog', 'rockogre', 'icewolf', 'snowslime', 'frostgiant'],
     m3a: ['steppewolf', 'steppewolf', 'clayslime', 'wildram', 'reedviper'], m3b: ['warboar', 'pollenslime', 'fieldogre', 'ashwolf', 'brownbear', 'hilltroll', 'stoneslime', 'hillgiant'],
     m4a: ['shadewolf', 'shadewolf', 'leafslime', 'cliffboar', 'pitviper'], m4b: ['moonbear', 'rotslime', 'oldtroll', 'gorgehound', 'gorgeogre', 'stormwolf', 'cloudslime', 'peakgiant'],
+    hechil: ['frostfox', 'frostfox', 'snowgoat', 'snowgoat', 'icewisp', 'icewisp', 'snowyeti', 'avagolem', 'snowowl', 'frostmammoth'],
     m5a: ['cinderhound', 'cinderhound', 'cinderslime'], m5b: ['scorchboar', 'magmaviper'], m5c: ['ashbear', 'lavaslime', 'lavatroll'], m5d: ['flamehound', 'flameogre'], m5e: ['firewolf', 'smokeslime', 'firegiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 60, mhill: 60, m2a: 60, m2b: 60, m3a: 60, m3b: 60, m4a: 60, m4b: 60,   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 60, mhill: 60, m2a: 60, m2b: 60, m3a: 60, m3b: 60, m4a: 60, m4b: 60, hechil: 70,   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
   for (const L of MLINES_ALL) if (L.off) for (const [id] of L.zones) { delete ZONE_COUNT[id]; delete ZONE_MON[id]; }   // 꺼 둔 땅에는 몬스터가 나오지 않는다
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
@@ -399,9 +408,9 @@
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hechil: [0, 0], mfield: [60, 67] };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hechil: [100, 150], mfield: [60, 67] };
   MLINES.forEach((L) => { if (L.branch) { L.zones.forEach(([id], i) => { const a = 60 + (L.n - 1) * 35 + i * 7; ZONE_LEVELS[id] = [a, a + 7]; }); return; }
-    const a = 60 + (L.n - 1) * 35, w = 35 / L.zones.length; L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = [Math.round(a + i * w), Math.round(a + (i + 1) * w)]; }); });   /* 엑시즈 사냥터: 60레벨부터 문 하나에 35레벨, 그 문의 땅들이 나눠 맡는다 (빈 레벨 없이 60–200) */
+    const a = 60 + (L.n - 1) * 10, w = 10 / L.zones.length; L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = [Math.round(a + i * w), Math.round(a + (i + 1) * w)]; }); });   /* 엑시즈 사냥터: 60레벨부터 문 하나에 10레벨, 그 문의 땅들이 나눠 맡는다 (2026-11-06 원호: 60–100. 100–150은 허칠산) */
 
   // ---------- 의뢰 게시판 포스터 ----------
   // 의뢰를 주는 NPC마다 게시판이 따로 있다. 포스터는 마을 사람(실제 NPC)이 이유를 적어 붙인 것
@@ -426,7 +435,7 @@
   /* 엑시즈 모험가 길드의 큰 게시판: 등급(레벨대)별로 칸이 나뉘어 있고, 칸마다 의뢰가 고르게 붙는다 */
   BOARDS.guild = { title: '모험가 길드 의뢰 게시판', cap: 50, zones: [],
     /* 엑시즈 길드는 60레벨 이상 의뢰만: 스물여덟 레벨씩 칸을 나눈다 (사냥터의 시작 레벨로 가른다). 그 아래는 하레나 게시판 */
-    tiers: [...[[60, 88], [88, 116], [116, 144], [144, 172], [172, 200], [200, 250]].map(([lo, hi], i) => ({ id: 'a' + i, name: ['1급', '2급', '3급', '4급', '5급', '6급'][i], lv: [lo, hi], zones: MHUNT.filter((z) => ZONE_MON[z] && ZONE_LEVELS[z] && ZONE_LEVELS[z][0] >= lo && ZONE_LEVELS[z][0] < hi) }))].filter((t) => t.zones.length),
+    tiers: [...[[60, 70], [70, 80], [80, 90], [90, 100], [100, 125], [125, 150]].map(([lo, hi], i) => ({ id: 'a' + i, name: ['1급', '2급', '3급', '4급', '5급', '6급'][i], lv: [lo, hi], zones: [...MHUNT, 'hechil'].filter((z) => ZONE_MON[z] && ZONE_LEVELS[z] && ZONE_LEVELS[z][0] >= lo && ZONE_LEVELS[z][0] < hi) }))].filter((t) => t.zones.length),
     givers: [
       G('엑시즈 상인', '상인', ['{z}를 지나는 상단이 {m}에게 번번이 털립니다. 길이 안전해지면 왕도 물가도 내려갈 거예요.', '{z}에서 들여오는 물건이 {m} 때문에 끊겼어요. 가게 선반이 비어 갑니다.']),
       G('길드 접수원', '모험가 길드', ['{z}에 나간 모험가들이 {m} 때문에 돌아오지 못하고 있어요. 수를 줄여 길을 열어 주세요.', '{z}의 {m}에 대한 신고가 길드에 쌓였어요. 처리해 주실 분을 찾습니다.']),
