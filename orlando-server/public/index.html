@@ -26704,6 +26704,8 @@ function sendChat(){
       for(const k in ITEMS){const I=ITEMS[k];if(!(I.slot==='weapon'||I.slot==='sub')||!I.cls||I.cls==='basic'||!line.has(I.cls)||have.has(k))continue;if(P.bag.length>=BAG_SIZE){full++;continue;}P.bag.push(bagGear(k,10));got++;}
       if(got)log(`[테스트] 전직 무기 ${got}개를 가방에 넣었다`,'sys');if(full)log(`[테스트] 가방이 가득 차서 전직 무기 ${full}개를 못 넣었다`,'sys');}
     computeStats(P);P.hp=P.maxhp;P.mp=P.maxmp;log('[테스트] 모든 장비를 최상급 +10으로 맞췄다','sys');invDirty();updateHud();save();return;}
+  if(text==='/fly'){if(P.fly){toggleFly(false);return;}if(mode!=='world'||P.hp<=0||CCAR.ride)return;   /* 지팡이에 올라타 난다. 다시 치면 내린다 */
+    if(P.seat!=null)seatLeave();if(P.ride&&typeof rideOff==='function')rideOff(true);toggleFly(true);return;}
   if(text==='/class'){if(!(JOBS[P.job].adv||[]).length){toast('더 전직할 직업이 없어요');return;}openMentor();return;} // 테스트: 레벨·스승과 상관없이 전직 창
   if(text==='/gold'){P.gold+=10000;log('[테스트] 10000 골드를 받았다','sys');invDirty();updateHud();save();return;}
   if(text==='/levelup'){const to=Math.min(MAX_LV,P.lv+20);while(P.lv<to)gainExp(needExp(P.lv)-P.exp);log(`[테스트] 레벨이 올랐다 → Lv ${P.lv}`,'sys');return;}
@@ -26881,8 +26883,7 @@ function updatePlayer(dt){
   const g0=floorAt(pos.x,pos.z,pos.y);
   const onGround=pos.y<=g0+.02&&vy<=0;
   if(P.fly){
-    // 비행: 보는 쪽으로 날아간다 (W는 카메라 방향 그대로, 위아래 포함). Space 상승, Ctrl 하강. 중력 없음
-    if(P.fly)toggleFly(false);
+    // 비행: 보는 쪽으로 날아간다 (W는 카메라 방향 그대로, 위아래 포함). Space 상승, Ctrl 하강. 중력 없음 (/fly 로 켜고 끈다)
     const spd=sp*2.8;let wx=0,wy=0,wz=0;
     if(len>.1){const n=Math.min(1,len);f/=len;r/=len;const d=camDir(),rx=Math.cos(cam.yaw),rz=-Math.sin(cam.yaw);wx=(d.x*f+rx*r)*spd*n;wy=d.y*f*spd*n;wz=(d.z*f+rz*r)*spd*n;}
     if(keys.Space)wy+=spd*.6;if(keys.ControlLeft||keys.ControlRight)wy-=spd*.6;
@@ -26892,8 +26893,8 @@ function updatePlayer(dt){
     moving=Math.hypot(pvel.x,pvel.z)>.4?2:0;
     if(myMo==null||myMoId===''){myMoId='ride';myMo=motionFor(JOBS[P.job].weapon,'ride');swingT=.5;}if(myMoId==='ride'&&swingT<.5)swingT=.5;
     fitRide(player);rideTrail(player,dt);
-    // 가끔 균형을 잃고 떨어진다 (오래 탈수록·맞으면 더 자주)
-    P.flyT=(P.flyT||0)+dt;if(P.flyFall||(P.flyT>4&&Math.random()<dt/28)){P.flyFall=false;flyFall();}
+    // 맞으면 균형을 잃고 떨어질 수 있다
+    P.flyT=(P.flyT||0)+dt;if(P.flyFall){P.flyFall=false;flyFall();}
   }else if(P.dash){
     const D=P.dash,step=D.dist/D.dur*dt;
     // 빠르게 움직여도 벽을 뚫지 않게 잘게 나눠 움직이며 밀어낸다
