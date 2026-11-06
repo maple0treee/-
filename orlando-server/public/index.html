@@ -3863,8 +3863,14 @@ const FOODK=(()=>{
   /* 같은 자리면 늘 같은 갈래 (무작위 수를 쓰지 않는다: 둘레의 배치가 바뀌지 않게) */
   const pickV=(x,z,n)=>Math.floor(hash3(Math.round(x*10),Math.round(z*10),5.5)*n)%n;
   /* 여러 개를 한 모양으로 합친다: [[열쇠, Matrix4], ...] (따로 된 Mesh로 그리는 곳에서 그리기 횟수를 줄인다) */
-  const merge=list=>{const A=acc(),_n=new THREE.Matrix3();for(const [k,m] of list){const g=geo(k),a=g.attributes,P=a.position.array,N=a.normal.array,Cc=a.color.array,G=a.mt.array;_n.getNormalMatrix(m);
-      for(let i=0;i<P.length;i+=3){_V.set(P[i],P[i+1]-.0015,P[i+2]).applyMatrix4(m);_W.set(N[i],N[i+1],N[i+2]).applyMatrix3(_n).normalize();A.p.push(_V.x,_V.y,_V.z);A.n.push(_W.x,_W.y,_W.z);A.c.push(Cc[i],Cc[i+1],Cc[i+2]);A.g.push(G[i/3]);}}
+  /* 빠르게: 보통 배열에 하나씩 push하지 않고 처음부터 Float32Array에 바로 쓴다. 계산 식은 Vector3.applyMatrix4·applyMatrix3·normalize와 똑같아서 나오는 모양도 똑같다 */
+  const merge=list=>{let nv=0;const GS=list.map(([k])=>{const g=geo(k);nv+=g.attributes.position.count;return g;});
+    const A={p:new Float32Array(nv*3),n:new Float32Array(nv*3),c:new Float32Array(nv*3),g:new Float32Array(nv)},_n=new THREE.Matrix3();let o=0;
+    for(let j=0;j<list.length;j++){const m=list[j][1],a=GS[j].attributes,P=a.position.array,N=a.normal.array,Cc=a.color.array,G=a.mt.array,e=m.elements;_n.getNormalMatrix(m);const f=_n.elements;
+      for(let i=0;i<P.length;i+=3,o+=3){const x=P[i],y=P[i+1]-.0015,z=P[i+2],w=1/(e[3]*x+e[7]*y+e[11]*z+e[15]);
+        A.p[o]=(e[0]*x+e[4]*y+e[8]*z+e[12])*w;A.p[o+1]=(e[1]*x+e[5]*y+e[9]*z+e[13])*w;A.p[o+2]=(e[2]*x+e[6]*y+e[10]*z+e[14])*w;
+        const nx=N[i],ny=N[i+1],nz=N[i+2],qx=f[0]*nx+f[3]*ny+f[6]*nz,qy=f[1]*nx+f[4]*ny+f[7]*nz,qz=f[2]*nx+f[5]*ny+f[8]*nz,s=1/(Math.sqrt(qx*qx+qy*qy+qz*qz)||1);
+        A.n[o]=qx*s;A.n[o+1]=qy*s;A.n[o+2]=qz*s;A.c[o]=Cc[i];A.c[o+1]=Cc[i+1];A.c[o+2]=Cc[i+2];A.g[o/3]=G[i/3];}}
     return done(A);};
   return {geo,mat,matV,pickV,merge,T,VARS:{mug:3,wine:1,bread:3,cheese:2,stew:2,plate:3,loaf:5,cart:1,hand:5,veg:3,dough:2,flour:2}};
 })();
@@ -12525,7 +12531,8 @@ function marcusPlan(){if(MARCUS.plan)return MARCUS.plan;
   const inPoly=(P,x,y)=>{let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const [xi,yi]=P[i],[xj,yj]=P[j];if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))c=!c;}return c;};
   const segDist=(x,y,a,b)=>{const vx=b[0]-a[0],vy=b[1]-a[1],L=vx*vx+vy*vy||1,k=Math.max(0,Math.min(1,((x-a[0])*vx+(y-a[1])*vy)/L));return Math.hypot(a[0]+vx*k-x,a[1]+vy*k-y);};
   const polyDist=(P,x,y,closed=true)=>{let d=1e9;for(let i=0;i<P.length-(closed?0:1);i++){const q=segDist(x,y,P[i],P[(i+1)%P.length]);if(q<d)d=q;}return d;};
-  const wallDist=(x,y)=>{const d=polyDist(wall,x,y);return inPoly(wall,x,y)?-d:d;};   /* 안쪽 음수 */
+  /* 같은 자리를 잇달아 물으면(땅 높이 → 물 깊이 → 땅 색) 지난 답을 그대로 준다: 결과는 똑같다 */
+  let _wdX=NaN,_wdY=NaN,_wdV=0;const wallDist=(x,y)=>{if(x===_wdX&&y===_wdY)return _wdV;const d=polyDist(wall,x,y);_wdX=x;_wdY=y;return _wdV=inPoly(wall,x,y)?-d:d;};   /* 안쪽 음수 */
   const inZone=(z,x,y,m)=>{if(z.shape==='circle')return Math.hypot(x-z.x,y-z.y)<z.r+m;
     if(z.shape==='rect'){const a=-(z.rot||0)*PI/180,dx=x-z.x,dy=y-z.y,lx=dx*Math.cos(a)-dy*Math.sin(a),ly=dx*Math.sin(a)+dy*Math.cos(a);return Math.abs(lx)<z.w/2+m&&Math.abs(ly)<z.h/2+m;}
     if(inPoly(z.pts,x,y))return true;return m>0&&polyDist(z.pts,x,y)<m;};
@@ -12556,9 +12563,18 @@ function marcusPlan(){if(MARCUS.plan)return MARCUS.plan;
     for(const q of hillStairs()){const dx=x-q.x,dy=y-q.y,t=(dx*q.ux+dy*q.uy)/q.L,lat=Math.abs(-dx*q.uy+dy*q.ux);if(t>=-.02&&t<=1&&lat<q.w/2)return MARCUS_HILL_H*(1-Math.max(0,t));}
     return 0;};
   const onPlateau=(x,y)=>inPoly(hill,x,y);
-  const nearStreet=(x,y,m,noDead)=>{for(const st of streets){if(noDead&&st.dead)continue;for(let i=0;i<st.p.length-1;i++)if(segDist(x,y,st.p[i],st.p[i+1])<st.w/2+m)return true;}for(const [px,py,r] of piazze)if(Math.hypot(x-px,y-py)<r+m)return true;return false;};
+  /* 길 가까이인지 빠르게: 16m 칸마다 닿을 수 있는 길 토막만 모아 두고 그것만 본다 (같은 식으로 재서 답은 똑같다). 길 손질이 다 끝난 뒤(MARCUS.plan이 생긴 뒤)부터, 여유 m이 4m 이하일 때만 */
+  let _nsG=null;const NS_C=16,NS_M=4,nsKey=(i,j)=>(i+2048)*4096+(j+2048);
+  const nsGrid=()=>{const G=new Map(),put=(x0,x1,y0,y1,v)=>{for(let i=Math.floor(x0/NS_C);i<=Math.floor(x1/NS_C);i++)for(let j=Math.floor(y0/NS_C);j<=Math.floor(y1/NS_C);j++){const k=nsKey(i,j);let L=G.get(k);if(!L)G.set(k,L=[]);L.push(v);}};
+    streets.forEach((st,si)=>{const r=st.w/2+NS_M+.01;for(let i=0;i<st.p.length-1;i++){const a=st.p[i],b=st.p[i+1];put(Math.min(a[0],b[0])-r,Math.max(a[0],b[0])+r,Math.min(a[1],b[1])-r,Math.max(a[1],b[1])+r,[si,i]);}});
+    piazze.forEach(([px,py,pr],pi)=>{const r=pr+NS_M+.01;put(px-r,px+r,py-r,py+r,[-1,pi]);});return G;};
+  const nearStreet=(x,y,m,noDead)=>{if(MARCUS.plan&&m<=NS_M){if(!_nsG)_nsG=nsGrid();const L=_nsG.get(nsKey(Math.floor(x/NS_C),Math.floor(y/NS_C)));if(!L)return false;
+      for(const [si,i] of L){if(si<0){const [px,py,r]=piazze[i];if(Math.hypot(x-px,y-py)<r+m)return true;continue;}const st=streets[si];if(noDead&&st.dead)continue;if(segDist(x,y,st.p[i],st.p[i+1])<st.w/2+m)return true;}return false;}
+    return nearStreet0(x,y,m,noDead);};
+  const nearStreet0=(x,y,m,noDead)=>{for(const st of streets){if(noDead&&st.dead)continue;for(let i=0;i<st.p.length-1;i++)if(segDist(x,y,st.p[i],st.p[i+1])<st.w/2+m)return true;}for(const [px,py,r] of piazze)if(Math.hypot(x-px,y-py)<r+m)return true;return false;};
   const zone=id=>zones.find(z=>z.id===id);
-  const waterDepth=(x,y)=>{if(inHarbor(x,y,0)){if(wallDist(x,y)>-2)return 3.2;const d=polyDist(harbor,x,y);return 3.2*smooth(0,1.8,d);}   /* 부두 바로 아래부터 깊게 (얕은 둔덕이 포석처럼 보이지 않게) */   /* 성벽 밖으로 나간 항구 가장자리는 얕은 둔덕 없이 깊게 */
+  let _wpX=NaN,_wpY=NaN,_wpV=0;const waterDepth=(x,y)=>{if(x===_wpX&&y===_wpY)return _wpV;const v=waterDepth0(x,y);_wpX=x;_wpY=y;return _wpV=v;};
+  const waterDepth0=(x,y)=>{if(inHarbor(x,y,0)){if(wallDist(x,y)>-2)return 3.2;const d=polyDist(harbor,x,y);return 3.2*smooth(0,1.8,d);}   /* 부두 바로 아래부터 깊게 (얕은 둔덕이 포석처럼 보이지 않게) */   /* 성벽 밖으로 나간 항구 가장자리는 얕은 둔덕 없이 깊게 */
     const wd=wallDist(x,y);if(wd<0){const rd=riverDist(x,y);if(rd<MARCUS_RIVER_W/2+2&&!bridgeAt(x,y))return MARCUS_RIVER_DEEP*smooth(MARCUS_RIVER_W/2-1,MARCUS_RIVER_W/2-4.5,rd);   /* 둑 선(W/2+.5) 안쪽에서부터 내려간다: 땅 그물이 성겨도 둑 뒤 땅은 평평하게 */return 0;}
     /* 성벽 밖으로 나간 항구 물은 해자와 이어 준다 (그 사이에 물 위로 뜬 듯한 땅 띠가 남지 않게) */
     {const rd=riverDist(x,y);if(rd<MARCUS_RIVER_W/2+2)return Math.max(moatDepth(x,y),MARCUS_RIVER_DEEP*smooth(MARCUS_RIVER_W/2-1,MARCUS_RIVER_W/2-4.5,rd));}   /* 서쪽 들판에서 흘러드는 강 */
@@ -13825,7 +13841,9 @@ async function buildMarcus(H){
     /* fd: 음식. 매끈하게 그리고 mt 자리에 윤기를 담는다. 가까운 칸에서만 그린다(C.fm) */
   /* dt: 집 잔손질(창틀·덧문 살·처마 홈통·모서리 돌 등). 가까운 칸에서만 그린다(updateMarcus의 C.dm) */
   const SHD={op:[true,true],gl:[false,false],sh:[true,false],ip:[false,false],dt:[false,true],fd:[false,false],sm:[true,true],pr:[true,true]};
-  const bake=(b,key,parent)=>{if(!b.pos.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(b.pos.out(),3));g.setAttribute('normal',new THREE.Float32BufferAttribute(b.nor.out(),3));g.setAttribute('color',new THREE.Float32BufferAttribute(b.col.out(),3));g.setAttribute('mt',new THREE.Float32BufferAttribute(b.mt.out(),1));
+  /* 다 쓴 늘어나는 배열을 그대로 쓴다 (예전에는 새 배열로 한 벌 더 베꼈다: 칸이 수백 MB라 그것만으로 오래 걸렸다). 남는 자리가 많을 때만 맞는 크기로 베낀다. 값은 똑같다 */
+  const fit=f=>f.length===f.a.length?f.a:f.length>=f.a.length*.8?f.a.subarray(0,f.length):f.a.slice(0,f.length);
+  const bake=(b,key,parent)=>{if(!b.pos.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(fit(b.pos),3));g.setAttribute('normal',new THREE.BufferAttribute(fit(b.nor),3));g.setAttribute('color',new THREE.BufferAttribute(fit(b.col),3));g.setAttribute('mt',new THREE.BufferAttribute(fit(b.mt),1));
     g.computeBoundingSphere();const m=new THREE.Mesh(g,MAT[key]);m.castShadow=SHD[key][0];m.receiveShadow=SHD[key][1];parent.add(m);b.pos=b.nor=b.col=b.mt=null;return m;};
   for(const C of MARCUS.cells.values()){await BOOT.y();for(const k of ['op','gl','sh','ip','sm'])bake(C[k],k,C.g);C.dm=bake(C.dt,'dt',C.g);if(C.dm)C.dm.visible=false;C.fm=bake(C.fd,'fd',C.g);if(C.fm)C.fm.visible=false;C.pm=bake(C.pr,'pr',C.g);if(C.pm)C.pm.visible=false;}
   plodAdd(FOODK.geo('Slamp:0'),FOODK.geo('Slamplo:0'),LAMPM,{D:PR_D});
@@ -19599,8 +19617,16 @@ const HECH=(()=>{
   return {PK,LAKE,HUT,R0,EZ,HC,lakeR,raw,height,trailNear,init,fbm,ridged,vn,MAIN,SPUR,
     /* 높이를 세계 좌표로 */
     at:(x,z)=>{const I=OR.ISLES.hechil;return height(x-I.x,z-I.z);}};})();
+/* 어느 땅인지 빠르게 찾기: 64m 칸마다 '그 칸 어디서든 가장 가까울 수 있는 땅'만 OR.ISLE_ORDER 차례 그대로 골라 두고,
+   그 안에서 OR.isleAt과 똑같은 식으로 고른다 (가장 가까운 땅은 늘 후보 안에 있어서 답이 똑같다) */
+const ISLE_Q=new Map();
+function isleAtQ(x,z){const S=64,ci=Math.floor(x/S),cj=Math.floor(z/S),k=(ci+32768)*65536+(cj+32768);let C=ISLE_Q.get(k);
+  if(!C){const x0=ci*S,x1=x0+S,z0=cj*S,z1=z0+S,all=OR.ISLE_ORDER.map(id=>OR.ISLES[id]);let mu=1e9;
+    const lb=all.map(I=>{const dx=Math.max(x0-I.x,0,I.x-x1),dz=Math.max(z0-I.z,0,I.z-z1),ux=Math.max(Math.abs(x0-I.x),Math.abs(x1-I.x)),uz=Math.max(Math.abs(z0-I.z),Math.abs(z1-I.z));mu=Math.min(mu,Math.hypot(ux,uz)-I.R);return Math.hypot(dx,dz)-I.R;});
+    C=all.filter((I,i)=>lb[i]<=mu+1e-3);if(!(C.length>0)||!isFinite(x)||!isFinite(z))C=all;ISLE_Q.set(k,C);}
+  let b=null,bd=1e9;for(let i=0;i<C.length;i++){const I=C[i],ax=Math.abs(x-I.x),az=Math.abs(z-I.z);if((ax>az?ax:az)-I.R>=bd)continue;const d=Math.hypot(x-I.x,z-I.z)-I.R;if(d<bd){bd=d;b=I;}}return b;}
 function isleHeight(x,z){
-  const I=OR.isleAt(x,z),d=Math.hypot(x-I.x,z-I.z),R=I.R,ed=Math.hypot(x-I.entry.x,z-I.entry.z);
+  const I=isleAtQ(x,z),d=Math.hypot(x-I.x,z-I.z),R=I.R,ed=Math.hypot(x-I.entry.x,z-I.entry.z);
   let h=0,base=0;
   switch(I.id){
     case 'silva':h=Math.sin(x*.05)*Math.cos(z*.06)*1.8+Math.sin(x*.13+z*.1)*.9+Math.cos(z*.17-x*.08)*.4+Math.max(0,Math.sin(x*.03+.7)*Math.sin(z*.028))*3.2;break;
@@ -28348,8 +28374,27 @@ function loopBody(){
   if(mode==='world'){updateBossBar();
     if(shakeT>0){shakeT-=dt;const a=shakeT*.12;camera.position.x+=rnd(-a,a);camera.position.y+=rnd(-a,a);}}
   if(mode!=='title'){miniT-=dt;if(miniT<=0){miniT=1/20;drawMini();}if(wmapOpen&&(tAll*10|0)%2===0)drawWorldMap();updateHotbar();wpTick();saveT+=dt;if(saveT>8){saveT=0;if(mode==='world')save();}}
+  /* 첫 화면(시작 창)은 불투명해서 뒤의 세상이 보이지 않는다: 그동안은 세상을 그리지 않는다 (물체 4만 개를 매 프레임 그리느라 로딩이 끝난 뒤에도 첫 화면이 늦게 떴다) */
+  if(mode==='title'&&!START_EL.hidden){titleWarm();return;}
   renderer.render(scene,camera);if(typeof ninVisionRender==='function')ninVisionRender();
 }
+const START_EL=document.getElementById('start');
+/* 그 대신 시작 창이 떠 있는 동안 세상 물체를 몇백 개씩 보이지 않는 작은 화면(8x8)에 그려 모양·그림을 그래픽카드에 미리 올려 둔다.
+   한 프레임에 조금씩(한 번에 십몇 ms 안쪽)이라 시작 창이 멈추지 않고, 게임에 들어간 뒤 처음 보는 곳에서 멈추는 일도 줄어든다 (warmGpu가 할 일을 나눠서 먼저) */
+const TW={list:null,lights:null,i:0,n:200,rt:null,done:false,L:29};
+function titleWarm(){if(TW.done||warmGpu.done)return;
+  if(!TW.list){TW.list=[];TW.lights=[];scene.traverse(o=>{if(o.isLight)TW.lights.push(o);else if(o.isMesh||o.isPoints||o.isLine||o.isSprite)TW.list.push(o);});TW.rt=new THREE.WebGLRenderTarget(8,8);}
+  if(TW.i>=TW.list.length){TW.done=true;TW.rt.dispose();TW.list=TW.lights=null;return;}
+  const B=TW.list.slice(TW.i,TW.i+TW.n),fc=[],iv=[],had=new Set(),L=TW.L;TW.i+=B.length;
+  const ch=new Set();for(const q of InstChunks.list)if(!q.m.visible)ch.add(q.m);
+  const t0=performance.now(),mask=camera.layers.mask,prev=renderer.getRenderTarget(),nu=renderer.shadowMap.needsUpdate;
+  for(const o of [...TW.lights,...B]){if(o.layers.mask&(1<<L))had.add(o);else o.layers.enable(L);}
+  for(const o of B){if(o.frustumCulled){o.frustumCulled=false;fc.push(o);}if(ch.has(o)){o.visible=true;iv.push(o);}}
+  camera.layers.set(L);renderer.shadowMap.needsUpdate=false;
+  try{renderer.setRenderTarget(TW.rt);renderer.render(scene,camera);}catch(e){}
+  renderer.setRenderTarget(prev);renderer.shadowMap.needsUpdate=nu;camera.layers.mask=mask;
+  for(const o of [...TW.lights,...B])if(!had.has(o))o.layers.disable(L);for(const o of fc)o.frustumCulled=true;for(const o of iv)o.visible=false;
+  const dt=performance.now()-t0;TW.n=dt<6?Math.min(TW.n*2,3000):dt>24?Math.max(25,TW.n>>1):TW.n;}
 sun.position.set(30,60,20);
 if(!window.ORLANDO_WS){mnet=makeLocalMonsterNet();setupNetMonsters(mnet);mnet.start();}renderOnline();
 /* 서버에 닿지 않으면(서버가 꺼졌거나, 서버 없이 올린 사본) 몬스터를 이 기기에서 돌려 혼자서라도 할 수 있게 한다 */
