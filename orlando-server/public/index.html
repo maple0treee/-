@@ -2716,8 +2716,8 @@ const ZONES={
   exmarket:{name:'중앙 시장',diff:0,rec:'',sky:0xe4e6e2,mm:'#c0b296'},
   arena:{name:'투기장',diff:0,rec:'',sky:0xe8dcc4,mm:'#c8b48a'},
   library:{name:'왕립 도서관',diff:0,rec:'',sky:0x3a2e22,mm:'#9a7450'},
-  hechil:{name:'허칠산',diff:6,sky:0xd2dde9,mm:'#e9eef3'},
-  hcave:{name:'허칠산 동굴',diff:6,sky:0x0c1118,mm:'#2a323c'},
+  hechil:{name:'허칠',diff:6,sky:0xd2dde9,mm:'#e9eef3'},
+  hcave:{name:'허칠 동굴',diff:6,sky:0x0c1118,mm:'#2a323c'},
   khq:{name:'기사단 본부',diff:0,rec:'',sky:0xe4e6e2,mm:'#b0a890'},
 };
 /* 엑시즈 문 밖 사냥터: 이름 = 마르쿠스 + 땅 생김새 (예: 마르쿠스 숲). 2026-11-05 원호: 번호(2A 등)는 붙이지 않는다 */
@@ -10116,12 +10116,29 @@ const STICK_HOP=[[0,0,-.05,.1,.1,-.3,.03],[.2,0,-.8,1.35,.75,-.35,.32],[.3,.04,-
 function stickHop(t){const p=(t*.75)%1;let i=0;while(i<STICK_HOP.length-2&&STICK_HOP[i+1][0]<=p)i++;const a=STICK_HOP[i],b=STICK_HOP[i+1],u=(p-a[0])/(b[0]-a[0]),s=u*u*(3-2*u);
   return a.slice(1).map((v,k)=>v+(b[k+1]-v)*s);}
 /* 걷는 막대 인형 (주민): ph 걸음 위상, w 걷는 정도 */
-function stickWalkPose(g,ph,w,t,pp){const S=g.userData.stick;if(!S)return;const st=pp?pp.st:1,ar=pp?pp.arm:1,s=Math.sin(ph)*w;
-  S.L.hip.rotation.set(s*.6*st,0,0);S.R.hip.rotation.set(-s*.6*st,0,0);S.L.knee.rotation.x=Math.max(0,-Math.sin(ph))*w*.9*Math.min(1.25,st)+.05;S.R.knee.rotation.x=Math.max(0,Math.sin(ph))*w*.9*Math.min(1.25,st)+.05;
+/* 걸음 맞추기: 땅을 디딘 발은 몸이 나아가는 만큼 똑같이 뒤로 밀려 제자리에 붙어 있고(미끄러지지 않게), 무릎은 발을 앞으로 옮길 때만 굽힌다.
+   한 다리의 위상 u: |u|≤π/2 디딤(발 앞→뒤, 발끝 앞뒤 거리가 위상에 정비례), 나머지는 들어 옮김. 몸높이는 가장 낮은 발이 땅에 닿게 내린다 */
+const STK_AMP=.4,STK_LEG=.91,STK_H0=.45+.46*Math.cos(.05);
+/* 디딘 다리: 엉덩이 각 a(+는 발이 뒤로), 무릎 k0 */
+function stickLeg(u,A,k0){return Math.asin(Math.sin(A)*2*u/Math.PI);}
+const _wrapPi=u=>((u+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
+/* 들어 옮기는 다리: 발끝을 뒤→앞으로 옮기며 디딘 발 높이보다 들어 올린다 (두 마디 IK: 넓적다리 .45·정강이 .46, 무릎은 뒤로만 굽음) */
+function stickSwing(f,A,k0,H,lift){const zb=-(.45*Math.sin(A)+.46*Math.sin(A+k0)),zf=-(.45*Math.sin(-A)+.46*Math.sin(k0-A)),e=(1-Math.cos(Math.PI*f))/2;
+  const z=zb+(zf-zb)*e,y=-H+lift*Math.sin(Math.PI*f);let d=Math.hypot(y,z);d=Math.min(.909,Math.max(.2,d));
+  const k=Math.acos(Math.max(-1,Math.min(1,(d*d-.45*.45-.46*.46)/(2*.45*.46)))),phi=Math.atan2(-z,-y),b=Math.atan2(.46*Math.sin(k),.45+.46*Math.cos(k));return [phi-b,Math.max(k0,k)];}
+/* 걸음 빠르기(위상/초): 한 걸음(위상 π)에 디딘 발이 2·다리·sin(A)만큼 지나가므로 실제로 움직인 속도 v(m/s)를 그대로 나눈다 (sc: 몸 크기) */
+function stickCadence(v,w,st,sc){return v*Math.PI/(2*STK_LEG*(sc||1)*Math.max(.02,Math.sin(STK_AMP*(st||1)*w)));}
+/* 실제 속도에 맞춘 걸음 크기: 느리면 보폭이 줄고, 빠르면(뛰노는 아이) 보폭이 커진다 */
+const stickStride=(v,sc)=>Math.max(.12,Math.min(1.4,v/(1.25*(sc||1))));
+function stickWalkPose(g,ph,w,t,pp){const S=g.userData.stick;if(!S)return;const st=pp?pp.st:1,ar=pp?pp.arm:1,s=Math.sin(ph)*Math.min(1.2,w);
+  const A=STK_AMP*st*w,k0=.05+.06*Math.min(1,w),uL=_wrapPi(ph),lStance=Math.abs(uL)<=Math.PI/2,uS=lStance?uL:_wrapPi(ph+Math.PI);
+  const aS=stickLeg(uS,A,k0),HS=.45*Math.cos(aS)+.46*Math.cos(aS+k0),uW=_wrapPi(uS+Math.PI),f=(uW>0?uW-Math.PI/2:uW+1.5*Math.PI)/Math.PI;
+  const [aW,kW]=stickSwing(Math.max(0,Math.min(1,f)),A,k0,HS,.11*Math.min(1.1,w)*Math.min(1.2,st)),SL=lStance?S.L:S.R,WL=lStance?S.R:S.L;
+  SL.hip.rotation.set(aS,0,0);SL.knee.rotation.x=k0;WL.hip.rotation.set(aW,0,0);WL.knee.rotation.x=kW;const gy=HS-STK_H0;
   if(pp&&pp.hb){S.AR.sh.rotation.set(.45,-.6,-.15);S.AR.el.rotation.x=-1.5;S.AL.sh.rotation.set(.45,.6,.15);S.AL.el.rotation.x=-1.5;}   /* 뒷짐 */
   else{S.AR.sh.rotation.set(s*.5*ar,0,.08);S.AR.el.rotation.x=-.2-(ar>1.2?Math.max(0,s)*.4:0);S.AL.sh.rotation.set(-s*.5*ar,0,-.08);S.AL.el.rotation.x=-.2-(ar>1.2?Math.max(0,-s)*.4:0);}
   S.AR.hand.rotation.set(0,0,0);S.AL.hand.rotation.set(0,0,0);S.AR.el.rotation.y=0;S.AL.el.rotation.y=0;if(S.cup)S.cup.visible=false;
-  S.body.position.set(0,Math.abs(Math.cos(ph))*.03*w*(pp?pp.bob:1),0);S.body.rotation.set(0,0,0);S.upper.rotation.set(.04*w+(pp?pp.lean*w:0),0,0);S.head.rotation.set(pp?pp.head*w:0,0,0);
+  S.body.position.set(0,gy+Math.abs(Math.cos(ph))*.02*Math.min(1.2,w)*Math.max(0,(pp?pp.bob:1)-.6),0);S.body.rotation.set(0,0,0);S.upper.rotation.set(.04*w+(pp?pp.lean*w:0),0,0);S.head.rotation.set(pp?pp.head*w:0,0,0);
   if(pp){/* 성격 걸음: 두리번·흔들흔들·휘청·꾸벅 */
     if(pp.look>1.3){const gq=_sn(t*.5*pp.look,3);S.head.rotation.y=(Math.abs(gq)>.35?Math.sign(gq)*(Math.abs(gq)-.35)*1.3:0)*w;}
     if(pp.sway){S.body.rotation.z=Math.sin(ph)*.05*pp.sway*w;S.upper.rotation.y=Math.sin(ph)*.06*pp.sway*w;}
@@ -13939,7 +13956,11 @@ function citPose(c,t){
   if(c.k==='st')return {x:c.x,z:c.z,vx:Math.sin(c.yaw),vz:Math.cos(c.yaw),walk:false,s:0};
   if(c.k==='rt'){const u=((t+c.off)%c.P+c.P)%c.P;const S=c.sch;let lo=0,hi=S.length-1;while(lo<hi){const m=(lo+hi+1)>>1;if(S[m].st<=u)lo=m;else hi=m-1;}const it=S[lo];
     if(it.t==='s')return {x:it.x,z:it.z,vx:Math.sin(it.yaw),vz:Math.cos(it.yaw),walk:false,s:0,mode:it.mode};
-    const k=Math.min(1,(u-it.st)/it.dur),ux=(it.x1-it.x0)/it.L,uz=(it.z1-it.z0)/it.L;return {x:it.x0+(it.x1-it.x0)*k-uz*c.side,z:it.z0+(it.z1-it.z0)*k+ux*c.side,vx:ux,vz:uz,walk:true,s:0};}
+    /* 섰다가 떠날 때와 서기 전엔 천천히 걸음을 떼고 늦춘다 (구간 걸리는 시간은 그대로) */
+    if(it.e0===undefined){const pv=S[(lo-1+S.length)%S.length],nx=S[(lo+1)%S.length],ac=Math.min(.6,it.dur*.3);it.e0=pv.t==='s'||S.length===1?ac:0;it.e1=nx.t==='s'||S.length===1?ac:0;it.vm=it.L/(it.dur-(it.e0+it.e1)/2);}
+    const tau=Math.max(0,Math.min(it.dur,u-it.st)),D=it.dur,vm=it.vm;let d,vv=1;
+    if(tau<it.e0){d=vm*tau*tau/(2*it.e0);vv=tau/it.e0;}else if(tau>D-it.e1){const r=D-tau;d=it.L-vm*r*r/(2*it.e1);vv=r/it.e1;}else d=vm*(tau-it.e0/2);
+    const k=Math.min(1,d/it.L),ux=(it.x1-it.x0)/it.L,uz=(it.z1-it.z0)/it.L;return {x:it.x0+(it.x1-it.x0)*k-uz*c.side,z:it.z0+(it.z1-it.z0)*k+ux*c.side,vx:ux,vz:uz,walk:true,s:0,v:vv*vm/(c.sp||1)};}
   const sp=c.sp;
   if(c.k==='circ'){const L=2*Math.PI*c.r,s=((t+c.off)*sp)%L;const a=c.a0+c.dir*s/c.r;return {x:c.x+Math.cos(a)*c.r,z:c.z+Math.sin(a)*c.r,vx:-Math.sin(a)*c.dir,vz:Math.cos(a)*c.dir,walk:true,s};}
   /* 오가며 걷기: 천천히 걸음을 떼고 멈추기 전에 늦추며, 멈춰 서 있는 동안 돌아선다. 길모퉁이는 둥글게 돈다 */
@@ -14146,7 +14167,8 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
     near.forEach((c,k)=>{if(!c.I)return;if(c.I.stick){const sh=k<6;if(c.I.sh!==sh){c.I.sh=sh;c.I.g.traverse(o=>{if(o.isMesh)o.castShadow=sh;});}return;}const sh=k<10;if(c.I.sh!==sh){c.I.sh=sh;c.I.g.traverse(o=>{if(o.isSkinnedMesh&&o.material!==_citOl)o.castShadow=sh&&!o.material.transparent;});}});
     if(OLD){const [mb,mr,mh]=M.ims,m4=_cM4,qq=_cQ,v=_cV,sc=_cS;for(const c of M.list){if(c.I||c.d>M.FAR||n>=M.cap)continue;const q=c.q;
         v.set(q.x,citGround(q.x,q.z)+(c.y||0)+((q.mode||c.mode)==='sit'?-.45:0),q.z);qq.setFromAxisAngle(_cY,Math.atan2(q.vx,q.vz));const k=c.sc*(CIT_SMALL(c.type)?.7:1);sc.set(k,k,k);m4.compose(v,qq,sc);mb.setMatrixAt(n,m4);mr.setMatrixAt(n,m4);mh.setMatrixAt(n,m4);
-        const wk=!q.mode&&q.walk,spd=wk?c.sp*(q.v??1):0;M.aVel.array[n*2]=q.vx*spd;M.aVel.array[n*2+1]=q.vz*spd;M.aWalk.array[n*3]=c.ph;M.aWalk.array[n*3+1]=wk?c.sp*4.2:0;M.aWalk.array[n*3+2]=wk?.55*(c.pp?c.pp.st:1):0;
+        const wk=!q.mode&&q.walk,spd=wk?c.sp*(q.v??1):0;M.aVel.array[n*2]=q.vx*spd;M.aVel.array[n*2+1]=q.vz*spd;const fst=c.pp?c.pp.st:1,fsc=c._scl||(c._scl=c.sc*(CIT_SMALL(c.type)?.7:1)),fw=stickStride(spd,fsc),fr=wk?Math.min(14,stickCadence(spd,fw,fst,fsc)):0;   /* 먼 주민도 걸음 빠르기를 실제 속도에 맞춘다 (빠르기가 바뀌어도 위상이 튀지 않게 이어 셈) */
+        c.fph=(c.fph??c.ph)+(c.fT!=null?(t-c.fT)*(c.fr||0):0);c.fT=t;c.fr=fr;M.aWalk.array[n*3]=(c.fph-(t%1000)*fr)%6.2831853;M.aWalk.array[n*3+1]=fr;M.aWalk.array[n*3+2]=wk?STK_AMP*1.1*fst*Math.min(1.2,fw):0;
         const L=c._lk||(c._lk=citStickLook(CITM.ids[c.type]||'c'+c.type));_cC.setHex(L.robe);mb.setColorAt(n,_cC);_cC.setHex(L.hat==='helm'?0x7a8a9a:L.hat==='hood'?L.robe:L.hatC||0x4a3322);mh.setColorAt(n,_cC);n++;}
       M.fT=t;M.aVel.needsUpdate=M.aWalk.needsUpdate=true;mb.count=mr.count=mh.count=n;mb.instanceMatrix.needsUpdate=mr.instanceMatrix.needsUpdate=mh.instanceMatrix.needsUpdate=true;mb.instanceColor.needsUpdate=mh.instanceColor.needsUpdate=true;M.drawn=n;}
     else{
@@ -14154,11 +14176,17 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
       aP[n*3]=q.x;aP[n*3+1]=citGround(q.x,q.z)+(c.y||0);aP[n*3+2]=q.z;aI[n*4]=c.type;aI[n*4+1]=Math.atan2(q.vx,q.vz);aI[n*4+2]=c.sc;aI[n*4+3]=c.ph;
       const walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const idle=walking&&!q.walk;aF[n*3]=idle?0:fr[0];aF[n*3+1]=idle?0:fr[1];aF[n*3+2]=c.mode==='hoe'||c.mode==='hammer'?1.1:walking?c.sp*1.6:.6;n++;}
     M.aPos.needsUpdate=M.aInf.needsUpdate=M.aF.needsUpdate=true;M.mesh.geometry.instanceCount=n;M.drawn=n;}}
-  if(OLD&&M.fU){M.fU.uT.value=t;M.fU.uDT.value=Math.min(.5,t-(M.fT||t));}
+  if(OLD&&M.fU){M.fU.uT.value=t%1000;   /* 셰이더는 float32라 큰 시각을 그대로 주면 걸음 위상이 몇 초씩 뚝뚝 끊긴다 */
+  M.fU.uDT.value=Math.min(.5,t-(M.fT||t));}
   for(const c of M.list){if(!c.I)continue;const q=refresh?c.q:citQ(c,t);const G=c.I.g;G.position.set(q.x,citGround(q.x,q.z)+(c.y||0)+((q.mode||c.mode)==='sit'?-.53:0),q.z);   /* 앉은 막대 주민: 엉덩이가 벤치 앉는 면(0.6m)에 닿게 */
-    c.nearY=c.I.stick?citPersonaNearYaw(c,q):null;const want=c.nearY!=null?c.nearY:Math.atan2(q.vx,q.vz);let dr=Math.atan2(Math.sin(want-G.rotation.y),Math.cos(want-G.rotation.y));G.rotation.y+=Math.sign(dr)*Math.min(Math.abs(dr),Math.abs(dr)*dt*4.5+dt*1.2);   /* 사람처럼 천천히 돌아선다 */
-    const mode=q.mode||c.mode,walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const vk=q.v??1;c.w=(c.w??0)+(((walking&&q.walk)?Math.max(.25,vk):0)-(c.w??0))*Math.min(1,dt*5);
-    if(c.I.stick){crowdYield(c,G,dt);if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2*Math.max(.3,vk);stickWalkPose(G,c.ph,c.w,t+c.off,c.pp);}else{const nr=c.nearY!=null?c.pp.near:null,pm=c.hold?mode:nr||citPersonaMode(c,mode,q,t),sp2=CIT_STICK_POSE[pm]||'idle';stickNpcPose(G,sp2,t+c.off);citPersonaIdle(G,c.pp,t+c.off,sp2);}if(CIT_SMALL(c.type)&&G.scale.x>.8)G.scale.setScalar(c.sc*.7);continue;}
+    const mode=q.mode||c.mode,walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const vk=q.v??1;
+    /* 실제로 움직인 속도(지난 프레임 자리에서 잼): 다리 걸음은 이 속도에 맞춘다 */
+    let mv=0;if(walking&&q.walk){if(c.mt!=null&&t>c.mt){const d=Math.hypot(q.x-c.mx,q.z-c.mz)/(t-c.mt);c.mvv=d<4?d:c.sp*vk;}mv=c.mvv??c.sp*vk;}c.mx=q.x;c.mz=q.z;c.mt=t;
+    c.nearY=c.I.stick?citPersonaNearYaw(c,q):null;const want=c.nearY!=null?c.nearY:Math.atan2(q.vx,q.vz);let dr=Math.atan2(Math.sin(want-G.rotation.y),Math.cos(want-G.rotation.y));
+    const tr=mv>.05?Math.abs(dr)*7+2.2:Math.abs(dr)*4.5+1.2;G.rotation.y+=Math.sign(dr)*Math.min(Math.abs(dr),dt*tr);   /* 사람처럼 천천히 돌아선다 (걷는 중엔 길을 따라 얼른 몸을 튼다) */
+    const scl=c._scl||(c._scl=c.sc*(CIT_SMALL(c.type)?.7:1)),turnIn=walking&&mv<.05&&Math.abs(dr)>.35;   /* 제자리에서 돌아설 땐 잔걸음 */
+    c.w=(c.w??0)+((mv>.01?stickStride(mv,scl):turnIn?.16:0)-(c.w??0))*Math.min(1,dt*6);
+    if(c.I.stick){crowdYield(c,G,dt);if(walking||c.w>.05){const st=c.pp?c.pp.st:1;if(mv>.01)c.ph+=dt*Math.min(14,stickCadence(mv,Math.max(.05,c.w),st,scl));else if(turnIn)c.ph+=dt*Math.min(9,Math.abs(dr)*6+3);stickWalkPose(G,c.ph,c.w,t+c.off,c.pp);}else{const nr=c.nearY!=null?c.pp.near:null,pm=c.hold?mode:nr||citPersonaMode(c,mode,q,t),sp2=CIT_STICK_POSE[pm]||'idle';stickNpcPose(G,sp2,t+c.off);citPersonaIdle(G,c.pp,t+c.off,sp2);}if(CIT_SMALL(c.type)&&G.scale.x>.8)G.scale.setScalar(c.sc*.7);continue;}
     if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2*Math.max(.3,vk);citPoseBones(c.I,c.ph,c.w,t+c.off,c.mode==='walk'||c.w<.05&&c.mode!=='carry'?'walk':c.mode);}
     else{c.ph+=dt*(mode==='hoe'?3.2:mode==='hammer'?4.5:mode==='reap'?2:1.5)*(c.v?c.v.tempo:1);citPoseBones(c.I,c.ph,0,t+c.off,mode);}}}
 let _mcT=0;
@@ -14557,7 +14585,7 @@ function lifeTick(dt,p,inM){if(!LIFE.ready)return;petTick(dt);const G=LIFE.g;inM
         _lq.setFromEuler(_le.set(0,b.yaw+Math.PI,wf?flap:-1.35));_lv.set(b.x-Math.cos(b.yaw)*.05,b.y+.15,b.z+Math.sin(b.yaw)*.05);_lm.compose(_lv,_lq,_ls);BI.mwl.setMatrixAt(b.i,_lm);}ch=true;}
     if(ch){BI.mb.instanceMatrix.needsUpdate=BI.mwl.instanceMatrix.needsUpdate=BI.mwr.instanceMatrix.needsUpdate=true;}}
   /* 예술가 */
-  for(const A of LIFE.acts){if(A.kids){const vis=!far(A.x0,A.z0,55);for(const K of A.kids){if(K.g.visible!==vis)K.g.visible=vis;if(!vis)continue;K.a+=dt*1.15;const x=A.x0+Math.cos(K.a)*A.R,z=A.z0+Math.sin(K.a)*A.R;K.g.position.set(x,citGround(x,z),z);K.g.rotation.y=Math.atan2(-Math.sin(K.a),Math.cos(K.a));stickWalkPose(K.g,K.a*6.5+K.ph,1,t+K.ph,K.g.userData.pp);}continue;}
+  for(const A of LIFE.acts){if(A.kids){const vis=!far(A.x0,A.z0,55);for(const K of A.kids){if(K.g.visible!==vis)K.g.visible=vis;if(!vis)continue;K.a+=dt*1.15;const x=A.x0+Math.cos(K.a)*A.R,z=A.z0+Math.sin(K.a)*A.R;K.g.position.set(x,citGround(x,z),z);K.g.rotation.y=Math.atan2(-Math.sin(K.a),Math.cos(K.a));const kv=1.15*A.R,ksc=K.g.scale.x||1,kw=stickStride(kv,ksc),kp=K.g.userData.pp;K.wp=(K.wp??K.ph)+dt*Math.min(14,stickCadence(kv,kw,kp?kp.st:1,ksc));stickWalkPose(K.g,K.wp,kw,t+K.ph,kp);}continue;}
     const g=A.g,vis=!far(g.position.x,g.position.z,55);if(g.visible!==vis)g.visible=vis;if(A.balls)for(const b of A.balls)b.visible=vis;if(!vis)continue;
     {const pz=(A.pose==='clap'&&g.userData.wp)||A.pose;stickNpcPose(g,CIT_STICK_POSE[pz]&&pz!==A.pose?CIT_STICK_POSE[pz]:pz,t+A.ph);if(typeof citPersonaIdle==='function')citPersonaIdle(g,g.userData.pp,t+A.ph,pz);}
     if(A.balls){const ry=g.rotation.y,cs=Math.cos(ry),sn=Math.sin(ry),P=1.25;A.balls.forEach((b,i)=>{const u=((t/P+i/3)%1+1)%1,half=u<.5,k=half?u*2:(u-.5)*2,x0=half?.27:-.27,x1=half?-.27:.27;
@@ -15892,7 +15920,7 @@ function ghServeTick(t,dt){const S=GHALL.server;if(!S)return;const g=S.g,st=g.us
   if(S.st==='walk'){const tg=S.path[S.i],dx=tg[0]-lx,dz=tg[1]-lz,d=Math.hypot(dx,dz),sp=1.25;
     if(d<.06){S.i++;if(S.i>=S.path.length){if(S.back){S.st='bar';S.wait=3.5+Math.random()*3;S.full.visible=true;}else{S.st='serve';S.wait=3.2;}}}
     else{const m=Math.min(d,sp*dt);g.position.x+=dx/d*m;g.position.z+=dz/d*m;turn(Math.atan2(dx,dz),8);}
-    S.ph+=dt*7.2;stickWalkPose(g,S.ph,1,t);carry();return;}
+    {const sc=g.scale.x||1,sw=stickStride(1.25,sc);S.ph+=dt*stickCadence(1.25,sw,1,sc);stickWalkPose(g,S.ph,sw,t);}carry();return;}
   if(S.st==='serve'){const R=S.cur;turn(Math.atan2(R.t[0]-lx,R.t[1]-lz),5);S.wait-=dt;stickNpcPose(g,'idle',t);
     const k=Math.max(0,Math.min(1,(3.2-S.wait)/1.2))*Math.max(0,Math.min(1,S.wait/1.0));   /* 쟁반을 내밀어 내려놓고 다시 든다 */
     st.AR.sh.rotation.set(-.6-k*.5,0,.1);st.AR.el.rotation.x=-1.6+k*.75;st.AL.sh.rotation.set(-.6-k*.5,0,-.1);st.AL.el.rotation.x=-1.6+k*.75;st.upper.rotation.x+=k*.25;
@@ -20157,7 +20185,7 @@ float sn=smoothstep(.62,.8,iA.g*.6+iB.b*.4)*.85;diffuseColor.rgb=mix(diffuseColo
   const cairn=(lx,lz,sz,seed)=>{_s=seed;const y=hAt(lx,lz),L=[];let yy=y-.1*sz,r=.75*sz;while(r>.12*sz){const n=Math.max(1,Math.round(r*6/sz));for(let k=0;k<n;k++){const a=k/n*6.28+rr(0,1),d=n>1?r*.55:0,s=r*rr(.55,.75);L.push({x:lx+Math.cos(a)*d,z:lz+Math.sin(a)*d,y:yy+s*.3,s,sx:s*1.2,sy:s*.55,sz:s,ry:rr(0,6.28),rx:rr(-.1,.1),rz:rr(-.1,.1)});}yy+=r*.42;r*=.8;}
     return L;};
   const cairnL=[];
-  {const top=H.PK[0];cairnL.push(...cairn(top.x+1.5,top.z+.5,2.2,901));signPost(top.x-2.2,top.z+3.4,-.35,[{t:'허칠산',s:120,b:1,y:.36},{t:'꼭대기',s:56,y:.76}],1.6,.95,2.2);}
+  {const top=H.PK[0];cairnL.push(...cairn(top.x+1.5,top.z+.5,2.2,901));signPost(top.x-2.2,top.z+3.4,-.35,[{t:'허칠',s:120,b:1,y:.36},{t:'꼭대기',s:56,y:.76}],1.6,.95,2.2);}
   /* 산길 굽이마다 작은 돌탑 */
   [2,4,6,8,10,12].forEach((i,k)=>{const [x,z]=H.HC.PEAK[i],[x2,z2]=H.HC.PEAK[i-1],dx=x-x2,dz=z-z2,d=Math.hypot(dx,dz)||1,ox=x+dz/d*4.5,oz=z-dx/d*4.5;cairnL.push(...cairn(ox,oz,.8+k*.03,1200+k*37));});
   inst(NAT.rock(2),NAT.sstone(0x8c8780),cairnL,-.05);
@@ -20166,7 +20194,7 @@ float sn=smoothstep(.62,.8,iA.g*.6+iB.b*.4)*.85;diffuseColor.rgb=mix(diffuseColo
   {const lx=-7,lz=H.EZ-16,y=hAt(lx,lz),g=new THREE.Group();g.position.set(cx+lx,y,cz+lz);g.rotation.y=.25;root.add(g);
     const sg=new THREE.BoxGeometry(1.25,2.6,.5,6,12,2),P=sg.attributes.position;for(let i=0;i<P.count;i++){const x=P.getX(i),yy=P.getY(i),z=P.getZ(i);const k=yy>1.0?1-(yy-1)*.12*Math.abs(x)/.62:1;P.setXYZ(i,x*k*(1+Math.sin(yy*3.1+z*2)*.03),yy,z*(1+Math.sin(x*4+yy*2)*.06));}sg.computeVertexNormals();sg.translate(0,1.2,0);sg.setAttribute('color',new THREE.Float32BufferAttribute(new Float32Array(sg.attributes.position.count*3).fill(1),3));
     const cv=document.createElement('canvas');cv.width=256;cv.height=512;const x=cv.getContext('2d');x.fillStyle='#8a8580';x.fillRect(0,0,256,512);x.globalAlpha=.25;for(let i=0;i<300;i++){x.fillStyle=Math.random()<.5?'#5a5652':'#b0aba4';x.fillRect(Math.random()*256,Math.random()*512,2+Math.random()*4,2+Math.random()*4);}x.globalAlpha=1;
-    x.textAlign='center';x.textBaseline='middle';x.font='700 104px "KMUSunggokSerif","Gowun Batang",serif';['허','칠','산'].forEach((ch,i)=>{x.fillStyle='rgba(255,255,255,.25)';x.fillText(ch,129,150+i*118);x.fillStyle='#2e2a26';x.fillText(ch,128,148+i*118);});
+    x.textAlign='center';x.textBaseline='middle';x.font='700 124px "KMUSunggokSerif","Gowun Batang",serif';['허','칠'].forEach((ch,i)=>{x.fillStyle='rgba(255,255,255,.25)';x.fillText(ch,129,186+i*144);x.fillStyle='#2e2a26';x.fillText(ch,128,184+i*144);});
     const tx=new THREE.CanvasTexture(cv),sm3=NAT.sstone(0x8a8580);const st=new THREE.Mesh(sg,[sm3,sm3,sm3,sm3,new THREE.MeshStandardMaterial({map:tx,roughness:.9}),sm3]);st.castShadow=st.receiveShadow=true;g.add(st);
     const base=new THREE.Mesh(NAT.rock(0),NAT.sstone(0x7a756e));base.scale.set(1.3,.45,.9);base.position.y=.05;g.add(base);colliders.push({x:cx+lx,z:cz+lz,r:.9,h:2.8});
     signPost(9,H.EZ-22,-.35,[{t:'↑ 갈림길 · 얼음 호수',s:58,b:1,y:.32},{t:'← 산장',s:58,b:1,y:.72}],1.7,.8,2.1);
@@ -20316,7 +20344,7 @@ await BOOT.y();await (async function buildHCave(){
     pl.position.set(cx+p.x-ux*2.6,y0+h*.35,cz+p.z-uz*2.6);pl.lookAt(cx+p.x+ux*10,y0+h*.35,cz+p.z+uz*10);root.add(pl);
     const gl=new THREE.Mesh(new THREE.CircleGeometry(1,32),new THREE.MeshBasicMaterial({color:0xcfe4ff,fog:false,transparent:true,opacity:.35,depthWrite:false}));gl.scale.set(w*.8,h*1.05,1);gl.position.copy(pl.position).addScaledVector(new THREE.Vector3(ux,0,uz),.3);gl.quaternion.copy(pl.quaternion);root.add(gl);
     const g=new THREE.Group();g.position.set(cx+p.x-ux*2,H.fl(p.x-ux*2,p.z-uz*2),cz+p.z-uz*2);root.add(g);const M=C.MOUTH,HI=OR.ISLES.hechil;
-    PORTALS.push({id:'hcave_out',x:g.position.x,z:g.position.z,ry:0,hw:p.w,minLv:0,label:'허칠산으로 나가기',to:{x:HI.x+M.x-7,z:HI.z+M.z,yaw:Math.PI/2},msg:null,color:0x9ad8ff,door:1,fx:{g,cols:[]}});}
+    PORTALS.push({id:'hcave_out',x:g.position.x,z:g.position.z,ry:0,hw:p.w,minLv:0,label:'허칠로 나가기',to:{x:HI.x+M.x-7,z:HI.z+M.z,yaw:Math.PI/2},msg:null,color:0x9ad8ff,door:1,fx:{g,cols:[]}});}
   /* 굴 안 빛: 걷는 사람 곁을 은은히 비추는 얼음빛 (굴에 있을 때만 켠다) */
   {const L=new THREE.PointLight(0xc4dcff,.5,20,1.4);root.add(L);H.light=L;}
   H.ready=true;
@@ -22553,7 +22581,7 @@ function drawMarcusOverview(c,W,H,o={}){const mini=!!o.mini,Lo=movLayout(W,H,min
     /* 도시 이름 */
     c.textBaseline='bottom';ink(ZONES.marcus.name,cx,Math.min(...marcusPlan().wall.map(q=>movExizT(Lo)(q[0],q[1])[1]))-16*f,`700 ${Math.round(20*f)}px ${SER}`,MOV_INK,4);
     {const h=MOV_HARENA,[hx,hy]=P2(h.x,h.z);ink(ZONES.town?ZONES.town.name:'하레나',hx,hy-h.R*k-12*f,`700 ${Math.round(17*f)}px ${SER}`,MOV_INK,4);}
-    {const T=movHechilT(Lo);if(T){const dt=movHechilDetail(c,W,H,T),I=OR.ISLES.hechil,nm=ZONES.hechil?ZONES.hechil.name:'허칠산';   /* 허칠산: 멀리선 이름 하나, 확대하면 봉우리·호수·산장 이름 */
+    {const T=movHechilT(Lo);if(T){const dt=movHechilDetail(c,W,H,T),I=OR.ISLES.hechil,nm=ZONES.hechil?ZONES.hechil.name:'허칠';   /* 허칠산: 멀리선 이름 하나, 확대하면 봉우리·호수·산장 이름 */
       if(dt<1){c.save();c.globalAlpha=1-dt;const [x,y]=T.P(0,-I.R-10);ink(nm,x,y,`700 ${Math.round(17*f)}px ${SER}`,MOV_INK,4);{const Lv=OR.ZONE_LEVELS.hechil;if(Lv&&Lv[0])ink(`Lv ${Lv[0]}–${Lv[1]}`,x,y+15*f*fz,`${Math.round(9.5*f)}px ${SEMI}`,P&&P.lv<Lv[0]-2?'#b0302a':'#7a5a32',2.5);}c.restore();}
       if(dt>0){c.save();c.globalAlpha=dt;for(const P of HECH.PK){const [x,y]=T.P(P.x,P.z-14);ink(P.name,x,y,`700 ${Math.round((P.id==='main'?13:11)*f)}px ${SER}`,MOV_INK,3.5);}
         {const [x,y]=T.P(HECH.LAKE.x,HECH.LAKE.z);ink('얼음 호수',x,y,`${Math.round(10*f)}px ${SEMI}`,'#3f6468');}{const [x,y]=T.P(HECH.HUT.x,HECH.HUT.z-14);ink('산장',x,y,`${Math.round(10*f)}px ${SEMI}`);}
@@ -23292,7 +23320,7 @@ const PLACES=[
   {id:'explaza',name:'중앙 광장',zone:'marcus',test(x,z){const PL=marcusPlan(),m=PL.zone('plaza'),M=OR.ISLES.marcus;return !!m&&Math.hypot(x-M.x-m.x,z-M.z-m.y)<m.r+4;},map(){const PL=marcusPlan(),m=PL.zone('plaza'),M=OR.ISLES.marcus;return {x:M.x+m.x,z:M.z+m.y,R:m.r+75};}},
 ];
 /* 허칠산·동굴 사냥터: 들어서면 이름과 적정레벨이 뜬다 */
-for(const A of OR.HCH.AREAS){const zone=A.cave?'hcave':'hechil';PLACES.push({id:'hc_'+A.id,name:A.name,zone,sub:'허칠산',rec:`Lv ${A.lv[0]}–${A.lv[1]}`,test(x,z){const I=OR.ISLES[zone];return OR.HCH.areaAt(x-I.x,z-I.z,A.cave)===A;}});}
+for(const A of OR.HCH.AREAS){const zone=A.cave?'hcave':'hechil';PLACES.push({id:'hc_'+A.id,name:A.name,zone,sub:'허칠',rec:`Lv ${A.lv[0]}–${A.lv[1]}`,test(x,z){const I=OR.ISLES[zone];return OR.HCH.areaAt(x-I.x,z-I.z,A.cave)===A;}});}
 function placeAt(x,z){if(typeof marcusPlan!=='function')return null;for(const p of PLACES)if(p.zone===curZone&&p.test(x,z))return p;return null;}
 function placeTick(quiet){if(!player||!P)return;const p=placeAt(player.position.x,player.position.z);if(p===curPlace)return;curPlace=p;
   const Z=ZONES[curZone];if(!Z)return;$('#wName').textContent=p?p.name:Z.name;$('#wRec').textContent=p&&p.rec||Z.rec;{const C=COUNTRY_OF[curZone]||'';$('#wCountry').textContent=p&&p.sub?(C?`${C} · ${p.sub}`:p.sub):C;}
