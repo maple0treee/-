@@ -5,7 +5,8 @@
  * 시험용 브랜치 dev 의 게임을 claude.ai 아티팩트로 올릴 수 있게 준비한다.
  * - public/index.html 을 아티팩트용으로 고쳐 <출력 폴더>/index.html 에 쓴다
  *   (자체 서버 접속 대신 아티팩트의 room 으로 같이 하기, 큰 파일은 CDN 대신 같이 올린 파일에서 받기, 광고 빼기)
- * - 같이 올릴 파일 목록을 Artifact 도구의 files 모양([{"path": "models/x.glb.wasm"}, ...], root 는 orlando-server/public)으로 나눠서 <출력 폴더>/files-N.json 에 쓴다
+ * - 아티팩트 페이지는 늘 같은 작은 껍데기(<출력 폴더>/index.html)이고, 게임 본체는 game.html 로 같이 올린다
+ * - 같이 올릴 파일 목록을 Artifact 도구의 files 모양({"올릴 경로": "원본 경로"})으로 나눠서 <출력 폴더>/files-N.json 에 쓴다
  *   (한 번에 64MB 까지만 올릴 수 있어서 60MB 씩 나눈다)
  *
  * 쓰는 법:
@@ -35,6 +36,16 @@ function walk(dir, base = '') {
   return res;
 }
 
+const LOADER = `<title>오를란도 시험판</title>
+<style>:root{--bg:#241e17;--fg:#e8dcc4}html,body{height:100%;background:var(--bg);color:var(--fg)}#ld{display:grid;place-items:center;height:100%;font:16px serif}</style>
+<div id="ld">오를란도 시험판을 여는 중…</div>
+<script>
+fetch('game.html?t=' + Date.now()).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+  .then(t => { document.open(); document.write(t); document.close(); })
+  .catch(e => { document.getElementById('ld').textContent = '시험판을 열지 못했어요 (' + e.message + ')'; });
+</script>
+`;
+
 function transform(html) {
   const before = html.length;
   html = html.replace(/<title>[^<]*<\/title>/, '<title>오를란도 시험판</title>');
@@ -49,9 +60,13 @@ function transform(html) {
 
 fs.mkdirSync(out, { recursive: true });
 for (const f of fs.readdirSync(out)) if (/^files-\d+\.json$/.test(f)) fs.unlinkSync(path.join(out, f));
-fs.writeFileSync(path.join(out, 'index.html'), transform(fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8')));
+// 아티팩트 쪽 페이지(index.html)는 늘 같은 작은 껍데기이고, 게임 본체는 같이 올리는 game.html 이다
+// (페이지가 안 바뀌니 여러 스레드가 번갈아 올려도 3MB 넘는 페이지를 서로 다시 읽을 필요가 없다)
+fs.writeFileSync(path.join(out, 'game.html'), transform(fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8')));
+fs.writeFileSync(path.join(out, 'index.html'), LOADER);
 
 let list = walk(PUBLIC).filter(f => !SKIP.test(f));
+const GAME = path.join(out, 'game.html');
 const removed = [];
 if (since) {
   const diff = execFileSync('git', ['-C', REPO, 'diff', '--name-status', '--no-renames', since, 'HEAD', '--', 'orlando-server/public'], { encoding: 'utf8' });
@@ -66,18 +81,18 @@ if (since) {
 }
 
 const chunks = [];
-let cur = [], size = 0;
+let cur = { 'game.html': GAME }, size = fs.statSync(GAME).size;
 for (const rel of list.sort()) {
   const abs = path.join(PUBLIC, rel);
   const s = fs.statSync(abs).size;
-  if (size + s > CHUNK && cur.length) { chunks.push(cur); cur = []; size = 0; }
+  if (size + s > CHUNK && Object.keys(cur).length) { chunks.push(cur); cur = {}; size = 0; }
   // 아티팩트는 .glb 를 올려 주지 않아서 종류를 .wasm 과 같게 적는다 (내용은 그대로 glb)
-  cur.push(/\.glb$/.test(rel) ? { path: rel, contentType: 'application/wasm' } : { path: rel });
+  cur[rel] = /\.glb$/.test(rel) ? { from: abs, contentType: 'application/wasm' } : abs;
   size += s;
 }
-if (cur.length) chunks.push(cur);
+for (const rel of removed) cur[rel] = null;   // 지운 파일은 아티팩트에서도 지움
+if (Object.keys(cur).length) chunks.push(cur);
 chunks.forEach((c, i) => fs.writeFileSync(path.join(out, `files-${i + 1}.json`), JSON.stringify(c, null, 1)));
 
 const sha = execFileSync('git', ['-C', REPO, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-// 지운 파일은 아티팩트에서 {"경로": null} 로 지운다 (removed 에 적어 둠)
-console.log(JSON.stringify({ page: path.join(out, 'index.html'), root: 'orlando-server/public', sha, files: chunks.map((c, i) => ({ json: path.join(out, `files-${i + 1}.json`), count: c.length })), removed }, null, 1));
+console.log(JSON.stringify({ page: path.join(out, 'index.html'), sha, files: chunks.map((c, i) => ({ json: path.join(out, `files-${i + 1}.json`), count: Object.keys(c).length })), removed }, null, 1));

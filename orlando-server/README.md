@@ -60,6 +60,6 @@ npm start
 ## 업데이트를 올리는 순서 (시험판 → 본 서버)
 
 - 새 업데이트는 먼저 시험용 브랜치 **`dev`** 에 합칩니다. 본 서버(`main`)에는 바로 들어가지 않습니다.
-- `dev` 의 게임은 claude.ai 아티팩트 **"오를란도 시험판"** 으로 미리 해 볼 수 있습니다. 올리는 법: `node orlando-server/tools/preview.js <출력 폴더> [지난번 커밋]`
+- `dev` 의 게임은 claude.ai 아티팩트 **"오를란도 시험판"** 으로 미리 해 볼 수 있습니다. 올리는 법: `node orlando-server/tools/preview.js <출력 폴더> [지난번 커밋]` (아티팩트 페이지는 작은 껍데기이고 게임 본체는 같이 올리는 `game.html`)
 - 매일 **오전 4시(한국 시간)** 에 `.github/workflows/nightly-release.yml` 이 그때까지 `dev` 에 들어온 것을 `main` 으로 한 번에 합치고, 그러면 Render 가 본 서버를 새로 배포합니다. GitHub 예약 실행이 자주 늦거나 빠져서 08:37 까지 여러 번 다시 걸어 두었고, 이미 올렸으면 그냥 끝납니다.
 - 급한 고침만 `main` 에 바로 합칩니다. 그러면 `.github/workflows/sync-dev.yml` 이 그 고침을 `dev` 에도 곧바로 섞습니다.
