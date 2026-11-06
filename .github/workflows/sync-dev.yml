@@ -1,0 +1,31 @@
+# 본 서버(main)에 바로 올린 급한 고침을 시험용 브랜치 dev 에도 곧바로 섞는다
+# (그래야 시험판에도 그 고침이 들어가고, 오전 4시에 합칠 때 부딪히지 않는다)
+name: sync-dev
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: release-branches
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+      - name: main 을 dev 에 섞기
+        run: |
+          git config user.name "orlando-release"
+          git config user.email "orlando-release@users.noreply.github.com"
+          git fetch origin main
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "dev 에 이미 들어 있어요"; exit 0
+          fi
+          git merge --no-edit origin/main -m "본 서버의 급한 고침을 시험판에 합치기"
+          git push origin HEAD:dev
