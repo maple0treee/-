@@ -75,13 +75,13 @@
   // 엑시즈 문 밖 사냥터 줄: 숫자=줄, 글자=그 줄의 몇 번째 땅. 땅 생김새(kind)는 들판·구릉·숲·계곡·고개·호숫가·강가와 바닷가(모래톱·갯바위·해안 절벽·곶)
   // 2026-11-03 원호: 엑시즈는 남문·동문 쪽이 바다, 북문·서문 쪽이 숲·들판. 사냥터도 뭍을 따라 말굽 모양으로 놓는다
   //   1 남문(Lv 60, 바닷가에서 시작) → 2 서문 → 3 북문 → 4 동문(Lv 200, 바닷가 절벽에서 끝). 세 번째 칸 'c' = 바다에 닿은 땅(바깥쪽이 바다)
-  // 2026-11-05 원호: 문마다 첫 땅 하나씩, 네 곳만 남긴다 (모래톱·들판·숲·고개). 땅끼리는 이어지지 않고 저마다 제 문의 고갯길로만 드나든다.
-  //   자리(k = (줄-1)·5 + 순번)는 말굽 위 예전 그대로라 줄 사이에 빈 산이 있다. 밀골은 마차로만 간다
+  // 2026-11-05 원호: 문마다 첫 땅 하나씩, 네 곳만 남긴다 (모래톱·들판·숲·고개). 2026-11-06 원호 "사냥터 조금만 추가하자" → 문마다 두 번째 땅을 하나씩 더 (해안 들판·호숫가·강가·해안 절벽).
+  //   한 문의 두 땅은 넓은 목으로 이어지고, 다른 문의 땅과는 이어지지 않는다. 자리(k = (줄-1)·5 + 순번)는 말굽 위 예전 그대로라 줄 사이에 빈 산이 있다. 밀골은 마차로만 간다
   const MLINES_ALL = [
-    { n: 1, gate: '남문', zones: [['mfield', 'beach', 'c']] },
-    { n: 2, gate: '서문', zones: [['m2a', 'field']] },
-    { n: 3, gate: '북문', zones: [['m3a', 'wood']] },
-    { n: 4, gate: '동문', zones: [['m4a', 'pass']] },
+    { n: 1, gate: '남문', zones: [['mfield', 'beach', 'c'], ['mhill', 'field', 'c']] },
+    { n: 2, gate: '서문', zones: [['m2a', 'field'], ['m2b', 'lake']] },
+    { n: 3, gate: '북문', zones: [['m3a', 'wood'], ['m3b', 'river']] },
+    { n: 4, gate: '동문', zones: [['m4a', 'pass'], ['m4b', 'cliff', 'c']] },
     // 고리 밖으로 뻗은 가지: 4E에서 이어지는 새 지역 (엑시즈로 가는 문은 없다)
     // off: 게임에서 잠시 뺀 줄 (2026-11-03 원호: 몬스터가 예전과 똑같이 생겨서 다시 만들 때까지 뺀다). off를 지우면 다시 켜진다
     { n: 5, off: true, region: '불타는 협곡', branch: [162, 130, 100, 70, 40], zones: [['m5a', 'ash'], ['m5b', 'vale'], ['m5c', 'lava'], ['m5d', 'vale'], ['m5e', 'pass']] },
@@ -378,13 +378,14 @@
     forest: ['slime', 'slime', 'wolf'], plains: ['boar', 'goblin'], swamp: ['toad', 'lizard'], ruins: ['skeleton', 'skeleton', 'ogre'],
     wwest: ['jackal', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
     silva: ['silvawolf', 'mossslime'], arbus: ['snowwolf', 'frostslime'], kaolis: ['mackerel', 'tideslime', 'octopus'], subcus: ['darkhound', 'crystalslime'],
-    mfield: ['fieldwolf', 'fieldwolf', 'mudslime'],
-    m2a: ['pinewolf', 'pinewolf', 'barkslime'],
-    m3a: ['steppewolf', 'steppewolf', 'clayslime'],
-    m4a: ['shadewolf', 'shadewolf', 'leafslime'],
+    // 엑시즈 사냥터: 첫 땅 = 예전 그 줄 1·2번째 땅 몬스터, 두 번째 땅 = 3·4·5번째 땅 몬스터
+    mfield: ['fieldwolf', 'fieldwolf', 'mudslime', 'hillboar', 'meadowviper'], mhill: ['woodbear', 'thornslime', 'woodtroll', 'stonehound', 'valleyogre', 'windwolf', 'mistslime', 'cliffgiant'],
+    m2a: ['pinewolf', 'pinewolf', 'barkslime', 'hornboar', 'rockviper'], m2b: ['greybear', 'resinslime', 'pinetroll', 'cragdog', 'rockogre', 'icewolf', 'snowslime', 'frostgiant'],
+    m3a: ['steppewolf', 'steppewolf', 'clayslime', 'wildram', 'reedviper'], m3b: ['warboar', 'pollenslime', 'fieldogre', 'ashwolf', 'brownbear', 'hilltroll', 'stoneslime', 'hillgiant'],
+    m4a: ['shadewolf', 'shadewolf', 'leafslime', 'cliffboar', 'pitviper'], m4b: ['moonbear', 'rotslime', 'oldtroll', 'gorgehound', 'gorgeogre', 'stormwolf', 'cloudslime', 'peakgiant'],
     m5a: ['cinderhound', 'cinderhound', 'cinderslime'], m5b: ['scorchboar', 'magmaviper'], m5c: ['ashbear', 'lavaslime', 'lavatroll'], m5d: ['flamehound', 'flameogre'], m5e: ['firewolf', 'smokeslime', 'firegiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 40, m2a: 32, m3a: 32, m4a: 32, m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, mfield: 60, mhill: 60, m2a: 60, m2b: 60, m3a: 60, m3b: 60, m4a: 60, m4b: 60,   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
   for (const L of MLINES_ALL) if (L.off) for (const [id] of L.zones) { delete ZONE_COUNT[id]; delete ZONE_MON[id]; }   // 꺼 둔 땅에는 몬스터가 나오지 않는다
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
@@ -399,7 +400,8 @@
     }
   }
   const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], fort: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hechil: [0, 0], mfield: [60, 67] };
-  MLINES.forEach((L) => { if (L.n > 1) L.zones.forEach(([id], i) => { const a = 60 + (L.n - 1) * 35 + i * 7; ZONE_LEVELS[id] = [a, a + 7];   /* 엑시즈 사냥터: 60레벨부터 한 줄에 35레벨, 한 땅에 7레벨 */ }); });
+  MLINES.forEach((L) => { if (L.branch) { L.zones.forEach(([id], i) => { const a = 60 + (L.n - 1) * 35 + i * 7; ZONE_LEVELS[id] = [a, a + 7]; }); return; }
+    const a = 60 + (L.n - 1) * 35, w = 35 / L.zones.length; L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = [Math.round(a + i * w), Math.round(a + (i + 1) * w)]; }); });   /* 엑시즈 사냥터: 60레벨부터 문 하나에 35레벨, 그 문의 땅들이 나눠 맡는다 (빈 레벨 없이 60–200) */
 
   // ---------- 의뢰 게시판 포스터 ----------
   // 의뢰를 주는 NPC마다 게시판이 따로 있다. 포스터는 마을 사람(실제 NPC)이 이유를 적어 붙인 것
