@@ -58,7 +58,7 @@
       for (let i = 0; i < 400; i++) {
         let x, z;
         if (OR.ISLES[zone]) { const I = OR.ISLES[zone]; if (I.randPt) { const q = I.randPt(rnd, lv); x = q.x; z = q.z; } else { const a = rnd(-Math.PI, Math.PI), d = rnd(6, I.R - 8); x = I.x + Math.cos(a) * d; z = I.z + Math.sin(a) * d; }   /* 동굴: 굴 길 안에서 고른다 */ if (Math.hypot(x - I.entry.x, z - I.entry.z) < 16) continue; if (I.exit && Math.hypot(x - I.exit.x, z - I.exit.z) < 16) continue; if (I.noSpawn && I.noSpawn.some((q) => Math.hypot(x - I.x - q.x, z - I.z - q.z) < q.r)) continue;
-          if (lv && I.band && i < 360 && Math.abs(levelAt(zone, x, z) - lv) > I.band) continue; }   // 허칠산: 종마다 제 레벨에 맞는 높이에서
+          if (lv && i < 360) { if (I.areaLv) { const A = I.areaLv(x, z); if (lv < A[0] || lv > A[1]) continue; } else if (I.band && Math.abs(levelAt(zone, x, z) - lv) > I.band) continue; } }   // 허칠산: 종마다 제 사냥터에서   // 허칠산: 종마다 제 레벨에 맞는 높이에서
         else {   // 하레나 둘레 길: 그 구역의 4분의 1 바퀴 안에서 고른다
           const SP = OR.SP, i = SP.ZONES.indexOf(zone); if (i < 0) return null;
           const t = i * SP.Q + rnd(0.12, SP.Q - 0.12), q = OR.spPos(t, rnd(-(SP.HW - 3), SP.HW - 3)); x = q.x; z = q.z;
