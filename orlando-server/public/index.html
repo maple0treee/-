@@ -2983,6 +2983,8 @@ function advLv(job){const J=JOBS[job];if(!J.adv||!J.adv.length)return null;retur
 /* ---------- 허수아비: 때리면 피해 숫자가 뜬다 (서버와 상관없이 내 화면에서만 맞는 과녁, 쓰러지지 않는다) ---------- */
 const DUMMIES=[];
 function dummyAdd(x,z){DUMMIES.push({x,z});}
+/* 허수아비 모양 (FOODK가 빚은 짚 자루 허수아비). F는 시내 굽기 frame, (lx,lz)는 그 틀 안 자리, ry는 앞(+z)이 볼 방향, v는 갈래 (FOODK ST.dummy 참고) */
+function dummyModel(F,lx,lz,ry,v){F.P(FOODK.geo('Sdummy:'+v),lx,0,lz,1,1,1,0xffffff,{b:'sm',ry:ry||0});}
 function dummyMake(q,k){const g=new THREE.Group();g.position.set(q.x,heightAt(q.x,q.z),q.z);g.userData.h=2.2;
   return {dummy:true,r:.45,mesh:g,D:{name:'허수아비',lv:1,build:'none',scale:1},t:'dummy',ty:'dummy',zone:'marcus',dying:null,hp:1e9,mh:1e9,lv:1,st:{def:0,exp:0,atk:0,hp:1e9,lv:1},
     flags:0,tag:document.createElement('div'),sid:'dummy'+k,tx:q.x,tz:q.z,tr:0,phase:0,x0:q.x,y0:g.position.y,z0:q.z};}
@@ -3392,6 +3394,101 @@ const FOODK=(()=>{
   /* 하레나 좌판: 판 위(y .8)에 과일 넷 무더기 */
   ST.h=v=>{const A=acc(),K=['apple0','orange','apple1','lemon'];for(let k=0;k<4;k++)heap(A,K[(k+v)%4],.34,.34,.8,T(-.6+k*.4,0,0,0),.9);return A;};
 
+  /* ================= 허수아비 (훈련장 과녁) =================
+     땅에 박고 버팀목 셋으로 받친 나무 기둥, 어깨 높이 가로대. 짚을 꽉 채워 끈으로 묶은 삼베 자루가 몸통·머리·소매다.
+     밑단·소맷부리·목에서 짚이 삐져나오고, 가슴엔 칠한 과녁 천(겉옷 입은 것은 겉옷 무늬), 칼자국과 기운 천 조각이 있다.
+     v%3: 0 맨 자루, 1 붉은 겉옷, 2 푸른 겉옷 (기사단). (v/3|0)%2가 1이면 낡은 쇠 모자를 쓴다. 기울기·자국 자리는 v로 조금씩 달라진다.
+     앞은 +z, 기둥 밑은 원점. 높이 약 2.3m */
+  ST.dummy=v=>{const A=acc(),tab=v%3,helm=Math.floor(v/3)%2===1,sd=v*7.31+2.17,H=(a,b)=>hash3(a,b,sd);
+    const lx=(H(1,1)-.5)*.05,lz=(H(1,2)-.5)*.035,LX=y=>lx*y,LZ=y=>lz*y;   /* 기둥이 조금 기운다 (높이만큼 비켜 간다) */
+    const BUR=(C,P,dirt)=>{const n=fbm(P.x*7+sd,P.y*7,P.z*7,3),f=hash3(Math.round(P.x*300),Math.round(P.y*300),Math.round(P.z*300));
+      mixC(C,0x8e7246,0xc8aa72,n*1.5-.2);tint(C,0xdcc694,sm(1.5,2.2,P.y)*.35);tint(C,0x5e4a2c,sm(.62,.82,fbm(P.x*3+9,P.y*3,P.z*3+sd,2))*.45);C.multiplyScalar(.95+f*.1);
+      if(dirt)tint(C,0x6a5232,sm(1.25,.88,P.y)*.5);};
+    const STRAW=[0xe2c46a,0xd2ae52,0xc8a048,0xeed488,0xb89040];
+    const WOODC=(C,P,u,dark)=>{const g=fbm(Math.cos(u*TAU)*1.4+sd,(P.y+P.x+P.z)*4,Math.sin(u*TAU)*1.4,3),st=vn(u*16+sd,(P.y+P.x)*1.6,3.3);
+      mixC(C,dark?0x3a2616:0x4a3220,dark?0x6a4a2c:0x86603a,g*1.3-.15+st*.3);tint(C,0x2a1c10,sm(.7,.95,vn(u*7,(P.y+P.x)*11,sd))*.45);};
+    const ROPE=(C,u,w,n)=>{const s=.5+.5*Math.sin((u*3+w*n)*TAU);mixC(C,0x5e4a2e,0xae9468,s*.9+.1);};
+    /* 끈 고리: 둘레 R, 굵기 r. m으로 놓는다 (기본은 y축을 두르는 고리, sz로 앞뒤를 눌러 몸통 모양에 맞춘다) */
+    const ring=(R,r,m,n=18,sz=1)=>tube(A,(t,o)=>o.set(Math.cos(t*TAU)*R,0,Math.sin(t*TAU)*R*sz),()=>r,5,n,(C,P,u,w)=>ROPE(C,u,w,n*.9),.1,{m});
+    const straw=(p,d,len,c2,k)=>{const cu=new THREE.Vector3((H(k,5)-.5),(H(k,6)-.5)*.6,(H(k,7)-.5)).multiplyScalar(len*.5),sc=STRAW[Math.floor(H(k,8)*STRAW.length)];
+      tube(A,(t,o)=>o.set(p.x+d.x*len*t+cu.x*t*t,p.y+d.y*len*t+cu.y*t*t-(c2||0)*t*t,p.z+d.z*len*t+cu.z*t*t),t=>.0042*(1-.45*t),3,len>.09?2:1,(C,P,u,w)=>{C.set(sc);tint(C,0x9a7630,w*.3);},.35);};
+    const V=(x,y,z)=>new THREE.Vector3(x,y,z),_P2=new THREE.Vector3();let sk=0;
+
+    /* --- 땅: 밟혀 다져진 흙 둔덕과 흩어진 짚 --- */
+    disc(A,th=>.42+.05*Math.sin(th*3+sd)+.03*Math.sin(th*7),0,22,5,(C,P,u,w)=>{mixC(C,0x5a4630,0x8a7252,fbm(P.x*9+sd,0,P.z*9,3)*1.3-.1);tint(C,0x3a2c1c,sm(.5,0,w)*.35);if(hash3(Math.round(P.x*90),7,Math.round(P.z*90))>.86)tint(C,0xc8a450,.6);},.04,
+      {dy:(x,z,w)=>.045*(1-w*w)+.01*(vn(x*14+sd,1,z*14)-.5)});
+    for(let k=0;k<10;k++){const a=H(k,30)*TAU,r=.2+H(k,31)*.55,b=H(k,32)*TAU;straw(V(Math.cos(a)*r,.012+(r<.4?.03*(1-r/.4):0),Math.sin(a)*r),V(Math.cos(b),.02,Math.sin(b)),.1+H(k,33)*.12,0,sk++);}
+
+    /* --- 기둥과 버팀목 --- */
+    tube(A,(t,o)=>{const y=-.05+t*2.08;o.set(LX(y),y,LZ(y));},t=>.07-.012*t+.004*Math.sin(t*19+sd),9,12,(C,P,u)=>WOODC(C,P,u,false),.18);
+    const br0=H(2,1)*TAU;for(let k=0;k<3;k++){const a=br0+k*TAU/3,gx=Math.cos(a)*.46,gz=Math.sin(a)*.46,ty=.42;
+      tube(A,(t,o)=>o.set(gx+(LX(ty)+Math.cos(a)*.06-gx)*t,.0+ty*t,gz+(LZ(ty)+Math.sin(a)*.06-gz)*t),t=>.032-.006*t,7,5,(C,P,u)=>WOODC(C,P,u,true),.15);}
+    ring(.078,.013,T(LX(.43),.43,LZ(.43),.3),16);
+    /* 가로대 (어깨) */
+    const YA=1.55;tube(A,(t,o)=>{const x=-.76+t*1.52;o.set(x+LX(YA),YA-.012*Math.abs(x)+.004*Math.sin(t*9),LZ(YA)+.01*Math.sin(t*5+sd));},t=>.038+.003*Math.sin(t*23+sd),8,10,(C,P,u)=>WOODC(C,P,u,false),.18);
+
+    /* --- 몸통: 짚 채운 삼베 자루 (밑단을 끈으로 오므리고, 그 아래 천 끝이 주름져 벌어진다) --- */
+    const KY=[.9,.95,1.0,1.06,1.15,1.27,1.4,1.52,1.62,1.7,1.76,1.8],KR=[.15,.12,.1,.15,.235,.27,.285,.305,.295,.22,.12,.08];
+    const NT=160,TY=new Float32Array(NT+1),TR=new Float32Array(NT+1);
+    {const n=KY.length,cr=(a,b,c,d,t)=>.5*(2*b+(c-a)*t+(2*a-5*b+4*c-d)*t*t+(3*b-a-3*c+d)*t*t*t);
+      for(let i=0;i<=NT;i++){const s=i/NT*(n-1),j=Math.min(n-2,Math.floor(s)),t=s-j,g=k=>Math.max(0,Math.min(n-1,k));TY[i]=cr(KY[g(j-1)],KY[j],KY[j+1],KY[g(j+2)],t);TR[i]=cr(KR[g(j-1)],KR[j],KR[j+1],KR[g(j+2)],t);}}
+    const rAtY=y=>{if(y<=TY[0])return TR[0];if(y>=TY[NT])return TR[NT];let a=0,b=NT;while(b-a>1){const m=(a+b)>>1;if(TY[m]<y)a=m;else b=m;}const t=(y-TY[a])/(TY[b]-TY[a]);return TR[a]+(TR[b]-TR[a])*t;};
+    const SZ=.8;   /* 앞뒤로 눌린 자루 */
+    const SL=[[PI/2+.35+H(3,1)*.3,1.46,-.6,.12],[PI/2-.55-H(3,2)*.2,1.24,.5,.1],[-PI/2+.6,1.36,.9,.11]];   /* 칼자국: 둘레각·높이·기울기·길이 */
+    const slashD=(th,y)=>{let best=9;for(const [a,cy,k,len] of SL){if(tab&&a>0)continue;let dth=th-a;dth=Math.atan2(Math.sin(dth),Math.cos(dth));const x=dth*.3,yy=y-cy,c=Math.cos(k),s=Math.sin(k),al=x*c+yy*s,pe=-x*s+yy*c;
+      const e=Math.max(0,Math.abs(al)-len/2);best=Math.min(best,Math.hypot(e,pe));}return best;};
+    const lump=(th,y)=>{const n=fbm(Math.cos(th)*1.7+sd,y*4.2,Math.sin(th)*1.7,3)-.5,b=sm(1.08,1.25,y)*sm(1.78,1.66,y);
+      return 1+b*(n*.11+.018*Math.sin(th*2+y*9))-(.022*Math.exp(-(((Math.abs(Math.cos(th))-1)/.06)**2))*b)   /* 옆구리 바느질 골 */
+        +(1-sm(.94,1.0,y))*(.13*Math.sin(th*9+sd+y*30)+.06*Math.sin(th*17+sd*2));};   /* 밑단 주름 */
+    const TP=(th,y,off,o)=>{const r=rAtY(y)*lump(th,y)-(slashD(th,y)<.012?.01:0)+off;return o.set(r*Math.cos(th)+LX(y),y,r*Math.sin(th)*SZ+LZ(y));};
+    surf(A,30,22,(u,w,P)=>{const s=w*NT|0,t=w*NT-s,y=s>=NT?TY[NT]:TY[s]+(TY[s+1]-TY[s])*t;TP(u*TAU,y,0,P);},(C,P,u,w)=>{const th=u*TAU;BUR(C,P,true);
+      const sd2=slashD(th,P.y);if(sd2<.02){mixC(C,C.getHex(),0x6a5226,sm(.02,.006,sd2));if(sd2<.009)C.set(0xb08a40);}
+      tint(C,0x4a3a22,Math.exp(-(((Math.abs(Math.cos(th))-1)/.05)**2))*.4*sm(1,1.1,P.y));},.05,{wrap:true});
+    /* 칼자국에서 삐져나온 짚 */
+    for(const [a,cy,k,len] of SL){if(tab&&a>0)continue;for(let q=0;q<5;q++){const t=(q/4-.5)*len*.8,th=a+t*Math.cos(k)/.3,y=cy+t*Math.sin(k),p=TP(th,y,-.01,V()),d=V(Math.cos(th),(H(q,40+a)-.4)*.5,Math.sin(th)*SZ).normalize();straw(p,d,.04+H(q,41+a)*.06,.02,sk++);}}
+    /* 밑단 짚 */
+    for(let k=0;k<32;k++){const a=k/32*TAU+H(k,50)*.2,r=.03+H(k,51)*.1,p=V(Math.cos(a)*r+LX(.9),.93,Math.sin(a)*r*SZ+LZ(.9)),d=V(Math.cos(a)*(.25+H(k,52)*.6),-1,Math.sin(a)*(.25+H(k,52)*.6)).normalize();straw(p,d,.1+H(k,53)*.16,.03,sk++);}
+    ring(.1,.016,T(LX(1),1.0,LZ(1),.4),20,SZ*1.05);   /* 허리를 오므린 끈 */
+    ring(.088,.012,T(LX(1.785),1.785,LZ(1.785),.9),18,.95);   /* 목 끈 */
+
+    /* --- 소매: 가로대에 끼운 삼베 자루, 끝을 끈으로 묶었다 --- */
+    for(const s of [-1,1]){const path=(t,o)=>{const x=s*(.18+t*.46);return o.set(x+LX(YA),YA-.012*Math.abs(x)-.01*t*t,LZ(YA)+.008*Math.sin(t*4+sd+s));};
+      const rad=t=>(.098-.02*t+.006*(vn(t*6+sd,s,1)-.5)*2+.003*Math.sin(t*31+s))*(1-.5*Math.exp(-(((t-.84)/.045)**2)))+.022*sm(.88,1,t)+.03*sm(.12,0,t);
+      tube(A,path,rad,10,10,(C,P,u,w)=>{BUR(C,P,false);tint(C,0x5e4a2c,Math.exp(-(((w-.84)/.05)**2))*.3);},.05,{sx:.92});
+      const pc=path(.845,V());ring(.052,.011,T(pc.x,pc.y,pc.z,0,0,PI/2),14);
+      for(let k=0;k<10;k++){const a=k/10*TAU,p=path(.97,V()),d=V(s,Math.cos(a)*.5*(.5+H(k,60+s)),Math.sin(a)*.5*(.5+H(k,61+s))).normalize();p.y+=Math.cos(a)*.035;p.z+=Math.sin(a)*.035;straw(p,d,.07+H(k,62+s)*.1,.04,sk++);}}
+
+    /* --- 가슴: 칠한 과녁 천 (맨 자루) 또는 겉옷 (기사단) --- */
+    const onT=(a,b,yc,off,P)=>{const y=yc+b,r=rAtY(y)*lump(PI/2,y);TP(PI/2-a/Math.max(.05,r),y,off,P);};
+    if(!tab){surf(A,22,6,(u,w,P)=>{const R=.115*w;onT(R*Math.cos(u*TAU),R*Math.sin(u*TAU),1.4,.007,P);},(C,P,u,w)=>{const n=fbm(P.x*20+sd,P.y*20,3,2);mixC(C,0xb8a888,0xe0d4b4,n*1.3);
+        if(w<.3||(w>.52&&w<.8))mixC(C,0x6e1a14,0xb43024,n*1.2+.1);if(w>.9)tint(C,0x4a3a26,.55);tint(C,0x6a5232,sm(.6,.8,fbm(P.x*6,P.y*6+sd,1,2))*.4);},.08,{wrap:true});
+      for(let k=0;k<16;k++){const a=k/16*TAU,R=.118,p=V(),q=V();onT(R*Math.cos(a),R*Math.sin(a),1.4,.009,p);onT((R-.012)*Math.cos(a+.08),(R-.012)*Math.sin(a+.08),1.4,.009,q);
+        tube(A,(t,o)=>o.lerpVectors(p,q,t),()=>.0035,3,1,(C)=>C.set(0x3a2a1a),.1);}
+      /* 뒤쪽에 기운 천 조각 */
+      const pa=-PI/2+.5+H(4,1)*.6,py=1.33+H(4,2)*.12;surf(A,6,6,(u,w,P)=>{const a=(u-.5)*.15,b=(w-.5)*.13,y=py+b,r=rAtY(y)*lump(pa,y);TP(pa-a/r,y,.006,P);},(C,P,u,w)=>{mixC(C,0x6e6250,0x9a8c70,fbm(P.x*15,P.y*15,sd,2)*1.4);
+        if(u<.1||u>.9||w<.1||w>.9)tint(C,0x2e2618,.55);},.06,{wrap:false});}
+    else{const RED=tab===1,base=RED?0x8a1c1a:0x22407a,dark=RED?0x4e0e0c:0x10203e,trim=0xc8a044;
+      const rc=y=>y>1.22?rAtY(y)*1.06+.016:y>1.14?rAtY(y)*(1+.06*sm(1.14,1.22,y))+.012+.004*sm(1.14,1.22,y):rAtY(1.14)+.012+(1.14-y)*.4;
+      for(const face of [1,-1]){const th0=face*PI/2;
+        surf(A,14,22,(u,w,P)=>{const a=(u-.5)*.5,y=1.76-w*.88,r=rc(y)+.009*Math.sin(u*TAU*3+sd)*sm(1.14,1.0,y),th=th0-face*a/Math.max(.08,rc(y));P.set(r*Math.cos(th)+LX(y),y,r*Math.sin(th)*SZ+LZ(y));},
+          (C,P,u,w)=>{const n=fbm(P.x*12+sd,P.y*12,face,2);mixC(C,dark,base,n*1.1+.35);const ex=Math.abs(u-.5),ey=w;
+            if(face>0&&((ex<.075&&ey>.2&&ey<.62)||(Math.abs(ey-.35)<.05&&ex<.26)))mixC(C,0xc8b070,0xeeddaa,n);   /* 가슴 십자 */
+            if(ex>.44||ey>.94)C.set(trim).multiplyScalar(.85+n*.3);tint(C,0x3a2a1a,sm(.7,.95,fbm(P.x*5,P.y*5+sd,face,2))*.35);},.1,{wrap:false});}
+      ring(rAtY(1.14)+.026,.015,T(LX(1.14),1.14,LZ(1.14),.2),30,SZ);}
+
+    /* --- 머리: 짚 자루, 위 양쪽 귀퉁이가 뾰족하고 아래를 목에서 오므렸다. 앞에 세로 바늘땀 --- */
+    const hry=.185,hrx=.165,hrz=.15,tilt=(H(5,1)-.5)*.22,turn=(H(5,2)-.5)*.3;
+    const Mh=T(LX(1.79),1.79,LZ(1.79),turn,(H(5,3)-.5)*.12,tilt);
+    const HP=(th,ph,off,o)=>{const g=sm(2.3,2.95,ph),ear=.022*Math.exp(-(((ph-.72)/.26)**2))*Math.pow(Math.abs(Math.cos(th)),10),n=1+.06*(fbm(Math.cos(th)*1.6+sd,Math.cos(ph)*1.6,Math.sin(th)*1.6,2)-.5);
+      let hr=Math.sin(ph)*(1+ear*6)*n,hx=hr*hrx,hz=hr*hrz;const nk=.072+.008*Math.sin(th*9+sd);hx=hx*(1-g)+nk*g;hz=hz*(1-g)+nk*.9*g;
+      const y=hry+Math.cos(ph)*hry*(1+ear*1.5)*n,yb=-.005-.03*(ph-2.95>0?ph-2.95:0);return o.set((hx+off)*Math.cos(th),y*(1-g)+yb*g+off*Math.cos(ph),(hz+off)*Math.sin(th));};
+    surf(A,22,15,(u,w,P)=>HP(u*TAU,w*PI,0,P),(C,P,u,w)=>{BUR(C,_P2.set(P.x,P.y+1.8,P.z),false);tint(C,0x4a3a22,Math.exp(-((P.z/.014)**2))*sm(.26,.32,P.y)*.45);},.05,{wrap:true,m:Mh});
+        for(let k=0;k<10;k++){const a=k/10*TAU+H(k,70),p=V(Math.cos(a)*.07,.0,Math.sin(a)*.07),d=V(Math.cos(a),.35+H(k,71)*.4,Math.sin(a)).normalize();p.applyMatrix4(Mh);straw(p,d,.04+H(k,72)*.05,.01,sk++);}
+    if(helm){/* 낡은 쇠 모자 (찌그러지고 녹슨 챙 넓은 모자) */
+      const pr=[[.0,.15],[.07,.145],[.13,.12],[.165,.075],[.178,.03],[.18,.012],[.24,-.004],[.262,-.016],[.258,-.026],[.24,-.02],[.175,-.004],[.17,.03],[.158,.07],[.12,.112],[.06,.134],[0,.138]];
+      lathe(A,pr,20,13,(C,P,th,w)=>{const n=fbm(P.x*14+sd,P.y*14,P.z*14,3);mixC(C,0x3e3e40,0x76767a,n*1.4-.2);tint(C,0x7a3e1a,sm(.55,.75,fbm(P.x*8+3,P.y*8,P.z*8+sd,2))*.75);},.55,
+        {dr:(th,w,r,y)=>-.012*sm(.6,.75,vn(Math.cos(th)*3+sd,y*9,Math.sin(th)*3))*(r>.18?.4:1),m:new THREE.Matrix4().multiplyMatrices(Mh,T(0,.27,0,H(6,1)*TAU,(H(6,2)-.5)*.3,(H(6,3)-.5)*.35))});}
+    return A;};
   /* ================= 꾸리기 ================= */
   const done=A=>{const g=new THREE.BufferGeometry(),n=A.p.length/3,p=new Float32Array(A.p);for(let i=1;i<p.length;i+=3)p[i]+=.0015;   /* 밑면이 바닥과 딱 붙지 않게 1.5mm 띄운다 (굽기에서 밑면 붙은 모양을 내려 깜빡임을 막는 장치가 음식을 바닥에 묻지 않게) */
     g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(A.n,3));g.setAttribute('color',new THREE.Float32BufferAttribute(A.c,3));g.setAttribute('mt',new THREE.Float32BufferAttribute(A.g,1));
@@ -11838,7 +11935,7 @@ async function buildMarcus(H){
     out(){return this.a.subarray(0,this.length);}});
   const nb=()=>({pos:fbuf(),nor:fbuf(),col:fbuf(),mt:fbuf()});
   const cell=(x,z)=>{const i=Math.floor((x-cx)/CELL),j=Math.floor((z-cz)/CELL),k=i+','+j;let C=MARCUS.cells.get(k);
-    if(!C){C={op:nb(),gl:nb(),sh:nb(),ip:nb(),dt:nb(),fd:nb(),x:cx+(i+.5)*CELL,z:cz+(j+.5)*CELL,g:new THREE.Group()};C.g.userData.mc=1;scene.add(C.g);MARCUS.cells.set(k,C);}return C;};
+    if(!C){C={op:nb(),gl:nb(),sh:nb(),ip:nb(),dt:nb(),fd:nb(),sm:nb(),x:cx+(i+.5)*CELL,z:cz+(j+.5)*CELL,g:new THREE.Group()};C.g.userData.mc=1;scene.add(C.g);MARCUS.cells.set(k,C);}return C;};
   const GC=new Map(),geoC=(key,mk)=>{if(!GC.has(key))GC.set(key,mk());return GC.get(key);};
   const BOX=geoC('b',()=>new THREE.BoxGeometry(1,1,1)),QUAD=geoC('q',()=>new THREE.PlaneGeometry(1,1));
   const CYL=(rt,rb,n,open)=>geoC('c'+rt+'_'+rb+'_'+n+(open?'o':''),()=>new THREE.CylinderGeometry(rt,rb,1,n,1,!!open));
@@ -12784,7 +12881,7 @@ async function buildMarcus(H){
     for(const sd of [-1,1]){for(let k=0;k<=Math.floor(w/3);k++)F.P(BOX,-w/2+k*w/Math.floor(w/3),.6,sd*d/2,.18,1.2,.18,WOOD);F.P(BOX,0,.95,sd*d/2,w,.12,.1,WOOD);F.P(BOX,0,.5,sd*d/2,w,.12,.1,WOOD);
       for(let k=0;k<=Math.floor(d/3);k++)F.P(BOX,sd*w/2,.6,-d/2+k*d/Math.floor(d/3),.18,1.2,.18,WOOD);F.P(BOX,sd*w/2,.95,0,.1,.12,d,WOOD);F.P(BOX,sd*w/2,.5,0,.1,.12,d,WOOD);}
     segBox(x-w/2,z-d/2,x+w/2-8,z-d/2,.4,1.2);segBox(x-w/2,z+d/2,x+w/2,z+d/2,.4,1.2);segBox(x-w/2,z-d/2,x-w/2,z+d/2-14,.4,1.2);segBox(x+w/2,z-d/2,x+w/2,z+d/2,.4,1.2);
-    for(let k=0;k<6;k++){const px=-w/2+8+k*(w-16)/5,pz=-d/2+10;F.P(CYL(.08,.1,6),px,1,pz,1,2,1,WOOD);F.P(BOX,px,1.5,pz,.6,.8,.3,0xd8c896);F.P(BOX,px,1.5,pz,1.4,.1,.1,WOOD);F.P(SPH,px,2.15,pz,.22,.26,.22,0xd8c896);colliders.push({...F.W(px,pz),r:.4});{const q=F.W(px,pz);dummyAdd(q.x,q.z);}}
+    for(let k=0;k<6;k++){const px=-w/2+8+k*(w-16)/5,pz=-d/2+10;{const q=F.W(px,pz);dummyModel(F,px,pz,0,FOODK.pickV(q.x,q.z,2)*3);colliders.push({...q,r:.4});dummyAdd(q.x,q.z);}}
     for(let k=0;k<4;k++){const px=w/2-6,pz=-d/2+14+k*10;F.P(CYL(.9,.9,16),px,1.3,pz,1,.2,1,0xf0e8d8,{rz:PI/2});F.P(CYL(.6,.6,16),px-.11,1.3,pz,1,.2,1,0xc8302a,{rz:PI/2});F.P(CYL(.3,.3,16),px-.22,1.3,pz,1,.2,1,0xf0d050,{rz:PI/2});F.P(BOX,px+.2,.6,pz,.12,1.2,.12,WOOD);colliders.push({...F.W(px,pz),r:.6});}
     for(let k=0;k<5;k++){const px=-w/2+5+k*4,pz=d/2-5;F.P(BOX,px,.6,pz,1.6,1.2,1,0xd8b860);F.P(BOX,px,.6,pz,1.7,.1,1.1,0x8a6a3a);colliders.push({...F.W(px,pz),r:.9,h:1.2});}
     for(let k=0;k<3;k++){const G=frame(x-w/2+10+k*8,z+d/2-14,0);G.P(BOX,0,1,0,2.4,2,.3,WOOD);for(let q=0;q<5;q++){G.P(BOX,-1+q*.5,1.1,.2,.06,1.6,.06,0xc8ccd4);G.P(BOX,-1+q*.5,1.6,.2,.3,.06,.08,0xb08a3a);}G.box(0,0,2.4,.4,2);}
@@ -12920,12 +13017,13 @@ async function buildMarcus(H){
   /* ===== 칸 굽기 ===== */
   await BOOT.y();const MAT={op:MTEX.patch(new THREE.MeshStandardMaterial({vertexColors:true,roughness:.85,flatShading:true,side:THREE.DoubleSide}),'o'),
     gl:MTEX.patch(new THREE.MeshStandardMaterial({vertexColors:true,emissive:0xb08030,emissiveIntensity:.7,roughness:.3,side:THREE.DoubleSide}),'l')};
-  MAT.sh=MAT.op;MAT.ip=MAT.op;MAT.dt=MAT.op;MAT.fd=FOODK.mat();   /* fd: 음식. 매끈하게 그리고 mt 자리에 윤기를 담는다. 가까운 칸에서만 그린다(C.fm) */
+  MAT.sh=MAT.op;MAT.ip=MAT.op;MAT.dt=MAT.op;MAT.fd=FOODK.mat();MAT.sm=MAT.fd;   /* sm: 음식처럼 매끈하게 빚은 큰 것(허수아비). 그림자를 드리우고 칸과 함께 늘 그린다 */
+    /* fd: 음식. 매끈하게 그리고 mt 자리에 윤기를 담는다. 가까운 칸에서만 그린다(C.fm) */
   /* dt: 집 잔손질(창틀·덧문 살·처마 홈통·모서리 돌 등). 가까운 칸에서만 그린다(updateMarcus의 C.dm) */
-  const SHD={op:[true,true],gl:[false,false],sh:[true,false],ip:[false,false],dt:[false,true],fd:[false,false]};
+  const SHD={op:[true,true],gl:[false,false],sh:[true,false],ip:[false,false],dt:[false,true],fd:[false,false],sm:[true,true]};
   const bake=(b,key,parent)=>{if(!b.pos.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(b.pos.out(),3));g.setAttribute('normal',new THREE.Float32BufferAttribute(b.nor.out(),3));g.setAttribute('color',new THREE.Float32BufferAttribute(b.col.out(),3));g.setAttribute('mt',new THREE.Float32BufferAttribute(b.mt.out(),1));
     g.computeBoundingSphere();const m=new THREE.Mesh(g,MAT[key]);m.castShadow=SHD[key][0];m.receiveShadow=SHD[key][1];parent.add(m);b.pos=b.nor=b.col=b.mt=null;return m;};
-  for(const C of MARCUS.cells.values()){await BOOT.y();for(const k of ['op','gl','sh','ip'])bake(C[k],k,C.g);C.dm=bake(C.dt,'dt',C.g);if(C.dm)C.dm.visible=false;C.fm=bake(C.fd,'fd',C.g);if(C.fm)C.fm.visible=false;}
+  for(const C of MARCUS.cells.values()){await BOOT.y();for(const k of ['op','gl','sh','ip','sm'])bake(C[k],k,C.g);C.dm=bake(C.dt,'dt',C.g);if(C.dm)C.dm.visible=false;C.fm=bake(C.fd,'fd',C.g);if(C.fm)C.fm.visible=false;}
   await BOOT.y();makeCitizens(cx,cz);
   await BOOT.y();if(typeof marcusLife==='function')marcusLife(cx,cz);
   MARCUS.ready=true;
@@ -13908,7 +14006,7 @@ async function buildRealm(K){
       F.P(BOX,-2,.6,0,1.8,1.2,1.4,STONE2);F.P(BOX,-2,1.3,0,1.2,.2,1,0xff8a30,{glow:true});F.P(BOX,-2,2.6,0,1.4,2.6,1.2,STONE2);F.P(BOX,1.5,.45,.5,.5,.9,.5,DARKW);F.P(BOX,1.5,1.0,.5,1,.2,.4,0x3a3a40);F.P(CYL(.4,.4,10),2.4,.5,-1.5,1,1,1,0x7a5232);
       colliders.push({x:bx-2,z:bz,r:1.2,h:2.6},{x:bx+1.5,z:bz+.5,r:.6,h:1},{x:bx+2.4,z:bz-1.5,r:.5,h:1});R.spots.smith=[bx+1.5,bz-1];}
     {const [wx,wz]=bail(-16,16);well(wx,wz);}
-    for(let k=0;k<5;k++){const [px,pz]=bail(14+k*5,42),F=frame(px,pz,0,hAt(px,pz));F.P(CYL(.08,.1,6),0,1,0,1,2,1,WOOD);F.P(BOX,0,1.5,0,1.1,.12,.12,WOOD);F.P(CYL(.4,.5,8),0,1.45,0,1,.9,1,0xd8c090);F.P(SPH,0,2.2,0,.3,.3,.3,0xd8c090);colliders.push({x:px,z:pz,r:.5,h:2.4});R.spots['dummy'+k]=[px,pz+2.2];}
+    for(let k=0;k<5;k++){const [px,pz]=bail(14+k*5,42),F=frame(px,pz,0,hAt(px,pz));dummyModel(F,0,0,0,FOODK.pickV(px,pz,2)*3);colliders.push({x:px,z:pz,r:.5,h:2.4});R.spots['dummy'+k]=[px,pz+2.2];}
     for(const [lx,lz] of [[-30,-34],[30,-34],[-14,-34]]){const [px,pz]=bail(lx,lz);weaponRack(frame(px,pz,0,hAt(px,pz)),0,0,0);}
     for(const [lx,lz] of [[-6,-26],[6,-26],[-6,4],[6,4],[-28,36],[28,36]]){const [px,pz]=bail(lx,lz);lamp(px,pz,faceTo(px,pz,cx,pz));}
     for(const [lx,lz] of [[-7,-8],[7,-8],[-7,20],[7,20]]){const [px,pz]=bail(lx,lz);bench(px,pz,lx<0?PI/2:-PI/2);}
@@ -14408,7 +14506,7 @@ function buildCastle(K){
     R.spots.archery=[cx+82,cz+15];PL.zones.push({id:'archery',name:'활터',kind:'training',shape:'rect',x:89,y:17,w:18,h:24});}
   /* 훈련장: 남동쪽 바깥뜰, 허수아비와 무기대, 창 찌르기 과녁(퀸테인), 낮은 울타리 */
   {const tx=56,ty=74,tw=40,td=24;fence(cx+tx-tw/2,cz+ty-td/2,cx+tx+tw/2,cz+ty-td/2,[tw/2-5,tw/2+5]);fence(cx+tx-tw/2,cz+ty-td/2,cx+tx-tw/2,cz+ty+td/2);
-    for(let k=0;k<5;k++){const px=cx+tx-14+k*7,pz=cz+ty+1,F=frame(px,pz,0,0);F.P(CYL(.08,.1,6),0,1,0,1,2,1,WOOD);F.P(BOX,0,1.5,0,1.1,.12,.12,WOOD);F.P(CYL(.4,.5,8),0,1.45,0,1,.9,1,0xd8c090);F.P(SPH,0,2.2,0,.3,.3,.3,0xd8c090);colliders.push({x:px,z:pz,r:.5,h:2.4});R.spots['dummy'+k]=[px,pz-2.2];dummyAdd(px,pz);}
+    for(let k=0;k<5;k++){const px=cx+tx-14+k*7,pz=cz+ty+1,F=frame(px,pz,0,0);dummyModel(F,0,0,Math.PI,FOODK.pickV(px,pz,2)*3);colliders.push({x:px,z:pz,r:.5,h:2.4});R.spots['dummy'+k]=[px,pz-2.2];dummyAdd(px,pz);}
     {const F=F0(tx+14,ty-7,0,0);F.P(CYL(.15,.18,8),0,1.6,0,1,3.2,1,DARKW);F.P(BOX,0,2.9,0,2.6,.14,.14,WOOD);F.P(BOX,-1.25,2.6,0,.6,.8,.1,RED);F.P(SPH,1.3,2.5,0,.25,.25,.25,0x7a5a3a);colliders.push({...F.W(0,0),r:.4,h:3});}
     for(const k of [-1,1]){const px=cx+tx+k*12,pz=cz+ty-9;weaponRack(frame(px,pz,0,0),0,0,0);colliders.push({x:px,z:pz,r:1.2,h:2});}
     PL.zones.push({id:'train',name:'훈련장',kind:'training',shape:'rect',x:tx,y:ty,w:tw,h:td});}
@@ -15012,7 +15110,7 @@ function buildGuildHallMap(K){
     {const hw=BACK[1]/2,dz=-HD+T/2,E=W(BACK[0]+hw,dz),Wd=W(BACK[0]-hw,dz);swingDoorAdd(E.x,.08,E.z,hw,1);swingDoorAdd(Wd.x,.08,Wd.z,hw,-1);
       P(BOX,BACK[0],.05,dz,BACK[1],.1,T+.2,0x6a6058);}   /* 문턱 */
     /* 허수아비 (때리면 피해가 뜬다) */
-    for(let k=0;k<5;k++){const px=-14+k*7,pz=y0+7;P(CYL(.08,.1,6),px,1,pz,1,2,1,WOOD);P(BOX,px,1.5,pz,.6,.8,.3,0xd8c896);P(BOX,px,1.5,pz,1.4,.1,.1,WOOD);P(SPH,px,2.15,pz,.22,.26,.22,0xd8c896);const p=W(px,pz);colliders.push({x:p.x,z:p.z,r:.4});if(typeof dummyAdd==='function')dummyAdd(p.x,p.z);}
+    for(let k=0;k<5;k++){const px=-14+k*7,pz=y0+7;const p=W(px,pz);dummyModel(F,px,pz,0,FOODK.pickV(p.x,p.z,2)*3);colliders.push({x:p.x,z:p.z,r:.4});if(typeof dummyAdd==='function')dummyAdd(p.x,p.z);}
     /* 과녁 */
     for(let k=0;k<3;k++){const px=-10+k*10,pz=y0+1.5;P(BOX,px,.9,pz,.15,1.8,.15,WOOD);P(CYL(1,1,16),px,1.8,pz+.12,.8,.12,.8,0xf0e8d8,{rx:PI/2});P(CYL(1,1,16),px,1.8,pz+.18,.55,.12,.55,0xc83a3a,{rx:PI/2});P(CYL(1,1,16),px,1.8,pz+.24,.25,.12,.25,0xf0d040,{rx:PI/2});colliders.push({...W(px,pz),r:.6});}
     for(const x of [-17,17]){for(let k=0;k<3;k++)barrel(x,y0+12+k*1.4,0,.9);colliders.push({...W(x,y0+13.4),r:1.4,h:1.2});}}
@@ -15651,7 +15749,7 @@ function buildKnightsHQ(K){
       for(const s of [-1,1]){P(BOX,x-.2,2.6,s*1.45,.2,5.2,2.9,OAK,OP);for(const y of [1,2.6,4.2])P(BOX,x-.32,y,s*1.45,.04,.14,2.8,IRON,OP);for(let k=0;k<5;k++)P(SPH,x-.34,1+k*.8,s*.2,.05,.05,.05,IRON,OP);}
       wallC(x,-3,x,3,-1,8,1);banner(x-1.1,8.6,-4,1.2,3.4,-PI/2,0,OP);banner(x-1.1,8.6,4,1.2,3.4,-PI/2,1,OP);}
     /* 허수아비 넷 (때리면 피해가 뜬다) */
-    for(let k=0;k<4;k++){const px=29+k*5,pz=-8;P(CYL(.08,.1,6),px,1,pz,1,2,1,OAK,OP);P(BOX,px,1.5,pz,.6,.8,.3,0xd8c896,OP);P(BOX,px,1.5,pz,1.4,.1,.1,OAK,OP);P(SPH,px,2.15,pz,.22,.26,.22,0xd8c896,OP);P(BOX,px,1.35,pz+.16,.5,.5,.04,k%2?RUBY:BLUE,OP);
+    for(let k=0;k<4;k++){const px=29+k*5,pz=-8;dummyModel(F,px,pz,0,(k%2?1:2)+FOODK.pickV(px,pz,2)*3);   /* 붉은·푸른 기사단 겉옷을 번갈아 입혔다 */
       const p=W(px,pz);colliders.push({x:p.x,z:p.z,r:.4});if(typeof dummyAdd==='function')dummyAdd(p.x,p.z);}
     /* 과녁 셋 (북쪽 담 앞)과 활 쏘는 줄 */
     for(let k=0;k<3;k++){const px=30+k*6,pz=Z0+2.2;P(BOX,px,.9,pz,.15,1.8,.15,OAK,OP);for(const s of [-1,1])P(BOX,px+s*.45,.8,pz-.3,.1,1.7,.1,OAK,{rx:-.3});P(CYL(1,1,16),px,1.8,pz+.12,.8,.12,.8,0xf0e8d8,{rx:PI/2});P(CYL(1,1,16),px,1.8,pz+.18,.55,.12,.55,0xc83a3a,{rx:PI/2});P(CYL(1,1,16),px,1.8,pz+.24,.25,.12,.25,0xf0d040,{rx:PI/2});colliders.push({...W(px,pz),r:.7});}
