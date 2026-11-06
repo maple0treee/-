@@ -54,10 +54,11 @@
     let sendTick = 0;
     const changed = new Set();
     let seq = 0;
-    function randPointIn(zone) {
+    function randPointIn(zone, lv) {
       for (let i = 0; i < 400; i++) {
         let x, z;
-        if (OR.ISLES[zone]) { const I = OR.ISLES[zone]; const a = rnd(-Math.PI, Math.PI), d = rnd(6, I.R - 8); x = I.x + Math.cos(a) * d; z = I.z + Math.sin(a) * d; if (Math.hypot(x - I.entry.x, z - I.entry.z) < 16) continue; if (I.exit && Math.hypot(x - I.exit.x, z - I.exit.z) < 16) continue; }
+        if (OR.ISLES[zone]) { const I = OR.ISLES[zone]; const a = rnd(-Math.PI, Math.PI), d = rnd(6, I.R - 8); x = I.x + Math.cos(a) * d; z = I.z + Math.sin(a) * d; if (Math.hypot(x - I.entry.x, z - I.entry.z) < 16) continue; if (I.exit && Math.hypot(x - I.exit.x, z - I.exit.z) < 16) continue; if (I.noSpawn && I.noSpawn.some((q) => Math.hypot(x - I.x - q.x, z - I.z - q.z) < q.r)) continue;
+          if (lv && I.band && i < 360 && Math.abs(levelAt(zone, x, z) - lv) > I.band) continue; }   // 허칠산: 종마다 제 레벨에 맞는 높이에서
         else {   // 하레나 둘레 길: 그 구역의 4분의 1 바퀴 안에서 고른다
           const SP = OR.SP, i = SP.ZONES.indexOf(zone); if (i < 0) return null;
           const t = i * SP.Q + rnd(0.12, SP.Q - 0.12), q = OR.spPos(t, rnd(-(SP.HW - 3), SP.HW - 3)); x = q.x; z = q.z;
@@ -84,8 +85,8 @@
       return m;
     }
     function spawn(zone) {
-      const p = randPointIn(zone); if (!p) return null;
       const ty = pick(ZONE_MON[zone]);
+      const p = randPointIn(zone, MON[ty].lv); if (!p) return null;
       return makeMon(ty, zone, p, MON[ty].lv || levelAt(zone, p.x, p.z)); // 같은 종은 늘 같은 레벨
     }
     const pub = (m) => ({ i: m.i, ty: m.ty, zone: m.zone, lv: m.lv, x: r2(m.x), z: r2(m.z), ry: r2(m.ry), hp: Math.max(0, Math.round(m.hp)), mh: m.mh });
@@ -332,6 +333,13 @@
       goblin:    { k: 'throw', sh: 'c', at: 'target', range: [0, 12], tele: 0.9, r: 1.4, mul: 1.0, cd: [5, 8], col: 2 },
       wolf:      { k: 'dash',  sh: 'l', range: [0, 9], tele: 0.7, len: 8, w: 0.9, mul: 1.2, cd: [6, 9] },
       dog:       { k: 'dash',  sh: 'l', range: [0, 9], tele: 0.7, len: 8, w: 0.9, mul: 1.2, cd: [6, 9] },
+      frostfox:  { k: 'dash',  sh: 'l', range: [0, 10], tele: 0.6, len: 9, w: 0.9, mul: 1.25, cd: [5, 8] },
+      snowgoat:  { k: 'dash',  sh: 'l', range: [0, 11], tele: 0.9, len: 10, w: 1.1, mul: 1.5, cd: [6, 9] },
+      icewisp:   { k: 'spit',  sh: 'c', at: 'target', range: [0, 13], tele: 1.0, r: 2.2, mul: 1.05, cd: [6, 9], pool: [3, 0.3], col: 3 },
+      snowyeti:  { k: 'smash', sh: 'c', at: 'front', range: [0, 4], tele: 1.0, r: 2.6, mul: 1.7, cd: [6, 9], jump: 1 },
+      avagolem:  { k: 'smash', sh: 'c', at: 'front', range: [0, 4.5], tele: 1.1, r: 3.0, mul: 1.8, cd: [7, 10], jump: 1, pool: [3, 0.3], col: 3 },
+      snowowl:   { k: 'dash',  sh: 'l', range: [0, 12], tele: 0.75, len: 11, w: 1.2, mul: 1.4, cd: [6, 9] },
+      frostmammoth:{ k: 'smash', sh: 'c', at: 'front', range: [0, 5], tele: 1.15, r: 3.4, mul: 1.85, cd: [7, 10], jump: 1 },
       whitewolf: { k: 'dash',  sh: 'l', range: [0, 10], tele: 0.65, len: 9, w: 0.9, mul: 1.25, cd: [6, 9] },
       shadowwolf:{ k: 'dash',  sh: 'l', range: [0, 10], tele: 0.6, len: 10, w: 1.0, mul: 1.3, cd: [5, 8] },
       boar:      { k: 'dash',  sh: 'l', range: [0, 11], tele: 0.95, len: 11, w: 1.1, mul: 1.5, cd: [6, 9] },

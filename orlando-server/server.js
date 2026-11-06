@@ -11,7 +11,7 @@ const createSim = require('./sim.js');
 const OR = require('./shared.js');
 
 const PORT = process.env.PORT || 3000;
-const VERSION = 28; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
+const VERSION = 29; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
 const PUBLIC = path.join(__dirname, 'public');
 
 // 파일을 미리 읽어 두고(압축본 포함) 바로 보내 준다
