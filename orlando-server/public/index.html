@@ -26052,15 +26052,39 @@ function apRelaxPose(m,dt){const u=m.userData;u.relax=1;animStick(m,0,tAll,1,fal
   if(S){S.AR.sh.rotation.set(-.04,0,.1);S.AR.el.rotation.x=-.2;S.AL.sh.rotation.set(-.04,0,-.1);S.AL.el.rotation.x=-.2;S.AR.hand.rotation.x=0;S.AL.hand.rotation.x=0;S.upper.rotation.set(0,0,0);}
   if(!u.anime&&u.ap&&PM.data[u.ap.g])pmAttach(m,u.job,u.gear,u.ap);
   if(u.anime){if(!u.relaxF){u.relaxF=1;pmFingers(u.anime,'L','relax');pmFingers(u.anime,'R','relax');}pmPose(m,u.anime,dt);}}
+/* 미리보기·얼굴 그림은 모두 WebGL 하나(PV)로 그려 각 캔버스에 옮겨 붙인다. 캔버스마다 WebGL을 따로 만들면
+   처음 그릴 때마다 셰이더를 다시 구우며 몇 초씩 멈췄다(게임 시작·새 캐릭터를 누를 때). 셰이더는 홈 화면에 있는 동안 미리 굽는다:
+   checkShaderErrors를 끄면 굽는 동안 기다리지 않고, 다 구워진 뒤 처음 그릴 때 바로 그려진다 */
+const PV={r:null,cv:null,sc:null,fail:false,warm:0,t0:performance.now()};
+function pvGet(){if(PV.r||PV.fail)return PV.r;
+  try{const cv=document.createElement('canvas');cv.width=cv.height=8;const r=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true});
+    r.debug.checkShaderErrors=false;r.outputEncoding=renderer.outputEncoding;r.setPixelRatio(1);
+    const sc=new THREE.Scene();sc.add(new THREE.HemisphereLight(0xfff4e0,0x3a3430,.95));const k=new THREE.DirectionalLight(0xffffff,.88);k.position.set(1.5,3,3);sc.add(k);
+    PV.r=r;PV.cv=cv;PV.sc=sc;}catch(e){PV.fail=true;}return PV.r;}
+/* 큰 미리보기: PV 캔버스를 보이는 무대(.stage)에 옮겨 넣고 바로 그린다 (그림을 읽어 옮기면 그래픽카드가 다른 일을 끝낼 때까지 기다리게 된다).
+   copy: 얼굴 그림처럼 한 번 찍어 out(2D)에 옮겨 둘 때 */
+function pvDraw(m,cam,out,W,H,copy){const r=pvGet();if(!r||!m)return false;const C=PV.cv;
+  if(copy){if(C.width<W||C.height<H)r.setSize(Math.max(C.width,W),Math.max(C.height,H),false);
+    r.setViewport(0,0,W,H);r.setScissor(0,0,W,H);r.setScissorTest(true);PV.sc.add(m);try{r.render(PV.sc,cam);}catch(e){}PV.sc.remove(m);r.setScissorTest(false);
+    if(out.width!==W||out.height!==H){out.width=W;out.height=H;}const g=out.getContext('2d');g.clearRect(0,0,W,H);g.drawImage(C,0,C.height-H,W,H,0,0,W,H);r.clear();return true;}
+  if(C.previousSibling!==out)out.after(C);if(C.width!==W||C.height!==H)r.setSize(W,H,false);
+  r.setViewport(0,0,W,H);PV.sc.add(m);try{r.render(PV.sc,cam);}catch(e){}PV.sc.remove(m);return true;}
+/* 홈 화면에서 쉬는 동안: 저장된 캐릭터들과 새 캐릭터 모습을 미리 구워 둔다 (1단계 셰이더, 2단계 작은 그림 한 번으로 모양·그림 올리기) */
+function pvWarm(){if(PV.warm>=2||performance.now()-PV.t0<700)return;if(!OLD_LOOK&&!(PM.data.m&&PM.data.f))return;
+  const r=pvGet();if(!r){PV.warm=2;return;}
+  if(!PV.wm){PV.wm=[];try{for(const c of loadChars().slice(0,8))PV.wm.push(makePlayerMesh(c.job,gearOf(c),charAp(c)));
+      PV.wm.push(makePlayerMesh(chosen,{helm:-1,armor:-1,boots:-1,weapon:-1,sub:-1},{...newAp}));}catch(e){}}
+  const cam=new THREE.PerspectiveCamera(30,1,.1,20);cam.position.set(0,1.2,4.9);cam.lookAt(0,1,0);
+  if(PV.warm===0){for(const m of PV.wm)PV.sc.add(m);try{r.compile(PV.sc,cam);}catch(e){}for(const m of PV.wm)PV.sc.remove(m);PV.warm=1;PV.t1=performance.now();return;}
+  if(performance.now()-PV.t1<1500)return;
+  for(const m of PV.wm)PV.sc.add(m);r.setViewport(0,0,8,8);try{r.render(PV.sc,cam);}catch(e){}for(const m of PV.wm)PV.sc.remove(m);PV.wm=null;PV.warm=2;}
 // 작은 미리보기 화면 하나 (캔버스마다)
 function makeApPreview(cv){let st=null;return{dirty:true,tick(dt,job,ap,gear,alive){if(!alive)return;
-  if(!st){try{const r=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true});r.setPixelRatio(Math.min(2,devicePixelRatio||1));r.outputEncoding=renderer.outputEncoding;
-    const sc=new THREE.Scene();sc.add(new THREE.HemisphereLight(0xfff4e0,0x3a3430,.95));const k=new THREE.DirectionalLight(0xffffff,.85);k.position.set(1.5,3,3);sc.add(k);
-    const c2=new THREE.PerspectiveCamera(30,1,.1,20);c2.position.set(0,1.2,4.9);c2.lookAt(0,1.0,0);st={r,sc,cam:c2,m:null,yaw:.4};}catch(e){st={fail:1};}}
-  if(st.fail)return;const w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;if(st.w!==w||st.h!==h){st.w=w;st.h=h;st.r.setSize(w,h,false);st.cam.aspect=w/h;st.cam.updateProjectionMatrix();}
-  if(this.dirty&&(OLD_LOOK||PM.data[ap.g])){if(st.m)st.sc.remove(st.m);st.m=makePlayerMesh(job,gear,{...ap});st.sc.add(st.m);this.dirty=false;st.yaw=.4;}
-  if(st.m){st.yaw+=dt*.5;st.m.rotation.y=st.yaw;apRelaxPose(st.m,dt);}
-  st.r.render(st.sc,st.cam);}};}
+  if(!st){const c2=new THREE.PerspectiveCamera(30,1,.1,20);c2.position.set(0,1.2,4.9);c2.lookAt(0,1.0,0);st={cam:c2,m:null,yaw:.4};}
+  const w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;const pr=Math.min(2,devicePixelRatio||1),W=Math.round(w*pr),H=Math.round(h*pr);
+  if(st.w!==w||st.h!==h){st.w=w;st.h=h;st.cam.aspect=w/h;st.cam.updateProjectionMatrix();}
+  if(this.dirty&&(OLD_LOOK||PM.data[ap.g])){st.m=makePlayerMesh(job,gear,{...ap});this.dirty=false;st.yaw=.4;}
+  if(st.m){st.yaw+=dt*.5;st.m.rotation.y=st.yaw;apRelaxPose(st.m,dt);pvDraw(st.m,st.cam,cv,W,H);}}};}
 let selId=null;
 const charAp=c=>apParse(c.ap)||(c.ap&&c.ap.g?c.ap:null)||apDefault();
 const PORTRAITS=new Map(),portraitWant=[];let charPicR=null;
@@ -26069,6 +26093,7 @@ const newAp={...apDefault(),c:SHIRT_COLORS[0]};let apPrev=null;
 (function(){const box=$('#apBox');if(!box)return;buildApControls(box,newAp,()=>{if(apPrev)apPrev.dirty=true;});if(!OLD_LOOK){pmLoad('m').catch(()=>{});pmLoad('f').catch(()=>{});}})();
 // 미리보기: 새 캐릭터 화면이 열려 있을 때만 돈다
 function apPreviewTick(dt){
+  pvWarm();
   if(!apPrev&&$('#apPrev'))apPrev=makeApPreview($('#apPrev'));
   if(apPrev){$('#apWait').hidden=OLD_LOOK||!!PM.data[newAp.g];apPrev.tick(dt,chosen,newAp,{helm:-1,armor:-1,boots:-1,weapon:-1,sub:-1},!$('#start').hidden&&!$('#stepNew').hidden&&mode==='title');}
   /* 캐릭터 선택창: 고른 캐릭터를 크게 돌려 보이고, 목록 얼굴 그림을 한 장씩 찍는다 */
@@ -26122,11 +26147,10 @@ $('#selPlay').onclick=()=>{const c=loadChars().find(x=>x.id===selId);if(c)startG
 function portraitKey(c){return c.job+'|'+(typeof c.ap==='string'?c.ap:apCode(charAp(c)))+'|'+JSON.stringify(gearOf(c));}
 function portraitStep(){const w=portraitWant.shift();if(!w)return;const [k,c,im]=w;
   if(PORTRAITS.has(k)){im.src=PORTRAITS.get(k);return;}
-  try{if(!charPicR){const cv=document.createElement('canvas');const r=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true,preserveDrawingBuffer:true});r.outputEncoding=renderer.outputEncoding;r.setSize(128,128,false);
-      const sc=new THREE.Scene();sc.add(new THREE.HemisphereLight(0xfff4e0,0x3a3430,.95));const l=new THREE.DirectionalLight(0xffffff,.9);l.position.set(1.5,3,3);sc.add(l);charPicR={r,sc,cv,cam:new THREE.PerspectiveCamera(19,1,.1,20)};}
-    const R=charPicR,ap=charAp(c),m=makePlayerMesh(c.job,gearOf(c),ap);m.rotation.y=.12;apRelaxPose(m,1);R.sc.add(m);
+  try{if(!charPicR)charPicR={cv:document.createElement('canvas'),cam:new THREE.PerspectiveCamera(19,1,.1,20)};
+    const R=charPicR,ap=charAp(c),m=makePlayerMesh(c.job,gearOf(c),ap);m.rotation.y=.12;apRelaxPose(m,1);
     const bare=makePlayerMesh(c.job,{helm:-1,armor:-1,boots:-1,weapon:-1,sub:-1,acc:-1,shs:0,wc:0},ap);bare.updateMatrixWorld(true);const hy=new THREE.Box3().setFromObject(bare).max.y-.27;
-    R.cam.position.set(0,hy+.02,1.75);R.cam.lookAt(0,hy,0);R.r.render(R.sc,R.cam);R.sc.remove(m);
+    R.cam.position.set(0,hy+.02,1.75);R.cam.lookAt(0,hy,0);if(!pvDraw(m,R.cam,R.cv,128,128,true))return;
     const url=R.cv.toDataURL('image/png');PORTRAITS.set(k,url);im.src=url;}catch(e){}}
 function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:spAll(),skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mhv:6,mentorReady:P.mentorReady,faith:P.faith|0||undefined,needBook:P.needBook||undefined,mq:P.mq||undefined,mqDone:P.mqDone||undefined,myHome:P.myHome||undefined,gq:P.gq&&Object.keys(P.gq).length?P.gq:undefined,gqDone:P.gqDone||undefined,gqPin:P.gqPin&&Object.keys(P.gqPin).length?P.gqPin:undefined,spc:P.spc&&Object.keys(P.spc).length?P.spc:undefined,poff:P.poff&&Object.keys(P.poff).length?P.poff:undefined,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap),gk:P.gk,guild:P.guild||undefined,gApply:P.gApply||undefined,gApps:P.gApps&&P.gApps.list.length?{gid:P.gApps.gid,list:P.gApps.list.map(a=>({n:a.n,k:a.k,t:a.t,no:a.no?1:undefined}))}:undefined,wbk:P.wbk&&Object.keys(P.wbk).length?P.wbk:undefined,shelf:P.shelf&&P.shelf.length?P.shelf:undefined,lak:P.lak||undefined}:null;}
 /* 같은 캐릭터를 창 두 개(또는 휴대폰에 남아 있던 옛 탭)에서 켜 두면, 옛 창이 나중에 저장하면서 새 창의 기록을 덮어썼다.
@@ -30169,20 +30193,37 @@ function loopBody(){
 const START_EL=document.getElementById('start');
 /* 그 대신 시작 창이 떠 있는 동안 세상 물체를 몇백 개씩 보이지 않는 작은 화면(8x8)에 그려 모양·그림을 그래픽카드에 미리 올려 둔다.
    한 프레임에 조금씩(한 번에 십몇 ms 안쪽)이라 시작 창이 멈추지 않고, 게임에 들어간 뒤 처음 보는 곳에서 멈추는 일도 줄어든다 (warmGpu가 할 일을 나눠서 먼저) */
-const TW={list:null,lights:null,i:0,n:200,rt:null,done:false,L:29};
+const TW={list:null,lights:null,i:0,n:200,rt:null,done:false,L:29,fence:null,wait:0,B:null,wp:null,pw:0,tmp:null,ext:undefined};
+/* 묶음마다 두 걸음: (1) 셰이더를 굽기만 하고(checkShaderErrors를 끄면 기다리지 않는다) 다 구워질 때까지 몇 프레임 넘긴다 (2) 그다음 작은 화면에 그린다.
+   예전에는 그리면서 셰이더를 구워 한 번에 1초 넘게 멈추곤 했다 (홈 화면이 버벅였다).
+   그래픽카드가 앞 묶음을 다 그린 뒤에만 다음 묶음을 보낸다: 끝없이 쌓아 두면 캐릭터 그림처럼 결과를 기다리는 일이 그게 다 끝날 때까지(몇 초) 멈췄다 */
+function twLayers(B,on){const L=TW.L;if(on){TW.had=new Set();for(const o of TW.lights)if(o.layers.mask&(1<<L))TW.had.add(o);else o.layers.enable(L);for(const o of B)if(o.layers.mask&(1<<L))TW.had.add(o);else o.layers.enable(L);}
+  else{for(const o of TW.lights)if(!TW.had.has(o))o.layers.disable(L);for(const o of B)if(!TW.had.has(o))o.layers.disable(L);TW.had=null;}}
 function titleWarm(){if(TW.done||warmGpu.done)return;
-  if(!TW.list){TW.list=[];TW.lights=[];scene.traverse(o=>{if(o.isLight)TW.lights.push(o);else if(o.isMesh||o.isPoints||o.isLine||o.isSprite)TW.list.push(o);});TW.rt=new THREE.WebGLRenderTarget(8,8);}
-  if(TW.i>=TW.list.length){TW.done=true;TW.rt.dispose();TW.list=TW.lights=null;return;}
-  const B=TW.list.slice(TW.i,TW.i+TW.n),fc=[],iv=[],had=new Set(),L=TW.L;TW.i+=B.length;
+  const gl=renderer.getContext();
+  if(TW.ext===undefined)TW.ext=gl.getExtension('KHR_parallel_shader_compile')||null;
+  if(TW.fence){if(gl.getSyncParameter(TW.fence,gl.SYNC_STATUS)!==gl.SIGNALED){TW.slow=1;if(++TW.wait>3){TW.wait=0;TW.n=Math.max(25,TW.n>>1);}return;}gl.deleteSync(TW.fence);TW.fence=null;TW.wait=0;}
+  if(TW.wp){TW.pw++;if(TW.ext?(TW.pw<240&&TW.wp.some(p=>!gl.getProgramParameter(p,TW.ext.COMPLETION_STATUS_KHR))):TW.pw<3)return;TW.wp=null;}
+  else{
+    if(!TW.list){TW.list=[];TW.lights=[];scene.traverse(o=>{if(o.isLight)TW.lights.push(o);else if(o.isMesh||o.isPoints||o.isLine||o.isSprite)TW.list.push(o);});TW.rt=new THREE.WebGLRenderTarget(8,8);TW.tmp=new THREE.Scene();}
+    if(TW.i>=TW.list.length){TW.done=true;TW.rt.dispose();TW.list=TW.lights=TW.B=TW.tmp=null;return;}
+    const B=TW.B=TW.list.slice(TW.i,TW.i+TW.n);TW.i+=B.length;
+    const T=TW.tmp,mask=camera.layers.mask,prev=renderer.getRenderTarget(),n0=renderer.info.programs.length,ce=renderer.debug.checkShaderErrors;
+    T.fog=scene.fog;T.environment=scene.environment;T.children=[...TW.lights,...B];twLayers(B,true);camera.layers.set(TW.L);renderer.debug.checkShaderErrors=false;
+    try{renderer.setRenderTarget(TW.rt);renderer.compile(T,camera);}catch(e){}
+    renderer.debug.checkShaderErrors=ce;renderer.setRenderTarget(prev);camera.layers.mask=mask;twLayers(B,false);T.children=[];
+    const np=renderer.info.programs.slice(n0).map(p=>p.program);if(np.length){TW.wp=np;TW.pw=0;return;}}
+  const B=TW.B,fc=[],iv=[];TW.B=null;if(!B)return;
   const ch=new Set();for(const q of InstChunks.list)if(!q.m.visible)ch.add(q.m);
   const t0=performance.now(),mask=camera.layers.mask,prev=renderer.getRenderTarget(),nu=renderer.shadowMap.needsUpdate;
-  for(const o of [...TW.lights,...B]){if(o.layers.mask&(1<<L))had.add(o);else o.layers.enable(L);}
+  twLayers(B,true);
   for(const o of B){if(o.frustumCulled){o.frustumCulled=false;fc.push(o);}if(ch.has(o)){o.visible=true;iv.push(o);}}
-  camera.layers.set(L);renderer.shadowMap.needsUpdate=false;
+  camera.layers.set(TW.L);renderer.shadowMap.needsUpdate=false;
   try{renderer.setRenderTarget(TW.rt);renderer.render(scene,camera);}catch(e){}
+  if(gl.fenceSync){TW.fence=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0);gl.flush();}
   renderer.setRenderTarget(prev);renderer.shadowMap.needsUpdate=nu;camera.layers.mask=mask;
-  for(const o of [...TW.lights,...B])if(!had.has(o))o.layers.disable(L);for(const o of fc)o.frustumCulled=true;for(const o of iv)o.visible=false;
-  const dt=performance.now()-t0;TW.n=dt<6?Math.min(TW.n*2,3000):dt>24?Math.max(25,TW.n>>1):TW.n;}
+  twLayers(B,false);for(const o of fc)o.frustumCulled=true;for(const o of iv)o.visible=false;
+  const dt=performance.now()-t0,slow=TW.slow;TW.slow=0;TW.n=dt<6&&!slow?Math.min(TW.n*2,3000):dt>24?Math.max(25,TW.n>>1):TW.n;}
 sun.position.set(30,60,20);
 if(!window.ORLANDO_WS){mnet=makeLocalMonsterNet();setupNetMonsters(mnet);mnet.start();}renderOnline();
 /* 서버에 닿지 않으면(서버가 꺼졌거나, 서버 없이 올린 사본) 몬스터를 이 기기에서 돌려 혼자서라도 할 수 있게 한다 */
