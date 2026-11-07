@@ -8368,7 +8368,7 @@ function lkHairShell(o){const R=o.R||.22,A=o.A||128,Mr=o.M||46,N=o.N||72,C=o.C||
     const cph=o.cph||0,cs1=Math.abs(Math.sin(az*C/2+cph)),cl=Math.pow(1-cs1,2.2),cb=Math.pow(cs1,10),tipD=(o.tipB??.03)+((o.tipF??.035)-(o.tipB??.03))*wF;
     {const k=Math.floor((az*C/2+cph)/Math.PI),hv=Math.sin(k*12.9898+(o.under?7.3:1.1))*43758.5453;Y-=tipD*cl*(.55+.9*(hv-Math.floor(hv)));}   /* 다발마다 길이가 조금씩 달라 톱니처럼 고르지 않다 */
     Y-=(o.sb??.03)*Math.exp(-Math.pow((aa-1.3)/.1,2))*(1-wB);   /* 귀밑머리: 얼굴 옆을 따라 조금 더 내려온다 */
-    const yTop=o.helm?.02:(o.top??(R+vol+.003));if(o.helm)Y=wF>.3?yTop:Math.min(Y,yTop-.01);   /* 투구를 쓰면 투구 아래 옆·뒤로만 */
+    const HM=o.helm!=null&&o.helm!==false,yTop=HM?o.helm+.02:(o.top??(R+vol+.003));if(HM)Y=Math.min(Y,yTop-.012);   /* 투구·왕관을 쓰면 테 바로 아래에서 시작해 둘레 전체로 내려온다 */
     let pd=0;if(o.pa!=null){let d=az-o.pa;d=Math.atan2(Math.sin(d),Math.cos(d));pd=Math.exp(-Math.pow(d/.05,2));}
     const OUT=[];
     for(let m=0;m<Mr;m++){const t=m/(Mr-1),y=Y+(yTop-Y)*Math.cos(t*Math.PI/2);
@@ -8674,7 +8674,8 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
   const helm=(G.helm??-1)>=0,ns=(HAIR_STYLES[ap.g]||HAIR_STYLES.m),nm=ns[ap.s|0]||'';
   const L_=(pts,r0,r1,flat,m)=>add(HB,lkLock(pts,r0,r1,8,14,flat),m);
   const mHairS=M(hairC,{roughness:.66,vertexColors:true,side:THREE.DoubleSide});mm.push(mHairS);
-  const shell=o=>add(HB,lkHairShell(Object.assign({helm},o)),mHairS);
+  const helmY=helm?(G.helm===10?.13:G.helm===0?.055:.07):null;   /* 투구 테 높이 (왕관은 높이 얹힌다) */
+  const shell=o=>add(HB,lkHairShell(Object.assign({helm:helmY},o)),mHairS);
   /* 묶은 머리 다발: 끈으로 묶은 자리에서 굵게 나와 끝으로 갈수록 가늘어지고, 살짝 S자로 흔들린다 */
   const tail=(x,y,z,len,r=.05,sw=0,out=0)=>{const P=[[x,y,z],[x+sw*.4+out*.3,y-.06,z-.05],[x+sw+out,y-len*.45,z-.05],[x+sw*.6+out*1.2,y-len*.8,z-.02],[x+sw*.8+out*1.1,y-len,z]];
     add(HB,lkLock(P,r*.9,.01,12,26,.85,.8),mHairD);   /* 속 다발 + 둘레 잔 다발 여섯: 결이 보이고 끝이 갈라진다 */
@@ -8686,7 +8687,7 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     add(HB,new THREE.TorusGeometry(.016,.006,6,14),mHairD,x,y-n*.04+.01,z,[Math.PI/2,0,0]);add(HB,lkLock([[x,y-n*.04,z],[x+.004,y-n*.04-.04,z+.004],[x,y-n*.04-.07,z]],.02,.004,8,10,.8,1),mHair);};
   /* 앞머리 다발들: n개를 이마 위에 겹쳐 놓는다 (뒷줄은 넓고 짧게, 앞줄은 좁게 엇갈려). y=끝 높이, span=덮는 너비(라디안),
      sw=전체가 한쪽으로 쏠림, cur=가운데 가르마로 양옆으로 갈림, ln=한쪽이 길어짐, see=시스루(가늘고 틈) */
-  const bangs=b=>{if(helm||!b)return;let sd=(seed*7.3)%1;const rnd=()=>{sd=(sd*9301+.49297)%1;return sd;};
+  const bangs=b=>{if(!b||(helm&&(b.y??.08)>helmY-.025))return;let sd=(seed*7.3)%1;const rnd=()=>{sd=(sd*9301+.49297)%1;return sd;};
     const n=b.n||7,span=b.span??1.0,yt=b.y??.08,vr=b.v??.02,wv=b.w??1;
     for(const back of [1,0]){const m=back?n:n-1;
       for(let i=0;i<m;i++){let t=m===1?0:(i+(back?0:.5))/(n-1)*2-1;t=Math.max(-1,Math.min(1,t));if(b.cur&&Math.abs(t)<.18&&!back)continue;
@@ -8694,9 +8695,9 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
         let sw=(b.sw||0)+(b.cur?Math.sign(t||1)*b.cur*(1-Math.abs(t)*.4):0)+(b.mess||0)*(rnd()*2-1)+(b.conv??.1)*-t;
         if(Math.abs(az+sw)>1.3)sw=Math.sign(az+sw)*1.3-az;   /* 옆으로 넘긴 다발도 얼굴 옆 선을 넘어 허공으로 뜨지 않게 */
         const y=yt-(b.ln||0)*(t+1)/2-vr*rnd()+(b.edgeUp??.03)*t*t-(back?0:.008);
-        add(HB,lkBangLock({az,w,sw,yr:.205,yt:y,lift:back?.011:.015,th:b.see?.007:.012,blunt:b.blunt||0,curl:b.curl??.004,wig:b.wig?b.wig*(rnd()*2-1):0,shade:back?.86:1}),mHairS);}}};
+        add(HB,lkBangLock({az,w,sw,yr:helm?helmY+.012:.205,yt:y,lift:back?.011:.015,th:b.see?.007:.012,blunt:b.blunt||0,curl:b.curl??.004,wig:b.wig?b.wig*(rnd()*2-1):0,shade:back?.86:1}),mHairS);}}};
   if(nm!=='대머리'){
-    const H0={bang:.1,side:-.1,back:-.2,vol:.016,tipF:.04,tipB:.02,C:16};const sh=o=>{let q=Object.assign({},H0,o);if(q.bg&&!helm)q=Object.assign(q,{bang:Math.max(q.bang,(q.bg.y??.08)+.07),tipF:.015});shell(q);bangs(q.bg);   /* 겹: 안쪽 머리가 조금 더 길게, 다발 사이로 엇갈려 비친다 */
+    const H0={bang:.1,side:-.1,back:-.2,vol:.016,tipF:.04,tipB:.02,C:16};const sh=o=>{let q=Object.assign({},H0,o);if(q.bg)q=Object.assign(q,{bang:Math.max(q.bang,(q.bg.y??.08)+.07),tipF:.015});shell(q);bangs(q.bg);   /* 겹: 안쪽 머리가 조금 더 길게, 다발 사이로 엇갈려 비친다 */
       shell(Object.assign({},q,{under:1,shade:.8,vol:q.vol*.55,bang:q.bang-.012,side:q.side-.018,back:q.back-.02,cph:(q.cph||0)+Math.PI/2,pa:null,spike:0,puff:0}));};
     const bun=(x,y,z,r)=>{if(!helm){add(HB,lkHairCap(r,1,1,.006,16),mHair,x,y,z);add(HB,new THREE.TorusGeometry(r*.75,r*.16,8,18),mHairD,x,y-r*.55,z,[Math.PI/2,0,0]);}};
     const LONG={side:-.28,back:-.55,vol:.018,hang:1,drape:.15,tipB:.03,C:18};
