@@ -70,6 +70,7 @@
     hpeak:  { x: 11800, z: 0, R: 120 },   // 허칠 봉우리: 골짜기 갈림길 위 벼랑 틈을 지나면 나오는 따로 된 땅 (땅 좌표는 허칠과 같다: 봉우리 둘레 벼랑 안만 걷는다)
     hcave:  { x: 11000, z: 0, R: 240 },   // 허칠산 동굴: 갈림길 동쪽 벼랑의 굴 입구로 들어간다 (땅 밑 굴은 따로 된 땅)   // 허칠산: 엑시즈 북서쪽 눈 덮인 산. 북문 밖 숲(3A) 바깥 산길 끝에서 넘어온다 (남쪽 가장자리로 들어온다)
     khq: { x: 9100, z: 0, R: 90 },
+    hlodge: { x: 9500, z: 0, R: 60 },   /* 허칠 산장 안 (2026-11-07): 허칠 산장 맵의 큰 산장 정문으로 들어온다 */
     /* 허칠 사냥터 맵 (땅 좌표는 허칠 산장·동굴과 같다: 같은 산을 옮겨 그린다). hpeak = 눈 비탈, hcave = 박쥐 굴 */
     hwood: { x: 12600, z: 0, R: 120 }, hlake: { x: 13400, z: 0, R: 120 }, hscree: { x: 14200, z: 0, R: 120 }, hridge: { x: 15000, z: 0, R: 120 }, htop: { x: 15800, z: 0, R: 120 },
     hcrys: { x: 16500, z: 0, R: 240 }, hfall: { x: 17100, z: 0, R: 240 }, hden: { x: 17700, z: 0, R: 240 },       // 기사단 본부: 엑시즈 시내 기사단 본부 정문으로 들어가면 나온다 (2층 회당 건물과 동쪽 훈련 마당)
@@ -108,7 +109,7 @@
     if (L.branch) { const prev = i ? ISLES[L.zones[i - 1][0]] : ISLES[MLINES[L.n - 2].zones[MLINES[L.n - 2].zones.length - 1][0]], h = L.branch[i] * PI / 180; I.x = prev.x + Math.cos(h) * MH.STEP; I.z = prev.z + Math.sin(h) * MH.STEP; I.th = h - PI / 2; I.branch = 1; }
     else { const th = MH.TH0 + k * MH.DTH; I.x = MH.cx + Math.cos(th) * MH.RR; I.z = MH.cz + Math.sin(th) * MH.RR; I.th = th; } }));
   const MHUNT = MLINES.flatMap((L) => L.zones.map((q) => q[0]));
-  const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'coachway', 'castle', 'guildhall', 'exmarket', 'arena', 'library', 'hechil', 'hcave', 'hpeak', 'khq', 'hwood', 'hlake', 'hscree', 'hridge', 'htop', 'hcrys', 'hfall', 'hden', ...MHUNT];
+  const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'coachway', 'castle', 'guildhall', 'exmarket', 'arena', 'library', 'hechil', 'hcave', 'hpeak', 'khq', 'hlodge', 'hwood', 'hlake', 'hscree', 'hridge', 'htop', 'hcrys', 'hfall', 'hden', ...MHUNT];
   // 엑시즈 성벽(섬 중심 기준 m, 시계 방향)과 가장자리: 성벽에서 바깥으로 약 70m까지만 땅이 있다 (들쭉날쭉)
   const MARCUS_WALL_M = [[-303,-218],[-247,-216],[-173,-213],[-112,-240],[-57,-264],[11,-277],[134,-264],[214,-234],[282,-206],[355,-151],[380,-58],[380,28],[368,101],[355,138],[331,194],[282,243],[220,280],[134,292],[42,286],[-63,264],[-161,249],[-260,218],[-333,175],[-370,89],[-376,15],[-361,-46],[-352,-114],[-333,-169]];
   const MARCUS_EDGE_GAP = 70;
@@ -180,7 +181,7 @@
       return { x: P.x + (Q.x - P.x) * k, z: P.z + (Q.z - P.z) * k, w: P.w + (Q.w - P.w) * k, ux: (Q.x - P.x) / L, uz: (Q.z - P.z) / L }; };
     /* 바깥 맵: 걷는 길 사슬 (맵 가운데 기준). up = 둘레가 솟은 벼랑·숲, 아니면 낭떠러지. rise = 들어온 곳에서 나가는 곳까지 오르는 높이 */
     H.OM = {
-      hechil: { up: 1, rise: 6, L: [[[0, 70, 8], [1, 56, 10], [-2, 40, 16], [-8, 20, 24], [-4, 0, 26], [2, -18, 22], [4, -34, 13], [0, -50, 8], [0, -58, 7]]], hut: { x: -20, z: 6, ry: Math.PI / 2, r: 13 } },
+      hechil: { up: 1, rise: 6, L: [[[0, 70, 8], [1, 56, 10], [-2, 40, 18], [-8, 20, 34], [-4, 0, 36], [2, -18, 34], [4, -34, 15], [0, -50, 8], [0, -58, 7]]], hut: { x: -24, z: 6, ry: Math.PI / 2, r: 26 } },   // 산장: 호텔처럼 큰 산장 (2026-11-07), 둘레 골짜기를 넓혔다
       hwood: { up: 1, rise: 10, L: [[[0, 90, 8], [0, 78, 15], [-12, 58, 22], [-6, 34, 26], [10, 10, 26], [8, -14, 26], [-8, -38, 24], [-4, -62, 16], [0, -78, 10], [0, -90, 8]]] },
       hlake: { up: 1, rise: 8, L: [[[0, 85, 8], [0, 72, 16], [8, 48, 30], [0, 16, 40], [-8, -16, 40], [0, -46, 26], [0, -70, 12], [0, -84, 8]], [[20, 6, 10], [38, 2, 9], [54, -1, 8], [66, -2, 7]]], lake: { x: -6, z: 2, r: 20 } },
       hpeak: { up: 1, rise: 46, L: [[[0, 85, 8], [0, 72, 14], [-22, 56, 18], [18, 36, 18], [-20, 14, 18], [18, -8, 18], [-16, -30, 18], [0, -52, 14], [0, -70, 10], [0, -82, 8]]] },
@@ -313,7 +314,7 @@
     const n = spNear(x, z); const i = n ? clampN(Math.floor(n.t / SP.Q), 0, 7) : 0;
     return SP.ZONES[i];
   }
-  const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, myhome: 1, ghouse: 1, bakery: 1, mshop: 1, marcus: 1, milgol: 1, coachway: 1, castle: 1, guildhall: 1, exmarket: 1, arena: 1, library: 1, khq: 1, hechil: 1 };
+  const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, myhome: 1, ghouse: 1, bakery: 1, mshop: 1, marcus: 1, milgol: 1, coachway: 1, castle: 1, guildhall: 1, exmarket: 1, arena: 1, library: 1, khq: 1, hlodge: 1, hechil: 1 };
 
   // 걸어 다닐 수 있는 곳 안으로 붙잡는다 (첫 지역 원, 길, 두 번째 지역 원, 석굴)
   function roomClamp(p, rad) {
@@ -575,7 +576,7 @@
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hechil: [0, 0], ...Object.fromEntries(HCH.AREAS.map((A) => [A.zone, A.lv])) };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hlodge: [0, 0], hechil: [0, 0], ...Object.fromEntries(HCH.AREAS.map((A) => [A.zone, A.lv])) };
   MLINES.forEach((L) => { if (L.lv) { L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = L.lv[i].slice(); }); return; }
     if (L.branch) { L.zones.forEach(([id], i) => { const a = 60 + (L.n - 1) * 35 + i * 7; ZONE_LEVELS[id] = [a, a + 7]; }); return; }
     const a = 60 + (L.n - 1) * 10, w = 10 / L.zones.length; L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = [Math.round(a + i * w), Math.round(a + (i + 1) * w)]; }); });   /* 엑시즈 사냥터: 60레벨부터 문 하나에 10레벨, 그 문의 땅들이 나눠 맡는다 (2026-11-06 원호: 60–100. 100–150은 허칠산) */
