@@ -12,7 +12,7 @@ const OR = require('./shared.js');
 const accounts = require('./accounts.js');
 
 const PORT = process.env.PORT || 3000;
-const VERSION = 38; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
+const VERSION = 39; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
 const PUBLIC = path.join(__dirname, 'public');
 
 // 파일을 미리 읽어 두고(압축본 포함) 바로 보내 준다
@@ -180,7 +180,7 @@ function cleanPresence(d) {
     cr: typeof d.cr === 'string' && /^k\d{1,2}s\d$/.test(d.cr) ? d.cr : '',
     gd: typeof d.gd === 'string' && /^[a-z0-9]{8}\|[\uac00-\ud7a3A-Za-z0-9 ]{2,12}\|[mn]\|\d{1,7}\|[0-9a-f]{6}$/.test(d.gd) ? d.gd : null,
     pd: Array.isArray(d.pd) && d.pd.length === 3 && d.pd.every((v) => typeof v === 'number' && isFinite(v)) && d.pd[0] >= 0 && d.pd[0] < 100 ? [Math.floor(d.pd[0]), n(d.pd[1]), n(d.pd[2])] : 0,   // 쓰다듬는 개: [번호, 길 위 자리, 옆 자리]
-    ap: typeof d.ap === 'string' && /^[mf],[0-9a-f]{6},[0-9a-f]{6}(,\d(,\d,\d,[0-9a-f]{6},[0-9a-f]{6}(,\d(,[0-9a-z]{8})?)?)?)?$/.test(d.ap) ? d.ap : '',
+    ap: typeof d.ap === 'string' && /^[mf],[0-9a-f]{6},[0-9a-f]{6}(,\d(,\d,\d,[0-9a-f]{6},[0-9a-f]{6}(,\d(,[0-9a-z]{8}(,[0-9a-z]{3})?)?)?)?)?$/.test(d.ap) ? d.ap : '',
   };
 }
 
