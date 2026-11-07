@@ -8361,7 +8361,7 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   if(air){S.L.hip.rotation.x=-.6;S.L.knee.rotation.x=1.1;S.R.hip.rotation.x=.2;S.R.knee.rotation.x=.5;if(S.gait){const G=S.gait,p=mesh.position;G.t=t;G.px=p.x;G.py=p.y;G.pz=p.z;}}
   let q;
   if(atk&&mo&&mo.k3){const idle=STICK_IDLE[S.style]||STICK_IDLE.sword,io={};M3.forEach((n,i)=>io[n]=i<9?idle[i]:0);
-    const v=blendKeys(mo.k3,swing,io,M3);q=v.slice(0,9);ex={sp:v[9],lf:v[10],cr:v[11],wy:v[12],kr:v[13],rl:v[14]};}
+    const v=blendKeys(mo.k3,swing,io,M3);q=v.slice(0,9);ex={sp:v[9],lf:v[10],cr:v[11],wy:v[12],kr:v[13],rl:v[14]};for(let i=15;i<M3.length;i++)ex[M3[i]]=v[i];}
   else q=stickPose(S.style,atk?swing:1,alt);
   // 약탈자: 단검 날이 늘 앞을 향하게 쥔다
   if(typeof P!=='undefined'&&P&&P.deepHold&&typeof player!=='undefined'&&mesh===player&&!(atk&&mo&&mo.k3)){q=q.slice();q[8]=(q[8]||0)+3.14;}
@@ -8386,6 +8386,7 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   S.upper.rotation.set(q[7]+k*.08+(GT&&!GT.back?grf*.1:0),q[6],0);
   S.AR.hand.rotation.y=ex&&ex.wy?ex.wy:0;S.AR.hand.rotation.z=0;if(S.fwd&&S.w)S.w.rotation.y=-THIEF_KY+(atk&&mo&&mo.v==='reap'?reapTwist(swing):atk&&mo&&mo.v==='reapOut'?reapTwist2(swing):0);
   S.head.position.y=.88+Math.sin(t*2)*.012*(1-k);S.head.rotation.y=-q[6]*.6;S.head.rotation.x=ex&&ex.rl>.2&&ex.rl<6?.7:0;   // 구르는 동안 턱 당기기 (몸 축 방향과 무관하게 앞으로)
+  stickLegs(mesh,S,t,k,air,atk,mo,swing,q,ex);   // 스킬 동작 하반신: 디딤·무릎·골반·무게 이동
   // 활과 지팡이는 손 방향과 상관없이 세워 든다
   if(S.xb){const xl=typeof player!=='undefined'&&mesh===player?xlMine():(mesh.userData.xl??-1);
     const st=xbState(mo,swing,xl),c=xbPose(XB3,st);S.w.position.set(c[0],c[1],c[2]);S.w.rotation.set(c[3],c[4],c[5]);S.w.scale.setScalar(.85);S.w.updateMatrix();
@@ -8408,10 +8409,121 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
     S.upper.rotation.x=L(S.upper.rotation.x,.12);
     S.AR.sh.rotation.x=L(S.AR.sh.rotation.x,-.55);S.AR.sh.rotation.z=L(S.AR.sh.rotation.z,.25);S.AR.el.rotation.x=L(S.AR.el.rotation.x,-.7);
     S.AL.sh.rotation.x=L(S.AL.sh.rotation.x,-.55);S.AL.sh.rotation.z=L(S.AL.sh.rotation.z,-.25);S.AL.el.rotation.x=L(S.AL.el.rotation.x,-.7);}
-  else{S.L.hip.rotation.z=0;S.R.hip.rotation.z=0;}
+  else if(!(S._lg&&S._lg.w>0)){S.L.hip.rotation.z=0;S.R.hip.rotation.z=0;}
   /* 탈것에 올라앉기: 안장 높이만큼 올라가고, 다리를 벌려 걸치고, 두 손은 고삐 */
   {const ry=mesh.userData.rideY;if(ry){S.body.position.y+=ry;for(const [Lg,sx] of [[S.L,-1],[S.R,1]]){Lg.hip.rotation.x=-1.1;Lg.hip.rotation.z=sx*.5;Lg.knee.rotation.x=1.4;}
     if(!atk){S.AR.sh.rotation.set(-.85,0,.12);S.AR.el.rotation.x=-.6;S.AL.sh.rotation.set(-.85,0,-.12);S.AL.el.rotation.x=-.6;S.upper.rotation.x=.1;}}}
+}
+
+/* ---------- 스킬 동작 하반신: 디딤·무릎·골반·무게 이동 ----------
+   공격·스킬을 쓰는 동안 두 발을 땅에 디뎌 붙여 두고(미끄러지지 않게), 골반을 무게가 실리는 발 쪽으로 옮기며 낮추고, 허리 비틀기를 골반과 가슴에 나눠 싣는다.
+   다리는 두 마디 IK(넓적다리 .45·정강이 .46)로 디딘 발에 맞추고, 발 자리가 바뀌어야 하면 한 발씩 들어 옮겨 딛는다(내딛기·물러딛기).
+   값(열쇠 자세 M3): fl 왼발(앞발) 앞뒤, fr 오른발(뒷발) 앞뒤, wd 두 발 벌리기, wf 무게 앞뒤(-1 뒷발 ~ 1 앞발), ws 무게 좌우(+ 무기 쪽), py 골반 돌리기, dp 더 낮추기 (m·rad, 몸 크기 1 기준)
+   걷거나 뛰는 중·공중·구르기·앉기·탈것에서는 꺼지고, 걷기 다리는 걷기 코드 그대로 쓴다 */
+const LEG_BASE={   /* 무기마다 싸우는 자세: 앞발·뒷발 자리, 벌림, 골반 돌림, 낮춤, 뒷발 발끝 돌림(to), 가슴이 골반 돌림을 따라가는 정도(ck) */
+  sword:{fl:.2,fr:-.13,wd:.03,py:.24,dp:.035,to:.45,ck:.45},shield:{fl:.19,fr:-.14,wd:.05,py:.16,dp:.045,to:.4,ck:.4},
+  dagger:{fl:.17,fr:-.16,wd:.08,py:.2,dp:.075,to:.5,ck:.45},fist:{fl:.19,fr:-.13,wd:.05,py:.3,dp:.045,to:.5,ck:.45},
+  staff:{fl:.13,fr:-.09,wd:.05,py:.12,dp:.025,to:.35,ck:.3},bow:{fl:.17,fr:-.12,wd:.1,py:.45,dp:.03,to:.8,ck:0},xb:{fl:.17,fr:-.12,wd:.07,py:.22,dp:.04,to:.55,ck:0}};
+/* 스킬 동작마다 발·무게 열쇠 (verb3 열쇠 차례대로, 되풀이 동작은 차례가 되풀이된다) */
+const LEG3={
+  overhead:[{wf:-.5,fr:-.06},{wf:-.3},{fl:.2,wf:.85,dp:.04}],chop:[{wf:-.6,fr:-.08},{fl:.24,wf:.9,dp:.03},{fl:.24,wf:.8}],
+  dash:[{fl:.32,fr:-.16,wf:.8},{fl:.34,fr:-.18,wf:.9},{fl:.22,wf:.5}],spin:[{wd:.06,dp:.03},{wd:.08},{}],
+  combo:[{wf:-.35},{fl:.12,wf:.6}],uppercut:[{fl:.1,wf:.4,dp:.04},{wf:-.2}],thrust:[{fr:-.08,wf:-.6},{fl:.28,wf:.95,dp:.035}],
+  swordguard:[{fr:-.1,wd:.05,wf:-.35},{fr:-.1,wd:.05,wf:-.35}],riposte:[{fr:-.08,wf:-.3},{fr:-.12,wf:-.5,ws:.4},{fl:.24,wf:.65,ws:-.4},{fl:.24,wf:.5}],
+  sweep:[{fr:-.14,wf:-.5,ws:.5},{fr:-.15,wf:-.6,ws:.6},{fl:.28,wf:.75,ws:-.4},{fl:.28,wf:.7,ws:-.5},{fl:.16,wf:.3}],
+  shove:[{wf:-.2,ws:-.4},{wf:-.25,ws:-.45},{fl:.14,wf:.4,ws:.4},{fl:.14,wf:.35,ws:.4},{}],
+  staffshot:[{wf:.3},{wf:.35},{wf:-.4,fr:-.05}],shieldbash:[{fr:-.1,wf:-.4},{fl:.28,wf:.9}],bang:[{wf:-.2},{wf:.2,dp:.03}],
+  hurl:[{wf:.4,dp:.04},{wf:-.5,fr:-.1},{wf:-.55,fr:-.1},{fl:.24,wf:.9},{fl:.24,wf:.7}],
+  uplift:[{wd:.06,dp:.05,ws:.4},{wd:.07,dp:.06,ws:.45},{wf:.2},{wf:-.1},{},{}],
+  quake:[{wf:-.3},{fl:.2,wd:.08,wf:.6},{fl:.2,wd:.08,wf:.5}],bravecharge:[{fl:.32,fr:-.22,wf:.9},{fl:.32,fr:-.22,wf:.9}],
+  axespin:[{fr:-.12,ws:.5,wf:-.3},{fr:-.13,ws:.55,wf:-.35},{},{fl:.2,ws:-.5,wf:.4},{fl:.2,ws:-.6,wf:.3},{fl:.14,ws:-.4}],
+  tow:[{fr:-.12,wf:-.6},{fl:.28,wf:.9},{fl:.32,fr:-.14,wf:1}],rage:[{wd:.06,dp:.04},{wd:.07,dp:.05},{wd:.1,wf:-.2},{wd:.1,wf:-.2}],
+  roar:[{wd:.1,wf:-.3},{wd:.12,wf:-.35}],shieldcharge:[{fr:-.15,wf:.3},{fr:-.16,wf:.35},{fl:.32,wf:.95},{fl:.32,wf:.9}],
+  axechop:[{wf:-.5},{fl:.24,wf:.9},{fl:.24,wf:.8}],hbrise:[{dp:.03,wf:.2},{wf:-.1},{}],hbsweep:[{ws:-.4},{ws:.4,wf:.2},{ws:.35}],
+  hbslam:[{wf:-.3},{fl:.18,wf:.7},{fl:.18,wf:.6}],
+  reap:[{fr:-.12,wf:-.4},{fl:.28,wf:.9},{fl:.28,wf:.9},{wf:.1},{}],reapIn:[{fr:-.14,wf:-.45},{fl:.3,wf:.9},{fl:.32,wf:1},{fl:.32,wf:.9}],
+  reapOut:[{fl:.32,wf:.9},{fl:.32,wf:.8},{fl:.14,wf:-.2},{wf:-.3,fr:-.12},{}],
+  snare:[{fl:-.04,wf:-.5},{fr:.2,wf:.7},{fr:.2,wf:.6}],vcut:[{wd:.04},{},{},{}],quaff:[{},{wf:-.3},{wf:-.35},{}],
+  disc:[{},{fr:-.1,ws:.4,wf:-.3},{fl:.24,ws:-.4,wf:.6},{fl:.2,wf:.5}],shuriken:[{wf:-.3},{fr:.12,wf:.4},{fr:.1,wf:.3}],
+  deepstab:[{},{wf:-.1},{},{wf:-.15},{dp:.04}],deepslash:[{dp:.05,wf:.3,ws:.3},{fl:.2,wf:.5,ws:-.3},{fl:.2,wf:.4}],
+  kchop:[{wf:-.4},{fl:.22,wf:.8},{fl:.22,wf:.7}],ambushstab:[{dp:.05,wf:-.3},{fl:.28,wf:.9},{fl:.28,wf:.9},{wf:.2}],
+  smflick:[{ws:.3},{fl:.14,ws:-.4,wf:.3},{fl:.12}],smdiag:[{wf:-.3},{fl:.2,wf:.7},{fl:.18,wf:.6}],
+  aslice:[{ws:.3},{fl:.12,ws:-.3,wf:.4},{fl:.1}],arise:[{dp:.04,ws:-.3},{ws:.3,wf:.1},{}],ajab:[{fr:-.1,wf:-.4},{fl:.26,wf:.9},{fl:.24,wf:.8}],
+  dslash:[{ws:.3},{fl:.12,wf:.4,ws:-.3},{fl:.1}],axebasic:[{wf:-.4},{fl:.15,wf:.6},{fl:.15,wf:.5}],
+  stomp:[{ws:-.3},{wd:.06,dp:.03},{wd:.06}],
+  yank:[{wf:-.5,fr:-.08},{fl:.32,wf:1},{fl:.32,wf:1},{fl:.24,fr:-.2,wf:-.8},{fl:.2,fr:-.2,wf:-.7}],
+  batswing:[{fr:-.1,wd:.06,wf:-.4,ws:.5},{fr:-.12,wd:.07,wf:-.45,ws:.55},{fl:.24,wd:.08,wf:.6,ws:-.5},{fl:.2,wd:.08,wf:.4,ws:-.4}],
+  shieldrush:[{fl:.32,fr:-.2,wf:.9},{fl:.32,fr:-.2,wf:.9}],shieldslam:[{wd:.06,dp:.05},{},{},{fl:.2,wd:.08,wf:.7},{fl:.2,wd:.08,wf:.6}],
+  shswap:[{ws:.3},{}],pjab:[{wf:-.3},{fl:.18,wf:.8},{fl:.15,wf:.6}],pback:[{ws:.4},{fl:.12,ws:-.4,wf:.3},{fl:.1}],
+  pedge:[{fr:-.08,wf:-.4},{fl:.26,wf:.9},{fl:.24,wf:.8}],capthrow:[{fr:-.12,wf:-.5,ws:.3},{fl:.28,wf:.9,ws:-.3},{fl:.26,wf:.7}],
+  pslam2:[{wf:-.3},{fl:.2,wd:.06,wf:.7},{fl:.2,wd:.06,wf:.6}],scplant:[{wd:.04},{},{fl:.22,wd:.08,wf:.7},{fl:.22,wd:.08,wf:.65},{fr:-.1,wf:-.4}],
+  pboom:[{ws:.4,wf:-.2},{fl:.2,ws:-.4,wf:.5},{fl:.15,wf:.2},{fl:.1,wf:.3},{}],
+  pspin:[{wd:.06,dp:.05,ws:.4},{wd:.07,dp:.06,ws:.4},{},{},{fl:.2,wd:.08,wf:.6},{fl:.2,wd:.08,wf:.5}],
+  shheal:[{wd:-.02},{}],shrecall:[{fl:.1,wf:.4},{fl:.1,wf:.35}],shupper:[{dp:.05,wf:.3},{wf:-.2}],
+  shieldplant:[{},{fl:.2,wd:.1,wf:.5},{fl:.2,wd:.1,wf:.5},{fl:.2,wd:.1,wf:.5}],guard:[{fr:-.12,wd:.06,wf:-.3},{fr:-.12,wd:.06,wf:-.35}],
+  throw:[{fr:-.12,wf:-.6},{fl:.24,wf:.85}],lthrow:[{fl:-.04,wf:-.45},{fr:.18,wf:.7}],leap:[{wd:.04,dp:.04},{},{fl:.2,wd:.08,wf:.5}],
+  ready:[{fl:.15,fr:-.18,wf:.6,dp:.04},{fl:.15,fr:-.2,wf:.65}],steal:[{fl:.2,wf:.6},{fl:.28,wf:.9}],scatter:[{wf:-.2},{wd:.08,wf:-.1}],
+  pump:[{dp:.03,wf:.2},{wf:-.2}],cast:[{wf:-.3,fr:-.04},{fl:.12,wf:.55}],castup:[{wd:.04},{wd:.06,wf:-.35}],castdown:[{wf:-.35},{fl:.15,wd:.05,wf:.6}],
+  pray:[{wd:-.03,wf:.1},{wf:-.25}],flamecast:[{fl:.08,wf:.35},{fl:.08,wf:.4}],channel:[{wd:.1,dp:.03},{wd:.12,dp:.04}],
+  shoot:[{},{wf:-.15},{wf:.15}],multi:[{wf:-.1},{wf:.15}],skyshot:[{wd:.04,wf:-.35},{wd:.04,wf:-.3}],
+  bowdraw:[{},{wf:-.1},{wf:-.15},{wf:-.15}],bowshot:[{wf:-.15},{wf:.2},{}],quick:[{wf:-.1},{wf:.2}],place:[{fl:.2,wf:.7,dp:.04},{fl:.22,wf:.75}]};
+function legAug(v,K){const A=LEG3[v];if(!A||!K.length)return K;return K.map(([t,o],i)=>[t,Object.assign({},A[i%A.length],o)]);}
+const _lgQ=new THREE.Quaternion(),_lgQ2=new THREE.Quaternion(),_lgQ3=new THREE.Quaternion(),_lgE=new THREE.Euler(0,0,0,'YXZ'),_lgV=new THREE.Vector3(),_lgV2=new THREE.Vector3(),_lgAY=new THREE.Vector3(0,1,0);
+const _lgC=x=>Math.max(0,Math.min(1,x));
+/* 다리 하나 IK: 엉덩이 부모(몸) 공간의 발목 자리 v → [엉덩이 앞뒤 a, 엉덩이 벌림 c, 무릎 k] (엉덩이 회전 순서 YXZ, 엉덩이 돌림 y는 미리 빼 둔다) */
+function legIK(v){const d=Math.max(.25,Math.min(.906,v.length())),k=Math.acos(Math.max(-1,Math.min(1,(d*d-.2025-.2116)/(2*.45*.46))));
+  const fy=-.45-.46*Math.cos(k),fz=-.46*Math.sin(k),c=Math.asin(Math.max(-1,Math.min(1,v.x/Math.max(.05,-fy)))),Y=fy*Math.cos(c);
+  let a=Math.atan2(v.z,v.y)-Math.atan2(fz,Y);a-=Math.round(a/(2*Math.PI))*2*Math.PI;return [a,c,k];}
+function stickLegs(mesh,S,t,k,air,atk,mo,swing,q,ex){
+  const G=S._lg||(S._lg={w:0,b:0,t,F:[{x:0,z:0,sx:0,sz:0,f:1,D:0},{x:0,z:0,sx:0,sz:0,f:1,D:0}],on:false});
+  const dt=Math.max(0,Math.min(.1,t-G.t));G.t=t;
+  const u=mesh.userData,v=mo&&mo.v,ok=!air&&!(ex&&ex.rl)&&v!=='ride'&&v!=='roll'&&!(u.sitK>0)&&!u.rideY&&!u.relax;
+  G.b+=((atk?1:0)-G.b)*Math.min(1,dt*(atk?9:3.2));if(!atk&&G.b<.02)G.b=0;
+  const want=ok&&(atk||G.b>0)?_lgC(1-k*3):0,w0=G.w;
+  G.w+=(want-G.w)*Math.min(1,dt*(want>G.w?30:8));if(want===0&&G.w<.03)G.w=0;
+  const s=S.body.scale.x||1,hx=Math.abs(S.gait&&S.gait.hx?S.gait.hx[1]:S.R.hip.position.x)*s;
+  if(G.w<=0){if(G.on){for(const Lg of [S.L,S.R]){Lg.hip.rotation.y=0;Lg.foot.quaternion.identity();}G.on=false;}
+    for(let i=0;i<2;i++){const F=G.F[i];F.x=(i?1:-1)*hx;F.z=0;F.f=1;}return;}
+  if(w0<=0)for(let i=0;i<2;i++){const F=G.F[i];F.x=(i?1:-1)*hx;F.z=0;F.f=1;}   /* 처음 켜질 때는 서 있던 자리에서 시작 */
+  G.on=true;const W=G.w;
+  /* 들어오는 값 (공격이 끝난 뒤에는 0으로 돌아가며 자세를 푼다) */
+  const E=atk&&ex?ex:null,tw=atk?q[6]||0:0,ln=atk?q[7]||0:0,cr=E?E.cr||0:0,sp=E?E.sp||0:0,lf=E?Math.max(0,E.lf||0):0,kr=E?E.kr||0:0;
+  const A=n=>E&&E[n]||0,base=LEG_BASE[S.xb?'xb':S.style]||LEG_BASE.sword,two=mo&&mo.two?1:0,B=G.b;
+  /* 두 발 자리 (몸 앞 +z, 무기 쪽 +x) */
+  const fl=Math.min(.48,B*(base.fl+two*.04)+A('fl')+Math.max(0,ln)*.1+cr*.04),fr=Math.max(-.36,B*base.fr+A('fr')-cr*.05-Math.max(0,-ln)*.08),wd=Math.min(.2,B*(base.wd+two*.04)+A('wd')+cr*.05);
+  const fy=sp*(1-.7*Math.max(0,1-Math.abs(sp)/2.2)),cf=Math.cos(fy),sf=Math.sin(fy),rot=(x,z)=>[x*cf+z*sf,-x*sf+z*cf];
+  const T=[rot(-(hx+wd*s),fl*s),rot(hx+wd*s,fr*s)],toe=[fy-B*.06,fy+B*base.to];
+  /* 무게: 앞뒤는 숙임과 열쇠, 좌우는 열쇠(차는 다리 반대쪽으로) */
+  const wf=Math.max(-1,Math.min(1,ln*1.2+A('wf'))),ws=Math.max(-1,Math.min(1,A('ws')-kr*.8));
+  const zc=(fl+fr)/2*s,hz=(fl-fr)/2*s,[px,pz]=rot(ws*(hx+wd*s)*.75,zc+hz*wf*.62);
+  const stance=B*base.py+A('py'),pyT=tw*.4+stance,pp=Math.max(-.2,Math.min(.35,ln*.25+cr*.08)),byaw=sp+pyT;
+  /* 골반 높이: 웅크림·낮춤에 더해, 벌린 발에 다리가 닿도록 내린다 */
+  const ank=.05*s,R=.9*s,cy=Math.cos(byaw),sy=Math.sin(byaw);
+  let hy=.96*s+lf-(cr*.26+B*base.dp+A('dp')+two*.02)*s;
+  for(let i=0;i<2;i++){const hxw=px+(i?1:-1)*hx*cy,hzw=pz-(i?1:-1)*hx*sy,h=Math.hypot(T[i][0]-hxw,T[i][1]-hzw);hy=Math.min(hy,lf+ank+Math.sqrt(Math.max(0,R*R-h*h)));}
+  hy=Math.max(.5*s,hy);
+  /* 몸(골반) 자리·방향: 원래 자세와 섞는다 */
+  _lgQ.setFromAxisAngle(_lgAY,byaw);_lgQ2.setFromAxisAngle(_lgV.set(1,0,0),pp);_lgQ.multiply(_lgQ2);
+  _lgV2.set(0,.96*s,0).applyQuaternion(_lgQ);_lgV.set(px,hy,pz).sub(_lgV2);
+  S.body.quaternion.slerp(_lgQ,W);S.body.position.lerp(_lgV,W);
+  S.upper.rotation.x-=W*pp;S.upper.rotation.y-=W*(tw*.4+(1-base.ck)*stance);S.head.rotation.y-=W*base.ck*stance;
+  /* 발: 디딘 발은 그 자리에 붙여 두고, 자리가 멀어지면 한 발씩 들어 옮겨 딛는다 */
+  const bq=_lgQ3.copy(S.body.quaternion).invert(),bp=S.body.position,fwx=Math.sin(byaw),fwz=Math.cos(byaw);
+  const legW=W*(1-_lgC((lf-.13)/.1));   /* 살짝 뜨는 동작은 발끝으로 버티고, 높이 뛸 때만 발을 뗀다 */
+  for(let i=0;i<2;i++){const F=G.F[i],O=G.F[1-i],tx=T[i][0],tz=T[i][1],Lg=i?S.R:S.L;
+    const dd=Math.hypot(tx-F.x,tz-F.z);
+    if(F.f>=1&&dd>.055*s&&O.f>=.55){F.sx=F.x;F.sz=F.z;F.f=0;F.D=dd/s;}
+    let lift=0;if(F.f<1){F.f=Math.min(1,F.f+dt/Math.max(.1,Math.min(.2,.08+F.D*.3)));const e=_sm(F.f);F.x=F.sx+(tx-F.sx)*e;F.z=F.sz+(tz-F.sz)*e;lift=Math.sin(Math.PI*F.f)*Math.min(.13,.035+F.D*.3)*s;}
+    /* 몸 뒤에 남은 발은 발끝으로 버티며 뒤꿈치를 든다 */
+    const back=((pz-F.z)*fwz+(px-F.x)*fwx)/s,heel=_lgC((back-.22)*2.2)*.5+(F.f<1?.25*Math.sin(Math.PI*F.f):0);
+    const lw=i===1?legW*(1-_lgC(kr*3)):legW;if(lw<=0)continue;
+    _lgV.set(F.x,ank+lift+Math.sin(heel)*.1*s,F.z).sub(bp).applyQuaternion(bq).divideScalar(s).sub(Lg.hip.position);
+    const ry=Math.max(-.9,Math.min(.9,toe[i]-byaw));_lgV.applyAxisAngle(_lgAY,-ry);
+    const [a,c,kk]=legIK(_lgV);
+    Lg.hip.rotation.order='YXZ';Lg.hip.rotation.set(Lg.hip.rotation.x+(a-Lg.hip.rotation.x)*lw,ry*lw,c*lw);Lg.knee.rotation.x+=(kk-Lg.knee.rotation.x)*lw;
+    /* 발바닥은 땅과 나란히, 발끝은 디딘 방향으로 */
+    _lgQ2.copy(S.body.quaternion).multiply(Lg.hip.quaternion).multiply(Lg.knee.quaternion).invert();
+    _lgE.set(heel,toe[i],0,'YXZ');Lg.foot.quaternion.setFromEuler(_lgE).premultiply(_lgQ2);Lg.foot.quaternion.slerp(_lgQ.identity(),1-lw);}
 }
 
 // 그리모어: 왼손에 펼쳐 든 마법서. 표지는 짙은 남색 가죽에 금 테두리·금 장식, 펼친 책장은 미색이고 글줄과 마법진이 적혀 있다. 책장 위에 희미한 빛이 떠돈다
@@ -8805,7 +8917,7 @@ const MOTION_OF={
 };
 // 활 기본공격: 시위 당기기(누르고 있는 동안 .99에서 멈춘다) → 쏘기
 Object.assign(MOTION_OF,{xload:{v:'xreload',dur:.7},bload:{v:'xreload',dur:.7},xtrap:{v:'place',dur:.6},bmine:{v:'place',dur:.6},triple:{v:'shoot',dur:.42,c:.1},pull2:{v:'pump',dur:.5,a:.7},barrage:{v:'multi',dur:.45},arrows:{v:'multi',dur:.6},pull:{v:'pump',dur:.5,a:.7},bdraw:{v:'bowdraw',dur:.8},bshot:{v:'bowshot',dur:.42},rapid:{v:'pump',dur:.5,a:.7},roll:{v:'roll',dur:.7},burstout:{v:'channel',dur:.6},holycircle:{v:'castup',dur:.7},lightning:{v:'quick',n:1,dur:.45},flame:{v:'flamecast',dur:.6},empower:{v:'pump',dur:.7,a:.8},dupe:{v:'pump',dur:.6,a:.7},approach:{v:'dash',dur:.5},counterm:{v:'shove',dur:.55,a:1.1},leapblast:{v:'leap',j:.5,dur:.45},lbcast:{v:'staffshot',dur:.5},whack:{v:'overhead',dur:.55,a:1.1},grasp:{v:'castdown',dur:.7,a:1.2},beams:{v:'channel',dur:1.0,a:1.1},farblast:{v:'castup',dur:1.5,a:1.15},fbfire:{v:'staffshot',dur:.5,a:1.2},ride:{v:'ride',dur:1},holyray:{v:'channel',dur:.8},angel:{v:'castup',dur:.8},fizzle:{v:'pump',dur:.45,a:.5},roll0:{v:'roll',dur:.7,dir:0},roll4:{v:'roll',dur:.7,dir:4}});
-const M3=['rx','rz','re','lx','lz','le','tw','ln','wr','sp','lf','cr','wy','kr','rl'];
+const M3=['rx','rz','re','lx','lz','le','tw','ln','wr','sp','lf','cr','wy','kr','rl','fl','fr','wd','wf','ws','py','dp'];
 // 3인칭 열쇠 자세들
 function verb3(v,o,style){
   const a=o.a||1,sd=o.sd||1,n=o.n||1,j=o.j||0,c=o.c||0,K=[];
@@ -9442,7 +9554,7 @@ function reapTwist(p){return -1.57*(p<.42?0:p<.75?(p-.42)/.33:p<.92?1-(p-.75)/.1
 const _motionCache={};
 function motionFor(style,id){
   const o=MOTION_OF[id];if(!o)return null;const key=style+':'+id;
-  if(!_motionCache[key]){const k3=verb3(o.v,o,style),fp=verbFP(o.v,o,style);_motionCache[key]={k3,fp,dur:o.dur||.6,v:o.v,two:!!o.two,dir:o.dir};}
+  if(!_motionCache[key]){const k3=legAug(o.v,verb3(o.v,o,style)),fp=verbFP(o.v,o,style);_motionCache[key]={k3,fp,dur:o.dur||.6,v:o.v,two:!!o.two,dir:o.dir};}
   return _motionCache[key];
 }
 // 열쇠 사이를 부드럽게 섞기 (빠진 값은 쉬는 자세)
