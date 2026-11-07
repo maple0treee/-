@@ -37,6 +37,7 @@
     const clients = new Map(); // id -> {send, pres}
     // 'dc:<id>'는 쉴더가 땅에 박아 둔 스쿠툼: 그 스쿠툼을 친 공격은 주인에게 따로 알린다
     const send = (id, msg) => {
+      if (typeof id === 'string' && id.startsWith('lu:')) return;   // 트랩헌터가 숨어서 깔아 둔 덫·지뢰 (미끼): 치지 않는다
       if (typeof id === 'string' && id.startsWith('dc:')) { if (msg.t !== 'matk') return; const o = clients.get(id.slice(3)); if (o) o.send({ t: 'dch', i: msg.i, atk: msg.atk }); return; }
       const c = clients.get(id); if (c) c.send(msg);
     };
@@ -139,7 +140,14 @@
       const out = [];
       for (const [id, c] of clients) {
         const p = c.pres;
-        if (!p.on || !p.al || p.hd) continue;
+        if (!p.on || !p.al) continue;
+        // 잠복한 트랩헌터: 사람 대신 깔아 둔 덫·지뢰 자리(lu)로 몬스터가 간다
+        if (p.hd && Array.isArray(p.lu)) p.lu.slice(0, 12).forEach((q, k) => {
+          if (!Array.isArray(q) || !(Math.hypot(q[0] - p.x, q[1] - p.z) < 45)) return;
+          const t = { x: q[0], z: q[1] };
+          if (!SAFE[zoneAt(t.x, t.z)]) out.push({ id: 'lu:' + id + ':' + k, x: t.x, z: t.z, dun: t.z > 300 && t.x < 800, rot: inRotunda(t), sd: true, lu: true });
+        });
+        if (p.hd) continue;
         if (SAFE[zoneAt(p.x, p.z)]) continue;
         out.push({ id, x: p.x, z: p.z, dun: p.z > 300 && p.x < 800, rot: inRotunda(p), sd: !!p.sd });
         if (Array.isArray(p.dc)) { const q = { x: p.dc[0], z: p.dc[1] }; if (!SAFE[zoneAt(q.x, q.z)]) out.push({ id: 'dc:' + id, x: q.x, z: q.z, dun: q.z > 300, rot: inRotunda(q), sd: true, dc: true }); }
@@ -419,7 +427,7 @@
     // ---------- 매 틱 ----------
     function tick() {
       if (!clients.size) return;
-      const ts = targetsFor();
+      const ts = targetsFor(), tsB = ts.filter((t) => !t.lu);   // 우두머리는 미끼에 속지 않는다
       // 쉴더가 스쿠툼을 박아 두면 그 쉴더를 노리던 몬스터는 스쿠툼을 노린다
       // 도발당해 그 쉴더를 노리던 몬스터만 옮겨 간다 (그냥 박아 둔 스쿠툼은 아무도 끌지 않는다)
       { const dcs = new Set(ts.filter((t) => t.dc).map((t) => t.id)); if (dcs.size) for (const m of monsters.values()) if (m.aggroOn && m.taunt > 0 && dcs.has('dc:' + m.aggroOn)) m.aggroOn = 'dc:' + m.aggroOn; }
@@ -435,8 +443,8 @@
           if (m.dot.acc >= 1) { const d = Math.floor(m.dot.acc); m.dot.acc -= d; hurt(m, d, null); if (!monsters.has(m.i)) continue; }
           if (m.dot.t <= 0) m.dot = null;
         }
-        if (m.boss) { bossTick(m, ts); continue; }
-        if (m.dragon) { dragonTick(m, ts); continue; }
+        if (m.boss) { bossTick(m, tsB); continue; }
+        if (m.dragon) { dragonTick(m, tsB); continue; }
         // 보스에게 빨려 들어가는 조각
         if (m.feed && boss) {
           moveToward(m, boss.x, boss.z, 3.2);
@@ -461,7 +469,7 @@
           const far = false;   // (단단한 감각은 없어졌다)
           if ((homeD > (far ? 80 : 60) && !m.summon) || d > (far ? 55 : 40)) continue;   /* 더 멀리까지 쫓아온다 */
           const pri = t.id === m.aggroOn ? d - 6 : d;
-          if ((d < (t.sd ? 22 : 14) || t.id === m.aggroOn) && pri < best) { best = pri; tgt = t; }   /* 더 멀리서 알아챈다 (9 → 14m) */
+          if ((d < (t.lu ? 30 : t.sd ? 22 : 14) || t.id === m.aggroOn) && pri < best) { best = pri; tgt = t; }   /* 더 멀리서 알아챈다 (9 → 14m) */
         }
         if (m.taunt > 0) { m.taunt -= TICK; const tt = ts.find((q) => q.id === m.aggroOn && (dun ? q.rot : !q.dun)); if (tt) tgt = tt; }
         if (!tgt) m.aggroOn = null;
@@ -469,6 +477,12 @@
         if (m.sk && !m.sk.done && m.stun > 0) { broadcast({ t: 'mskx', i: m.i }); m.sk = null; m.skCd = rnd(3, 5); }
         if (m.sk) stepSkill(m, ts);
         else if (m.stun > 0) m.windup = 0;
+        else if (tgt && tgt.lu) {
+          // 미끼: 치지 않고 덫·지뢰 자리까지 그대로 걸어 들어간다 (밟히면 게임 쪽에서 터지고 미끼가 사라진다)
+          m.windup = 0;
+          const spd = m.D.build === 'slime' ? 2.8 : m.D.build === 'quad' ? 3.9 : 3.5;
+          if (Math.hypot(tgt.x - m.x, tgt.z - m.z) > 0.15) { moveToward(m, tgt.x, tgt.z, spd); want = spd; }
+        }
         else if (tgt) {
           const dx = tgt.x - m.x, dz = tgt.z - m.z, dist = Math.hypot(dx, dz), reach = 0.9 + m.r + 0.5;
           m.atkCd -= TICK;
