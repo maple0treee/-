@@ -9,6 +9,7 @@ const zlib = require('zlib');
 const { WebSocketServer } = require('ws');
 const createSim = require('./sim.js');
 const OR = require('./shared.js');
+const accounts = require('./accounts.js');
 
 const PORT = process.env.PORT || 3000;
 const VERSION = 38; // 게임 페이지(index.html)와 맞아야 하는 서버 버전
@@ -92,6 +93,7 @@ for (const f of Object.values(files)) {
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
   if (url === '/health') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('ok v' + VERSION + ' monsters ' + sim.count()); }
+  if (url.startsWith('/api/')) return accounts.handle(req, res, url);   // 회원가입·로그인·계정 저장 (accounts.js)
   if (url === '/index.html') { res.writeHead(301, { Location: '/' }); return res.end(); }   // 같은 페이지는 주소 하나로 (검색 노출)
   const f = files[url];
   if (f && req.headers['if-none-match'] === f.etag) { res.writeHead(304, { ETag: f.etag, 'Cache-Control': f.cache }); return res.end(); }
