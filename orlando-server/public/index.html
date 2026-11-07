@@ -3130,6 +3130,11 @@ const SKILL_MAX=5;
 const isTrait=S=>!!(S&&S.trait);   // 특성: 직업을 얻으면 바로 열리고 SP를 쓰지 않으며 강화도 없다
 const skMax=S=>S&&(S.max||(isTrait(S)?1:SKILL_MAX));   // 특성만 1단계, 패시브도 액티브처럼 강화된다  // 스킬마다 최대 단계 (업그레이드가 없는 스킬은 1)
 const SK={};Object.values(SKILLS).forEach(l=>l.forEach(s=>SK[s.id]=s));
+/* 스킬 단계별 재사용 시간: 1단계는 원래 값(S.cd), 최대 단계는 CD_TOP 값이고 그 사이는 고르게 줄어든다 */
+const CD_TOP={thrust1:2.5,parry:5.5,swing:4,guardcut:6,downcut:4.5,guardstrike:7,dashcut:5.5,duel:21,axechop:2.5,axespin:5.5,tow:6,rage:17.5,hurl:5.5,uplift:6,quake:11,bravecharge:9,sraise:7.5,dleap:9,fmark:6,blockade:17.5,raise:5.5,push:5.5,leap:5.5,ambush:3,sprint:9,plunder:3,lasso:6,bombs:9,deepstab:2,quakedash:6,shuriken:3,nshuri:2.5,nrush:7,nsmoke:10,nchain:12.5,sassn:5.5,starget:7.5,sbomb:9,sfeint:10,orb:3,release:7,scripture:12,spread:6,guide:14,lbeam:3,lmark:7.5,lelem:9,approach:4.5,counterm:5.5,leapblast:9,whack:3,angel:17.5,grasp:7.5,beams:7,farblast:12.5,arrows:4.5,pull:6,xload:4.5,xtrap:4.5,xroll:2.5,tchalk:6,tmine:4,tambush:14,tpoach:17.5,triple:4.5,pull2:2.5,barrage:4.5};
+function skCdAt(S,lv,base){const b=base==null?S.cd:base,top=CD_TOP[S.id],mx=skMax(S);if(!b||!top||!S.cd||mx<2)return b;const l=Math.min(mx,Math.max(1,lv||1));return Math.round(b*(1-(1-top/S.cd)*(l-1)/(mx-1))*10)/10;}
+const skCd=(S,base)=>skCdAt(S,P&&P.skills[S.id]||1,base);   // 지금 배운 단계의 재사용 시간
+function skCdTxt(S,lvl,base){const c=skCdAt(S,Math.max(1,lvl),base);if(lvl<1||lvl>=skMax(S))return `${c}초`;const n=skCdAt(S,lvl+1,base);return n<c?`${c}초 (다음 단계 ${n}초)`:`${c}초`;}
 /* 특수 스킬: 직업과 상관없이 퀘스트로 배운다. 배운 것은 P.spc[id]=1 */
 const SPECIAL=[
   {id:'chainbolt',name:'연쇄번개',type:'passive',cd:7,hops:4,mult:1.5,range:9,jumpR:7,color:0x7fb6ff,
@@ -25012,11 +25017,11 @@ function shdParmaMesh(t){const g=new THREE.Group(),m=makeShield('parma',t);mount
 function shdScutumMesh(t){const g=new THREE.Group(),m=makeShield('scutum',t);m.scale.setScalar(1.45);m.position.y=.72;g.add(m);g.traverse(o=>{if(o.isMesh)o.castShadow=true;});return g;}
 // 스킬 칸 하나가 지금 어떤 모습인지 (든 방패에 따라 이름·재사용·MP가 바뀐다)
 function shdForm(S){const s=shdState();
-  if(S.id==='shswap')return {name:'전환하기',cd:S.cd,mp:0,key:'shswap',ok:true};
+  if(S.id==='shswap')return {name:'전환하기',cd:skCd(S),mp:0,key:'shswap',ok:true};
   const f=s.pa?'pa':'sc',F=S[f];
   const pull=S.id==='shB'&&f==='sc'&&!!s.plant;
   const ok=!(f==='pa'&&s.paObj&&S.id!=='shB');
-  return {f,F,name:pull?'뽑아 들기':F.name,cd:F.cd,mp:pull?0:skMp(F.mp),key:S.id+'_'+f,ok,pull};}
+  return {f,F,name:pull?'뽑아 들기':F.name,cd:skCd(S,F.cd),mp:pull?0:skMp(F.mp),key:S.id+'_'+f,ok,pull};}
 function shdUse(S,lvl){
   const s=shdState(),F=shdForm(S),pw=1+.25*(lvl-1);
   if(F.pull){swingT=0;swingN++;myMoId='shpull';myMo=motionFor('shield','shpull');P.skN=swingN;shdUnplant(false);return;}
@@ -25490,7 +25495,7 @@ function updateHotbar(){
       else{const n=countOf(id);name=ITEMS[id].short;count=String(n);left=cds.item||0;frac=left/1;cls+=' item'+(n<=0?' none':'');}}
     else{const id=P.slots[i];cls+=' sk';
       if(!id){name='빈칸';cls+=' empty';}
-      else{const S=SK[id],SF=S.type==='shd'?shdForm(S):null;name=SF?SF.name:S.name;left=SF?(SF.pull?0:cds[SF.key]||0):cds[id]||0;frac=left/(SF?SF.cd:S.cd);if(SF&&!SF.ok)cls+=' nomp';else if(S.recast&&P.reLeap&&P.reLeap.id===id&&tAll<P.reLeap.until){left=0;frac=0;win=P.reLeap.until-tAll;cls+=' ready follow again';}
+      else{const S=SK[id],SF=S.type==='shd'?shdForm(S):null;name=SF?SF.name:S.name;left=SF?(SF.pull?0:cds[SF.key]||0):cds[id]||0;frac=left/(SF?SF.cd:skCd(S));if(SF&&!SF.ok)cls+=' nomp';else if(S.recast&&P.reLeap&&P.reLeap.id===id&&tAll<P.reLeap.until){left=0;frac=0;win=P.reLeap.until-tAll;cls+=' ready follow again';}
       else if(S.type==='triple'&&P.tri&&P.tri.id===id&&tAll<P.tri.until&&P.tri.n<=S.re){left=0;frac=0;win=P.tri.until-tAll;cls+=' ready follow again';}   /* 삼연 발사: 남은 두 발을 쏠 수 있는 동안 */   /* 파괴적 착지: 한 번 더 쓸 수 있는 동안 빛나고 남은 시간을 보인다 */
       else if(S.counter&&P.counterT>0){name='쳐내기';left=0;frac=0;cls+=' ready follow';}else if(id==='reap'&&P.reapHold){left=0;frac=0;cls+=' ready follow';}else if(!faithLine()&&P.mp<(SF?SF.mp:skMp(S.mp)))cls+=' nomp';else if(S.type==='guide'&&!(P.faith>0))cls+=' nomp';else if(left<=0)cls+=' ready';}}
     if(i<NSK){const id=P.slots[i];if(id==='tchalk'||id==='tmine'){const n=trpCount(id);if(n)count=String(n);}}   /* 트랩헌터: 깔린 덫 수 · 지뢰 수 */
@@ -26644,7 +26649,7 @@ function renderSkills(){
     const card=document.createElement('div');card.className='sk'+(locked?' locked':'')+(past?' past':'')+(lvl>0&&S.type==='passive'&&!isTrait(S)&&pOff(S.id)?' off':'');
     const nm=document.createElement('div');nm.className='nm';
     const b=document.createElement('b');b.textContent=S.name;
-    const meta=document.createElement('span');meta.textContent=S.noTag?'':isTrait(S)?'특성':faithLine()&&!S.sc&&S.type!=='passive'?`재사용 ${S.cd}초`:S.type==='passive'?'패시브':S.sc?`MP ${skMp(S.sc.mp)} · ${S.sc.cd}초 / MP ${skMp(S.pa.mp)} · ${S.pa.cd}초`:`MP ${skMp(S.mp)} · 재사용 ${S.cd}초`;
+    const meta=document.createElement('span');meta.textContent=S.noTag?'':isTrait(S)?'특성':faithLine()&&!S.sc&&S.type!=='passive'?`재사용 ${skCdTxt(S,lvl)}`:S.type==='passive'?'패시브':S.sc?`MP ${skMp(S.sc.mp)} · ${skCdTxt(S,lvl,S.sc.cd)} / MP ${skMp(S.pa.mp)} · ${skCdTxt(S,lvl,S.pa.cd)}`:`MP ${skMp(S.mp)} · 재사용 ${skCdTxt(S,lvl)}`;
     const pips=document.createElement('span');pips.className='pips';pips.textContent=isTrait(S)?'':'●'.repeat(lvl)+'○'.repeat(Math.max(0,skMax(S)-lvl));
     nm.append(b,meta,pips);
     const btn=document.createElement('button');btn.className='learn';btn.type='button';
@@ -28300,8 +28305,8 @@ function useSkillInner(i){
   if(S.type==='guide'&&!(P.faith>0)){toast('신앙이 없다');return;}
   if(emp){endGuard();P.empShield=true;}
   const bc=S.type==='barb'?barbCombo(id):'';
-  if(P.fly&&Math.random()<.3){if(!faithLine())P.mp-=skMp(S.mp);cds[id]=Math.min(S.cd,1.5);swingT=0;swingN++;myMoId='fizzle';myMo=motionFor(JOBS[P.job].weapon,'fizzle');const tp=staffTip();VFX.burst(tp,0x9a90b0,10,1.5,.3,{mix:0xffffff,up:.2});for(let k=0;k<6;k++)VFX.emit(0,tp.x,tp.y,tp.z,(Math.random()-.5)*2,(Math.random()-.5)*2,(Math.random()-.5)*2,0x6a6080,.5,3,1);sfx('mg_basic',null,.4,.6);toast('지팡이 위라 마법이 흔들렸다');updateHud();return;}   /* 비행 중: 마법이 종종 불발 */
-  if(reUse)P.reLeap=null;else{if(!faithLine())P.mp-=skMp(S.mp);cds[id]=S.cd;}if(P.hideT>tAll&&id!=='deepstab'&&id!=='sassn')P.hideT=0;agileStack();vetStack();swingN++;if(!P.fly){swingT=0;myMoId=bc==='bat'?'batswing':bc==='spinchop'?'axechopF':id;myMo=motionFor(JOBS[P.job].weapon,emp&&id==='push'?'pushE':myMoId);}P.skN=swingN;sfxSkill(S,id);   /* 타고 있을 땐 동작 없이 지팡이 끝에서 바로 */
+  if(P.fly&&Math.random()<.3){if(!faithLine())P.mp-=skMp(S.mp);cds[id]=Math.min(skCd(S),1.5);swingT=0;swingN++;myMoId='fizzle';myMo=motionFor(JOBS[P.job].weapon,'fizzle');const tp=staffTip();VFX.burst(tp,0x9a90b0,10,1.5,.3,{mix:0xffffff,up:.2});for(let k=0;k<6;k++)VFX.emit(0,tp.x,tp.y,tp.z,(Math.random()-.5)*2,(Math.random()-.5)*2,(Math.random()-.5)*2,0x6a6080,.5,3,1);sfx('mg_basic',null,.4,.6);toast('지팡이 위라 마법이 흔들렸다');updateHud();return;}   /* 비행 중: 마법이 종종 불발 */
+  if(reUse)P.reLeap=null;else{if(!faithLine())P.mp-=skMp(S.mp);cds[id]=skCd(S);}if(P.hideT>tAll&&id!=='deepstab'&&id!=='sassn')P.hideT=0;agileStack();vetStack();swingN++;if(!P.fly){swingT=0;myMoId=bc==='bat'?'batswing':bc==='spinchop'?'axechopF':id;myMo=motionFor(JOBS[P.job].weapon,emp&&id==='push'?'pushE':myMoId);}P.skN=swingN;sfxSkill(S,id);   /* 타고 있을 땐 동작 없이 지팡이 끝에서 바로 */
   const pw=1+.25*(lvl-1),opt={stun:S.stun,dot:S.dot,crit:S.crit,execute:S.execute,steal:S.steal,color:S.color,skHit:1,skT:skTier(id)};
   let fxAt=null;
   switch(S.type){
@@ -28371,7 +28376,7 @@ function useSkillInner(i){
     case 'trp':fxAt=trpSkill(S,id,pw,opt);break;
     case 'rage':{P.buffs.rage={v:1.7,t:S.dur*(1+.1*(pw-1)/.25)};flash('#d83020',.3);shakeT=Math.max(shakeT,.3);sfx('roar',null,1,.8);
       setTimeout(()=>{if(mode!=='world')return;const q=player.position.clone();VFX.shock(q,0xd83020,4,.5);VFX.aura(q,0xd83020,40,.9,1.6);VFX.burst(q.clone().setY(q.y+1.2),0xff5030,30,5,.6,{up:.4,mix:0xffd0a0});},300);updateHud();break;}
-    case 'guard':{cds[id]=0;P.guardT=S.dur;P.guardRef=S.mult*pw;P.guardId=id;P.guardCd=S.cd;P.guardPop=0;
+    case 'guard':{cds[id]=0;P.guardT=S.dur;P.guardRef=S.mult*pw;P.guardId=id;P.guardCd=skCd(S);P.guardPop=0;
       setTimeout(()=>{if(mode!=='world'||!(P.guardT>0))return;const q=player.position,f=flatFwd(),at=new THREE.Vector3(q.x+f.x*.9,q.y,q.z+f.z*.9);
         VFX.shock(at,0xbfd4ff,3.2,.45);VFX.shock(at,0xffffff,1.8,.3);VFX.burst(at.clone().setY(at.y+.2),0xb8a888,26,5,.55,{up:.6,grav:9});VFX.burst(at.clone().setY(at.y+1),0xdde8ff,22,4,.5,{mix:0xffffff});
         shakeT=Math.max(shakeT,.18);cam.land=.08;sfx('slam',at,.9);P.guardPop=1;},260);
@@ -28387,7 +28392,7 @@ function useSkillInner(i){
       log(['폭발 화살을 장전했다','관통 화살을 장전했다','감전 화살을 장전했다'][k],'sys');fxAt=null;break;}
     case 'xtrap':{xtrapPlace(S,pw,opt);fxAt=null;break;}
     case 'triple':{if(!triRe){P.tri={id,n:1,until:tAll+S.window,hits:new Map()};cds[id]=0;}else{P.tri.n++;P.tri.until=tAll+S.window;}
-      const T=P.tri;if(P.tri.n>S.re){P.tri=null;cds[id]=S.cd;}sfx('bw_fire');
+      const T=P.tri;if(P.tri.n>S.re){P.tri=null;cds[id]=skCd(S);}sfx('bw_fire');
       fireProj({color:S.color,speed:S.speed,size:BASIC.bow.size,mult:0,noDirect:true,arrow:true,arc:5,life:1.2,opt,onHit:m=>{const n=(T.hits.get(m)||0)+1;T.hits.set(m,n);const mul=S.mult*pw*(n>=3?2:n===2?1.5:1);
         damageMonster(m,mul,opt);if(n>=2){const c=mCenter(m);VFX.burst(c,0xffe8a0,n>=3?22:14,n>=3?5:3.5,.4,{mix:0xffffff});sfx('bw_hit',c,.9,n>=3?.8:.95);}}});
       fxAt=player.position.clone().add(new THREE.Vector3(0,1.3,0));break;}
@@ -29785,9 +29790,9 @@ function bottleMesh(id){const col={hp_l:0xe03030,hp_s:0xff6060,mp_l:0x3050e0,mp_
   const g=new THREE.Group();g.add(new THREE.Mesh(new THREE.SphereGeometry(.06,10,8),new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:.35,transparent:true,opacity:.85,roughness:.15})));
   const nk=new THREE.Mesh(new THREE.CylinderGeometry(.022,.026,.06,8),new THREE.MeshStandardMaterial({color:0xdde8ee,transparent:true,opacity:.7}));nk.position.y=.07;g.add(nk);
   const ck=new THREE.Mesh(new THREE.CylinderGeometry(.024,.02,.025,8),new THREE.MeshStandardMaterial({color:0x8a5a30}));ck.position.y=.11;g.add(ck);return {g,col};}
-function endReapHold(){const H=P&&P.reapHold;if(!H)return;P.reapHold=null;cds.reap=H.S.cd;if(myMoId==='reap1')swingT=1;}
+function endReapHold(){const H=P&&P.reapHold;if(!H)return;P.reapHold=null;cds.reap=skCd(H.S);if(myMoId==='reap1')swingT=1;}
 // 처형 2타: 박힌 칼을 비틀어 뽑아낸다
-function reapPull(){const H=P.reapHold;P.reapHold=null;cds.reap=H.S.cd;swingT=0;swingN++;myMoId='reap2';myMo=motionFor('dagger','reap2');P.skN=swingN;
+function reapPull(){const H=P.reapHold;P.reapHold=null;cds.reap=skCd(H.S);swingT=0;swingN++;myMoId='reap2';myMo=motionFor('dagger','reap2');P.skN=swingN;
   {const m=H.m;if(m&&m.dying===null)reapTwistFx(m);}
   setTimeout(()=>{if(mode!=='world')return;const m=H.m;if(!m||m.dying!==null)return;m.reapT=tAll;const low=m.hp<m.mh*.25;
     shared(()=>damageMonster(m,H.S.mult*H.pw*.6,{...H.opt,exec25:true,netx:m.netT>tAll}));reapRipFx(m,low);
