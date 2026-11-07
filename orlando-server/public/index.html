@@ -8311,6 +8311,197 @@ function stickAp(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{};
     case '뻗친 머리':cap(.47);back(.24,.21,.3,-.1);break;
     default:cap(.45);}
 }
+/* ---------- 플레이어 생김새 (막대 인형 마디에 빚은 몸을 입힌다) ----------
+   막대 인형의 마디(어깨·팔꿈치·손, 엉덩이·무릎·발, 윗몸·머리)는 그대로 두고, 막대 조각은 숨긴 뒤
+   같은 마디에 소매·바지·장화·손가락·머리카락을 빚어 붙인다. 그래서 걸음·공격·스킬 동작은 모두 그대로 맞는다.
+   조각은 마디마다 재질별로 한 메시로 합친다 (gearMerge) */
+const LOOK_ON=true;
+const EYE_SHAPES=['보통 눈','또렷한 눈','가는 눈','졸린 눈'];
+const BROWS=['보통','짙은','가는','올라간'];
+const FACE_MARKS=['없음','볼','주근깨','볼·주근깨'];
+const BEARDS=['없음','콧수염','짧은 수염','덥수룩 수염','염소수염'];
+const TOPS=['튜닉','셔츠','조끼','로브'];
+const BOTTOMS=['바지','치마','반바지'];
+const SHOES=['긴 장화','짧은 장화','단화'];
+const _lkV2=(pr)=>pr.map(([r,y])=>new THREE.Vector2(Math.max(r,0),y));
+function lkLathe(pr,n=24){const g=new THREE.LatheGeometry(_lkV2(pr),n);g.computeVertexNormals();return g;}
+/* 끝이 가늘어지는 굽은 다발: 머리카락·눈썹·손가락·수염 (flat<1이면 납작하게) */
+function lkLock(pts,r0,r1,rad=8,tub=16,flat=1,ease=1.3){const cv=new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(p[0],p[1],p[2])));
+  const tg=new THREE.TubeGeometry(cv,tub,1,rad,false),pos=tg.attributes.position,v=new THREE.Vector3();
+  for(let i=0;i<=tub;i++){const t=i/tub,c=cv.getPointAt(t),r=r0+(r1-r0)*Math.pow(t,ease),fr=tg.binormals[i];
+    for(let j=0;j<=rad;j++){const k=i*(rad+1)+j;v.fromBufferAttribute(pos,k).sub(c);const al=v.dot(fr);v.addScaledVector(fr,al*(flat-1));v.multiplyScalar(r);pos.setXYZ(k,c.x+v.x,c.y+v.y,c.z+v.z);}}
+  tg.computeVertexNormals();return tg;}
+/* 결이 있는 머리 덮개: 정수리부터 뒤는 깊게(cov), 이마 쪽은 얕게(front) 덮는다 */
+function lkHairCap(R,cov,front,groove=.007,N=34){const gg=new THREE.SphereGeometry(R,56,30,0,Math.PI*2,0,Math.PI*cov),p=gg.attributes.position,v=new THREE.Vector3();
+  for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i);const az=Math.atan2(v.x,v.z),th=Math.acos(Math.max(-1,Math.min(1,v.y/R)));
+    const d=groove*Math.pow(Math.abs(Math.sin(az*N/2)),.6)*Math.min(1,th*2);
+    const fz=Math.pow((1+Math.cos(az))/2,1.6),lim=Math.PI*(cov-(cov-front)*fz),tt=Math.min(th,lim),nr=R+d-groove,s=Math.sin(tt),c=Math.cos(tt);
+    p.setXYZ(i,Math.sin(az)*s*nr,c*nr,Math.cos(az)*s*nr);}
+  gg.computeVertexNormals();return gg;}
+/* 외모 꾸밈 값 (새 칸): 없으면 기본 */
+function apX(ap){return {y:ap.y|0,w:ap.w|0,f:ap.f??1,d:ap.g==='f'?0:(ap.d|0),u:ap.u|0,l:ap.l|0,o:ap.o|0};}
+function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{};
+  const H=S.head,f=ap.g==='f',X=apX(ap);
+  const base=new Set(u.mats.slice(0,4)),[limb,skin,body,trim]=u.mats;
+  skin.color.setHex(0xf1e6d2).multiply(new THREE.Color(SKIN_TONES[ap.k|0]??0xffffff));
+  if(ap.c){body.color.setHex(ap.c);trim.color.setHex(new THREE.Color(ap.c).multiplyScalar(.55).getHex());}
+  const skC=skin.color.getHex(),shirtC=body.color.getHex(),pantsC=ap.p??PANTS_COLORS[0],hairC=ap.h??HAIR_COLORS[1];
+  const mm=[];const M=(c,x)=>{const m=mat(c,Object.assign({flatShading:false,roughness:.72},x||{}));mm.push(m);return m;};
+  const dk=(c,k)=>new THREE.Color(c).multiplyScalar(k).getHex();
+  const mSkin=M(skC,{roughness:.6}),mSkinD=M(dk(skC,.84),{roughness:.6}),mShirt=M(shirtC,{roughness:.82}),mShirtD=M(dk(shirtC,.7),{roughness:.82});
+  const vest=X.u===2,underC=vest?0xe6dcc6:shirtC,mUnder=vest?M(underC,{roughness:.85}):mShirt,mUnderD=vest?M(dk(underC,.78),{roughness:.85}):mShirtD;
+  const mPants=M(pantsC,{roughness:.85}),mBoot=M(X.o===2?0x2e2420:0x4a3020,{roughness:.55}),mBootD=M(0x2a1c14,{roughness:.6}),mBelt=M(0x3a2618,{roughness:.5}),mGold=M(0xc9a24a,{roughness:.35,metalness:.6});
+  const mHair=M(hairC,{roughness:.6}),mHairD=M(dk(hairC,.72),{roughness:.6});
+  /* 막대 조각 숨기기 (장비 조각은 그대로) */
+  const hideBase=par=>{for(const o of par.children)if(o.isMesh&&o!==H&&base.has(o.material)&&!o.userData.gear)o.visible=false;};
+  /* 마디마다 따로 모았다가 재질별로 합친다 */
+  const bins=new Map();const bin=(par,sc)=>{let b=bins.get(par);if(!b){b=new THREE.Group();if(sc)b.scale.copy(sc);bins.set(par,b);}return b;};
+  const add=(par,geo,m,x=0,y=0,z=0,r,s)=>{const q=new THREE.Mesh(geo,m);q.position.set(x,y,z);if(r){q.rotation.order='YXZ';q.rotation.set(r[0],r[1],r[2]||0);}if(s)q.scale.set(s[0],s[1],s[2]);par.add(q);return q;};
+  const sph=(r,a=20,b=14)=>new THREE.SphereGeometry(r,a,b);
+  const bw=[.86,1,1.1,1.22][ap.b??1]*(f?.93:1),armor=(G.armor??-1)>=1,bootsG=(G.boots??-1)>=0&&S.L.foot.userData.boot;
+
+  /* --- 몸통 --- */
+  hideBase(S.upper);
+  const T=bin(S.upper,new THREE.Vector3(bw,1,bw));
+  const chest=f?.18:.195,waist=f?.145:.16;
+  const tg=lkLathe([[0,-.02],[.15,-.02],[waist+.005,.04],[waist,.1],[chest*.97,.3],[chest,.4],[chest*.95,.5],[.15,.57],[.1,.6],[0,.61]],40);tg.scale(1,1,.74);add(T,tg,mUnder);
+  /* 아래 자락: 튜닉은 허벅지까지 퍼지고, 셔츠는 짧게, 로브는 무릎 아래까지 */
+  const hemTo=X.u===3?-.62:X.u===1?-.07:-.185,hemR=X.u===3?.27:X.u===1?waist+.025:.2;
+  if(!armor||X.u===3){const hp=[[waist+.012,.06],[waist+.018,0]];for(let k=1;k<=4;k++){const t=k/4;hp.push([waist+.02+(hemR-waist-.02)*Math.pow(t,1.3),hemTo*t]);}
+    hp.push([hemR-.004,hemTo-.012],[hemR-.02,hemTo-.004],[waist+.004,0]);
+    const hg=lkLathe(hp,44),p=hg.attributes.position,v=new THREE.Vector3();
+    for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i);const az=Math.atan2(v.x,v.z),w=Math.max(0,-v.y)/Math.abs(hemTo),r=1+.05*Math.sin(az*(X.u===3?11:9))*w;p.setXYZ(i,v.x*r,v.y,v.z*.8*r);}
+    hg.computeVertexNormals();add(T,hg,X.u===2?mPants:mUnder);}
+  /* 치마 (아래 옷) */
+  if(X.l===1&&X.u!==3){const sg=lkLathe([[waist+.01,.04],[waist+.03,-.05],[.21,-.2],[.25,-.4],[.246,-.415],[.225,-.405],[waist,.02]],44),p=sg.attributes.position,v=new THREE.Vector3();
+    for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i);const az=Math.atan2(v.x,v.z),w=Math.max(0,-v.y)/.4,r=1+.06*Math.sin(az*10)*w;p.setXYZ(i,v.x*r,v.y,v.z*.82*r);}sg.computeVertexNormals();add(T,sg,mPants);}
+  /* 앞섶: 튜닉·로브는 끈, 셔츠는 단추, 조끼는 앞이 트인 덧옷 */
+  if(X.u===1){add(T,new THREE.BoxGeometry(.016,.5,.006),mShirtD,0,.3,.122,[-.04,0,0]);for(let i=0;i<5;i++)add(T,sph(.008,8,6),mGold,0,.52-i*.1,.128-Math.max(0,.3-i*.1)*.0);}
+  else if(X.u===2){const vg=lkLathe([[0,-.03],[waist+.016,-.03],[waist+.012,.1],[chest*1.0+.012,.3],[chest+.014,.42],[chest*.95+.01,.52],[.13,.565],[0,.57]],40),p=vg.attributes.position,v=new THREE.Vector3();
+    const keep=[];for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i);p.setZ(i,v.z*.76);}vg.computeVertexNormals();
+    /* 앞 가운데를 V자로 비운다: 앞쪽 꼭짓점을 양옆으로 민다 */
+    for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i);const az=Math.atan2(v.x,v.z),gap=.12+.5*Math.max(0,(v.y-.15)/.42);if(Math.abs(az)<gap){const s=az>=0?1:-1,na=s*gap,r=Math.hypot(v.x,v.z/.76);p.setXYZ(i,Math.sin(na)*r,v.y,Math.cos(na)*r*.76);}}
+    vg.computeVertexNormals();add(T,vg,mShirt);for(let i=0;i<3;i++)add(T,sph(.009,8,6),mGold,.035,.12+i*.07,(waist+.01)*.76+.01);}
+  else{add(T,new THREE.BoxGeometry(.012,.16,.01),mUnderD,0,.5,.118,[-.25,0,0]);for(let i=0;i<3;i++)add(T,new THREE.TorusGeometry(.01,.0035,6,10),mUnderD,0,.56-i*.045,.106+i*.007,[-.25,0,0]);}
+  /* 허리띠·버클·주머니 */
+  if(!armor){const bg=new THREE.TorusGeometry(waist+.013,.022,8,40);bg.rotateX(Math.PI/2);bg.scale(1,.9,.76);add(T,bg,mBelt,0,.045,0);
+    add(T,new THREE.TorusGeometry(.024,.007,6,14),mGold,0,.045,(waist+.013)*.76+.018,null,[1.15,.95,1]);
+    add(T,lkLathe([[0,-.05],[.03,-.045],[.036,-.02],[.03,.01],[.02,.018],[0,.02]],14),mBelt,.13,0,.05,[.9,0,0],[1,1,.7]);}
+  /* 깃·목 */
+  {const cg=new THREE.TorusGeometry(.085,.022,8,30);cg.rotateX(Math.PI/2);cg.scale(1,1,.85);add(T,cg,mUnderD,0,.585,.005,[-.12,0,0]);}
+  add(bin(S.upper),lkLathe([[.046,.55],[.044,.66],[.05,.76],[0,.78]],16),mSkin);
+  if(X.u===3){/* 로브: 어깨를 덮는 짧은 망토 깃 */const cp=lkLathe([[.09,.6],[.15,.57],[.215,.5],[.235,.43],[.225,.42],[.19,.49],[.1,.58]],40);cp.scale(1,1,.8);add(T,cp,mShirtD);}
+
+  /* --- 팔 --- */
+  const bell=X.u===3;
+  for(const A of [S.AL,S.AR]){const sd=Math.sign(A.sh.position.x);A.sh.position.x*=bw;
+    hideBase(A.sh);hideBase(A.el);hideBase(A.hand);
+    const SH=bin(A.sh),EL=bin(A.el),HD=bin(A.hand);
+    add(SH,sph(.062),mUnder,-sd*.008,-.01,0,null,[1,.95,1]);
+    add(SH,lkLathe([[0,.02],[.068,0],[.066,-.08],[.058,-.2],[.052,-.32],[.05,-.37],[0,-.37]],20),mUnder);
+    add(EL,sph(.048),mUnder);
+    if(bell){add(EL,lkLathe([[0,0],[.05,0],[.056,-.1],[.072,-.22],[.08,-.27],[.074,-.275],[.05,-.2],[0,-.2]],22),mUnder);}
+    else{add(EL,lkLathe([[0,0],[.05,0],[.047,-.12],[.042,-.24],[.044,-.27],[0,-.27]],20),mUnder);
+      const cf=new THREE.TorusGeometry(.044,.012,8,22);cf.rotateX(Math.PI/2);add(EL,cf,mUnderD,0,-.265,0);}
+    add(EL,lkLathe([[0,-.25],[.033,-.25],[.03,-.31],[.034,-.35],[0,-.36]],14),mSkin);
+    /* 손: 손등 + 말아 쥔 네 손가락 + 엄지 (무기 손잡이는 손의 z 축) */
+    add(HD,sph(.042),mSkin,0,.012,0,null,[.78,1.05,1]);
+    for(let i=0;i<4;i++){const z=.027-i*.018,r=.0115-(i===3?.002:0);add(HD,lkLock([[-sd*.028,0,z],[-sd*.034,-.032,z],[-sd*.008,-.052,z],[sd*.02,-.04,z],[sd*.026,-.018,z]],r,r*.85,8,12,1,1),mSkin);}
+    add(HD,lkLock([[-sd*.02,.02,.035],[-sd*.01,0,.052],[sd*.012,-.02,.045]],.012,.01,8,10,1,1),mSkin);}
+
+  /* --- 다리 --- */
+  const shorts=X.l===2,skirt=X.l===1||X.u===3;
+  for(const Lg of [S.L,S.R]){Lg.hip.position.x*=1+(bw-1)*.6;hideBase(Lg.hip);hideBase(Lg.knee);
+    const HP=bin(Lg.hip),KN=bin(Lg.knee),legM=skirt?mPants:mPants,lw=bw*.95+.05;
+    if(shorts){add(HP,lkLathe([[0,.06],[.084,.06],[.094,-.02],[.09,-.2],[.088,-.26],[0,-.26]],20),mPants,0,0,0,null,[lw,1,1]);
+      add(HP,lkLathe([[0,-.2],[.066,-.2],[.06,-.4],[.056,-.46],[0,-.46]],18),mSkin,0,0,0,null,[lw,1,1]);}
+    else add(HP,lkLathe([[0,.06],[.08,.06],[.09,-.02],[.082,-.2],[.068,-.4],[.062,-.46],[0,-.46]],20),legM,0,0,0,null,[lw,1,1]);
+    const shinM=shorts?mSkin:mPants;add(KN,sph(.056),shinM);
+    add(KN,lkLathe([[0,0],[.06,0],[.058,-.1],[.05,-.25],[.045,-.4],[.042,-.45],[0,-.45]],18),shinM);
+    if(bootsG)continue;   /* 갑옷 장화를 신었으면 그 모양 그대로 */
+    const top=X.o===0?-.17:X.o===1?-.31:-.4,r0=.064;
+    if(X.o<2){const pr=[[0,top],[r0+.012,top],[r0+.014,top-.03],[r0+.004,top-.045]];if(X.o===0)pr.push([r0,-.3],[r0-.004,-.42]);else pr.push([r0-.002,-.42]);pr.push([r0,-.45],[0,-.45]);add(KN,lkLathe(pr,22),mBoot);}
+    const ft=Lg.foot,fg=lkLathe([[0,-.05],[.05,-.05],[.056,-.04],[.055,0],[.045,.03],[0,.035]],22);fg.scale(1.05,X.o===2?.82:1,2.15);fg.translate(0,X.o===2?-.008:0,.012);
+    ft.geometry=fg;ft.material=mBoot;ft.userData.lookFoot=1;
+    const so=new THREE.Mesh(lkLathe([[0,-.006],[.058,-.006],[.058,.006],[0,.006]],22),mBootD);so.geometry.scale(1.08,1,2.2);so.position.set(0,-.05,.012);ft.add(so);}
+
+  /* --- 머리·얼굴 --- */
+  hideBase(H);H.geometry=new THREE.SphereGeometry(.22,40,28);
+  const HB=bin(H),R=.22;
+  const surf=(x,y,lift=0)=>{const z=Math.sqrt(Math.max(0,R*R-x*x-y*y)),n=new THREE.Vector3(x,y,z).normalize();return {p:n.clone().multiplyScalar(R+lift),q:new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),n)};};
+  const onF=(geo,m,x,y,lift,s,rz=0)=>{const a=surf(x,y,lift),q=new THREE.Mesh(geo,m);q.position.copy(a.p);q.quaternion.copy(a.q);if(rz)q.rotateZ(rz);if(s)q.scale.set(s[0],s[1],s[2]);HB.add(q);return q;};
+  [-1,1].forEach(s=>{add(HB,sph(.04,14,10),mSkin,s*.212,-.005,-.005,[0,s*.35,0],[.42,1,.72]);add(HB,sph(.022,10,8),mSkinD,s*.222,-.005,.002,[0,s*.35,0],[.3,.8,.55]);});
+  onF(sph(.024,14,10),mSkin,0,-.03,-.012,[.8,.9,.7]);
+  if(X.f===1||X.f===3){const bl=M(0xf09a8a,{transparent:true,opacity:.42,roughness:.9,depthWrite:false});[-1,1].forEach(s=>onF(new THREE.CircleGeometry(.026,18),bl,s*.105,-.045,.002,[1.25,.8,1]));}
+  if(X.f>=2){const fm=M(dk(skC,.7),{roughness:.9});[[-.1,-.02],[-.118,-.035],[-.088,-.04],[-.108,-.055],[.1,-.02],[.118,-.035],[.088,-.04],[.108,-.055],[-.03,-.012],[.03,-.012]].forEach(([x,y])=>onF(new THREE.CircleGeometry(.0045,8),fm,x,y,.001));}
+  /* 눈: 보통(까만 알)·또렷한(눈동자 색+빛 점)·가는·졸린 */
+  const eyeC=new THREE.Color(ap.e??0x14110e).multiplyScalar(.75).getHex(),mEye=M(0x1a1410,{roughness:.25});
+  const mWh=M(0xffffff,{roughness:.2,emissive:0xffffff,emissiveIntensity:.4});
+  [-1,1].forEach(s=>{const ex=s*.074,ey=.025;
+    if(X.y===1){onF(sph(.034,18,12),mEye,ex,ey,-.008,[.86,1.12,.42]);onF(sph(.027,18,12),M(eyeC,{roughness:.25}),ex,ey-.005,-.002,[.82,1.0,.4]);
+      onF(sph(.009,8,6),mWh,ex-s*.011,ey+.013,.003,[1,1,.5]);onF(sph(.0045,8,6),mWh,ex+s*.009,ey-.014,.003,[1,1,.5]);}
+    else if(X.y===2)onF(sph(.031,18,12),mEye,ex,ey,-.004,[1.0,.42,.42]);
+    else if(X.y===3){onF(sph(.031,18,12),mEye,ex,ey-.004,-.006,[.95,.75,.42]);onF(lkLock([[-.034,0,0],[0,.004,0],[.034,0,0]],.006,.004,6,8),mSkinD,ex,ey+.012,.002);}
+    else onF(sph(.031,18,12),mEye,ex,ey,-.006,[.82,1.12,.42]);
+    const by=ey+(X.y===1?.07:.064),bt=[.0055,.008,.0038,.006][X.w],br=[(f?-.05:.08),.06,-.02,.34][X.w];
+    onF(lkLock([[-.024,-.003,0],[0,.004,0],[.024,0,0]],bt,bt*.55,6,10),mHairD,ex+s*.004,by,.002,null,s*br);});
+  /* 수염 (남자) */
+  if(X.d){const md=mHairD;
+    if(X.d===1||X.d===3)[-1,1].forEach(s=>onF(lkLock([[0,0,0],[s*.03,-.004,0],[s*.05,-.016,0]],.011,.004,8,10),md,s*.004,-.062,.004));
+    if(X.d===2||X.d===3){const big=X.d===3,t0=Math.PI*(big?.57:.6),t1=Math.PI*(big?.93:.86);
+      const bg=new THREE.SphereGeometry(R,40,14,Math.PI/2-1.25,2.5,t0,t1-t0),p=bg.attributes.position,v=new THREE.Vector3();
+      for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i);const az=Math.atan2(v.x,v.z),th=Math.acos(v.y/R),q=(th-t0)/(t1-t0),fr=Math.max(0,Math.cos(az));
+        /* 아래로 갈수록, 앞일수록 두툼하게 (털 결 홈) */
+        const thick=(big?.035:.014)*Math.sin(Math.PI*Math.min(1,q*1.15))*(.4+.6*fr)+.004-.004*Math.abs(Math.sin(az*16)),k=(R+thick)/R;
+        p.setXYZ(i,v.x*k,v.y*k-(big?.035:.008)*q*fr,v.z*k);}
+      bg.computeVertexNormals();add(HB,bg,md);}
+    if(X.d===4)onF(lkLock([[0,0,0],[0,-.03,.01],[0,-.06,.004]],.018,.003,8,10),md,0,-.15,.004);}
+  /* 머리카락 (투구를 쓰면 정수리·앞머리는 투구가 덮는다) */
+  const helm=(G.helm??-1)>=0,ns=(HAIR_STYLES[ap.g]||HAIR_STYLES.m),nm=ns[ap.s|0]||'';
+  const L_=(pts,r0,r1,flat,m)=>add(HB,lkLock(pts,r0,r1,8,14,flat),m);
+  const fringe=(n,len,spread,y0=.15,curl=.02,r=.034)=>{if(helm)return;for(let i=0;i<n;i++){const t=n===1?0:i/(n-1)*2-1,a=t*spread,x=Math.sin(a)*.2,z=Math.cos(a)*.2,nx=Math.sin(a),nz=Math.cos(a),Ln=len*(1-.15*Math.abs(t))*(1+.12*Math.sin(i*2.7));
+      L_([[x*.55,y0+.04,z*.55-.02],[x*1.08,y0,z*1.08],[nx*(.23+curl*.3),y0-Ln*.6,nz*(.23+curl)],[nx*(.226+curl*.1)+t*.01,y0-Ln,nz*(.225+curl*.6)]],r,.004,.55,i%2?mHair:mHairD);}};
+  const sideLocks=(len,r=.032)=>[-1,1].forEach(s=>{for(let k=0;k<2;k++){const z=.09-k*.07;L_([[s*.15,.12,z],[s*.225,0,z+.01],[s*.235,-len*.6,z],[s*.225,-len,z-.01]],r,.005,.6,k?mHairD:mHair);}});
+  const backHair=(len,w=.22,n=15,r=.06)=>{for(let i=0;i<n;i++){const a=Math.PI+(i/(n-1)*2-1)*1.25,nx=Math.sin(a),nz=Math.cos(a),Ln=len*(1+.08*Math.sin(i*1.9));
+      L_([[nx*.15,.16,nz*.15],[nx*w,0,nz*w],[nx*(w+.015),-Ln*.55,nz*(w+.02)],[nx*(w+.005),-Ln,nz*(w+.01)]],r,.012,.45,i%2?mHair:mHairD);}};
+  const spikes=(n,len,y=.12)=>{if(helm)return;for(let i=0;i<n;i++){const a=i/n*Math.PI*2,nx=Math.sin(a),nz=Math.cos(a),up=.6+.4*Math.abs(Math.sin(a*1.5));
+      L_([[nx*.12,y+.05,nz*.12],[nx*.19,y+.05,nz*.19],[nx*(.2+len*.6),y+.02+len*up*.5,nz*(.2+len*.6)]],.05,.004,.6,i%2?mHair:mHairD);}};
+  const tail=(y,z,len,r=.05,sw=0)=>{add(HB,sph(r*.95,14,10),mHairD,sw,y,z);L_([[sw,y,z-.015],[sw*1.3,y-.12,z-.04],[sw*1.5,y-len*.6,z-.03],[sw*1.5,y-len,z]],r,.008,.75,mHair);};
+  const braid=(y,z,len,sw=0)=>{const n=Math.round(len/.05);for(let k=0;k<n;k++)add(HB,sph(.032-k*.0015,12,8),k%2?mHair:mHairD,sw+(k%2?.008:-.008),y-k*.048,z-.01*Math.sin(k*.5));};
+  if(nm!=='대머리'){
+    const longB=/긴|어깨|단발|보브|히메|뻗친|양갈래|땋은|곱슬/.test(nm);
+    if(!helm)add(HB,lkHairCap(.232,longB?.84:.8,.3),mHair,0,.004,-.006,[-.08,0,0]);
+    switch(nm){
+      case '짧은 머리':fringe(7,.07,.9);break;
+      case '스포츠 머리':break;
+      case '뾰족 머리':spikes(9,.1);fringe(5,.06,.7,.16);break;
+      case '덥수룩 머리':if(!helm)add(HB,lkHairCap(.25,.82,.34,.012,22),mHair,0,0,-.01,[-.1,0,0]);fringe(8,.1,1.0,.14,.03,.036);sideLocks(.1);break;
+      case '단발':fringe(7,.08,.9);sideLocks(.16);backHair(.2,.22,11);break;
+      case '흐트러진 머리':fringe(6,.09,1.0,.15,.04,.036);spikes(7,.05,.14);break;
+      case '덮은 머리':fringe(9,.13,1.05,.15,.03,.036);sideLocks(.12);break;
+      case '긴 머리':fringe(7,.09,.9);sideLocks(.26);backHair(.42,.22,15);break;
+      case '묶은 긴 머리':fringe(7,.07,.9);tail(.02,-.24,.42);break;
+      case '옆 가르마':if(!helm)for(let i=0;i<8;i++){const t=i/7,a=-.9+t*1.9;L_([[-.06,.2,.08],[Math.sin(a)*.17,.17-t*.03,Math.cos(a)*.17],[Math.sin(a)*.235,.07-t*.04,Math.cos(a)*.21]],.04,.006,.55,i%2?mHair:mHairD);}break;
+      case '꽁지머리':fringe(7,.07,.9);tail(.0,-.235,.16,.035);break;
+      case '곱슬 머리':if(!helm)for(let i=0;i<46;i++){const a=i*2.399,yy=.215-(i/46)*.26,rr=Math.sqrt(Math.max(0,.235*.235-yy*yy))||.06;if(Math.cos(a)>.5&&yy<.13)continue;add(HB,sph(.04,10,8),i%2?mHair:mHairD,Math.sin(a)*rr*.98,yy,Math.cos(a)*rr*.98-.01);}break;
+      case '긴 생머리':fringe(9,.1,1.0,.15,.02,.032);sideLocks(.36);backHair(.6,.22,17);break;
+      case '어깨 머리':fringe(9,.1,1.0,.15,.02,.032);sideLocks(.26);backHair(.36,.22,15);break;
+      case '올림 단발':fringe(7,.08,.9,.15,.02,.032);if(!helm)add(HB,lkHairCap(.08,1,1,.006,14),mHair,0,.16,-.17);sideLocks(.12);break;
+      case '보브':fringe(11,.11,1.1,.15,.02,.032);sideLocks(.18,.036);backHair(.2,.24,13);break;
+      case '히메컷':fringe(11,.12,1.0,.15,0,.03);[-1,1].forEach(s=>L_([[s*.17,.1,.11],[s*.215,-.02,.12],[s*.22,-.16,.11]],.03,.022,.45,mHair));backHair(.6,.22,17);break;
+      case '뻗친 머리':fringe(9,.09,1.0,.15,.02,.032);[-1,1].forEach(s=>{for(let k=0;k<3;k++)L_([[s*.18,.08,.05-k*.08],[s*.23,-.1,.05-k*.08],[s*.3,-.2,.05-k*.08]],.035,.005,.6,k%2?mHairD:mHair);});backHair(.22,.23,11);break;
+      case '포니테일':fringe(9,.09,1.0,.15,.02,.032);sideLocks(.14);tail(.1,-.23,.5,.07);break;
+      case '양갈래':fringe(9,.09,1.0,.15,.02,.032);[-1,1].forEach(s=>{add(HB,sph(.045,12,8),mHairD,s*.2,.03,-.1);L_([[s*.215,.02,-.11],[s*.245,-.08,-.1],[s*.25,-.25,-.08],[s*.24,-.42,-.06]],.055,.01,.8,mHair);});break;
+      case '땋은 머리':fringe(9,.09,1.0,.15,.02,.032);sideLocks(.14);braid(-.02,-.235,.5);break;
+      case '곱슬 긴 머리':fringe(9,.1,1.0,.15,.03,.034);for(let i=0;i<15;i++){const a=Math.PI+(i/14*2-1)*1.25,nx=Math.sin(a),nz=Math.cos(a);for(let k=0;k<5;k++)add(HB,sph(.045-k*.003,10,8),(i+k)%2?mHair:mHairD,nx*(.225+.01*Math.sin(k*2)),-.02-k*.1,nz*(.225+.01*Math.cos(k*2)));}break;
+      default:fringe(7,.07,.9);}
+  }
+  /* 모아 둔 조각을 마디마다 재질별로 합친다 */
+  for(const [par,b] of bins){gearMerge(b,par);}
+  for(const o of [S.L.foot,S.R.foot])o.traverse(q=>{if(q.isMesh)q.castShadow=true;});
+  S.body.scale.setScalar(HEIGHTS[ap.t??2]??1);
+  u.look={skin:skC,sleeve:underC,top:X.u};u.mats.push(...mm);
+}
 /* 공격 동작: 직업(무기)마다 다른 열쇠 자세를 시간에 따라 섞는다
    값: [오른어깨x, 오른어깨z, 오른팔꿈치, 왼어깨x, 왼어깨z, 왼팔꿈치, 허리비틀기, 숙이기] */
 let SHIELD_TW=.6;
@@ -8608,7 +8799,7 @@ function makeGrimoire(tier=0){
 const PM={ver:'6',data:{},loading:{},tmpl:{},scale:{m:1.1,f:1.06}};
 const HAIR_COLORS=[0x2a2220,0x5a3a22,0x9a5a30,0xd8b070,0xe8e2d8,0xb03a2e,0x3a5aa8,0x6a4aa0,0x7a7a82,0xf0d898,0xe09ab0,0x2a7a5a];
 const EYE_COLORS=[0x5a3a22,0x3a6aa8,0x3a9a6a,0x9a3a3a,0xb08a2a,0x7a4ab0,0x4a4a54,0x2a8a9a,0xb8bccc,0xe0782a];
-const HAIR_STYLES={m:['짧은 머리','스포츠 머리','뾰족 머리','덥수룩 머리','단발','흐트러진 머리','덮은 머리','긴 머리','묶은 긴 머리','대머리'],f:['긴 생머리','어깨 머리','올림 단발','단발','보브','히메컷','뻗친 머리','짧은 머리','대머리']};
+const HAIR_STYLES={m:['짧은 머리','스포츠 머리','뾰족 머리','덥수룩 머리','단발','흐트러진 머리','덮은 머리','긴 머리','묶은 긴 머리','대머리','옆 가르마','꽁지머리','곱슬 머리'],f:['긴 생머리','어깨 머리','올림 단발','단발','보브','히메컷','뻗친 머리','짧은 머리','대머리','포니테일','양갈래','땋은 머리','곱슬 긴 머리']};
 // 피부색(곱하는 색), 키(배율), 윗옷색(0은 직업색), 바지색
 const SKIN_TONES=[0xffffff,0xfff1ec,0xf3d6b8,0xdfb48c,0xb98258,0x8c5c3e];
 const HEIGHTS=[.94,.97,1,1.03,1.06];
@@ -8616,11 +8807,16 @@ const SHIRT_COLORS=[0xb8a27c,0x9c3d2f,0x2f5a9c,0x3f7a3a,0x6a4a8a,0xd8c8a0,0x2e2e
 const PANTS_COLORS=[0x4a3a2c,0x2a2a30,0x34466a,0x55583e,0x7a5a3a,0xc4b496];
 // 체형: 목 아래 몸과 옷을 겉면 방향으로 부풀리거나 줄인다 (손·머리는 그대로)
 const BUILDS=['마른','보통','탄탄한','통통한'];
-function apDefault(){return {g:'m',h:HAIR_COLORS[1],e:EYE_COLORS[0],s:0,k:0,t:2,c:0,p:PANTS_COLORS[0],b:1};}
+function apDefault(){return {g:'m',h:HAIR_COLORS[1],e:EYE_COLORS[0],s:0,k:0,t:2,c:0,p:PANTS_COLORS[0],b:1,y:0,w:0,f:1,d:0,u:0,l:0,o:0};}
 const _hx=v=>(v>>>0).toString(16).padStart(6,'0');
-function apCode(a){a=a||apDefault();return a.g+','+_hx(a.h)+','+_hx(a.e)+','+(a.s|0)+','+Math.min(9,a.k|0)+','+Math.min(9,a.t??2)+','+_hx(a.c|0)+','+_hx(a.p??PANTS_COLORS[0])+','+Math.min(9,a.b??1);}
-function apParse(s){const m=/^([mf]),([0-9a-f]{6}),([0-9a-f]{6})(?:,(\d)(?:,(\d),(\d),([0-9a-f]{6}),([0-9a-f]{6})(?:,(\d))?)?)?$/.exec(String(s||''));if(!m)return null;const g=m[1];
-  return {g,h:parseInt(m[2],16),e:parseInt(m[3],16),s:Math.min(HAIR_STYLES[g].length-1,+(m[4]||0)),k:Math.min(SKIN_TONES.length-1,+(m[5]||0)),t:m[6]!=null?Math.min(HEIGHTS.length-1,+m[6]):2,c:m[7]?parseInt(m[7],16):0,p:m[8]?parseInt(m[8],16):PANTS_COLORS[0],b:m[9]!=null?Math.min(BUILDS.length-1,+m[9]):1};}
+/* 끝의 여덟 글자(36진수 한 글자씩): 눈 모양·눈썹·얼굴 꾸밈·수염·윗옷·아래·신발·머리 모양(10번째 이후까지) */
+const _b36=(v,n)=>Math.max(0,Math.min(n,v|0)).toString(36);
+function apCode(a){a=a||apDefault();const X=apX(a);return a.g+','+_hx(a.h)+','+_hx(a.e)+','+Math.min(9,a.s|0)+','+Math.min(9,a.k|0)+','+Math.min(9,a.t??2)+','+_hx(a.c|0)+','+_hx(a.p??PANTS_COLORS[0])+','+Math.min(9,a.b??1)
+  +','+_b36(X.y,35)+_b36(X.w,35)+_b36(X.f,35)+_b36(X.d,35)+_b36(X.u,35)+_b36(X.l,35)+_b36(X.o,35)+_b36(a.s,35);}
+function apParse(s){const m=/^([mf]),([0-9a-f]{6}),([0-9a-f]{6})(?:,(\d)(?:,(\d),(\d),([0-9a-f]{6}),([0-9a-f]{6})(?:,(\d)(?:,([0-9a-z]{8}))?)?)?)?$/.exec(String(s||''));if(!m)return null;const g=m[1];
+  const a={g,h:parseInt(m[2],16),e:parseInt(m[3],16),s:Math.min(HAIR_STYLES[g].length-1,+(m[4]||0)),k:Math.min(SKIN_TONES.length-1,+(m[5]||0)),t:m[6]!=null?Math.min(HEIGHTS.length-1,+m[6]):2,c:m[7]?parseInt(m[7],16):0,p:m[8]?parseInt(m[8],16):PANTS_COLORS[0],b:m[9]!=null?Math.min(BUILDS.length-1,+m[9]):1,y:0,w:0,f:1,d:0,u:0,l:0,o:0};
+  if(m[10]){const x=[...m[10]].map(c=>parseInt(c,36)),L=[EYE_SHAPES,BROWS,FACE_MARKS,BEARDS,TOPS,BOTTOMS,SHOES];['y','w','f','d','u','l','o'].forEach((k,i)=>a[k]=Math.min(L[i].length-1,x[i]));a.s=Math.min(HAIR_STYLES[g].length-1,x[7]);}
+  return a;}
 function pmLoad(g){
   if(PM.data[g])return Promise.resolve(PM.data[g]);
   if(!PM.loading[g])PM.loading[g]=fetch('pmodel/'+g+'.json?v='+PM.ver).then(r=>{if(!r.ok)throw new Error('pmodel '+r.status);return r.json();}).then(async d=>{
@@ -15155,7 +15351,7 @@ const _petW=new THREE.Vector3();let _petH=null;
 function petFP(){if(!player)return;const vm=viewModel,u=vm&&vm.userData,k=player.userData.petK||0,L=LIFE.pet;let H=_petH;
   if(k<=0||!LIFE.ready||cam.third){if(H){H.visible=false;H.userData.arm.visible=false;}return;}
   if(H&&H.userData.pl!==player){camera.remove(H,H.userData.arm);H=_petH=null;}   /* 옷·장비를 바꿔 몸을 다시 만들었으면 손도 다시 */
-  if(!H){const sk=u&&u.L?u.L.userData.skin[0].material.color.getHex():0xf6dccb,sl=u&&u.L?u.L.userData.arm.material.color.getHex():0x24201c;
+  if(!H){const sk=u&&u.L?u.L.userData.skinC:0xf6dccb,sl=u&&u.L?u.L.userData.sleeveC:0x24201c;
     H=_petH=fpHand(-1,camera,sk,sl);camera.add(H);H.userData.pl=player;}   /* 1인칭 왼손과 같은 주먹 손. 카메라에 바로 단다: 직업을 고르기 전(손 화면이 꺼져 있을 때)에도 보이게 */
   if(u&&u.L){u.L.visible=false;u.L.userData.arm.visible=false;}H.visible=true;
   const D=L?L.D:null,st=Math.sin((player.userData.petT||0)*5.5);let tx=-.3,ty=-.55,tz=-.5;
@@ -24660,7 +24856,7 @@ function shdOrient(M,dx,dz,spin){M.rotation.order='YXZ';const l=Math.hypot(dx,dz
 /* ---------- 플레이어 모델: 막대 인간 ---------- */
 function makePlayerMesh(job,gear,ap){const m=makeStickPlayer(job,gear);m.userData.keepMx=true;   /* 1인칭에서 숨겨도 손·무기 위치 계산에 행렬이 필요하다 */
   m.userData.gcode=gear?gearCode(gear):'';
-  if(ap&&OLD_LOOK)stickAp(m,ap,gear);
+  if(OLD_LOOK&&LOOK_ON)stickLook(m,Object.assign(apDefault(),ap||{}),gear);else if(ap&&OLD_LOOK)stickAp(m,ap,gear);
   // 애니 모델: 준비되어 있으면 바로, 아니면 불러온 뒤 입힌다 (그동안은 막대 인형)
   if(ap&&!OLD_LOOK){m.userData.ap=ap;m.userData.job=job;m.userData.gear=gear;if(PM.data[ap.g])pmAttach(m,job,gear,ap);else pmLoad(ap.g).catch(()=>{});}
   return m;}
@@ -24720,20 +24916,33 @@ function animBiped(mesh,speed,t){
 let viewModel=null;
 const SWING_SPD={sword:2.1,shield:.95,dagger:2.8,staff:1.85,bow:1.8};
 const swingSpd=job=>P&&!P.equip.weapon?2.6:JOBS[job]&&JOBS[job].aspd?(SWING_SPD[JOBS[job].weapon]||SWING_SPD.dagger)/JOBS[job].aspd:job==='swordsman'||job==='swordmaster'?(job==='swordsman'?2.4:2.7)*(1+famLv()*.05*(P&&P.buffs.fam?P.famN||0:0)):SWING_SPD[JOBS[job]?(JOBS[job].weapon):'sword']||2;
+/* 1인칭 손: 손등·손바닥 + 손잡이(손의 y 축)를 감싸 쥔 네 손가락 + 그 위에 눕는 엄지.
+   팔은 어깨(화면 아래 바깥)에서 손목까지 소매 관과 접힌 소매 끝, 손목 살 (fpArm이 길이를 맞춘다) */
 function fpHand(side,root,skinC=0xf6dccb,sleeveC=0x24201c){
-  const g=new THREE.Group();
-  // 주먹: 손등이 조금 넓은 둥근 주먹 + 엄지
-  const sk=mat(skinC,{flatShading:false,roughness:.6});const fist=new THREE.Mesh(new THREE.SphereGeometry(.05,14,10),sk);fist.scale.set(1.05,.9,1.2);g.add(fist);
-  const th=new THREE.Mesh(new THREE.SphereGeometry(.022,8,6),sk);th.position.set(-side*.035,.012,-.02);g.add(th);
-  // 팔: 어깨(화면 아래 바깥)에서 손목까지 이어지는 소매 + 손목 피부. 손이 돌아도 팔은 따라 돌지 않는다
-  const geo=new THREE.CylinderGeometry(.034,.05,1,10);geo.translate(0,.5,0);
-  const arm=new THREE.Mesh(geo,mat(sleeveC,{roughness:.7,flatShading:false}));root.add(arm);
-  const wr=new THREE.Mesh(new THREE.CylinderGeometry(.03,.034,.06,10),sk);wr.position.y=-.035;g.add(wr);
-  g.userData={arm,skin:[fist,th,wr],shoulder:new THREE.Vector3(side*.3,-.66,.12)};return g;
+  const g=new THREE.Group(),s=side,inner=new THREE.Group();g.add(inner);
+  const sk=mat(skinC,{flatShading:false,roughness:.62});
+  const sl=mat(sleeveC,{roughness:.85,flatShading:false}),slD=mat(new THREE.Color(sleeveC).multiplyScalar(.72).getHex(),{roughness:.85,flatShading:false});
+  const T=new THREE.Group(),add=(geo,x=0,y=0,z=0,sc)=>{const q=new THREE.Mesh(geo,sk);q.position.set(x,y,z);if(sc)q.scale.set(sc[0],sc[1],sc[2]);T.add(q);return q;};
+  add(new THREE.SphereGeometry(.05,28,18),s*.026,-.002,.03,[.52,1,.95]);
+  add(new THREE.SphereGeometry(.03,18,12),-s*.008,.008,.038,[.8,1.1,.9]);
+  const fy=[.034,.012,-.01,-.03],fr=[.0125,.013,.0125,.011];
+  for(let i=0;i<4;i++){const R=.03-(i===3?.002:0),y=fy[i],P=[];for(const a of [.55,-.1,-.75,-1.5,-2.25,-2.9]){const rr=R*(a>-.2?1.12:1);P.push([s*Math.cos(a)*rr,y+(i===0?.002:0),Math.sin(a)*rr]);}
+    add(lkLock(P,fr[i],fr[i]*.88,10,22,1,1));for(const [q,r] of [[P[0],fr[i]],[P[P.length-1],fr[i]*.88]])add(new THREE.SphereGeometry(r,12,8),q[0],q[1],q[2]);}
+  const TP=[[-s*.008,-.012,.045],[-s*.03,.004,.024],[-s*.036,.014,-.002],[-s*.03,.012,-.024]];
+  add(lkLock(TP,.016,.0125,10,16,1,1));add(new THREE.SphereGeometry(.0125,12,8),TP[3][0],TP[3][1],TP[3][2]);
+  gearMerge(T,inner);const skin=[inner,...inner.children];
+  const arm=new THREE.Group();root.add(arm);
+  const tube=new THREE.Mesh(lkLathe([[.044,0],[.047,.3],[.056,.75],[.062,1]],20),sl);arm.add(tube);
+  arm.add(new THREE.Mesh(lkLathe([[0,0],[.046,0],[.05,.012],[.05,.05],[.047,.062],[.044,.07],[0,.07]],22),slD));
+  arm.add(new THREE.Mesh(lkLathe([[0,-.05],[.026,-.05],[.03,-.02],[.031,0],[0,0]],16),sk));
+  arm.userData.tube=tube;
+  g.userData={inner,arm,skin,skinC,sleeveC,shoulder:new THREE.Vector3(side*.3,-.66,.12)};return g;
 }
-const _fpUp=new THREE.Vector3(0,1,0),_fpD=new THREE.Vector3();
-function fpArm(h){const u=h.userData;u.arm.visible=h.visible;if(!h.visible)return;
-  _fpD.copy(h.position).sub(u.shoulder);const len=_fpD.length();u.arm.position.copy(u.shoulder);u.arm.scale.set(1,len,1);u.arm.quaternion.setFromUnitVectors(_fpUp,_fpD.normalize());}
+const _fpUp=new THREE.Vector3(0,1,0),_fpD=new THREE.Vector3(),_fpW=new THREE.Vector3();
+function fpArm(h){const u=h.userData,A=u.arm;A.visible=h.visible;if(!h.visible)return;
+  _fpW.set(0,-.055,.055).applyEuler(h.rotation).add(h.position);   /* 손목 자리 */
+  _fpD.copy(u.shoulder).sub(_fpW);const len=_fpD.length();A.position.copy(_fpW);A.quaternion.setFromUnitVectors(_fpUp,_fpD.normalize());
+  const T=A.userData.tube;T.position.y=.06;T.scale.set(1,Math.max(.01,len-.06),1);}
 // 1인칭 열쇠 자세: [x,y,z,rx,ry,rz] (카메라 기준, 앞이 -z)
 const FP_GRIM=[[0,[-.3,-.42,-.56,.5,.3,.12]],[1,null]];   // 그리모어를 든 왼손: 책이 보이게 가슴 앞으로 올려 든다
 const FP={
@@ -24749,6 +24958,8 @@ const FP={
   bow:{R:[[0,[.3,-.42,-.5,0,0,0]],[.22,[-.1,-.12,-.68,0,0,0]],[.55,[-.07,-.12,-.44,0,0,0]],[.62,[.05,-.1,-.42,0,0,0]],[1,null]],
        L:[[0,[-.26,-.3,-.6,0,.12,.2]],[.22,[-.12,-.09,-.82,0,0,.12]],[.62,[-.12,-.09,-.82,0,0,.12]],[1,null]]},
 };
+/* 손과 팔이 화면에 잘 보이게 모든 자세를 조금 올리고 앞으로 당긴다 */
+for(const k in FP)for(const sd of ['R','L'])if(FP[k][sd])for(const kk of FP[k][sd])if(kk[1]){kk[1][1]+=.1;kk[1][2]+=.08;}
 function fpPose(keys,p){
   const idle=keys[0][1];if(p>=1)return idle;
   let a=keys[0],b=keys[keys.length-1];for(let i=0;i<keys.length-1;i++)if(p>=keys[i][0]&&p<=keys[i+1][0]){a=keys[i];b=keys[i+1];break;}
@@ -24760,11 +24971,13 @@ function makeViewModel(job){const jobReal=job;job=drawJobOf(jobReal,P?wclsOf(P.e
   const Gq=P?gearOf(P):{armor:-1};const slv=(Gq.armor>=1?pmTint('armor',Gq.armor,jobReal):pmTint('shirt',-1,jobReal,P&&P.ap)).getHex();
   let skC=new THREE.Color(0xf6dccb).multiply(new THREE.Color(P&&P.ap?SKIN_TONES[P.ap.k|0]??0xffffff:0xffffff)).getHex();   // 피부: 고른 피부색
   /* 막대 인형 몸(OLD_LOOK)이면 3인칭에서 보이는 팔·손 색을 그대로 쓴다 (셔츠·갑옷 색을 쓰면 초록 셔츠 직업은 1인칭 팔만 초록이 된다) */
-  let slvC=slv;if(OLD_LOOK&&player&&player.userData.stick){const A=player.userData.stick.AL,seg=A.el.children.find(o=>o.isMesh&&o.geometry.type==='CylinderGeometry'),hb=A.hand.children.find(o=>o.isMesh);
+  let slvC=slv;if(OLD_LOOK&&player&&player.userData.look){skC=player.userData.look.skin;slvC=player.userData.look.sleeve;}
+  else if(OLD_LOOK&&player&&player.userData.stick){const A=player.userData.stick.AL,seg=A.el.children.find(o=>o.isMesh&&o.geometry.type==='CylinderGeometry'),hb=A.hand.children.find(o=>o.isMesh);
     if(seg)slvC=seg.material.color.getHex();if(hb)skC=hb.material.color.getHex();}
   const R=fpHand(1,root,skC,slvC),L=fpHand(-1,root,skC,slvC);root.add(R,L);L.visible=false;
   const u={style,R,L,arrow:null,orb:null};
-  if(style==='fist'){L.visible=true;if((G.sub??-1)>=0&&J.sub==='shield'){u.hasL=true;u.shieldL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
+  if(style==='fist'){L.visible=true;R.userData.inner.rotation.set(0,-.5,1.45);L.userData.inner.rotation.set(0,.5,-1.45);   /* 맨손: 손등과 주먹 마디가 보이게 */
+    if((G.sub??-1)>=0&&J.sub==='shield'){u.hasL=true;u.shieldL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
   else if(style==='sword'){const w=stickWeapon(style,job,G.weapon);w.rotation.set(-.5,0,-.12);w.scale.setScalar(job==='barbarian'||job==='fowler'?.6:.85);if(job==='barbarian'||job==='fowler')w.position.y=-.08;R.add(w);
     if((G.sub??-1)>=0){L.visible=true;u.hasL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
   else if(style==='shield'){R.visible=false;u.noR=true;L.visible=true;const kd=jobReal==='shielder'?shdHandKind():'tower';const sg=new THREE.Group();if(jobReal==='shielder')u.hasL=true;if(kd){u.hasL=true;const tt=jobReal!=='shielder'?G.weapon:kd==='parma'?(G.shs?G.weapon:G.sub):(G.shs?G.sub:G.weapon);const sh=makeShield(kd,tt);mountShield(sh,kd,kd==='parma'?.9:.82,Math.PI+.35);sg.add(sh);}R.add(sg);u.shieldG=sg;u.swapLR=true;}   // 1인칭: 방패는 오른쪽 (왼손 동작을 좌우로 뒤집어 오른손에 준다)
@@ -25826,11 +26039,14 @@ function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
   sw('머리색',HAIR_COLORS,'h');sw('눈색',EYE_COLORS,'e');
   {const w=row('피부','c');const base=new THREE.Color(0xf4d2bc);SKIN_TONES.forEach((c,i)=>{const b=document.createElement('button');b.type='button';b.className='swc';b.style.background='#'+base.clone().multiply(new THREE.Color(c)).getHexString();b.setAttribute('aria-pressed',(ap.k|0)===i);b.setAttribute('aria-label','피부');
     b.onclick=()=>{ap.k=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});}
+  const opt=(label,list,key,def=0)=>{const w=row(label,'t');list.forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap[key]??def)===i);
+    b.onclick=()=>{ap[key]=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});};
+  opt('눈',EYE_SHAPES,'y');opt('눈썹',BROWS,'w');opt('얼굴',FACE_MARKS,'f',1);if(ap.g!=='f')opt('수염',BEARDS,'d');
   grp('몸');{const w=row('키','t');['아주 작게','작게','보통','크게','아주 크게'].forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap.t??2)===i);
     b.onclick=()=>{ap.t=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});}
   {const w=row('체형','t');BUILDS.forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap.b??1)===i);
     b.onclick=()=>{ap.b=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});}
-  grp('옷');sw('윗옷',SHIRT_COLORS,'c');sw('바지',PANTS_COLORS,'p');}
+  grp('옷');opt('윗옷',TOPS,'u');sw('윗옷 색',SHIRT_COLORS,'c');opt('아래',BOTTOMS,'l');sw('아래 색',PANTS_COLORS,'p');opt('신발',SHOES,'o');}
 // 미리보기 자세: 무기 없이 팔을 편하게 내리고 손도 편다
 function apRelaxPose(m,dt){const u=m.userData;u.relax=1;animStick(m,0,tAll,1,false,false,null);const S=u.stick;
   if(S){S.AR.sh.rotation.set(-.04,0,.1);S.AR.el.rotation.x=-.2;S.AL.sh.rotation.set(-.04,0,-.1);S.AL.el.rotation.x=-.2;S.AR.hand.rotation.x=0;S.AL.hand.rotation.x=0;S.upper.rotation.set(0,0,0);}
@@ -28267,7 +28483,7 @@ function updateOthers(dt){
 var roomStatus='연결 중…',presErr='',pageViewers=0;
 function setRoomStatus(t){roomStatus=t;renderOnline();}
 // 자체 서버(WebSocket)용 연결: claude room과 같은 모양으로 감싼다
-const SERVER_VER=37;let srvVer=null,monsGot=0;
+const SERVER_VER=38;let srvVer=null,monsGot=0;
 function makeWsRoom(){
   const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
   let ws=null,myId=null,ok=false,retry=1000;const peers=new Map(),peerFns=[],topicFns={},connFns=[];const mine={};
