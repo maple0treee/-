@@ -20012,19 +20012,36 @@ function isleAtQ(x,z){const S=64,ci=Math.floor(x/S),cj=Math.floor(z/S),k=(ci+327
 /* ---------- 허칠 바깥 맵 짓기 (2026-11-07 원호: "허칠 맵 하나하나가 나눠져 있었으면 좋겠어. 맵이 너무 커") ----------
    산장·숲길·호숫가·눈 비탈·바위밭·능선·꼭대기가 저마다 따로 떨어진 작은 땅이다. 걷는 길 사슬(OR.HCH.OM) 둘레를 눈 덮인 벼랑과 전나무 숲이
    높이 막아 다른 사냥터가 보이지 않는다 (능선·꼭대기는 둘레가 안개 속 낭떠러지). 길 끝마다 문(OR.HCH.GATES)이 서 있고, 지나가면 이웃 맵으로 넘어간다 */
+/* 허칠 호숫가 얼음 호수 (2026-11-07 원호: "얼음호수의 퀄리티를 훨씬 올려줘. 더 얼음호수같게. 물인 부분도 추가해줘")
+   물가 모양, 샘이 솟아 한겨울에도 얼지 않는 물웅덩이 둘, 호수 바닥 깊이. 좌표는 호수 가운데 기준 */
+const HLAKE=(()=>{const sm=OR.smooth;
+  const R=(L,a)=>L.r+2.2*Math.sin(3*a+.7)+1.4*Math.sin(5*a+2.1)+.7*Math.sin(9*a+1.3);
+  const OPEN=[{x:4,z:-3,r:6,s:1.3},{x:-8.5,z:7,r:2.4,s:4.1}];
+  const openR=(O,a)=>O.r*(1+.16*Math.sin(3*a+O.s)+.09*Math.sin(5*a+2*O.s)+.05*Math.sin(8*a+3*O.s));
+  /* 웅덩이 가장자리까지 거리 (안쪽은 -) */
+  const openD=(x,z)=>{let m=1e9;for(const O of OPEN){const dx=x-O.x,dz=z-O.z,d=Math.hypot(dx,dz);if(d>O.r*1.5+12)continue;m=Math.min(m,d-openR(O,Math.atan2(dz,dx)));}return m;};
+  /* 바닥 깊이 (물가에서 i m 들어간 곳): 물가는 완만한 턱, 가운데는 3~4m */
+  const dep=(x,z,i)=>.5*sm(0,4,i)+3.4*sm(2,14,i)*(.8+.4*HECH.fbm(x*.07+7,z*.07,2));
+  return {R,OPEN,openR,openD,dep,ICE_T:.06,WAT:-.12,WADE:1.15,   /* 얼음 윗면·물 높이(호수 높이 기준), 물에서 가장 깊이 잠기는 깊이 */
+    /* 호수 위 어디인지: k 0 = 아님, 1 = 얼음, 2 = 물 (w = 잠긴 정도 0~1) */
+    at(L,x,z){const d=Math.hypot(x,z);if(d>L.r+6)return {k:0,w:0};const r=R(L,Math.atan2(z,x));if(d>r+.6)return {k:0,w:0};const o=d<r?openD(x,z):1;return o>0?{k:1,w:0}:{k:2,w:sm(0,2.6,-o)};}};})();
 const HMAP=(()=>{const C=OR.HCH,sm=OR.smooth,Y0={};let acc=0;for(const z of ['hechil','hwood','hlake','hpeak','hscree','hridge','htop']){Y0[z]=acc;acc+=C.OM[z].rise;}
   const lerp=(a,b,k)=>a+(b-a)*k;
   const baseAt=(M,lx,lz)=>Y0[M.id]+M.rise*C.omT(M,lx,lz);
   /* 땅 높이 (맵 가운데 기준) */
-  const h=(M,lx,lz)=>{const q=C.omNear(M,lx,lz),t=C.omT(M,lx,lz),e=q.d-q.w;let b=Y0[M.id]+M.rise*t+(HECH.fbm(lx*.04+7,lz*.04,3)-.5)*1.6;
-    if(M.lake){const d=Math.hypot(lx-M.lake.x,lz-M.lake.z);b=lerp(baseAt(M,M.lake.x,M.lake.z)-.5,b,sm(M.lake.r+1,M.lake.r+8,d));}
+  /* bed가 참이면 호수 바닥(땅 모양), 아니면 걷는 높이 (얼음 위, 얼지 않은 물에선 비탈처럼 가슴께까지 잠긴다) */
+  const lakeY=M=>baseAt(M,M.lake.x,M.lake.z)-.5;
+  const h=(M,lx,lz,bed)=>{const q=C.omNear(M,lx,lz),t=C.omT(M,lx,lz),e=q.d-q.w;let b=Y0[M.id]+M.rise*t+(HECH.fbm(lx*.04+7,lz*.04,3)-.5)*1.6;
+    if(M.lake){const L=M.lake,dx=lx-L.x,dz=lz-L.z,d=Math.hypot(dx,dz);if(d<L.r+14){const Y=lakeY(M),r=HLAKE.R(L,Math.atan2(dz,dx));b=lerp(Y,b,sm(r+.5,r+7,d));
+      if(d<r){const B=Y-HLAKE.dep(dx,dz,r-d);if(bed)return B;const o=HLAKE.openD(dx,dz);return o>0?Y+HLAKE.ICE_T:Math.max(B,Y+HLAKE.WAT-HLAKE.WADE*sm(0,2.6,-o));}
+      if(!bed&&d<r+.6)return Math.max(b,Y+HLAKE.ICE_T);}}
     if(M.hut){const d=Math.hypot(lx-M.hut.x,lz-M.hut.z);b=lerp(baseAt(M,M.hut.x,M.hut.z),b,sm(M.hut.r-6,M.hut.r,d));}
     const endK=M.up?1:0;   /* 능선·꼭대기: 둘레가 다 낭떠러지 (끝의 문 너머는 안개가 가린다) */
     if(e<=0)return b+.5*sm(-5,0,e)*endK;
     const rg=HECH.ridged(lx*.03+M.rise,lz*.03,3),up=Math.min(.5+e*1.25+e*e*.05+rg*e*.45,85+rg*25);
     if(endK>=1)return b+up;
     const dn=Math.max(-(e*1.6+e*e*.07)*(.8+rg*.4),-140);return b+dn+(up-dn)*endK;};
-  return {Y0,h,roots:{},firs:{},fx:null,hut:null};})();
+  return {Y0,h,lakeY,roots:{},firs:{},fx:null,hut:null};})();
 function isleHeight(x,z){
   const I=isleAtQ(x,z),d=Math.hypot(x-I.x,z-I.z),R=I.R,ed=Math.hypot(x-I.entry.x,z-I.entry.z);
   {const M=OR.HCH.OM[I.id];if(M)return HMAP.h(M,x-I.x,z-I.z);if(OR.HCH.fam(I.id)==='cave')return HCAVE.fl(x-I.x,z-I.z);}   /* 허칠 맵들은 같은 산·같은 굴 땅 좌표 */
@@ -20609,7 +20626,7 @@ await BOOT.y();await (async function buildHMaps(){
     x.textAlign='center';x.textBaseline='middle';lines.forEach((L,i)=>{x.font=`${L.b?700:500} ${L.s}px "KMUSunggokSerif","Gowun Batang",serif`;x.fillStyle='rgba(255,230,190,.22)';x.fillText(L.t,w/2+1.5,L.y*h+2);x.fillStyle='#24160a';x.fillText(L.t,w/2,L.y*h);});
     const t=new THREE.CanvasTexture(cv);t.anisotropy=4;return t;};
   HECH.signTex=signTex;
-  const SNOW=new THREE.Color(0xf3f6fa),SNOW2=new THREE.Color(0xdfe7ef),ROCK=new THREE.Color(0x45474d),ROCK2=new THREE.Color(0x67686d),TRAIL=new THREE.Color(0xcbc5bb),tmp=new THREE.Color();
+  const SNOW=new THREE.Color(0xf3f6fa),SNOW2=new THREE.Color(0xdfe7ef),ROCK=new THREE.Color(0x45474d),ROCK2=new THREE.Color(0x67686d),TRAIL=new THREE.Color(0xcbc5bb),tmp=new THREE.Color(),tmp2=new THREE.Color();
   const FH=[0,1,2].map(v=>NAT.fir(v)),FL=[0,1,2].map(v=>NAT.lo(()=>NAT.fir(v))),bark=NAT.bark(0x4a3626),leaf=NAT.sleaf();
   const DENS={hechil:.85,hwood:1.25,hlake:.9,hpeak:.45,hscree:.18,hridge:0,htop:0};
   for(const z of ['hechil','hwood','hlake','hpeak','hscree','hridge','htop']){const M=C.OM[z],I=OR.ISLES[z],cx=I.x,cz=I.z,col0=colliders.length,hAt=(lx,lz)=>HM.h(M,lx,lz);
@@ -20621,12 +20638,14 @@ await BOOT.y();await (async function buildHMaps(){
     let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;for(const Ch of M.C)for(const p of Ch){x0=Math.min(x0,p.x-p.w);x1=Math.max(x1,p.x+p.w);z0=Math.min(z0,p.z-p.w);z1=Math.max(z1,p.z+p.w);}
     const mg=M.up?62:84;x0-=mg;x1+=mg;z0-=mg;z1+=mg;
     const ground=function*(){const st=2,nx=Math.ceil((x1-x0)/st),nz=Math.ceil((z1-z0)/st),g=new THREE.PlaneGeometry(nx*st,nz*st,nx,nz);g.rotateX(-Math.PI/2);g.translate((x0+x1)/2,0,(z0+z1)/2);
-      const P=g.attributes.position;for(let i=0;i<P.count;i++){if((i&2047)===2047)yield;const lx=P.getX(i),lz=P.getZ(i);P.setY(i,hAt(lx,lz));}
+      const P=g.attributes.position;for(let i=0;i<P.count;i++){if((i&2047)===2047)yield;const lx=P.getX(i),lz=P.getZ(i);P.setY(i,HM.h(M,lx,lz,1));}   /* 호수는 바닥 높이 */
       g.computeVertexNormals();const N=g.attributes.normal,cl=new Float32Array(P.count*3);
       for(let i=0;i<P.count;i++){if((i&2047)===2047)yield;const lx=P.getX(i),lz=P.getZ(i),ny=N.getY(i),sl=Math.sqrt(Math.max(0,1-ny*ny))/Math.max(.05,ny),q=C.omNear(M,lx,lz),e=q.d-q.w;
         tmp.copy(SNOW).lerp(SNOW2,HECH.fbm(lx*.07,lz*.07,2)*.8);tmp.lerp(ROCK2,sm(.75,1.35,sl)*.8);tmp.lerp(ROCK,sm(1.3,2.4,sl)*.85*HECH.vn(lx*.15,lz*.15));
         if(z==='hscree'&&e<0)tmp.lerp(ROCK2,sm(.45,.7,HECH.fbm(lx*.09+3,lz*.09,3))*.55);
         if(e<0&&q.k===0||(e<0&&M.C.length>1))tmp.lerp(TRAIL,(1-sm(1.2,3,q.d))*.6);
+        if(M.lake){const L=M.lake,dx=lx-L.x,dz=lz-L.z,d=Math.hypot(dx,dz);if(d<L.r+5){const r=HLAKE.R(L,Math.atan2(dz,dx));if(d<r){   /* 호수 바닥: 얼음·물 밑으로 비치는 잿빛 진흙과 자갈, 깊을수록 어둡다 */
+          const dp=HM.lakeY(M)-P.getY(i);c4.setRGB(.43,.42,.36).lerp(tmp2.setRGB(.54,.52,.46),HECH.fbm(lx*.21,lz*.21,2));c4.multiplyScalar(1-.55*sm(.5,3.5,dp));tmp.lerp(c4,1-sm(r-3,r-1.8,d));}}}
         cl[i*3]=tmp.r;cl[i*3+1]=tmp.g;cl[i*3+2]=tmp.b;}
       g.setAttribute('color',new THREE.BufferAttribute(cl,3));
       g.translate(cx,0,cz);return g;};
@@ -20651,10 +20670,84 @@ await BOOT.y();await (async function buildHMaps(){
       if(z==='hpeak')along(50,-4,1,.5,1.6,true);
       if(!M.up)along(110,-2.5,1.5,.5,1.8,true);
       R.forEach((L,v)=>inst(NAT.rock(v),NAT.sstone(z==='hscree'?0x7a7670:0x8c8780),L,0));}
-    /* ===== 호숫가: 얼어붙은 호수 ===== */
-    if(M.lake){const L=M.lake,y=HMAP.Y0[z]+M.rise*C.omT(M,L.x,L.z)-.42,sh=new THREE.Shape();for(let i=0;i<=48;i++){const a=i/48*Math.PI*2,r=L.r+2.2*Math.sin(3*a+.7)+1.4*Math.sin(5*a+2.1);i?sh.lineTo(Math.cos(a)*r,Math.sin(a)*r):sh.moveTo(Math.cos(a)*r,Math.sin(a)*r);}
-      const g=new THREE.ShapeGeometry(sh,48);g.rotateX(Math.PI/2);g.translate(cx+L.x,y,cz+L.z);const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0xa9c8d8,roughness:.12,metalness:.05,side:THREE.DoubleSide}));m.receiveShadow=true;root.add(m);
-      for(let k=0;k<8;k++){const a=rr(0,6.28),r=rr(0,L.r*.75),s=new THREE.Mesh(new THREE.CircleGeometry(rr(.8,2.2),24),new THREE.MeshStandardMaterial({color:0xeef3f8,roughness:.9,transparent:true,opacity:.7,depthWrite:false}));s.rotation.x=-Math.PI/2;s.scale.y=rr(.4,1);s.position.set(cx+L.x+Math.cos(a)*r,y+.03,cz+L.z+Math.sin(a)*r);root.add(s);}}   /* 바람에 날린 눈 */
+    /* ===== 호숫가: 얼어붙은 호수 (2026-11-07 다시 만듦) =====
+       맑고 검은 얼음(얕은 곳은 바닥 자갈이 비친다), 얼음 속 공기 방울, 얼음 속으로 내려가는 흰 금과 잔금, 바람에 쓸린 눈 줄, 물가 눈 둔덕, 하늘 비침.
+       샘이 솟는 두 곳은 한겨울에도 얼지 않은 물: 둘레는 검고 얇은 얼음, 얼음 턱(두께가 보인다), 떠 있는 얼음 조각, 물 위로 피어오르는 김 */
+    if(M.lake){for(let k=0;k<32;k++)rnd();   /* 예전 호수가 쓰던 만큼 난수를 넘겨 다른 맵 나무·바위 자리는 그대로 */
+      let _l=9157;const lr=(a,b)=>a+((_l=(_l*16807)%2147483647)/2147483647)*(b-a);const L=M.lake,HL=HLAKE,Y=HM.lakeY(M),IY=Y+HL.ICE_T,WY=Y+HL.WAT,S=2*Math.ceil(L.r+6),N=Math.round(S/.8),LX=cx+L.x,LZ=cz+L.z;
+      const g=new THREE.PlaneGeometry(S,S,N,N);g.rotateX(-Math.PI/2);const P=g.attributes.position,E=new Float32Array(P.count*3);
+      for(let i=0;i<P.count;i++){const x=P.getX(i),zz=P.getZ(i);E[i*3]=HL.R(L,Math.atan2(zz,x))+.6-Math.hypot(x,zz);E[i*3+1]=Math.min(30,HL.openD(x,zz));E[i*3+2]=Math.max(0,Y-HM.h(M,L.x+x,L.z+zz,1));}
+      {const ix=g.index.array,keep=[];for(let t=0;t<ix.length;t+=3){let ok=false;for(let k=0;k<3;k++){const v=ix[t+k];if(E[v*3]>-1.6&&E[v*3+1]>-.8)ok=true;}if(ok)keep.push(ix[t],ix[t+1],ix[t+2]);}g.setIndex(keep);}   /* 호수 밖·물웅덩이 안 칸은 버린다 */
+      g.setAttribute('aE',new THREE.BufferAttribute(E,3));g.deleteAttribute('uv');g.translate(LX,IY,LZ);g.computeBoundingSphere();
+      const U={uNT:{value:NAT.noiseTex},uExp:{value:.64}};
+      const m=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.06,metalness:0,transparent:true});
+      m.onBeforeCompile=s=>{Object.assign(s.uniforms,U,{uHor:SKY.hor,uZen:SKY.zen,uSun:SKY.sun,uGlow:SKY.glow});
+        s.vertexShader='attribute vec3 aE;varying vec3 vIW,vE;\n'+s.vertexShader.replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvIW=(modelMatrix*vec4(transformed,1.)).xyz;vE=aE;');
+        s.fragmentShader=`uniform sampler2D uNT;uniform float uExp,uGlow;uniform vec3 uHor,uZen,uSun;varying vec3 vIW,vE;
+vec2 iH2(vec2 p){p=vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3)));return fract(sin(p)*43758.5453);}
+/* 얼음 판 사이 금: 가장 가까운 두 점까지 거리 차 (작을수록 금 위) */
+float iVor(vec2 p){vec2 n=floor(p),f=fract(p);float d1=8.,d2=8.;for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 g=vec2(float(i),float(j)),r=g+iH2(n+g)-f;float d=length(r);if(d<d1){d2=d1;d1=d;}else if(d<d2)d2=d;}return d2-d1;}
+vec3 iSky(vec3 d){vec3 c=mix(uHor,uZen,pow(smoothstep(-.02,.75,d.y),.8));float sd=max(dot(d,normalize(uSun)),0.);c+=vec3(1.,.93,.78)*pow(sd,8.)*.12*uGlow;return c*.86;}
+`+s.fragmentShader
+          .replace('#include <color_fragment>',`#include <color_fragment>
+vec3 iV=normalize(cameraPosition-vIW);float iDist=length(cameraPosition-vIW),iNear=1.-smoothstep(35.,130.,iDist);vec2 wp=vIW.xz;
+vec4 nA=texture2D(uNT,wp*.021),nB=texture2D(uNT,wp*.083+.3),nC=texture2D(uNT,wp*.37+.6);
+float eL=vE.x+(nB.r-.5)*1.8,eO=vE.y,dp=vE.z;if(eL<0.||eO<0.)discard;
+vec2 par=-iV.xz/max(iV.y,.14);   /* 얼음 속 깊이: 보는 쪽 반대로 밀려 보인다 */
+float dk=smoothstep(.4,3.6,dp);vec3 col=mix(vec3(.42,.56,.58),vec3(.035,.11,.15),dk);float al=mix(.34,.9,dk);   /* 맑은 검은 얼음: 얕으면 바닥이 비치고 깊으면 짙은 청록 */
+float milk=smoothstep(.5,.78,nA.g*.7+nB.b*.3);col=mix(col,vec3(.66,.76,.8),milk*.5);al=mix(al,.95,milk*.45);   /* 흐린 흰 얼음 얼룩 */
+float bub=0.;for(int k=0;k<3;k++){float fk=float(k)+1.;vec2 q=(wp+par*fk*.07)*(2.6+fk*.9)+fk*7.3,n=floor(q),o=iH2(n);float rb=.04+.1*o.y*o.y;bub+=(1.-smoothstep(rb*.6,rb,length(fract(q)-.25-.5*o)))*step(.62,fract(o.x*7.13))*(1.15-fk*.25);}   /* 동그란 공기 방울 (세 깊이) */
+bub*=smoothstep(.4,.66,nA.a);   /* 방울은 군데군데 무리 지어 */
+{vec4 b=texture2D(uNT,(wp+par*.22)*.42+.71);bub+=smoothstep(.95,.98,b.g*b.b*1.9)*.5*smoothstep(1.2,2.4,dp)*smoothstep(.5,.7,nB.a);}   /* 깊은 곳: 바닥에서 올라와 갇힌 납작한 방울 */
+bub*=iNear*(1.-milk*.6);
+float ck=0.;if(iDist<170.){vec2 wq=wp+(nB.rg-.5)*2.2;for(int k=0;k<3;k++){float fk=float(k);ck+=(1.-smoothstep(0.,.03+.02*fk,iVor((wq+par*fk*.06)*.1+vec2(3.1,7.7))))*(1.-fk*.3);}
+  float v2=iVor((wq+par*.03)*.3+vec2(11.,4.));ck=max(ck*.7,(1.-smoothstep(0.,.022,v2))*smoothstep(.5,.72,nB.g)*.5*iNear);}   /* 큰 판 금(얼음 속으로 내려간 흰 면) + 군데군데 잔금 */
+vec2 wr=vec2(dot(wp,vec2(.8,.6)),dot(wp,vec2(-.6,.8)));vec4 sA=texture2D(uNT,wr*vec2(.03,.08)+.17),sB=texture2D(uNT,wr*vec2(.08,.26)+.5);
+float sn=smoothstep(.58,.76,sA.g*.6+sB.r*.4)*smoothstep(.38,.62,nA.b)*(.55+.45*nC.r);sn=max(sn,smoothstep(2.4,.4,eL+(sB.b-.5)*1.4));   /* 바람에 쓸린 눈 줄 (군데군데 엷게) + 물가 눈 둔덕 */
+float thin=1.-smoothstep(.3,2.6,eO);sn*=1.-thin;col=mix(col,vec3(.02,.07,.09),thin*.65);al=mix(al,.72,thin*.6);   /* 물웅덩이 둘레: 얇고 검은 얼음 */
+float slush=1.-smoothstep(.0,.3+.3*nC.r,eO);
+col=mix(col,vec3(.97),clamp(bub,0.,1.)*.75);col=mix(col,vec3(.88,.94,1.),clamp(ck,0.,1.)*.8*(1.-sn));al=max(al,clamp(ck,0.,1.)*.8*(1.-sn));
+col=mix(col,vec3(.6,.68,.7),slush*.7);al=max(al,slush*.85);
+col=mix(col,vec3(.95,.97,1.)*(.92+.08*nC.g),sn);al=mix(al,1.,sn);
+diffuseColor.rgb=col;diffuseColor.a=al;float iceR=sn;`)
+          .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(.05+.15*milk,.85,iceR);')
+          .replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+{vec3 wn=vec3(nC.g-.5,0.,nC.a-.5)*(.05+.6*iceR);normal=normalize(normal+(viewMatrix*vec4(wn,0.)).xyz*iNear);}`)
+          .replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+{vec3 R=reflect(-iV,vec3(0.,1.,0.)+vec3(nC.g-.5,0.,nC.a-.5)*.03);R.y=max(R.y,.01);float fr=.03+.97*pow(1.-max(iV.y,0.),5.);float nf=1.-iceR;
+ totalEmissiveRadiance+=iSky(normalize(R))/uExp*fr*nf*.55;diffuseColor.rgb*=1.-fr*.4*nf;
+ vec4 g1=texture2D(uNT,wp*7.3+cameraPosition.xz*.004),g2=texture2D(uNT,wp.yx*9.1-cameraPosition.xz*.003);totalEmissiveRadiance+=vec3(.95,.97,1.)*smoothstep(.965,.995,g1.a*g2.r*1.9)*iceR*(1.-smoothstep(10.,45.,iDist))*.55;}`);};   /* 맑은 얼음엔 하늘이 비치고, 눈은 반짝인다 */
+      m.customProgramCacheKey=()=>'hechil-ice2';
+      const ice=new THREE.Mesh(g,m);ice.receiveShadow=true;ice.renderOrder=1;root.add(ice);
+      const LF={U,water:[],mist:[],chunks:null,L,LX,LZ,Y,zone:z};HM.lake=LF;
+      /* 얼지 않은 물: 바다 물감(얕으면 맑고 깊으면 짙은 물빛, 하늘 비침), 물결은 잔잔하게 */
+      const wm=seaMat({deep:0x061c25,shal:0x24525c,riv:0x0a2a35,wave:.22,depK:1}),bedW=(x,zz)=>HM.h(M,x-cx,zz-cz,1);
+      for(const O of HL.OPEN){const K=48,R0=O.r*1.5+1,ox=LX+O.x,oz=LZ+O.z,pos=[ox,WY,oz],idx=[];
+        for(const k of [.35,.7,1])for(let i=0;i<K;i++){const a=i/K*Math.PI*2,r=k===1?HL.openR(O,a)+.5:HL.openR(O,a)*k;pos.push(ox+Math.cos(a)*r,WY,oz+Math.sin(a)*r);}
+        for(let i=0;i<K;i++){const j=(i+1)%K;idx.push(0,1+j,1+i);for(let ring=0;ring<2;ring++){const a=1+ring*K,b=a+K;idx.push(a+i,a+j,b+i,a+j,b+j,b+i);}}
+        const wg=new THREE.BufferGeometry();wg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));wg.setIndex(idx);wg.computeVertexNormals();
+        const w=new THREE.Mesh(wg,wm);w.renderOrder=2;w.receiveShadow=true;root.add(w);
+        seaAdd(w,wm,seaBake(ox-R0,oz-R0,R0*2,64,WY,bedW,()=>true,()=>0));
+        /* 얼음 턱: 물가 둘레로 얼음 두께가 보인다 (위는 얼음 윗면, 아래는 물속으로) */
+        const sp=[],si=[];for(let i=0;i<=K;i++){const a=i/K*Math.PI*2,r=HL.openR(O,a),x=ox+Math.cos(a)*r,zz=oz+Math.sin(a)*r;sp.push(x,IY,zz,x,WY-.32,zz);if(i<K){const b=i*2;si.push(b,b+1,b+2,b+1,b+3,b+2);}}
+        const sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));sg.setIndex(si);sg.computeVertexNormals();
+        root.add(new THREE.Mesh(sg,new THREE.MeshStandardMaterial({color:0xa9cfd8,emissive:0x1d3a44,roughness:.12,transparent:true,opacity:.82,side:THREE.DoubleSide})));}
+      /* 떠 있는 얼음 조각: 깨진 판이 큰 웅덩이에 몇 개 (사람이 헤치고 가면 밀려난다) */
+      {const O=HL.OPEN[0],cg=new THREE.CylinderGeometry(1,1,1,7,1);{const p=cg.attributes.position;for(let i=0;i<p.count;i++){const a=Math.atan2(p.getZ(i),p.getX(i)),k=1+.22*Math.sin(a*3+1.7)+.12*Math.sin(a*5);p.setX(i,p.getX(i)*k);p.setZ(i,p.getZ(i)*k);}cg.computeVertexNormals();}
+        const n=6,ch=new THREE.InstancedMesh(cg,new THREE.MeshStandardMaterial({color:0xc4dbe2,roughness:.3,emissive:0x10262e}),n),Q=[];
+        for(let i=0;i<n;i++){const a=lr(0,6.28),r=HL.openR(O,a)*lr(.2,.7),s=lr(.35,1);Q.push({x:LX+O.x+Math.cos(a)*r,z:LZ+O.z+Math.sin(a)*r,s,sx:s*lr(.8,1.4),sz:s*lr(.7,1.1),ry:lr(0,6.28),ph:lr(0,6.28),ox:0,oz:0});}
+        ch.receiveShadow=true;root.add(ch);LF.chunks={m:ch,L:Q,y:WY,t:1};}
+      /* 물 위로 피어오르는 김 (찬 공기에 닿은 샘물) */
+      {const tex=edgeMistTex();for(const O of HL.OPEN)for(let i=0;i<Math.max(2,Math.round(O.r*.9));i++){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xf2f6f8,transparent:true,opacity:0,depthWrite:false,fog:true}));
+        sp.userData={O,a:lr(0,6.28),r:lr(0,.75),age:lr(0,7),life:lr(6,9),s:lr(2.2,3.6)*O.r/6+.8};root.add(sp);LF.mist.push(sp);}}
+      /* 물가: 얼음 위로 비죽 나온 눈 쌓인 돌, 얼음에 갇힌 마른 갈대 */
+      {const st=[];for(let i=0;i<22;i++){const a=lr(0,6.28),r=HL.R(L,a)+lr(-1,2),x=L.x+Math.cos(a)*r,zz=L.z+Math.sin(a)*r,s=lr(.35,1);st.push({x,z:zz,y:Math.max(hAt(x,zz)-.15,IY-.1),s,sx:s*lr(1,1.5),sy:s*lr(.5,.8),sz:s,ry:lr(0,6.28)});}
+        inst(NAT.rock(1),NAT.sstone(0x7e7a76),st,-.2);}
+      {const rg=new THREE.ConeGeometry(.018,1,3,1);rg.translate(0,.5,0);const R=[];
+        for(let c=0;c<12;c++){const a=lr(0,6.28),r=HL.R(L,a)-lr(.5,2.4),bx=Math.cos(a)*r,bz=Math.sin(a)*r;if(HL.openD(bx,bz)<2.5)continue;for(let k=0;k<lr(8,18);k++){const q=lr(0,6.28),d=lr(0,1);R.push({x:L.x+bx+Math.cos(q)*d,z:L.z+bz+Math.sin(q)*d,h:lr(.5,1.25),rx:lr(-.25,.25),rz:lr(-.25,.25),ry:lr(0,6.28)});}}
+        const rm=new THREE.InstancedMesh(rg,new THREE.MeshStandardMaterial({color:0xffffff,roughness:.9}),R.length);
+        R.forEach((t,i)=>{e4.set(t.rx,t.ry,t.rz);q4.setFromEuler(e4);s4.set(1,t.h,1);v4.set(cx+t.x,IY-.02,cz+t.z);M4.compose(v4,q4,s4);rm.setMatrixAt(i,M4);c4.setHSL(.1+lr(-.02,.02),.35,.48+lr(-.08,.08));rm.setColorAt(i,c4);});
+        rm.instanceColor.needsUpdate=true;rm.castShadow=true;root.add(rm);}}
     /* ===== 산장 ===== */
     if(M.hut){const mat=_mat,T0=null;
         /* ===== 산장: 통나무 벽, 눈이 두껍게 얹힌 지붕, 고드름, 돌 굴뚝(연기), 따뜻한 창, 장작더미, 문 옆 등불 ===== */
@@ -20771,9 +20864,33 @@ function hchPortalsAll(){const C=OR.HCH,HM=HMAP;
     mk(IA,g.a,g.A,g.a+'_to_'+g.b,hchRo(ZONES[g.b].name)+' 가기',g.b,g.B);
     mk(IB,g.b,g.B,g.b+'_to_'+g.a,hchRo(ZONES[g.a].name)+' 가기',g.a,g.A);}
 }
+/* 얼음 호수 (호숫가 맵에 있을 때만): 김·떠 있는 얼음을 움직이고, 얼음 위인지 물속인지 재고, 물에 들어가면 물보라 */
+const e4h=new THREE.Euler(),q4h=new THREE.Quaternion(),s4h=new THREE.Vector3(),v4h=new THREE.Vector3(),M4h=new THREE.Matrix4();
+function hchLakeTick(t,dt){const LF=HMAP.lake,HL=HLAKE,L=LF.L,pl=player.position,lx=pl.x-LF.LX,lz=pl.z-LF.LZ;LF.U.uExp.value=renderer.toneMappingExposure;
+  const near=Math.hypot(lx,lz)<L.r+70;if(LF.near!==near){LF.near=near;for(const sp of LF.mist)sp.visible=near;}   /* 멀면 김은 그리지 않는다 */
+  const q=near?HL.at(L,lx,lz):{k:0,w:0},inW=q.k===2&&pl.y<LF.Y+HL.WAT+.05;LF.wet=inW?q.w:0;LF.onIce=q.k===1&&jumpY<.05;
+  if(!near)return;
+  const wind=HECH.wind||{x:1,z:0};
+  for(const sp of LF.mist){const u=sp.userData;u.age+=dt;if(u.age>u.life){u.age=0;u.a=Math.random()*6.28;u.r=Math.random()*.75;}const k=u.age/u.life,O=u.O,r=HL.openR(O,u.a)*u.r;
+    sp.position.set(LF.LX+O.x+Math.cos(u.a)*r+wind.x*k*1.4,LF.Y+.25+k*2.4,LF.LZ+O.z+Math.sin(u.a)*r+wind.z*k*1.4);sp.scale.set(u.s*(1+k*.8),u.s*.45*(1+k*.5),1);sp.material.opacity=.2*Math.sin(Math.PI*k)*OR.smooth(2.5,9,camera.position.distanceTo(sp.position));}   /* 눈앞의 김은 엷게 (화면에 흰 얼룩이 생기지 않게) */
+  {const C=LF.chunks;C.t+=dt;if(C.t>.1||inW){const dd=C.t;C.t=0;const O=HL.OPEN[0];
+    C.L.forEach((c,i)=>{let x=c.x+c.ox+Math.sin(t*.08+c.ph)*.25,z=c.z+c.oz+Math.cos(t*.07+c.ph)*.25;
+      if(inW){const dx=x-pl.x,dz=z-pl.z,d=Math.hypot(dx,dz),R=c.s*1.1+.5;if(d<R){const k=(R-d)/(d||1)*Math.min(1,dd*6);c.ox+=dx*k;c.oz+=dz*k;}   /* 사람이 헤치고 가면 얼음 조각이 밀려난다 */
+        const ax=c.x+c.ox-LF.LX-O.x,az=c.z+c.oz-LF.LZ-O.z,ad=Math.hypot(ax,az),lim=HL.openR(O,Math.atan2(az,ax))-c.s*1.2;if(ad>lim&&ad>0){c.ox-=ax*(1-lim/ad);c.oz-=az*(1-lim/ad);}}
+      e4h.set(Math.sin(t*.7+c.ph)*.03,c.ry+Math.sin(t*.05+c.ph)*.2,Math.cos(t*.6+c.ph)*.03);q4h.setFromEuler(e4h);s4h.set(c.sx,.14,c.sz);v4h.set(x,C.y+.02+Math.sin(t*.9+c.ph)*.015,z);M4h.compose(v4h,q4h,s4h);C.m.setMatrixAt(i,M4h);});C.m.instanceMatrix.needsUpdate=true;}}
+  /* 사람: 물에 들어가는 순간·물속을 걸을 때 물보라와 첨벙 소리 */
+  if(inW){const wy=LF.Y+HL.WAT;LF.st=(LF.st||0)-dt;const sp=Math.hypot(pvel.x,pvel.z);
+    if(!LF.was||sp>1.5&&LF.st<=0){const big=!LF.was;LF.st=.32;VFX.burst(new THREE.Vector3(pl.x,wy+.05,pl.z),0xd6eef4,big?22:7,big?4.2:2.2,big?.7:.45,{up:1.1,grav:9,mix:0xffffff,glow:false,plain:true});hchSplash(big?1:.35);}}
+  LF.was=inW;}
+/* 물 첨벙 소리 (거른 잡음) */
+function hchSplash(v){try{const X=SFX.ctx;if(!X||!SFX.master||SFX.vol<=0)return;const t=X.currentTime,len=Math.floor(X.sampleRate*.5),b=X.createBuffer(1,len,X.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<len;i++){const k=i/len;d[i]=(Math.random()*2-1)*Math.pow(1-k,3)*(k<.02?k/.02:1)*(.7+.3*Math.sin(k*90+Math.sin(k*13)*4));}
+  const s=X.createBufferSource();s.buffer=b;s.playbackRate.value=.9+Math.random()*.25;const f=X.createBiquadFilter();f.type='bandpass';f.frequency.setValueAtTime(1300,t);f.frequency.exponentialRampToValueAtTime(520,t+.45);f.Q.value=.7;
+  const g=X.createGain();g.gain.value=.55*v;s.connect(f);f.connect(g);g.connect(SFX.master);s.start(t);}catch(e){}}
 /* 허칠 바깥 맵 매 프레임: 지금 맵만 보이기, 눈 내림, 굴뚝 연기, 밤 창불 */
 function hechTick(t,dt){const p=player.position,at=p.x>=800?OR.isleAt(p.x,p.z):null,z=at&&OR.HCH.OM[at.id]?at.id:null,HM=HMAP;
   for(const k in HM.roots){const r=HM.roots[k],on=k===z;if(r.visible!==on)r.visible=on;}
+  if(HM.lake){if(z===HM.lake.zone)hchLakeTick(t,dt);else HM.lake.wet=0,HM.lake.onIce=false,HM.lake.was=false;}
   if(HM.fx&&HM.fx.visible!==!!z)HM.fx.visible=!!z;if(!z)return;hchVeilTick(t);
   const c=camera.position,wx=Math.sin(t*.07)*1.2+2.2,wz=Math.cos(t*.05)*.6-.4;HECH.wind={x:wx,z:wz,alt:Math.max(0,c.y-HMAP.Y0.hechil)};
   {const gs=1+(z==='hridge'||z==='htop'?.8:0)+HECH.wind.alt*.004,gu=1+.9*Math.max(0,Math.sin(t*.23)*Math.sin(t*.61+1.3))+.25*Math.sin(t*1.7)*Math.sin(t*.37),R=Math.random;   /* 돌풍: 가끔 세졌다 잦아든다 */
@@ -24444,7 +24561,7 @@ function hechZoneImg(z){const K=hechZoneImg.K||(hechZoneImg.K={});if(K[z])return
     if(M){const q=C.omNear(M,lx,lz),e=q.d-q.w;
       if(e<=0){r=240+n;g=238+n;bb=230+n;a=255;if(q.d<1.6&&q.k===0){r=196;g=150;bb=118;}}   /* 눈길, 가운데 산길 */
       else{const k=OR.smooth(0,14,e);r=236-(236-150)*Math.min(1,k*1.4)+n;g=226-(226-138)*Math.min(1,k*1.4)+n;bb=200-(200-118)*Math.min(1,k*1.4)+n;a=255*(1-OR.smooth(8,16,e));if(!M.up){r-=30*k;g-=30*k;bb-=24*k;}}
-      if(M.lake&&Math.hypot(lx-M.lake.x,lz-M.lake.z)<M.lake.r){r=163;g=192;bb=204;}}
+      if(M.lake){const dx=lx-M.lake.x,dz=lz-M.lake.z;if(Math.hypot(dx,dz)<HLAKE.R(M.lake,Math.atan2(dz,dx))){r=163;g=192;bb=204;if(HLAKE.openD(dx,dz)<0){r=92;g=132;bb=150;}}}}   /* 얼지 않은 물은 짙게 */
     else{const q=C.near(C.T,lx,lz),e=q.d-q.w,A=C.areaOf(z),inS=q.s>=A.s[0]-.5&&q.s<=(A.s[1]||C.TL)+.5;
       if(e<=0&&inS){r=128+n;g=122+n;bb=112+n;a=255;}else{const k=OR.smooth(0,8,e);r=70+n;g=62+n;bb=54+n;a=inS?255*(1-k):0;}}
     im.data[o]=r;im.data[o+1]=g;im.data[o+2]=bb;im.data[o+3]=a;}
@@ -24453,7 +24570,7 @@ function hechZoneImg(z){const K=hechZoneImg.K||(hechZoneImg.K={});if(K[z])return
     c.strokeStyle='rgba(70,50,32,.55)';c.lineWidth=.8;c.beginPath();for(const Ch of M.C){const Lc=Ch[Ch.length-1].s;for(let s=0;s<=Lc;s+=2.4){const p=C.cAt(Ch,s);for(const sd of [-1,1]){const lat=sd*(p.w+1.2),x=p.x-p.uz*lat,zz=p.z+p.ux*lat,q=C.omNear(M,x,zz);if(q.d-q.w<.5)continue;const L2=3.5+movRnd(s*3+sd)*3;c.moveTo(X(x),Y(zz));c.lineTo(X(x-p.uz*sd*L2),Y(zz+p.ux*sd*L2));}}}c.stroke();
     /* 전나무 (실제 나무 자리) */
     const F=HMAP.firs&&HMAP.firs[z];if(F){c.lineWidth=.7;for(const t of F){const x=X(t.x),y=Y(t.z),s=1.5*t.s;if(x<0||y<0||x>W||y>H)continue;c.fillStyle='rgba(84,112,82,.8)';c.strokeStyle='rgba(52,62,40,.8)';c.beginPath();c.moveTo(x,y-s*1.6);c.lineTo(x+s*.75,y+s*.3);c.lineTo(x-s*.75,y+s*.3);c.closePath();c.fill();c.stroke();}}
-    if(M.lake){c.strokeStyle='rgba(60,84,96,.85)';c.lineWidth=1.2;c.beginPath();c.arc(X(M.lake.x),Y(M.lake.z),M.lake.r*ppm,0,7);c.stroke();}
+    if(M.lake){const L=M.lake;c.strokeStyle='rgba(60,84,96,.85)';c.lineWidth=1.2;c.beginPath();for(let i=0;i<=72;i++){const a=i/72*Math.PI*2,r=HLAKE.R(L,a);const x=X(L.x+Math.cos(a)*r),y=Y(L.z+Math.sin(a)*r);i?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();}
     if(M.hut){c.save();c.translate(X(M.hut.x),Y(M.hut.z));c.rotate(-M.hut.ry);c.fillStyle='#8a5a36';c.strokeStyle='#3b2a18';c.lineWidth=1.2;c.beginPath();c.rect(-4.5,-3.5,9,7);c.fill();c.stroke();c.beginPath();c.moveTo(-4.5,0);c.lineTo(4.5,0);c.stroke();c.restore();}
     if(M.cairn){const x=X(M.cairn.x),y=Y(M.cairn.z);c.strokeStyle='#3b2a18';c.lineWidth=1.6;c.beginPath();c.moveTo(x-4,y);c.lineTo(x+4,y);c.moveTo(x,y-4);c.lineTo(x,y+4);c.stroke();}}
   /* 문: 길을 가로지른 붉은 막대 */
@@ -27450,7 +27567,8 @@ function updatePlayer(dt){
     const gx=(floorAt(pos.x+.4,pos.z,pos.y)-floorAt(pos.x-.4,pos.z,pos.y))/.8,gz=(floorAt(pos.x,pos.z+.4,pos.y)-floorAt(pos.x,pos.z-.4,pos.y))/.8;
     const wl=Math.hypot(wx,wz);
     if(onGround&&wl>0){const up=(gx*wx+gz*wz)/wl;if(up>0){const k=up>1.1?0:1/(1+up*1.4);wx*=k;wz*=k;}else{const k=1-up*.25;wx*=k;wz*=k;}}
-    const acc=onGround?(wl>0?55:38):7;
+    let acc=onGround?(wl>0?55:38):7;
+    {const LF=HMAP.lake;if(LF){if(LF.wet>0){const k=1-.5*LF.wet;wx*=k;wz*=k;}else if(LF.onIce&&onGround)acc*=wl>0?.35:.22;}}   /* 얼지 않은 물: 잠길수록 느리다 · 얼음 위: 조금 미끄러진다 */
     const dvx=wx-pvel.x,dvz=wz-pvel.z,dl=Math.hypot(dvx,dvz),stepA=acc*dt;
     if(dl<=stepA){pvel.x=wx;pvel.z=wz;}else{pvel.x+=dvx/dl*stepA;pvel.z+=dvz/dl*stepA;}
     // 가파른 비탈에서는 미끄러진다
