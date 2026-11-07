@@ -8339,6 +8339,25 @@ function lkLock(pts,r0,r1,rad=8,tub=16,flat=1,ease=1.3){const cv=new THREE.Catmu
 /* 머리카락 한 덩이: 정수리에서 내려오는 결을 따라 머리를 감싸고, 끝은 뾰족한 다발로 갈라진다.
    얼굴 앞(az≈0)은 앞머리 길이(bang), 옆은 side, 뒤는 back 높이까지 내려온다 (y는 머리 가운데 기준, 머리 반지름 R).
    hang>0이면 턱 아래로는 머리를 따라 오므리지 않고 곧게 늘어진다. 결(N)·다발(C) 골은 꼭짓점 색으로 어둡게, 정수리 아래엔 윤기 띠 */
+/* 앞머리 다발 하나: 정수리 앞에서 이마로 흘러내려 끝이 뾰족하게 모인다. 단면은 앞이 둥글게 부푼 납작한 다발(두께 있음),
+   끝은 이마 쪽으로 살짝 말리고, sw만큼 옆으로 휘어 흐른다. blunt>0이면 끝을 일자로 자른 다발 */
+function lkBangLock(o){const R=o.R||.22,V=20,S=14,th=o.th??.009,az0=o.az,w=o.w,sw=o.sw||0,blunt=o.blunt||0;
+  const tR=Math.acos(Math.min(.999,o.yr/R)),tT=Math.acos(Math.max(-.999,Math.min(.999,o.yt/R)));
+  const pos=[],col=[],uv=[],idx=[];
+  for(let i=0;i<=V;i++){const v=i/V,th_=tR+(tT-tR)*v,st=Math.max(.35,Math.sin(th_)),ct=Math.cos(th_);
+    const az=az0+sw*Math.pow(v,1.5)+(o.wig||0)*Math.sin(v*Math.PI*1.2);
+    const hw=w*(blunt?(1-.25*v)*(v>.94?Math.sqrt(Math.max(0,(1-v)/.06))*.6+.4:1):Math.pow(Math.max(0,1-Math.pow(v,1.35)),.8));
+    const lift=(o.lift??.013)+.007*Math.sin(Math.PI*v)-(o.curl??.004)*Math.pow(v,3);
+    const tk=th*(blunt?1:(1-.75*v));
+    for(let k=0;k<S;k++){const a=k/S*Math.PI*2,u=Math.cos(a),sd=Math.sin(a);
+      const off=sd>0?sd*(tk*.5+.0035*(1-u*u)):sd*tk*.5,r=R+Math.max(.0025,lift+off),azp=az+u*hw/st;
+      pos.push(r*st*Math.sin(azp),r*ct,r*st*Math.cos(azp));
+      const gl=.16*Math.exp(-Math.pow((v-.28)/.07,2))*(1-u*u),edge=Math.pow(Math.abs(u),3);
+      const sh=(o.shade??1)*(sd>0?Math.min(1.2,.86+.14*(1-u*u)-.22*edge+gl-.1*v):.5);col.push(sh,sh,sh);uv.push(k/S,v);}}
+  for(let i=0;i<V;i++)for(let k=0;k<S;k++){const k2=(k+1)%S,a=i*S+k,b=(i+1)*S+k,c=i*S+k2,d=(i+1)*S+k2;idx.push(a,b,c,b,d,c);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+  g.setIndex(idx);g.computeVertexNormals();return g;
+}
 function lkHairShell(o){const R=o.R||.22,A=o.A||128,Mr=o.M||46,N=o.N||72,C=o.C||14,vol=o.vol??.016,hangR=(o.hang||0)*R*.86,SH=o.shade??1;
   const sstep=(a,b,x)=>{const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t);};
   const pos=[],col=[],uv=[],idx=[],W=2*Mr;
@@ -8665,35 +8684,63 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
   const braid=(x,y,z,len)=>{const n=Math.round(len/.042);for(let k=0;k<n;k++){const f=1-k/n*.45,e=sph(.03*f,16,12);add(HB,e,k%2?mHair:mHairD,x+(k%2?.009:-.009)*f,y-k*.04,z-.012*Math.sin(k*.4),[.5*(k%2?1:-1),0,.55*(k%2?1:-1)]);
       HB.children[HB.children.length-1].scale.set(1,1.45,.85);}
     add(HB,new THREE.TorusGeometry(.016,.006,6,14),mHairD,x,y-n*.04+.01,z,[Math.PI/2,0,0]);add(HB,lkLock([[x,y-n*.04,z],[x+.004,y-n*.04-.04,z+.004],[x,y-n*.04-.07,z]],.02,.004,8,10,.8,1),mHair);};
+  /* 앞머리 다발들: n개를 이마 위에 겹쳐 놓는다 (뒷줄은 넓고 짧게, 앞줄은 좁게 엇갈려). y=끝 높이, span=덮는 너비(라디안),
+     sw=전체가 한쪽으로 쏠림, cur=가운데 가르마로 양옆으로 갈림, ln=한쪽이 길어짐, see=시스루(가늘고 틈) */
+  const bangs=b=>{if(helm||!b)return;let sd=(seed*7.3)%1;const rnd=()=>{sd=(sd*9301+.49297)%1;return sd;};
+    const n=b.n||7,span=b.span??1.0,yt=b.y??.08,vr=b.v??.02,wv=b.w??1;
+    for(const back of [1,0]){const m=back?n:n-1;
+      for(let i=0;i<m;i++){let t=m===1?0:(i+(back?0:.5))/(n-1)*2-1;t=Math.max(-1,Math.min(1,t));if(b.cur&&Math.abs(t)<.18&&!back)continue;
+        const az=t*span+(b.off||0),w=(b.w0||span/(n-1)*(back?1.0:.82))*wv*(b.see?.55:1)*(.85+.3*rnd());
+        let sw=(b.sw||0)+(b.cur?Math.sign(t||1)*b.cur*(1-Math.abs(t)*.4):0)+(b.mess||0)*(rnd()*2-1)+(b.conv??.1)*-t;
+        if(Math.abs(az+sw)>1.3)sw=Math.sign(az+sw)*1.3-az;   /* 옆으로 넘긴 다발도 얼굴 옆 선을 넘어 허공으로 뜨지 않게 */
+        const y=yt-(b.ln||0)*(t+1)/2-vr*rnd()+(b.edgeUp??.03)*t*t-(back?0:.008);
+        add(HB,lkBangLock({az,w,sw,yr:.205,yt:y,lift:back?.011:.015,th:b.see?.007:.012,blunt:b.blunt||0,curl:b.curl??.004,wig:b.wig?b.wig*(rnd()*2-1):0,shade:back?.86:1}),mHairS);}}};
   if(nm!=='대머리'){
-    const H0={bang:.1,side:-.1,back:-.2,vol:.016,tipF:.04,tipB:.02,C:16};const sh=o=>{const q=Object.assign({},H0,o);shell(q);   /* 겹: 안쪽 머리가 조금 더 길게, 다발 사이로 엇갈려 비친다 */
+    const H0={bang:.1,side:-.1,back:-.2,vol:.016,tipF:.04,tipB:.02,C:16};const sh=o=>{let q=Object.assign({},H0,o);if(q.bg&&!helm)q=Object.assign(q,{bang:Math.max(q.bang,(q.bg.y??.08)+.07),tipF:.015});shell(q);bangs(q.bg);   /* 겹: 안쪽 머리가 조금 더 길게, 다발 사이로 엇갈려 비친다 */
       shell(Object.assign({},q,{under:1,shade:.8,vol:q.vol*.55,bang:q.bang-.012,side:q.side-.018,back:q.back-.02,cph:(q.cph||0)+Math.PI/2,pa:null,spike:0,puff:0}));};
-    switch(nm){
-      case '짧은 머리':sh({pa:.45,});break;
-      case '스포츠 머리':sh({bang:.14,side:0,back:-.11,vol:.007,tipF:.012,tipB:.01,groove:.002,C:30,tipL:.03});break;
-      case '뾰족 머리':sh({bang:.11,side:-.09,back:-.18,vol:.02,tipF:.06,tipB:.04,C:12});if(!helm)for(let i=0;i<11;i++){const a=(i/10-.5)*3.6,el=.55+.35*Math.abs(Math.cos(i*1.7)),d=new THREE.Vector3(Math.sin(a)*Math.cos(el),Math.sin(el),Math.cos(a)*Math.cos(el)),b=d.clone().multiplyScalar(.19),q=d.clone().add(new THREE.Vector3(0,.3,-1.1)).normalize(),L=.075+.025*Math.sin(i*2.3);
-        add(HB,lkLock([[b.x,b.y,b.z],[b.x+q.x*L*.5+d.x*.03,b.y+q.y*L*.5+d.y*.03,b.z+q.z*L*.5+d.z*.03],[b.x+q.x*L+d.x*.03,b.y+q.y*L+d.y*.03,b.z+q.z*L+d.z*.03]],.07,.008,10,12,.55,1.1),i%2?mHair:mHairD);}break;
-      case '덥수룩 머리':sh({bang:.06,side:-.11,back:-.21,vol:.028,puff:.6,tipF:.05,tipB:.05,C:12});break;
-      case '단발':sh({bang:.08,side:-.12,back:-.16,vol:.02,hang:.3,tipF:.035,tipB:.03});break;
-      case '흐트러진 머리':sh({bang:.08,side:-.1,back:-.19,vol:.026,tipF:.07,tipB:.05,C:10,twist:9,puff:.5});break;
-      case '덮은 머리':sh({bang:.035,side:-.1,back:-.2,vol:.02,tipF:.03,C:18});break;
-      case '긴 머리':sh({pa:0,bang:.09,side:-.28,back:-.44,vol:.02,hang:1,drape:.15,tipB:.035,C:16});break;
-      case '묶은 긴 머리':sh({bang:.1,side:-.09,back:-.17,tipB:.012});tail(0,-.04,-.23,.42,.05);break;
-      case '옆 가르마':sh({pa:.55,bang:.12,part:1,side:-.1,back:-.2,vol:.02,tipF:.025,C:14,cph:.6});break;
-      case '꽁지머리':sh({});tail(0,-.06,-.22,.16,.032);break;
-      case '곱슬 머리':sh({bang:.11,side:-.1,back:-.2,vol:.03,puff:.5,curl:.016,groove:0,tipF:.02,tipB:.02,C:22});break;
-      case '긴 생머리':sh({pa:.12,bang:.09,side:-.3,back:-.6,vol:.018,hang:1,drape:.15,tipB:.03,tipF:.03,C:18});break;
-      case '어깨 머리':sh({pa:.12,bang:.09,side:-.26,back:-.36,vol:.018,hang:1,drape:.15,tipB:.03,C:18});break;
-      case '올림 단발':sh({bang:.1,side:-.09,back:-.17,vol:.016,tipB:.01});if(!helm)add(HB,lkHairCap(.08,1,1,.006,14),mHair,0,.15,-.18);break;
-      case '단발':sh({bang:.09,side:-.16,back:-.18,vol:.02,hang:.5,flare:.3,C:18});break;
-      case '보브':sh({bang:.06,side:-.17,back:-.17,vol:.022,hang:.6,flare:.5,tipF:.012,tipB:.012,C:28,tipL:.04});break;
-      case '히메컷':sh({bang:.07,side:-.15,back:-.6,vol:.018,hang:1,drape:.15,tipF:.008,tipB:.01,C:30,tipL:.03});break;
-      case '뻗친 머리':sh({bang:.09,side:-.16,back:-.18,vol:.02,hang:.5,flare:.7,tipB:.04,C:14});break;
-      case '포니테일':sh({bang:.09,side:-.09,back:-.17,vol:.017,tipB:.012});tail(0,.08,-.22,.5,.065,0);break;
-      case '양갈래':sh({bang:.09,side:-.09,back:-.17,vol:.017,tipB:.012});[-1,1].forEach(sd=>tail(sd*.19,.04,-.1,.42,.05,0,sd*.04));break;
-      case '땋은 머리':sh({bang:.09,side:-.09,back:-.17,vol:.017,tipB:.012});braid(0,-.05,-.23,.48);break;
-      case '곱슬 긴 머리':sh({pa:-.2,bang:.09,side:-.3,back:-.48,vol:.024,hang:1,drape:.18,wave:.012,wf:26,curl:.006,C:16});break;
-      default:sh({});}
+    const bun=(x,y,z,r)=>{if(!helm){add(HB,lkHairCap(r,1,1,.006,16),mHair,x,y,z);add(HB,new THREE.TorusGeometry(r*.75,r*.16,8,18),mHairD,x,y-r*.55,z,[Math.PI/2,0,0]);}};
+    const LONG={side:-.28,back:-.55,vol:.018,hang:1,drape:.15,tipB:.03,C:18};
+    const HS={
+      'm:짧은 머리':()=>sh({pa:.45,bg:{n:7,y:.085,sw:.12}}),
+      'm:스포츠 머리':()=>sh({bang:.14,side:0,back:-.11,vol:.007,tipF:.012,tipB:.01,groove:.002,C:30,tipL:.03}),
+      'm:뾰족 머리':()=>{sh({bang:.11,side:-.09,back:-.18,vol:.02,tipF:.06,tipB:.04,C:12,bg:{n:6,y:.09,v:.035,w:1.25,mess:.12,curl:-.004}});if(!helm)for(let i=0;i<11;i++){const a=(i/10-.5)*3.6,el=.55+.35*Math.abs(Math.cos(i*1.7)),d=new THREE.Vector3(Math.sin(a)*Math.cos(el),Math.sin(el),Math.cos(a)*Math.cos(el)),b=d.clone().multiplyScalar(.19),q=d.clone().add(new THREE.Vector3(0,.3,-1.1)).normalize(),L=.075+.025*Math.sin(i*2.3);
+          add(HB,lkLock([[b.x,b.y,b.z],[b.x+q.x*L*.5+d.x*.03,b.y+q.y*L*.5+d.y*.03,b.z+q.z*L*.5+d.z*.03],[b.x+q.x*L+d.x*.03,b.y+q.y*L+d.y*.03,b.z+q.z*L+d.z*.03]],.07,.008,10,12,.55,1.1),i%2?mHair:mHairD);}},
+      'm:덥수룩 머리':()=>sh({side:-.11,back:-.21,vol:.028,puff:.6,tipF:.05,tipB:.05,C:12,bg:{n:8,y:.04,v:.03,mess:.1}}),
+      'm:단발':()=>sh({side:-.12,back:-.16,vol:.02,hang:.3,tipB:.03,bg:{n:7,y:.07}}),
+      'm:흐트러진 머리':()=>sh({side:-.1,back:-.19,vol:.026,tipB:.05,C:10,twist:9,puff:.5,bg:{n:7,y:.07,v:.04,mess:.28,wig:.08}}),
+      'm:덮은 머리':()=>sh({side:-.1,back:-.2,vol:.02,C:18,bg:{n:9,y:.02,v:.015}}),
+      'm:긴 머리':()=>sh({pa:0,side:-.28,back:-.44,vol:.02,hang:1,drape:.15,tipB:.035,C:16,bg:{n:6,y:.05,cur:.3,span:1.1}}),
+      'm:묶은 긴 머리':()=>{sh({side:-.09,back:-.17,tipB:.012,bg:{n:7,y:.09,sw:.08}});tail(0,-.04,-.23,.42,.05);},
+      'm:옆 가르마':()=>sh({pa:.55,side:-.1,back:-.2,vol:.02,C:14,cph:.6,bg:{n:7,y:.11,ln:.06,sw:-.45,off:-.1,edgeUp:.02}}),
+      'm:꽁지머리':()=>{sh({bg:{n:7,y:.085}});tail(0,-.06,-.22,.16,.032);},
+      'm:곱슬 머리':()=>sh({bang:.11,side:-.1,back:-.2,vol:.03,puff:.5,curl:.016,groove:0,tipF:.02,tipB:.02,C:22}),
+      'm:넘긴 머리':()=>sh({pa:0,bang:.18,side:-.1,back:-.2,vol:.02,tipF:.01,puff:.5,twist:-3}),
+      'm:가운데 가르마':()=>sh({pa:0,side:-.13,back:-.2,vol:.02,bg:{n:6,y:.02,cur:.45,span:1.05,v:.02}}),
+      'm:울프컷':()=>sh({side:-.15,back:-.34,hang:.45,vol:.024,tipB:.07,C:11,puff:.4,bg:{n:7,y:.06,v:.04,mess:.15}}),
+      'm:투블럭':()=>sh({side:-.04,back:-.13,vol:.02,puff:.9,tipB:.012,C:20,bg:{n:6,y:.1,sw:.4,span:.95}}),
+      'm:반묶음':()=>{sh({side:-.14,back:-.2,vol:.02,hang:.3,bg:{n:7,y:.07}});tail(0,.12,-.19,.12,.03);},
+      'm:긴 앞머리':()=>sh({side:-.12,back:-.2,vol:.02,bg:{n:7,y:-.02,sw:.42,ln:.05,v:.03}}),
+      'f:긴 생머리':()=>sh(Object.assign({},LONG,{pa:.12,back:-.6,bg:{n:9,y:.07}})),
+      'f:어깨 머리':()=>sh(Object.assign({},LONG,{pa:.12,side:-.26,back:-.36,bg:{n:9,y:.07,sw:.12}})),
+      'f:올림 단발':()=>{sh({side:-.09,back:-.17,vol:.016,tipB:.01,bg:{n:7,y:.08}});bun(0,.15,-.18,.08);},
+      'f:단발':()=>sh({side:-.16,back:-.18,vol:.02,hang:.5,flare:.3,C:18,bg:{n:9,y:.075}}),
+      'f:보브':()=>sh({side:-.17,back:-.17,vol:.022,hang:.6,flare:.5,tipB:.012,C:28,tipL:.04,bg:{n:11,y:.06,blunt:1,v:.006,edgeUp:.0}}),
+      'f:히메컷':()=>sh({side:-.15,back:-.6,vol:.018,hang:1,drape:.15,tipB:.01,C:30,tipL:.03,bg:{n:11,y:.065,blunt:1,v:.005,edgeUp:0}}),
+      'f:뻗친 머리':()=>sh({side:-.16,back:-.18,vol:.02,hang:.5,flare:.7,tipB:.04,C:14,bg:{n:8,y:.075,v:.03}}),
+      'f:짧은 머리':()=>sh({pa:.4,side:-.1,back:-.2,bg:{n:8,y:.08}}),
+      'f:포니테일':()=>{sh({side:-.09,back:-.17,vol:.017,tipB:.012,bg:{n:9,y:.075}});tail(0,.08,-.22,.5,.065,0);},
+      'f:양갈래':()=>{sh({side:-.09,back:-.17,vol:.017,tipB:.012,bg:{n:9,y:.075}});[-1,1].forEach(sd=>tail(sd*.19,.04,-.1,.42,.05,0,sd*.04));},
+      'f:땋은 머리':()=>{sh({side:-.09,back:-.17,vol:.017,tipB:.012,bg:{n:9,y:.075}});braid(0,-.05,-.23,.48);},
+      'f:곱슬 긴 머리':()=>sh({pa:-.2,side:-.3,back:-.48,vol:.024,hang:1,drape:.18,wave:.012,wf:26,curl:.006,C:16,bg:{n:8,y:.07,v:.03,wig:.06}}),
+      'f:앞머리 없는 긴 머리':()=>sh(Object.assign({},LONG,{pa:0,bang:.16,bg:{n:2,y:-.08,cur:.25,span:1.05,v:.02,w0:.2}})),
+      'f:시스루 앞머리':()=>sh(Object.assign({},LONG,{pa:.1,bg:{n:9,y:.065,see:1,v:.015}})),
+      'f:사이드 뱅':()=>sh(Object.assign({},LONG,{pa:-.5,side:-.26,back:-.38,bg:{n:8,y:.1,ln:.08,sw:.5,off:.05}})),
+      'f:하프 업':()=>{sh(Object.assign({},LONG,{bg:{n:9,y:.075}}));tail(0,.11,-.19,.2,.04);},
+      'f:똥머리 두 개':()=>{sh({side:-.1,back:-.18,vol:.017,tipB:.012,bg:{n:9,y:.075}});[-1,1].forEach(sd=>bun(sd*.14,.17,-.06,.065));},
+      'f:숏컷':()=>sh({side:-.07,back:-.16,vol:.018,puff:.4,C:16,bg:{n:7,y:.085,sw:.3,span:.95}}),
+      'f:웨이브 단발':()=>sh({side:-.17,back:-.19,vol:.024,hang:.5,wave:.012,wf:30,flare:.25,C:16,bg:{n:9,y:.07,wig:.05}}),
+      'f:높은 포니테일':()=>{sh({side:-.08,back:-.16,vol:.016,tipB:.012,bg:{n:8,y:.08,cur:.2}});tail(0,.19,-.17,.55,.06,0);}};
+    (HS[ap.g+':'+nm]||HS['m:짧은 머리'])();
   }
   /* 모아 둔 조각을 마디마다 재질별로 합친다 */
   for(const [par,b] of bins){lkMerge(b,par);}
@@ -8998,7 +9045,7 @@ function makeGrimoire(tier=0){
 const PM={ver:'6',data:{},loading:{},tmpl:{},scale:{m:1.1,f:1.06}};
 const HAIR_COLORS=[0x2a2220,0x5a3a22,0x9a5a30,0xd8b070,0xe8e2d8,0xb03a2e,0x3a5aa8,0x6a4aa0,0x7a7a82,0xf0d898,0xe09ab0,0x2a7a5a];
 const EYE_COLORS=[0x5a3a22,0x3a6aa8,0x3a9a6a,0x9a3a3a,0xb08a2a,0x7a4ab0,0x4a4a54,0x2a8a9a,0xb8bccc,0xe0782a];
-const HAIR_STYLES={m:['짧은 머리','스포츠 머리','뾰족 머리','덥수룩 머리','단발','흐트러진 머리','덮은 머리','긴 머리','묶은 긴 머리','대머리','옆 가르마','꽁지머리','곱슬 머리'],f:['긴 생머리','어깨 머리','올림 단발','단발','보브','히메컷','뻗친 머리','짧은 머리','대머리','포니테일','양갈래','땋은 머리','곱슬 긴 머리']};
+const HAIR_STYLES={m:['짧은 머리','스포츠 머리','뾰족 머리','덥수룩 머리','단발','흐트러진 머리','덮은 머리','긴 머리','묶은 긴 머리','대머리','옆 가르마','꽁지머리','곱슬 머리','넘긴 머리','가운데 가르마','울프컷','투블럭','반묶음','긴 앞머리'],f:['긴 생머리','어깨 머리','올림 단발','단발','보브','히메컷','뻗친 머리','짧은 머리','대머리','포니테일','양갈래','땋은 머리','곱슬 긴 머리','앞머리 없는 긴 머리','시스루 앞머리','사이드 뱅','하프 업','똥머리 두 개','숏컷','웨이브 단발','높은 포니테일']};
 // 피부색(곱하는 색), 키(배율), 윗옷색(0은 직업색), 바지색
 const SKIN_TONES=[0xffffff,0xfff1ec,0xf3d6b8,0xdfb48c,0xb98258,0x8c5c3e];
 const HEIGHTS=[.94,.97,1,1.03,1.06];
