@@ -19,6 +19,8 @@ const MAX_DOC = 8 * 1024 * 1024;       // 계정 하나에 담을 수 있는 크
 const MAX_CHARS = 30;
 const TOK_KEEP = 90 * 24 * 3600 * 1000; // 90일 동안 안 쓴 로그인 표는 버린다
 const GONE_KEEP = 180 * 24 * 3600 * 1000;
+const TRASH_KEEP = 90 * 24 * 3600 * 1000; // 지운 캐릭터를 되살릴 수 있게 남겨 두는 기간
+const MAX_DEL = 3;                         // 한 번 저장에 지울 수 있는 캐릭터 수
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
 // ---------- 저장소 ----------
@@ -27,6 +29,7 @@ async function pg() {
   if (pool) return pool;
   const { Pool } = require('pg');
   const p = new Pool({ connectionString: DB_URL, max: 4 });   // Neon 주소에는 ?sslmode=require 가 붙어 있어 암호화해서 잇는다
+  p.on('error', (e) => console.error('데이터베이스 연결 끊김 (다시 이음)', e && e.message));   // Neon이 쉬는 연결을 끊어도 서버가 죽지 않게
   await p.query('CREATE TABLE IF NOT EXISTS orlando_accounts (id text PRIMARY KEY, doc jsonb NOT NULL, updated timestamptz NOT NULL DEFAULT now())');
   pool = p;
   return p;
@@ -80,10 +83,11 @@ function newToken(doc) {
 
 // ---------- 너무 많이 시도하는 것 막기 ----------
 const tries = new Map();   // key -> {n, t}
-function limited(key, max, ms) {
+// over: 이미 max번을 넘겼는가 (세지는 않음), bump: 한 번 센다. 로그인은 틀린 것만 센다 (PC방처럼 IP 하나를 여럿이 써도 막히지 않게)
+function over(key, max, ms) { const e = tries.get(key); return !!e && Date.now() - e.t <= ms && e.n >= max; }
+function bump(key, ms) {
   const now = Date.now(), e = tries.get(key);
-  if (!e || now - e.t > ms) { tries.set(key, { n: 1, t: now }); return false; }
-  e.n++; return e.n > max;
+  if (!e || now - e.t > ms) tries.set(key, { n: 1, t: now }); else e.n++;
 }
 setInterval(() => { const now = Date.now(); for (const [k, e] of tries) if (now - e.t > 3600 * 1000) tries.delete(k); }, 10 * 60 * 1000).unref();
 
@@ -146,17 +150,19 @@ async function handle(req, res, url) {
       if (!ID_RE.test(id)) return reply(res, 400, { err: 'id' });
       if (pw.length < 6 || pw.length > 64) return reply(res, 400, { err: 'pw' });
       if (url === '/api/signup') {
-        if (limited('s:' + ip, 5, 3600 * 1000)) return reply(res, 429, { err: 'many' });
+        if (over('s:' + ip, 30, 3600 * 1000)) return reply(res, 429, { err: 'many' });
+        bump('s:' + ip, 3600 * 1000);
         const doc = { id, pw: await hashPw(pw), created: Date.now(), chars: [], gone: {}, bank: { gold: 0, t: 0 }, tok: [] };
         const tok = newToken(doc);
         if (!(await rawPut(id, doc, true))) return reply(res, 409, { err: 'taken' });
         return reply(res, 200, { tok, name: id });
       }
-      if (limited('l:' + ip, 20, 15 * 60 * 1000) || limited('u:' + id, 10, 15 * 60 * 1000)) return reply(res, 429, { err: 'many' });
+      const FAIL_MS = 15 * 60 * 1000, failed = () => { bump('l:' + ip, FAIL_MS); bump('u:' + id, FAIL_MS); return reply(res, 401, { err: 'wrong' }); };
+      if (over('l:' + ip, 30, FAIL_MS) || over('u:' + id, 10, FAIL_MS)) return reply(res, 429, { err: 'many' });
       return withLock(id, async () => {
         const doc = await rawGet(id);
-        if (!doc) { if (!DUMMY) DUMMY = await hashPw('x'.repeat(12)); await checkPw(pw, DUMMY); return reply(res, 401, { err: 'wrong' }); }
-        if (!(await checkPw(pw, doc.pw))) return reply(res, 401, { err: 'wrong' });
+        if (!doc) { if (!DUMMY) DUMMY = await hashPw('x'.repeat(12)); await checkPw(pw, DUMMY); return failed(); }
+        if (!(await checkPw(pw, doc.pw))) return failed();
         tries.delete('u:' + id);
         const tok = newToken(doc); await rawPut(id, doc);
         reply(res, 200, { tok, name: id });
@@ -170,7 +176,16 @@ async function handle(req, res, url) {
       return withLock(a.id, async () => {
         const doc = await rawGet(a.id), now = Date.now();
         const gone = doc.gone || {}, map = new Map((doc.chars || []).map((c) => [c.id, c]));
-        for (const id of Array.isArray(body.gone) ? body.gone : []) if (typeof id === 'string' && CHAR_ID.test(id)) { map.delete(id); gone[id] = now; }
+        // 지운 캐릭터는 바로 없애지 않고 휴지통(trash)에 90일 둔다. 한 번에 지울 수 있는 건 몇 개뿐 (잘못된 창이 '다 지워졌다'고 보내도 다 사라지지 않게)
+        const trash = doc.trash || {};
+        let del = 0;
+        for (const id of Array.isArray(body.gone) ? body.gone : []) {
+          if (typeof id !== 'string' || !CHAR_ID.test(id) || !map.has(id)) continue;
+          if (++del > MAX_DEL) break;
+          trash[id] = { c: map.get(id), at: now }; map.delete(id); gone[id] = now;
+        }
+        for (const id in trash) if (now - trash[id].at > TRASH_KEEP) delete trash[id];
+        doc.trash = trash;
         for (const q of Array.isArray(body.chars) ? body.chars : []) {
           const c = cleanChar(q); if (!c) continue;
           if (gone[c.id] && gone[c.id] >= (c.t || 0)) continue;   // 다른 기기에서 지운 캐릭터를 옛 기록이 되살리지 않게
