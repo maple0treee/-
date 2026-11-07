@@ -8379,6 +8379,55 @@ function lkHairCap(R,cov,front,groove=.007,N=34){const gg=new THREE.SphereGeomet
     const fz=Math.pow((1+Math.cos(az))/2,1.6),lim=Math.PI*(cov-(cov-front)*fz),tt=Math.min(th,lim),nr=R+d-groove,s=Math.sin(tt),c=Math.cos(tt);
     p.setXYZ(i,Math.sin(az)*s*nr,c*nr,Math.cos(az)*s*nr);}
   gg.computeVertexNormals();return gg;}
+/* 애니풍 머리: 매끈한 바탕 덩이 위에 끝이 뾰족한(또는 뭉툭한) 납작 다발을 겹친다. st=LK_ANI 모양 하나, 머리 마디 좌표(반지름 .22) */
+function lkAniHair(st){
+  const R=.22,Rr=R+.012,pos=[],col=[],idx=[],Vs=THREE.Vector3;
+  const surf=(az,y,lift,drape=0)=>{let r;const yc=-R*.45;if(y>=yc)r=Math.sqrt(Math.max(0,Rr*Rr-y*y));else r=Math.sqrt(Rr*Rr-yc*yc)+drape*(yc-y);r+=lift;return new Vs(Math.sin(az)*r,y,Math.cos(az)*r);};
+  const band=(p,az)=>{const yb=R*.6+.012*Math.sin(az*9);return Math.exp(-Math.pow((p.y-yb)/.011,2))*Math.max(0,Math.cos(az*.5+.3))*(p.y>0?1:0);};
+  /* 다발 하나: 곡선을 따라 렌즈 모양 단면을 쓸어 간다. 뿌리는 좁게 시작해 넓어지고, 끝은 tp가 클수록 뭉툭하다 */
+  const lock=(pts,w0,th,tp=2.2)=>{const cv=new THREE.CatmullRomCurve3(pts),n=30,K=12,base=pos.length/3;
+    for(let i=0;i<=n;i++){const s=i/n,p=cv.getPoint(s),T=cv.getTangent(s).normalize();
+      const N=p.clone().sub(new Vs(0,Math.min(0,p.y)*.9,0));N.sub(T.clone().multiplyScalar(N.dot(T))).normalize();const B=new Vs().crossVectors(T,N).normalize();
+      const tap=1-Math.pow(s,tp),root=Math.min(1,.55+s*4),w=w0*tap*root*(1+.18*Math.sin(Math.PI*Math.min(1,s*1.4))),t=th*Math.max(.15,tap)*root;
+      for(let k=0;k<K;k++){const f=k/K*Math.PI*2,cx=Math.cos(f),sy=Math.sin(f),out=sy>0?sy:sy*.35;
+        const q=p.clone().addScaledVector(B,cx*w*.5).addScaledVector(N,out*t*.5+(1-cx*cx)*t*.15*(sy>0?1:0));pos.push(q.x,q.y,q.z);
+        let sh=(.78+.22*Math.sqrt(Math.max(0,1-cx*cx)))*(.84+.16*Math.min(1,s*5));if(sy<0)sh*=.6;sh+=.25*band(q,Math.atan2(q.x,q.z))*(sy>0?1:0);col.push(sh,sh,sh);}
+      if(i<n)for(let k=0;k<K;k++){const a=base+i*K+k,b=base+i*K+(k+1)%K;idx.push(a,a+K,b,b,a+K,b+K);}}
+    const tip=pos.length/3,pl=cv.getPoint(1);pos.push(pl.x,pl.y,pl.z);col.push(.8,.8,.8);for(let k=0;k<K;k++)idx.push(base+n*K+k,tip,base+n*K+(k+1)%K);};
+  /* 머리 겉면을 따라 흐르는 다발 (jit: 중간이 조금씩 휜다) */
+  let sd=st.seed||.37;const rnd=()=>{sd=(sd*9301+.49297)%1;return sd;};
+  const flow=(az0,y0,az1,y1,w,th,l0=.004,l1=.012,flick=0,drape=0,tp=2.2,jit=0)=>{const P=[];for(let i=0;i<=8;i++){const s=i/8,e=s*s*(3-2*s)*.35+s*.65,j=(i>0&&i<8)?jit*(rnd()*2-1):0;
+      P.push(surf(az0+(az1-az0)*e+j*3,y0+(y1-y0)*e+j,l0+(l1-l0)*s+flick*Math.pow(s,2.5),drape));}lock(P,w,th,tp);};
+  /* 바탕 덩이: 정수리를 덮고 앞은 이마선, 옆·뒤는 아래로 */
+  {const A=72,M=26,base=pos.length/3,cp=st.cap;
+    for(let a=0;a<=A;a++){const az=a/A*Math.PI*2-Math.PI,aa=Math.abs(az),pm=cp[0]+(cp[1]-cp[0])*_lkSS(.7,1.35,aa)+(cp[2]-cp[1])*_lkSS(1.6,2.6,aa);
+      for(let m=0;m<=M;m++){const pl=m/M*pm,r=R+.009,p=new Vs(Math.sin(az)*Math.sin(pl)*r,Math.cos(pl)*r,Math.cos(az)*Math.sin(pl)*r);pos.push(p.x,p.y,p.z);
+        const sh=.82+.12*Math.cos(pl)+.25*band(p,az);col.push(sh,sh,sh);}}
+    for(let a=0;a<A;a++)for(let m=0;m<M;m++){const i=base+a*(M+1)+m,j=i+M+1;idx.push(i,i+1,j,j,i+1,j+1);}}
+  st.build({flow,lock,surf,rnd,Vs});
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col.map(v=>Math.min(1.3,v)),3));g.setIndex(idx);g.computeVertexNormals();return g;}
+const LK_ANI={
+  /* 흐트러진 앞머리: 이마를 고르게 덮는 앞머리, 턱까지 오는 옆 다발, 뒤로 뻗친 뾰족 다발 */
+  messyBangs(flow){const BG=[[-.64,.04,.085,-.7],[-.33,0,.085,-.36],[0,-.03,.085,0],[.33,0,.085,.36],[.64,.04,.085,.7],[-.48,.03,.07,-.53],[-.16,-.01,.07,-.17],[.16,-.01,.07,.17],[.48,.03,.07,.53]];
+    for(const [az,y1,w,az1] of BG)flow(az*.6,.215,az1,y1,w,.012,.008,.026,.004,0,1.3);},
+  m_messy:{cap:[.92,1.7,1.95],seed:.37,build:({flow,lock,surf,rnd,Vs})=>{LK_ANI.messyBangs(flow);
+    for(const s of [-1,1])for(const [a,y1,w] of [[.95,-.2,.05],[1.15,-.26,.045],[1.35,-.17,.05],[1.55,-.22,.045]])flow(s*a*.8,.19,s*a,y1,w*1.3,.012,.008,.022,.008,0,1.3,.003);
+    const n=17;for(let i=0;i<n;i++){const a=(i/(n-1)*2-1)*Math.PI*.5+Math.PI,az=((a+Math.PI)%(2*Math.PI))-Math.PI,aa=Math.abs(az);
+      flow(az*.7,.21,az*1.02,-.08-.08*rnd()-(aa>2.7?.04:0),.1,.016,.008,.03,.05+.06*rnd(),0,1.4,.003);}
+    for(let i=0;i<9;i++){const az=(i/8*2-1)*1.9,dir=new Vs(Math.sin(az)*.7,.02+.12*rnd(),-.8).normalize();
+      const p0=surf(az*.4,.2,0),p1=p0.clone().add(new Vs(Math.sin(az)*.06,.02,-.1)),p2=p1.clone().addScaledVector(dir,.1+.04*rnd()),p3=p2.clone().addScaledVector(dir,.06);lock([p0,p1,p2,p3],.1,.02,1.4);}
+    for(const s of [-1,1]){const p0=surf(s*1.5,.12,.01),d=new Vs(s*.8,-.1,-.5).normalize();lock([p0,p0.clone().addScaledVector(d,.06),p0.clone().addScaledVector(d,.12).add(new Vs(0,.01,0))],.06,.025,1.5);}}},
+  /* 흐트러진 긴 머리: 같은 앞머리, 얼굴 옆·뒤 다발이 가슴까지 */
+  f_messy:{cap:[.92,1.8,2.0],seed:.61,build:({flow,rnd})=>{LK_ANI.messyBangs(flow);
+    for(const s of [-1,1])for(const [a,y1,w] of [[.95,-.5,.06],[1.12,-.58,.065],[1.3,-.5,.06],[1.48,-.55,.065]])flow(s*a*.8,.19,s*a,y1,w*1.3,.014,.008,.02,.008,.2,1.6,.003);
+    const n=17;for(let i=0;i<n;i++){const a=(i/(n-1)*2-1)*Math.PI*.55+Math.PI,az=((a+Math.PI)%(2*Math.PI))-Math.PI;flow(az*.7,.21,az*1.02,-.5-.08*rnd(),.11,.016,.008,.03,.012+.012*rnd(),.2,1.6,.003);}
+    for(let i=0;i<11;i++){const a=(i/10*2-1)*Math.PI*.5+Math.PI,az=((a+Math.PI)%(2*Math.PI))-Math.PI;flow(az*.7,.22,az*1.04,-.08-.08*rnd(),.11,.016,.02,.04,.04+.04*rnd(),0,1.4,.003);}}},
+  /* 일자 단발: 눈썹 위 일자 앞머리, 턱선에서 끊긴 옆머리(뒤는 조금 짧게), 한쪽 얼굴 옆으로 가슴까지 오는 가는 다발 */
+  f_bob:{cap:[.92,1.85,1.9],build:({flow,lock,surf,Vs})=>{
+    const nb=13;for(let i=0;i<nb;i++){const t=i/(nb-1)*2-1,az=t*.82;flow(az*.55,.215,az,.07+.012*t*t+.004*Math.sin(i*2.3),.075,.014,.008,.02,.002,0,24);}
+    for(let i=0;i<24;i++){const t=i/23,a=(t<.5?1:-1)*(Math.PI*.3+Math.abs(t-.5)*2*Math.PI*.7),aa=Math.abs(a);flow(a*.97,.205,a,-.17+.06*Math.max(0,(aa-1.6)/1.5),.1,.02,.008,.018,-.01,.04,24);}
+    for(let i=0;i<16;i++){const t=i/15,a=(t<.5?1:-1)*(Math.PI*.36+Math.abs(t-.5)*2*Math.PI*.64),aa=Math.abs(a);flow(a*.95,.22,a,-.15+.06*Math.max(0,(aa-1.6)/1.5),.11,.02,.016,.028,-.012,.04,24);}
+    lock([surf(.75,.17,.02),surf(.8,.05,.03),surf(.82,-.1,.035),new Vs(.15,-.28,.17),new Vs(.14,-.42,.17),new Vs(.13,-.56,.15)],.055,.012,2.2);}}};
 /* 외모 꾸밈 값 (새 칸): 없으면 기본 */
 function apX(ap){return {y:ap.y|0,w:ap.w|0,f:ap.f??1,d:ap.g==='f'?0:(ap.d|0),u:ap.u|0,l:ap.l|0,o:ap.o|0};}
 /* ---------- 옷 빚기 도우미 ----------
@@ -8689,6 +8738,8 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       shell(Object.assign({},q,{under:1,shade:.8,vol:q.vol*.55,bang:q.bang-.012,side:q.side-.018,back:q.back-.02,cph:(q.cph||0)+Math.PI/2,pa:null,spike:0,puff:0}));};
     const bun=(x,y,z,r)=>{if(!helm){add(HB,lkHairCap(r,1,1,.006,16),mHair,x,y,z);add(HB,new THREE.TorusGeometry(r*.75,r*.16,8,18),mHairD,x,y-r*.55,z,[Math.PI/2,0,0]);}};
     const LONG={side:-.28,back:-.55,vol:.018,hang:1,drape:.15,tipB:.03,C:18};
+    /* 애니풍 머리 (투구를 쓰면 테 아래로 이어지는 덩이 머리로 대신) */
+    const ani=(k,fb)=>{if(helm)return sh(fb);add(HB,lkAniHair(LK_ANI[k]),mHairS);};
     const HS={
       'm:짧은 머리':()=>sh({pa:.45,bg:{n:7,y:.085,sw:.12}}),
       'm:스포츠 머리':()=>sh({bang:.14,side:0,back:-.11,vol:.007,tipF:.012,tipB:.01,groove:.002,C:30,tipL:.03}),
@@ -8709,6 +8760,7 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       'm:투블럭':()=>sh({side:-.04,back:-.13,vol:.02,puff:.9,tipB:.012,C:20,bg:{n:6,y:.1,sw:.4,span:.95}}),
       'm:반묶음':()=>{sh({side:-.14,back:-.2,vol:.02,hang:.3,bg:{n:7,y:.07}});tail(0,.12,-.19,.12,.03);},
       'm:긴 앞머리':()=>sh({side:-.12,back:-.2,vol:.02,bg:{n:7,y:-.02,sw:.42,ln:.05,v:.03}}),
+      'm:흐트러진 앞머리':()=>ani('m_messy',{side:-.12,back:-.2,vol:.022,tipB:.05,C:10,bg:{n:9,y:.04}}),
       'f:긴 생머리':()=>sh(Object.assign({},LONG,{pa:.12,back:-.6,bg:{n:9,y:.07}})),
       'f:어깨 머리':()=>sh(Object.assign({},LONG,{pa:.12,side:-.26,back:-.36,bg:{n:9,y:.07,sw:.12}})),
       'f:올림 단발':()=>{sh({side:-.09,back:-.17,vol:.016,tipB:.01,bg:{n:7,y:.08}});bun(0,.15,-.18,.08);},
@@ -8728,7 +8780,9 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       'f:똥머리 두 개':()=>{sh({side:-.1,back:-.18,vol:.017,tipB:.012,bg:{n:9,y:.075}});[-1,1].forEach(sd=>bun(sd*.14,.17,-.06,.065));},
       'f:숏컷':()=>sh({side:-.07,back:-.16,vol:.018,puff:.4,C:16,bg:{n:7,y:.085,sw:.3,span:.95}}),
       'f:웨이브 단발':()=>sh({side:-.17,back:-.19,vol:.024,hang:.5,wave:.012,wf:30,flare:.25,C:16,bg:{n:9,y:.07,wig:.05}}),
-      'f:높은 포니테일':()=>{sh({side:-.08,back:-.16,vol:.016,tipB:.012,bg:{n:8,y:.08,cur:.2}});tail(0,.19,-.17,.55,.06,0);}};
+      'f:높은 포니테일':()=>{sh({side:-.08,back:-.16,vol:.016,tipB:.012,bg:{n:8,y:.08,cur:.2}});tail(0,.19,-.17,.55,.06,0);},
+      'f:흐트러진 긴 머리':()=>ani('f_messy',Object.assign({},LONG,{back:-.5,bg:{n:9,y:.04}})),
+      'f:일자 단발':()=>ani('f_bob',{side:-.17,back:-.15,vol:.02,hang:.6,tipB:.012,C:28,tipL:.04,bg:{n:13,y:.07,blunt:1,v:.004,edgeUp:0}})};
     (HS[ap.g+':'+nm]||HS['m:짧은 머리'])();
   }
   /* 모아 둔 조각을 마디마다 재질별로 합친다 */
@@ -9034,7 +9088,7 @@ function makeGrimoire(tier=0){
 const PM={ver:'6',data:{},loading:{},tmpl:{},scale:{m:1.1,f:1.06}};
 const HAIR_COLORS=[0x2a2220,0x5a3a22,0x9a5a30,0xd8b070,0xe8e2d8,0xb03a2e,0x3a5aa8,0x6a4aa0,0x7a7a82,0xf0d898,0xe09ab0,0x2a7a5a];
 const EYE_COLORS=[0x5a3a22,0x3a6aa8,0x3a9a6a,0x9a3a3a,0xb08a2a,0x7a4ab0,0x4a4a54,0x2a8a9a,0xb8bccc,0xe0782a];
-const HAIR_STYLES={m:['짧은 머리','스포츠 머리','뾰족 머리','덥수룩 머리','단발','흐트러진 머리','덮은 머리','긴 머리','묶은 긴 머리','대머리','옆 가르마','꽁지머리','곱슬 머리','넘긴 머리','가운데 가르마','울프컷','투블럭','반묶음','긴 앞머리'],f:['긴 생머리','어깨 머리','올림 단발','단발','보브','히메컷','뻗친 머리','짧은 머리','대머리','포니테일','양갈래','땋은 머리','곱슬 긴 머리','앞머리 없는 긴 머리','시스루 앞머리','사이드 뱅','하프 업','똥머리 두 개','숏컷','웨이브 단발','높은 포니테일']};
+const HAIR_STYLES={m:['짧은 머리','스포츠 머리','뾰족 머리','덥수룩 머리','단발','흐트러진 머리','덮은 머리','긴 머리','묶은 긴 머리','대머리','옆 가르마','꽁지머리','곱슬 머리','넘긴 머리','가운데 가르마','울프컷','투블럭','반묶음','긴 앞머리','흐트러진 앞머리'],f:['긴 생머리','어깨 머리','올림 단발','단발','보브','히메컷','뻗친 머리','짧은 머리','대머리','포니테일','양갈래','땋은 머리','곱슬 긴 머리','앞머리 없는 긴 머리','시스루 앞머리','사이드 뱅','하프 업','똥머리 두 개','숏컷','웨이브 단발','높은 포니테일','흐트러진 긴 머리','일자 단발']};
 // 피부색(곱하는 색), 키(배율), 윗옷색(0은 직업색), 바지색
 const SKIN_TONES=[0xffffff,0xfff1ec,0xf3d6b8,0xdfb48c,0xb98258,0x8c5c3e];
 const HEIGHTS=[.94,.97,1,1.03,1.06];
