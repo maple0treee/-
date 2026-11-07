@@ -2873,33 +2873,44 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
 'use strict';
 /* 처음 불러오기: 세상 전체(마을·엑시즈·사냥터·성…)를 한 번에 지으면 그동안 브라우저가 아무것도 못 해 '페이지 응답 없음'이 뜬다.
    짓는 사이사이 잠깐씩 브라우저에 차례를 넘겨(화면 그리기·입력 처리) 멈춘 것처럼 보이지 않게 하고, 얼마나 됐는지 보여 준다.
-   짓는 동안에는 키·마우스 입력을 막는다 (아직 다 지어지지 않은 것을 건드리지 않게) */
-const BOOT=(()=>{const L=document.getElementById('loading'),M=document.getElementById('loadMsg'),N=336;let k=0,last=performance.now(),on=true;
-  if(L)L.hidden=false;if(M)M.textContent='불러오는 중… 0%';
-  const block=e=>{if(on){e.stopImmediatePropagation();if(e.cancelable&&e.type!=='wheel'&&e.type!=='touchstart')e.preventDefault();}};
+   짓는 동안에는 키·마우스 입력을 막는다 (아직 다 지어지지 않은 것을 건드리지 않게). 시작 창(홈·로그인·캐릭터 선택)만은 그동안에도 쓸 수 있다:
+   세상은 뒤에서 짓고, 로딩 화면은 '모험 시작'을 눌렀는데 아직 다 못 지었을 때만 뜬다 (wait) */
+const BOOT=(()=>{const L=document.getElementById('loading'),M=document.getElementById('loadMsg'),S=document.getElementById('start'),N=336;let k=0,last=performance.now(),on=true,bld=true,pq=null;
+  if(M)M.textContent='불러오는 중… 0%';
+  const inS=e=>S&&e.target instanceof Node&&S.contains(e.target)&&!S.hidden&&!pq;
+  const block=e=>{if(on&&!inS(e)){e.stopImmediatePropagation();if(e.cancelable&&e.type!=='wheel'&&e.type!=='touchstart')e.preventDefault();}};
   const EV=['keydown','keyup','keypress','mousedown','mouseup','click','dblclick','contextmenu','pointerdown','pointerup','wheel','touchstart','touchend'];
   for(const t of EV)window.addEventListener(t,block,{capture:true,passive:false});
+  /* 시작 창에서 누른 것은 시작 창 안에서만 (뒤에서 반쯤 지어진 게임 쪽 처리로 번지지 않게) */
+  if(S)for(const t of [...EV,'pointermove'])S.addEventListener(t,e=>{if(on)e.stopPropagation();});
   /* 예전에는 다 지을 때까지 타이머·화면 갱신 콜백·받아 온 파일 처리가 하나도 돌지 않았다. 사이사이 쉬어도 그 차례를 그대로 지킨다:
      짓는 동안 울린 것은 모아 두었다가 다 지은 뒤에 돌린다 (아직 만들어지지 않은 것을 건드려 오류가 나지 않게) */
   const W=window,_st=W.setTimeout,_si=W.setInterval,_raf=W.requestAnimationFrame,_fe=W.fetch,held=[];let open;const gate=new Promise(r=>open=r);
-  const sT=W.setTimeout=function(f,ms,...a){if(typeof f!=='function')return _st.call(W,f,ms,...a);return _st.call(W,function(){if(on)held.push(()=>f.apply(this,a));else f.apply(this,a);},ms);};
-  const sI=W.setInterval=function(f,ms,...a){if(typeof f!=='function')return _si.call(W,f,ms,...a);return _si.call(W,function(){if(!on)f.apply(this,a);},ms);};
-  const rA=W.requestAnimationFrame=function(f){return _raf.call(W,t=>{if(on)held.push(()=>_raf.call(W,f));else f(t);});};
-  const fE=_fe&&(W.fetch=function(){const p=_fe.apply(W,arguments);return on?p.then(r=>on?gate.then(()=>r):r,e=>on?gate.then(()=>{throw e;}):Promise.reject(e)):p;});
+  /* 세상을 짓는 코드가 돌고 있을 때(bld) 건 것만 미룬다. 짓기를 쉬는 사이에 시작 창이 건 것(계정 확인·미리보기·캐릭터 모형 받기)은 그대로 돈다 */
+  const sT=W.setTimeout=function(f,ms,...a){if(typeof f!=='function'||!bld)return _st.call(W,f,ms,...a);return _st.call(W,function(){if(on)held.push(()=>f.apply(this,a));else f.apply(this,a);},ms);};
+  const sI=W.setInterval=function(f,ms,...a){if(typeof f!=='function'||!bld)return _si.call(W,f,ms,...a);return _si.call(W,function(){if(!on)f.apply(this,a);},ms);};
+  const rA=W.requestAnimationFrame=function(f){if(!bld)return _raf.call(W,f);return _raf.call(W,t=>{if(on)held.push(()=>_raf.call(W,f));else f(t);});};
+  const fE=_fe&&(W.fetch=function(){const p=_fe.apply(W,arguments);return on&&bld?p.then(r=>on?gate.then(()=>r):r,e=>on?gate.then(()=>{throw e;}):Promise.reject(e)):p;});
   /* 모형 파일(XHR) 받기 끝남 알림도 다 지은 뒤로 미룬다 */
   const XP=W.XMLHttpRequest&&W.XMLHttpRequest.prototype,_xa=XP&&XP.addEventListener;
-  if(_xa)XP.addEventListener=function(t,f,o){if(!on||typeof f!=='function')return _xa.call(this,t,f,o);const x=this;return _xa.call(this,t,function(e){if(on)gate.then(()=>f.call(x,e));else f.call(x,e);},o);};
+  if(_xa)XP.addEventListener=function(t,f,o){if(!on||!bld||typeof f!=='function')return _xa.call(this,t,f,o);const x=this;return _xa.call(this,t,function(e){if(on)gate.then(()=>f.call(x,e));else f.call(x,e);},o);};
   /* 일꾼(Worker)이 보낸 결과도 (NPC 모습 다듬기 등) */
   const WP=W.Worker&&W.Worker.prototype,WD=WP&&Object.getOwnPropertyDescriptor(WP,'onmessage');
   if(WD&&WD.set)Object.defineProperty(WP,'onmessage',{configurable:true,enumerable:WD.enumerable,get(){return WD.get.call(this);},
-    set(f){WD.set.call(this,typeof f==='function'&&on?function(e){if(on)gate.then(()=>f.call(this,e));else f.call(this,e);}:f);}});
+    set(f){WD.set.call(this,typeof f==='function'&&on&&bld?function(e){if(on)gate.then(()=>f.call(this,e));else f.call(this,e);}:f);}});
   const ch=new MessageChannel(),q=[];ch.port1.onmessage=()=>{const f=q.shift();if(f)f();};
   const pass=()=>new Promise(r=>{q.push(r);ch.port2.postMessage(0);});
-  return {get on(){return on;},get k(){return k;},
-    /* 지난번에 넘긴 뒤 40ms 넘게 일했으면(must면 늘) 한 번 넘긴다 */
-    y(must){k++;const t=performance.now();if(!must&&t-last<40)return null;if(M)M.textContent='불러오는 중… '+Math.min(99,Math.floor(k/N*100))+'%';return pass().then(()=>{last=performance.now();});},
+  return {get on(){return on;},get k(){return k;},get q(){return pq;},raf:f=>_raf.call(W,f),
+    /* 지난번에 넘긴 뒤 40ms 넘게 일했으면(must면 늘) 한 번 넘긴다. 시작 창이 떠 있으면 조금 더 자주 넘겨 미리보기가 덜 끊기게 */
+    y(must){k++;const t=performance.now();if(!must&&t-last<(S&&!S.hidden&&!pq?25:40))return null;if(M)M.textContent='불러오는 중… '+Math.min(90,Math.floor(k/N*90))+'%';bld=false;return pass().then(()=>{last=performance.now();bld=true;});},
+    /* 시작 창 코드를 세상보다 먼저 돌리는 동안: 거기서 건 타이머·파일 받기는 미루지 않는다 */
+    hold(v){bld=!!v;},
+    msg(t){if(M)M.textContent=t;},
+    /* 다 짓기 전에 게임에 들어가려 하면: 로딩 화면을 띄우고 다 지은 뒤에 한다 (한 번만) */
+    wait(f){if(pq)return;pq=f;if(L)L.hidden=false;if(M)M.textContent='불러오는 중… '+Math.min(90,Math.floor(k/N*90))+'%';},
+    run(){const f=pq;pq=null;if(f)f();},
     /* 다 지었다: 막아 둔 입력·타이머를 풀고, 모아 둔 것을 돌린다 */
-    ready(){if(!on)return;on=false;for(const t of EV)W.removeEventListener(t,block,{capture:true});if(W.setTimeout===sT)W.setTimeout=_st;if(W.setInterval===sI)W.setInterval=_si;if(W.requestAnimationFrame===rA)W.requestAnimationFrame=_raf;if(_fe&&W.fetch===fE)W.fetch=_fe;if(_xa)XP.addEventListener=_xa;if(WD&&WD.set)Object.defineProperty(WP,'onmessage',WD);
+    ready(){if(!on)return;on=false;bld=false;for(const t of EV)W.removeEventListener(t,block,{capture:true});if(W.setTimeout===sT)W.setTimeout=_st;if(W.setInterval===sI)W.setInterval=_si;if(W.requestAnimationFrame===rA)W.requestAnimationFrame=_raf;if(_fe&&W.fetch===fE)W.fetch=_fe;if(_xa)XP.addEventListener=_xa;if(WD&&WD.set)Object.defineProperty(WP,'onmessage',WD);
       open();for(const f of held.splice(0))_st.call(W,f,0);},
     /* 첫 화면이 그려진 뒤 가린 것을 걷는다 */
     done(){if(M)M.textContent='불러오는 중…';if(L)L.hidden=true;}};})();
@@ -10606,6 +10617,294 @@ const HZ=[   // 구역: 바닥색, 바닥 짙은색, 능선색, 깃발색
   {g:0xbc6c46,g2:0x92482c,rock:0x7a4a36,flag:0xc84828},   // 6 붉은 바위 협곡
   {g:0x8c5e44,g2:0x664030,rock:0x5a4436,flag:0x8a2418},   // 7 전갈 사막
   {g:0x564844,g2:0x3a302c,rock:0x3a3230,flag:0x2a1a14}];  // 8 화산 황무지
+/* ---------- 홈 화면·로그인·캐릭터 선택은 세상보다 먼저 ----------
+   예전에는 세상 전체(마을·사냥터·성…)를 다 지은 뒤에야 홈 화면이 떠서, 사이트에 들어오면 한참 로딩만 보였다.
+   이제 시작 창에 필요한 것만 먼저 만들어 바로 쓸 수 있게 하고, 세상은 그 뒤에서 이어 짓는다 (BOOT).
+   그동안 '모험 시작'을 누르면 그때 로딩 화면이 뜨고 남은 만큼만 기다린다 (startGame → BOOT.wait) */
+let tAll=0;
+let P=null,player=null,mentor=null,mode='title',invuln=0,curZone=null,saveT=0,hurtT=99;
+const BANK_KEY='orlando3d.bank';
+BOOT.hold(false);   /* 여기서 거는 타이머·파일 받기(계정 확인·캐릭터 모형)는 다 지을 때까지 미루지 않는다 */
+/* ---------- 시작 화면 ---------- */
+const chosen='warrior';   /* 새 캐릭터는 직업 없이 시작한다 (튀르팽의 집에서 책을 고르면 정해진다). 미리보기 옷은 이 값과 상관없이 고른 색 */
+// 외모 고르기: 성별·머리색·눈색 (새 캐릭터 화면과 '외모 바꾸기' 창에서 함께 쓴다)
+function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
+  const grp=t=>{const g=document.createElement('div');g.className='apgrp';const h=document.createElement('h4');h.textContent=t;g.appendChild(h);box.appendChild(g);cur=g;};
+  const row=(label,cls)=>{const w=document.createElement('div');w.className='aprow '+cls;const l=document.createElement('span');l.textContent=label;w.appendChild(l);cur.appendChild(w);return w;};
+  grp('얼굴·머리');
+  const gr=row('성별','g');for(const [g,nm] of [['m','남자'],['f','여자']]){const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',ap.g===g);
+    b.onclick=()=>{if(ap.g!==g){ap.g=g;ap.s=0;ap.d=0;delete ap.sv;buildApControls(box,ap,onChange);}onChange();};gr.appendChild(b);}
+  const hs=row('머리','s');HAIR_STYLES[ap.g].forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap.s|0)===i);
+    b.onclick=()=>{ap.s=i;hs.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};hs.appendChild(b);});
+  const sw=(label,list,key)=>{const w=row(label,'c');for(const c of list){const b=document.createElement('button');b.type='button';b.className='swc';b.style.background='#'+c.toString(16).padStart(6,'0');b.setAttribute('aria-pressed',ap[key]===c);b.setAttribute('aria-label',label);
+    b.onclick=()=>{ap[key]=c;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);}};
+  sw('머리색',HAIR_COLORS,'h');sw('눈색',EYE_COLORS,'e');
+  {const w=row('피부','c');const base=new THREE.Color(0xf4d2bc);SKIN_TONES.forEach((c,i)=>{const b=document.createElement('button');b.type='button';b.className='swc';b.style.background='#'+base.clone().multiply(new THREE.Color(c)).getHexString();b.setAttribute('aria-pressed',(ap.k|0)===i);b.setAttribute('aria-label','피부');
+    b.onclick=()=>{ap.k=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});}
+  const opt=(label,list,key,def=0)=>{const w=row(label,'t');list.forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap[key]??def)===i);
+    b.onclick=()=>{ap[key]=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});};
+  opt('눈',EYE_SHAPES,'y');opt('눈썹',BROWS,'w');opt('얼굴',FACE_MARKS,'f',1);if(ap.g!=='f')opt('수염',BEARDS,'d');
+  /* 몸: 밀대로 조금씩 (키·체형·가슴) */
+  const sl=(label,key)=>{const w=row(label,'r'),r=document.createElement('input');r.type='range';r.min=0;r.max=35;r.step=1;r.value=apBody(ap)[key];r.setAttribute('aria-label',label);
+    r.oninput=()=>{const B=apBody(ap);ap.hv=B.hv;ap.wv=B.wv;ap.sv=B.sv;ap[key]=+r.value;onChange();};w.appendChild(r);};
+  grp('몸');sl('키','hv');sl('체형','wv');if(ap.g==='f')sl('가슴','sv');
+  grp('옷');opt('윗옷',TOPS,'u');sw('윗옷 색',SHIRT_COLORS,'c');opt('아래',BOTTOMS,'l');sw('아래 색',PANTS_COLORS,'p');opt('신발',SHOES,'o');}
+// 미리보기 자세: 무기 없이 팔을 편하게 내리고 손도 편다
+/* 석궁은 원래 윗몸 앞에 놓이고 두 손이 찾아가 쥔다(animStick). 미리보기에서는 팔을 편히 내리고(쥔 자세는 팔이 몸에 박혔다)
+   석궁은 오른손에 아래로 늘어뜨려 든다 */
+const _apXV=new THREE.Vector3(),AP_XB=[0,-.05,.05,-1.45,0,0];
+function apRelaxPose(m,dt){const u=m.userData,xb=!!(u.stick&&u.stick.xb);u.relax=1;animStick(m,0,tAll,1,false,false,null);const S=u.stick;
+  if(S){S.AR.sh.rotation.set(-.04,0,.1);S.AR.el.rotation.x=-.2;S.AL.sh.rotation.set(-.04,0,-.1);S.AL.el.rotation.x=-.2;S.AR.hand.rotation.x=0;S.AL.hand.rotation.x=0;S.upper.rotation.set(0,0,0);}
+  if(S&&xb&&S.w){m.updateMatrixWorld(true);S.AR.hand.getWorldPosition(_apXV);S.upper.worldToLocal(_apXV);
+    S.w.position.set(_apXV.x+AP_XB[0],_apXV.y+AP_XB[1],_apXV.z+AP_XB[2]);S.w.rotation.set(AP_XB[3],AP_XB[4],AP_XB[5]);S.w.updateMatrix();if(S.xbH)S.xbH.visible=false;}
+  if(!u.anime&&u.ap&&PM.data[u.ap.g])pmAttach(m,u.job,u.gear,u.ap);
+  if(u.anime){if(!u.relaxF){u.relaxF=1;pmFingers(u.anime,'L','relax');pmFingers(u.anime,'R','relax');}pmPose(m,u.anime,dt);}}
+/* 미리보기·얼굴 그림은 모두 WebGL 하나(PV)로 그려 각 캔버스에 옮겨 붙인다. 캔버스마다 WebGL을 따로 만들면
+   처음 그릴 때마다 셰이더를 다시 구우며 몇 초씩 멈췄다(게임 시작·새 캐릭터를 누를 때). 셰이더는 홈 화면에 있는 동안 미리 굽는다:
+   checkShaderErrors를 끄면 굽는 동안 기다리지 않고, 다 구워진 뒤 처음 그릴 때 바로 그려진다 */
+const PV={r:null,cv:null,sc:null,fail:false,warm:0,t0:performance.now()};
+function pvGet(){if(PV.r||PV.fail)return PV.r;
+  try{const cv=document.createElement('canvas');cv.width=cv.height=8;const r=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true});
+    r.debug.checkShaderErrors=false;r.outputEncoding=renderer.outputEncoding;r.setPixelRatio(1);
+    const sc=new THREE.Scene();sc.add(new THREE.HemisphereLight(0xfff4e0,0x3a3430,.95));const k=new THREE.DirectionalLight(0xffffff,.88);k.position.set(1.5,3,3);sc.add(k);
+    PV.r=r;PV.cv=cv;PV.sc=sc;}catch(e){PV.fail=true;}return PV.r;}
+/* 큰 미리보기: PV 캔버스를 보이는 무대(.stage)에 옮겨 넣고 바로 그린다 (그림을 읽어 옮기면 그래픽카드가 다른 일을 끝낼 때까지 기다리게 된다).
+   copy: 얼굴 그림처럼 한 번 찍어 out(2D)에 옮겨 둘 때 */
+function pvDraw(m,cam,out,W,H,copy){const r=pvGet();if(!r||!m)return false;const C=PV.cv;
+  if(copy){if(C.width<W||C.height<H)r.setSize(Math.max(C.width,W),Math.max(C.height,H),false);
+    r.setViewport(0,0,W,H);r.setScissor(0,0,W,H);r.setScissorTest(true);PV.sc.add(m);try{r.render(PV.sc,cam);}catch(e){}PV.sc.remove(m);r.setScissorTest(false);
+    if(out.width!==W||out.height!==H){out.width=W;out.height=H;}const g=out.getContext('2d');g.clearRect(0,0,W,H);g.drawImage(C,0,C.height-H,W,H,0,0,W,H);r.clear();return true;}
+  if(C.previousSibling!==out)out.after(C);if(C.width!==W||C.height!==H)r.setSize(W,H,false);
+  r.setViewport(0,0,W,H);PV.sc.add(m);try{r.render(PV.sc,cam);}catch(e){}PV.sc.remove(m);return true;}
+/* 홈 화면에서 쉬는 동안: 저장된 캐릭터들과 새 캐릭터 모습을 미리 구워 둔다 (1단계 셰이더, 2단계 작은 그림 한 번으로 모양·그림 올리기) */
+function pvWarm(){if(PV.warm>=2||performance.now()-PV.t0<700)return;if(!OLD_LOOK&&!(PM.data.m&&PM.data.f))return;
+  const r=pvGet();if(!r){PV.warm=2;return;}
+  if(!PV.wm){PV.wm=[];try{for(const c of loadChars().slice(0,8))PV.wm.push(makePlayerMesh(c.job,gearOf(c),charAp(c)));
+      PV.wm.push(makePlayerMesh(chosen,{helm:-1,armor:-1,boots:-1,weapon:-1,sub:-1},{...newAp}));}catch(e){}}
+  const cam=new THREE.PerspectiveCamera(30,1,.1,20);cam.position.set(0,1.2,4.9);cam.lookAt(0,1,0);
+  if(PV.warm===0){for(const m of PV.wm)PV.sc.add(m);try{r.compile(PV.sc,cam);}catch(e){}for(const m of PV.wm)PV.sc.remove(m);PV.warm=1;PV.t1=performance.now();return;}
+  if(performance.now()-PV.t1<1500)return;
+  for(const m of PV.wm)PV.sc.add(m);r.setViewport(0,0,8,8);try{r.render(PV.sc,cam);}catch(e){}for(const m of PV.wm)PV.sc.remove(m);PV.wm=null;PV.warm=2;}
+/* 마우스로 끌면 돌고 휠로 확대 (휴대폰: 한 손가락 끌기·두 손가락 벌리기). 손을 떼고 4초 지나면 다시 천천히 돈다 */
+function apPreviewInput(el,st){const P=new Map();let pd=0;el.style.touchAction='none';el.style.cursor='grab';
+  const zoom=f=>{st.zoom=Math.min(1.25,Math.max(.5,st.zoom*f));st.idle=0;};
+  el.addEventListener('pointerdown',e=>{if(e.button>0)return;P.set(e.pointerId,[e.clientX,e.clientY]);try{el.setPointerCapture(e.pointerId);}catch(_){}el.style.cursor='grabbing';st.idle=0;st.held=true;
+    if(P.size===2){const [a,b]=[...P.values()];pd=Math.hypot(a[0]-b[0],a[1]-b[1]);}});
+  el.addEventListener('pointermove',e=>{const q=P.get(e.pointerId);if(!q)return;
+    if(P.size===1){st.yaw+=(e.clientX-q[0])*.012;st.idle=0;}
+    P.set(e.pointerId,[e.clientX,e.clientY]);
+    if(P.size===2){const [a,b]=[...P.values()];const d=Math.hypot(a[0]-b[0],a[1]-b[1]);if(pd>0&&d>0)zoom(pd/d);pd=d;}});
+  const up=e=>{P.delete(e.pointerId);pd=0;if(!P.size){el.style.cursor='grab';st.held=false;}};
+  el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
+  el.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(e.deltaY*.0012));},{passive:false});}
+// 작은 미리보기 화면 하나 (캔버스마다)
+function makeApPreview(cv,dist=4.9,ly=1.0){let st=null;return{dirty:true,tick(dt,job,ap,gear,alive){if(!alive)return;
+  if(!st){const c2=new THREE.PerspectiveCamera(30,1,.1,20);st={cam:c2,m:null,yaw:.4,zoom:1,idle:99,held:false,touched:false,zk:-1};if(cv.parentElement)apPreviewInput(cv.parentElement,st);}
+  const w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;const pr=Math.min(2,devicePixelRatio||1),W=Math.round(w*pr),H=Math.round(h*pr);
+  if(st.w!==w||st.h!==h){st.w=w;st.h=h;st.cam.aspect=w/h;st.cam.updateProjectionMatrix();}
+  if(st.zk!==st.zoom){st.zk=st.zoom;const t=Math.max(0,Math.min(1,(1-st.zoom)/.5)),y=ly+(1.68-ly)*t;st.cam.position.set(0,y+.2*st.zoom,dist*st.zoom);st.cam.lookAt(0,y,0);}
+  if(this.dirty&&(OLD_LOOK||PM.data[ap.g])){st.m=makePlayerMesh(job,gear,{...ap});this.dirty=false;if(st.idle>=4)st.yaw=.4;}
+  if(st.m){if(st.held||st.idle<4)st.idle+=st.held?0:dt;else st.yaw+=dt*.5;st.m.rotation.y=st.yaw;apRelaxPose(st.m,dt);pvDraw(st.m,st.cam,cv,W,H);}}};}
+let selId=null;
+const charAp=c=>apParse(c.ap)||(c.ap&&c.ap.g?c.ap:null)||apDefault();
+const PORTRAITS=new Map(),portraitWant=[];let charPicR=null;
+let selPrev=null;
+const newAp={...apDefault(),c:SHIRT_COLORS[0]};let apPrev=null;
+(function(){const box=$('#apBox');if(!box)return;buildApControls(box,newAp,()=>{if(apPrev)apPrev.dirty=true;});if(!OLD_LOOK){pmLoad('m').catch(()=>{});pmLoad('f').catch(()=>{});}})();
+// 미리보기: 새 캐릭터 화면이 열려 있을 때만 돈다
+function apPreviewTick(dt){
+  if(BOOT.q)return;   /* 로딩 화면이 덮고 있으면 미리보기는 쉰다 (그만큼 빨리 짓는다) */
+  pvWarm();
+  if(!apPrev&&$('#apPrev'))apPrev=makeApPreview($('#apPrev'));
+  if(apPrev){$('#apWait').hidden=OLD_LOOK||!!PM.data[newAp.g];apPrev.tick(dt,chosen,newAp,{helm:-1,armor:-1,boots:-1,weapon:-1,sub:-1},!$('#start').hidden&&!$('#stepNew').hidden&&mode==='title');}
+  /* 캐릭터 선택창: 고른 캐릭터를 크게 돌려 보이고, 목록 얼굴 그림을 한 장씩 찍는다 */
+  if(mode!=='title'||$('#start').hidden||$('#stepList').hidden)return;
+  portraitStep();
+  if(!selPrev&&$('#selPrev'))selPrev=makeApPreview($('#selPrev'),5.6,1.15);   /* 선택창 무대는 작게(340px), 발이 바닥 그림자에 닿게 */
+  const c=selId&&loadCharsCached().find(x=>x.id===selId);
+  if(selPrev&&c)selPrev.tick(dt,c.job,charAp(c),gearOf(c),true);}
+let _lcT=0,_lc=[];function loadCharsCached(){const t=performance.now();if(t-_lcT>500){_lc=loadChars();_lcT=t;}return _lc;}
+function startStep(n){if(n===0)renderChars();   /* 목록은 보여 줄 때마다 지금 저장된 것으로 다시 그린다 (로그인으로 목록이 바뀐 뒤에도) */
+  $('#stepHome').hidden=n!==-1;$('#stepAuth').hidden=n!==2;$('#start').classList.toggle('home',n===-1);$('#stepList').hidden=n!==0;$('#stepNew').hidden=n!==1;if(n===1){if(apPrev)apPrev.dirty=true;setTimeout(()=>{try{$('#nick').focus();$('#nick').select();}catch(e){}},30);}}
+$('#toCreate').onclick=()=>startStep(1);$('#backList').onclick=()=>startStep(0);
+$('#toHome').onclick=()=>startStep(-1);$('#toList').onclick=()=>acctGate(()=>startStep(loadChars().length?0:1));
+(function(){
+  renderChars();
+  /* 이름이 비어 있으면 캐릭터를 만들 수 없다 */
+  const nickOk=()=>{const ok=!!($('#nick').value||'').trim();$('#go').disabled=!ok;return ok;};
+  $('#nick').addEventListener('input',()=>{nickOk();$('#nickShow').textContent=$('#nick').value.trim();});nickOk();
+  $('#go').onclick=()=>{if(!nickOk()){$('#nick').focus();return;}if(BOOT.on||BOOT.q){BOOT.wait(()=>$('#go').onclick());return;}const name=$('#nick').value.trim(),T=OR.THOUSE;
+    startGame({id:'c'+Date.now().toString(36)+Math.floor(Math.random()*1e4),name,job:chosen,needBook:true,lv:1,exp:0,sp:0,skills:{},slots:Array(NSK).fill(null),x:T.x-2.9,z:T.z-2.5,y:0,ap:apCode(newAp)});};
+  $('#nick').addEventListener('keydown',e=>{if(e.key==='Enter')$('#go').click();});
+})();
+
+function loadChars(){
+  let list=[];
+  try{list=JSON.parse(localStorage.getItem('orlando3d.chars')||'[]');if(!Array.isArray(list))list=[];}catch(e){list=[];}
+  try{const old=JSON.parse(localStorage.getItem('orlando3d.v2')||'null');
+    if(old&&old.job&&JOBS[old.job]&&!list.some(c=>c.id==='legacy')){old.id='legacy';list.unshift(old);storeChars(list);localStorage.removeItem('orlando3d.v2');}}catch(e){}
+  for(const c of list)if(c&&JOB_ALIAS[c.job])c.job=JOB_ALIAS[c.job];
+  return list.filter(c=>c&&c.id&&JOBS[c.job]);
+}
+function storeChars(list){try{localStorage.setItem('orlando3d.chars',JSON.stringify(list));}catch(e){}}
+/* 캐릭터 선택창: 왼쪽 목록(얼굴 그림) · 오른쪽 고른 캐릭터를 크게 */
+function renderChars(){
+  const list=loadChars(),box=$('#chars');box.innerHTML='';
+  list.sort((a,b)=>(b.t||0)-(a.t||0));
+  if(!list.some(c=>c.id===selId))selId=list.length?list[0].id:null;
+  for(const c of list){
+    const b=document.createElement('button');b.type='button';b.className='char'+(c.id===selId?' on':'');
+    const im=document.createElement('img');im.alt='';const k=portraitKey(c);if(PORTRAITS.has(k))im.src=PORTRAITS.get(k);else portraitWant.push([k,c,im]);
+    const t=document.createElement('div'),n=document.createElement('b');n.textContent=c.name;const m=document.createElement('span');m.textContent=`${c.needBook?'모험가':(JOBS[c.job]||{name:''}).name} · Lv ${c.lv}`;t.append(n,m);
+    b.append(im,t);b.onclick=()=>{if(selId===c.id)return;selId=c.id;renderChars();};b.ondblclick=()=>startGame(c);
+    box.appendChild(b);
+  }
+  const c=list.find(x=>x.id===selId);$('#selBig').hidden=!c;
+  if(c){$('#selName').textContent=c.name;$('#selInfo').textContent=`${c.needBook?'모험가':JOBS[c.job].name} · Lv ${c.lv}`;if(selPrev)selPrev.dirty=true;
+    const d=$('#selDel');d.classList.remove('arm');d.textContent='삭제';}
+}
+$('#selPlay').onclick=()=>{const c=loadChars().find(x=>x.id===selId);if(c)startGame(c);};
+{const d=$('#selDel');let tm=0;d.onclick=()=>{if(!d.classList.contains('arm')){d.classList.add('arm');d.textContent='정말 삭제';clearTimeout(tm);tm=setTimeout(()=>{d.classList.remove('arm');d.textContent='삭제';},3000);return;}
+  clearTimeout(tm);storeChars(loadChars().filter(x=>x.id!==selId));selId=null;renderChars();};}
+/* 목록의 얼굴 그림: 캐릭터 모델을 얼굴 높이에서 찍어 둔다 (한 번에 하나씩, 그린 것은 기억) */
+function portraitKey(c){return c.job+'|'+(typeof c.ap==='string'?c.ap:apCode(charAp(c)))+'|'+JSON.stringify(gearOf(c));}
+function portraitStep(){const w=portraitWant.shift();if(!w)return;const [k,c,im]=w;
+  if(PORTRAITS.has(k)){im.src=PORTRAITS.get(k);return;}
+  try{if(!charPicR)charPicR={cv:document.createElement('canvas'),cam:new THREE.PerspectiveCamera(19,1,.1,20)};
+    const R=charPicR,ap=charAp(c),m=makePlayerMesh(c.job,gearOf(c),ap);m.rotation.y=.12;apRelaxPose(m,1);
+    const bare=makePlayerMesh(c.job,{helm:-1,armor:-1,boots:-1,weapon:-1,sub:-1,acc:-1,shs:0,wc:0},ap);bare.updateMatrixWorld(true);const hy=new THREE.Box3().setFromObject(bare).max.y-.27;
+    R.cam.position.set(0,hy+.02,1.75);R.cam.lookAt(0,hy,0);if(!pvDraw(m,R.cam,R.cv,128,128,true))return;
+    const url=R.cv.toDataURL('image/png');PORTRAITS.set(k,url);im.src=url;}catch(e){}}
+/* ---------- 계정 (회원가입·로그인) ----------
+   서버(accounts.js)가 계정을 켜 두었으면 게임을 하기 전에 로그인하거나 게스트로 한다. 캐릭터 목록(orlando3d.chars)과 금고(orlando3d.bank)는
+   계정에 저장되고, 이 기기의 localStorage는 그 사본이 된다: 로그인할 때 서버 것과 합쳐(캐릭터마다 더 나중에 저장된 쪽) 쓰고, 바뀐 캐릭터만 몇 초마다 올린다.
+   계정이 없는 곳(시험판처럼 서버가 없을 때)과 게스트는 예전처럼 이 기기에만 저장한다.
+   게스트로 이 기기에 남긴 캐릭터·금고 골드는 그 기기에서 처음 로그인한 계정으로 옮긴다(mig: 옮기기가 끝날 때까지 기억).
+   gen: 로그인·로그아웃·게스트 고르기마다 새로 정하는 표. 다른 창에서 계정이 바뀌면 이 창은 그 사본을 건드리지 않는다 */
+const ACCT_KEY='orlando3d.acct';
+const ACCT={on:false,id:'',tok:'',guest:false,keep:true,dirty:false,mig:false,gen:'',stale:false,synced:false,sent:new Map(),bankSent:null,bankBoot:null,busy:false,boot:null,after:null,signup:false};
+const acctStored=()=>{try{return JSON.parse(localStorage.getItem(ACCT_KEY)||'{}')||{};}catch(e){return {};}};
+/* 로그인 유지: 켜면 표를 localStorage에 두어 브라우저를 다시 열어도 로그인된 채로, 끄면 sessionStorage에만 두어 브라우저를 닫으면 풀린다 */
+function acctRead(){const o=acctStored();ACCT.id=typeof o.id==='string'?o.id:'';ACCT.keep=o.keep!==false;let st='';try{st=sessionStorage.getItem(ACCT_KEY+'.tok')||'';}catch(e){}
+  ACCT.tok=ACCT.id&&typeof o.tok==='string'&&o.tok?o.tok:ACCT.id&&st.startsWith(ACCT.id+'.')?st:'';ACCT.dirty=!!o.dirty;ACCT.mig=!!(ACCT.id&&o.mig);ACCT.guest=!ACCT.id&&!!o.guest;ACCT.gen=typeof o.gen==='string'?o.gen:'';}
+function acctWrite(){if(ACCT.stale)return;
+  try{localStorage.setItem(ACCT_KEY,JSON.stringify(ACCT.id?{id:ACCT.id,tok:ACCT.keep?ACCT.tok:'',dirty:ACCT.dirty,mig:ACCT.mig||undefined,keep:ACCT.keep,gen:ACCT.gen}:ACCT.guest?{guest:1,keep:ACCT.keep,gen:ACCT.gen}:{keep:ACCT.keep,gen:ACCT.gen}));}catch(e){}
+  try{if(ACCT.tok&&!ACCT.keep)sessionStorage.setItem(ACCT_KEY+'.tok',ACCT.tok);else sessionStorage.removeItem(ACCT_KEY+'.tok');}catch(e){}}
+const acctNewGen=()=>{ACCT.gen=Math.random().toString(36).slice(2,10);};
+// 다른 창이 로그인·로그아웃·게스트를 골랐는가: 그러면 이 창은 더 저장하지도 올리지도 않고 새로 불러오게 한다
+function acctCheck(){if(ACCT.stale)return false;const g=acctStored().gen||'';if(g===ACCT.gen)return true;
+  ACCT.stale=true;ACCT.tok='';
+  if(P&&player&&mode!=='title'){saveStale=true;askPrompt('다른 창에서 계정이 바뀌었어요. 기록이 섞이지 않도록 이 창은 더 저장하지 않아요.','다시 불러오기','닫기',ok=>{if(ok)location.reload();});}
+  else location.reload();
+  return false;}
+addEventListener('storage',e=>{if(e.key===ACCT_KEY||e.key===null)acctCheck();});
+const acctCJ=c=>{const o={...c};delete o.tab;return JSON.stringify(o);};
+function acctRawChars(){try{const a=JSON.parse(localStorage.getItem('orlando3d.chars')||'[]');return Array.isArray(a)?a.filter(c=>c&&typeof c.id==='string'):[];}catch(e){return [];}}
+const acctBankRaw=()=>{try{return localStorage.getItem(BANK_KEY);}catch(e){return null;}};
+function acctClearLocal(){try{localStorage.setItem('orlando3d.chars','[]');localStorage.removeItem(BANK_KEY);}catch(e){}_lcT=0;selId=null;}
+async function acctApi(path,body,keep){const h={};if(body!==undefined)h['Content-Type']='application/json';if(ACCT.tok)h.Authorization='Bearer '+ACCT.tok;
+  const b=body===undefined?undefined:JSON.stringify(body);
+  const r=await fetch(path,{method:b===undefined?'GET':'POST',headers:h,body:b,cache:'no-store',keepalive:!!keep&&b!==undefined&&b.length<60000});
+  let j={};try{j=await r.json();}catch(e){}return {s:r.status,j};}
+// 지난번에 올린 것과 달라진 캐릭터·지운 캐릭터·금고
+function acctDiff(all){const list=acctRawChars(),chars=[],ids=new Set();
+  for(const c of list){ids.add(c.id);const s=acctCJ(c);if(all||ACCT.sent.get(c.id)!==s)chars.push([c,s]);}
+  const gone=all?[]:[...ACCT.sent.keys()].filter(id=>!ids.has(id));
+  const br=acctBankRaw(),bank=(all||br!==ACCT.bankSent)&&br!=null?br:null;
+  return {chars,gone,bank,br,empty:!chars.length&&!gone.length&&bank==null};}
+// 바뀐 것을 서버에 올린다. migrate: 게스트로 쓰던 이 기기의 기록을 통째로 올리고 금고 골드는 계정 금고에 더한다
+async function acctPush(opt={}){
+  if(!ACCT.on||!ACCT.tok||ACCT.busy||!acctCheck())return false;
+  if(!opt.migrate&&!ACCT.synced)return false;   /* 서버 것과 합치기 전에는 올리지 않는다 (금고를 덮어쓰지 않게) */
+  const d=acctDiff(opt.migrate);if(d.empty){if(ACCT.dirty){ACCT.dirty=false;acctWrite();}return true;}
+  if(!ACCT.dirty){ACCT.dirty=true;acctWrite();}
+  let bank;try{bank=d.bank!=null?JSON.parse(d.bank):undefined;}catch(e){}
+  const body={chars:d.chars.map(([c])=>{const o={...c};delete o.tab;return o;}),gone:d.gone};if(bank)body[opt.migrate?'bankAdd':'bank']=bank;
+  ACCT.busy=true;
+  try{const r=await acctApi('/api/save',body,opt.keep);
+    if(r.s===401){acctLost();return false;}
+    if(r.s!==200||ACCT.stale)return false;
+    for(const [c,s] of d.chars)ACCT.sent.set(c.id,s);for(const id of d.gone)ACCT.sent.delete(id);ACCT.bankSent=d.br;
+    if(acctDiff().empty){ACCT.dirty=false;acctWrite();}return true;
+  }catch(e){return false;}finally{ACCT.busy=false;}}
+/* 서버의 계정 기록을 이 기기 사본과 합친다: 캐릭터마다 더 나중에 저장된 쪽, 이 기기에서만 새로 만든 캐릭터는 남기고 다른 곳에서 지운 캐릭터는 지운다.
+   금고는 이 기기에서 올리지 못한 변화가 있으면(dirty) 이 기기 것, 아니면 서버 것. 이긴 이 기기 것은 다음 올리기에 실린다 */
+function acctApply(d){const srv=Array.isArray(d.chars)?d.chars.filter(c=>c&&typeof c.id==='string'):[],gone=d.gone&&typeof d.gone==='object'?d.gone:{};
+  const local=new Map(acctRawChars().map(c=>[c.id,c])),out=[];
+  for(const c of srv){const l=local.get(c.id);out.push(l&&(l.t||0)>(c.t||0)?l:c);local.delete(c.id);}
+  for(const [id,l] of local)if(!gone[id])out.push(l);
+  const sb=JSON.stringify(d.bank||{gold:0,t:0}),keepBank=ACCT.dirty&&acctBankRaw()!=null;
+  try{localStorage.setItem('orlando3d.chars',JSON.stringify(out));if(!keepBank)localStorage.setItem(BANK_KEY,sb);}catch(e){}
+  ACCT.sent=new Map(srv.map(c=>[c.id,acctCJ(c)]));ACCT.bankSent=keepBank?sb:acctBankRaw();ACCT.synced=true;_lcT=0;}
+async function acctPull(){const r=await acctApi('/api/me');if(r.s===401){acctLost();return false;}if(r.s!==200||!acctCheck())return false;acctApply(r.j);return true;}
+// 로그인 표가 더 이상 맞지 않으면 (다른 곳에서 로그아웃·오래 안 씀): 이 기기 사본은 그 계정 것으로 남겨 두고(dirty 그대로) 다시 로그인하게 한다
+function acctLost(){ACCT.tok='';ACCT.synced=false;acctWrite();acctBar();}
+// 이 기기 사본을 계정과 맞춘다: 게스트 기록 옮기기(남아 있으면) → 서버 것과 합치기
+async function acctSync(){if(!ACCT.tok||ACCT.stale)return false;
+  if(ACCT.mig){if(!await acctPush({migrate:true}))return false;ACCT.mig=false;ACCT.dirty=false;acctWrite();}
+  return acctPull();}
+async function acctBootRun(){acctRead();ACCT.bankBoot=acctBankRaw();
+  try{const r=await Promise.race([acctApi('/api/acct'),new Promise((_,no)=>setTimeout(()=>no(0),8000))]);ACCT.on=r.s===200&&!!r.j.on;}catch(e){ACCT.on=false;}
+  if(ACCT.on&&ACCT.tok){try{await acctSync();}catch(e){}}
+  acctBar();if(mode==='title'&&!$('#stepList').hidden)renderChars();}
+ACCT.boot=acctBootRun();
+// 몇 초마다: 아직 서버와 못 맞췄으면 다시 맞추고, 맞췄으면 바뀐 것만 올린다
+setInterval(()=>{if(!ACCT.tok||ACCT.busy||ACCT.stale)return;if(ACCT.synced)acctPush();else acctSync().catch(()=>{});},4000);
+function acctMarkDirty(){if(!ACCT.tok||ACCT.stale||ACCT.mig)return;const ch=ACCT.synced?!acctDiff().empty:acctBankRaw()!==ACCT.bankBoot;if(ch&&!ACCT.dirty){ACCT.dirty=true;acctWrite();}}
+addEventListener('pagehide',()=>{if(!ACCT.tok||!acctCheck())return;try{if(P&&player&&mode!=='title'&&!saveStale)save();}catch(e){}acctMarkDirty();acctPush({keep:true});});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&ACCT.tok){acctMarkDirty();acctPush({keep:true});}});
+// 머리줄의 로그인 단추
+function acctBar(){const bar=$('#acctBar');if(!bar)return;bar.hidden=!ACCT.on;
+  $('#acctName').textContent=ACCT.tok?ACCT.id:'';$('#acctBtn').textContent=ACCT.tok?'로그아웃':'로그인';}
+// 게임 시작 전: 계정이 켜져 있으면 로그인부터 (게스트를 골랐으면 그대로)
+async function acctGate(fn){if(ACCT.boot)await ACCT.boot;if(ACCT.on&&!ACCT.tok&&!ACCT.guest){acctOpen(false,fn);return;}fn();}
+/* 게스트: 로그인 없이 예전처럼 이 기기에만 저장한다. 로그인 표가 끊긴 계정의 사본이 남아 있으면 지운다
+   (남겨 두면 그 계정 캐릭터가 게스트 것이 되어, 나중에 다른 계정으로 로그인할 때 그 계정으로 옮겨져 버린다) */
+function acctGuest(){if(!acctCheck())return;if(ACCT.id)acctClearLocal();
+  ACCT.id='';ACCT.tok='';ACCT.dirty=false;ACCT.mig=false;ACCT.synced=false;ACCT.guest=true;ACCT.sent=new Map();ACCT.bankSent=null;acctNewGen();acctWrite();acctBar();
+  const f=ACCT.after;ACCT.after=null;if(f)f();else startStep(loadChars().length?0:1);}
+function acctOpen(signup,after){ACCT.after=after||null;acctMode(signup);startStep(2);$('#auKeep').checked=ACCT.keep;
+  const id=$('#auId');if(!id.value&&ACCT.id)id.value=ACCT.id;setTimeout(()=>{try{(id.value?$('#auPw'):id).focus();}catch(e){}},30);}
+function acctMode(signup){ACCT.signup=signup;$('#auTitle').textContent=signup?'회원가입':'로그인';$('#auGo').textContent=signup?'가입하기':'로그인';
+  $('#auSwap').textContent=signup?'로그인':'회원가입';$('#auPw2L').hidden=!signup;$('#auPw').autocomplete=signup?'new-password':'current-password';$('#auErr').textContent='';}
+const ACCT_ERR={id:'아이디는 영문 소문자와 숫자 4~16자로 해 주세요.',pw:'비밀번호는 6~64자로 해 주세요.',taken:'이미 있는 아이디예요.',wrong:'아이디나 비밀번호가 맞지 않아요.',many:'너무 여러 번 시도했어요. 잠시 뒤에 다시 해 주세요.',net:'서버에 닿지 않아요. 잠시 뒤에 다시 해 주세요.'};
+async function acctSubmit(){if(!acctCheck()||$('#auGo').disabled)return;const err=$('#auErr'),go=$('#auGo'),keep=$('#auKeep').checked,signup=ACCT.signup;
+  const id=$('#auId').value.trim().toLowerCase(),pw=$('#auPw').value;
+  if(!/^[a-z0-9]{4,16}$/.test(id)){err.textContent=ACCT_ERR.id;return;}
+  if(pw.length<6||pw.length>64){err.textContent=ACCT_ERR.pw;return;}
+  if(signup&&pw!==$('#auPw2').value){err.textContent='비밀번호가 서로 달라요.';return;}
+  err.textContent='';go.disabled=true;
+  try{let r;try{r=await acctApi(signup?'/api/signup':'/api/login',{id,pw});}catch(e){r={s:0,j:{}};}
+    if(!acctCheck())return;
+    if(r.s!==200||!r.j.tok){err.textContent=ACCT_ERR[r.j.err]||ACCT_ERR.net;return;}
+    const prev=ACCT.id,name=r.j.name;
+    if(prev&&prev!==name){acctClearLocal();ACCT.dirty=false;ACCT.mig=false;}   /* 다른 계정이 남긴 사본은 버린다 */
+    else if(!prev){ACCT.dirty=false;ACCT.mig=acctRawChars().length>0||bankGold()>0;   /* 게스트 기록은 이 계정으로 옮긴다 */
+      if(ACCT.mig){const list=acctRawChars();for(const c of list)if(c.id==='legacy')c.id='c'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);   /* 기기마다 같은 이름표가 있을 수 있어 바꿔 둔다 */
+        try{localStorage.setItem('orlando3d.chars',JSON.stringify(list));}catch(e){}}}
+    ACCT.id=name;ACCT.tok=r.j.tok;ACCT.guest=false;ACCT.keep=keep;ACCT.synced=false;ACCT.sent=new Map();ACCT.bankSent=null;ACCT.bankBoot=prev===name?ACCT.bankBoot:acctBankRaw();
+    acctNewGen();acctWrite();
+    if(!await acctSync()&&!ACCT.stale){err.textContent=ACCT_ERR.net;}
+    $('#auPw').value='';$('#auPw2').value='';acctBar();
+    const f=ACCT.after;ACCT.after=null;if(f)f();else startStep(-1);
+  }finally{go.disabled=false;}}
+async function acctLogout(){if(!acctCheck())return;const btn=$('#acctBtn');btn.disabled=true;
+  try{try{if(P&&player&&mode!=='title'&&!saveStale)save();}catch(e){}
+    for(let i=0;i<20&&ACCT.busy;i++)await new Promise(ok=>setTimeout(ok,150));
+    const ok=ACCT.mig||!ACCT.synced?await acctSync():true;
+    if(!ok||!await acctPush()){askPrompt('기록을 아직 다 올리지 못했어요. 잠시 뒤에 다시 해 주세요.','확인','닫기',()=>{});return;}
+    try{await acctApi('/api/logout',{});}catch(e){}
+    ACCT.id='';ACCT.tok='';ACCT.dirty=false;ACCT.mig=false;ACCT.synced=false;ACCT.sent=new Map();ACCT.bankSent=null;acctNewGen();acctWrite();acctClearLocal();
+    acctBar();startStep(-1);}finally{btn.disabled=false;}}
+$('#acctBtn').onclick=()=>{if(ACCT.tok)acctLogout();else acctOpen(false,null);};
+$('#auForm').onsubmit=e=>{e.preventDefault();acctSubmit();};
+$('#auSwap').onclick=()=>{acctMode(!ACCT.signup);};
+$('#auBack').onclick=()=>startStep(-1);$('#auGuest').onclick=()=>acctGuest();
+$('#auId').addEventListener('input',e=>{const v=e.target.value.toLowerCase().replace(/[^a-z0-9]/g,'');if(v!==e.target.value)e.target.value=v;});
+for(const s of ['#auId','#auPw','#auPw2']){const el=$(s);el.addEventListener('keydown',e=>e.stopPropagation());el.addEventListener('keyup',e=>e.stopPropagation());}
+BOOT.hold(true);
+/* 다 짓기 전에는 게임 화면 갱신(loop)이 아직 돌지 않는다: 그동안 시작 창 미리보기·얼굴 그림만 따로 돌린다 */
+{let t0=performance.now();const tick=()=>{if(!BOOT.on)return;BOOT.raf(tick);const t=performance.now(),dt=Math.min(.05,(t-t0)/1000);t0=t;try{apPreviewTick(dt);}catch(e){}};BOOT.raf(tick);}
 await BOOT.y();(function buildRegion2(){
   const SP=OR.SP,Q=SP.Q;
   // 땅
@@ -25238,7 +25537,6 @@ function animPlayer(mesh,speed,t,swing,air,alt,mo){mesh.userData.uprightOn=swing
 }
 
 /* ---------- 상태 ---------- */
-let P=null,player=null,mentor=null,mode='title',invuln=0,curZone=null,saveT=0,hurtT=99;
 const monsters=[],projs=[],fx=[],zonesPending=[];
 const cds={};let basicCd=0,attackHeld=false,swingT=1,swingN=0,lastWheel=0;
 const keys={};const joy={x:0,y:0};
@@ -26384,155 +26682,6 @@ function spawnRing(color,pos,radius,dur=.5){
   VFX.ringSparks(pos,color,radius);
 }
 
-/* ---------- 시작 화면 ---------- */
-const chosen='warrior';   /* 새 캐릭터는 직업 없이 시작한다 (튀르팽의 집에서 책을 고르면 정해진다). 미리보기 옷은 이 값과 상관없이 고른 색 */
-// 외모 고르기: 성별·머리색·눈색 (새 캐릭터 화면과 '외모 바꾸기' 창에서 함께 쓴다)
-function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
-  const grp=t=>{const g=document.createElement('div');g.className='apgrp';const h=document.createElement('h4');h.textContent=t;g.appendChild(h);box.appendChild(g);cur=g;};
-  const row=(label,cls)=>{const w=document.createElement('div');w.className='aprow '+cls;const l=document.createElement('span');l.textContent=label;w.appendChild(l);cur.appendChild(w);return w;};
-  grp('얼굴·머리');
-  const gr=row('성별','g');for(const [g,nm] of [['m','남자'],['f','여자']]){const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',ap.g===g);
-    b.onclick=()=>{if(ap.g!==g){ap.g=g;ap.s=0;ap.d=0;delete ap.sv;buildApControls(box,ap,onChange);}onChange();};gr.appendChild(b);}
-  const hs=row('머리','s');HAIR_STYLES[ap.g].forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap.s|0)===i);
-    b.onclick=()=>{ap.s=i;hs.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};hs.appendChild(b);});
-  const sw=(label,list,key)=>{const w=row(label,'c');for(const c of list){const b=document.createElement('button');b.type='button';b.className='swc';b.style.background='#'+c.toString(16).padStart(6,'0');b.setAttribute('aria-pressed',ap[key]===c);b.setAttribute('aria-label',label);
-    b.onclick=()=>{ap[key]=c;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);}};
-  sw('머리색',HAIR_COLORS,'h');sw('눈색',EYE_COLORS,'e');
-  {const w=row('피부','c');const base=new THREE.Color(0xf4d2bc);SKIN_TONES.forEach((c,i)=>{const b=document.createElement('button');b.type='button';b.className='swc';b.style.background='#'+base.clone().multiply(new THREE.Color(c)).getHexString();b.setAttribute('aria-pressed',(ap.k|0)===i);b.setAttribute('aria-label','피부');
-    b.onclick=()=>{ap.k=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});}
-  const opt=(label,list,key,def=0)=>{const w=row(label,'t');list.forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap[key]??def)===i);
-    b.onclick=()=>{ap[key]=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});};
-  opt('눈',EYE_SHAPES,'y');opt('눈썹',BROWS,'w');opt('얼굴',FACE_MARKS,'f',1);if(ap.g!=='f')opt('수염',BEARDS,'d');
-  /* 몸: 밀대로 조금씩 (키·체형·가슴) */
-  const sl=(label,key)=>{const w=row(label,'r'),r=document.createElement('input');r.type='range';r.min=0;r.max=35;r.step=1;r.value=apBody(ap)[key];r.setAttribute('aria-label',label);
-    r.oninput=()=>{const B=apBody(ap);ap.hv=B.hv;ap.wv=B.wv;ap.sv=B.sv;ap[key]=+r.value;onChange();};w.appendChild(r);};
-  grp('몸');sl('키','hv');sl('체형','wv');if(ap.g==='f')sl('가슴','sv');
-  grp('옷');opt('윗옷',TOPS,'u');sw('윗옷 색',SHIRT_COLORS,'c');opt('아래',BOTTOMS,'l');sw('아래 색',PANTS_COLORS,'p');opt('신발',SHOES,'o');}
-// 미리보기 자세: 무기 없이 팔을 편하게 내리고 손도 편다
-/* 석궁은 원래 윗몸 앞에 놓이고 두 손이 찾아가 쥔다(animStick). 미리보기에서는 팔을 편히 내리고(쥔 자세는 팔이 몸에 박혔다)
-   석궁은 오른손에 아래로 늘어뜨려 든다 */
-const _apXV=new THREE.Vector3(),AP_XB=[0,-.05,.05,-1.45,0,0];
-function apRelaxPose(m,dt){const u=m.userData,xb=!!(u.stick&&u.stick.xb);u.relax=1;animStick(m,0,tAll,1,false,false,null);const S=u.stick;
-  if(S){S.AR.sh.rotation.set(-.04,0,.1);S.AR.el.rotation.x=-.2;S.AL.sh.rotation.set(-.04,0,-.1);S.AL.el.rotation.x=-.2;S.AR.hand.rotation.x=0;S.AL.hand.rotation.x=0;S.upper.rotation.set(0,0,0);}
-  if(S&&xb&&S.w){m.updateMatrixWorld(true);S.AR.hand.getWorldPosition(_apXV);S.upper.worldToLocal(_apXV);
-    S.w.position.set(_apXV.x+AP_XB[0],_apXV.y+AP_XB[1],_apXV.z+AP_XB[2]);S.w.rotation.set(AP_XB[3],AP_XB[4],AP_XB[5]);S.w.updateMatrix();if(S.xbH)S.xbH.visible=false;}
-  if(!u.anime&&u.ap&&PM.data[u.ap.g])pmAttach(m,u.job,u.gear,u.ap);
-  if(u.anime){if(!u.relaxF){u.relaxF=1;pmFingers(u.anime,'L','relax');pmFingers(u.anime,'R','relax');}pmPose(m,u.anime,dt);}}
-/* 미리보기·얼굴 그림은 모두 WebGL 하나(PV)로 그려 각 캔버스에 옮겨 붙인다. 캔버스마다 WebGL을 따로 만들면
-   처음 그릴 때마다 셰이더를 다시 구우며 몇 초씩 멈췄다(게임 시작·새 캐릭터를 누를 때). 셰이더는 홈 화면에 있는 동안 미리 굽는다:
-   checkShaderErrors를 끄면 굽는 동안 기다리지 않고, 다 구워진 뒤 처음 그릴 때 바로 그려진다 */
-const PV={r:null,cv:null,sc:null,fail:false,warm:0,t0:performance.now()};
-function pvGet(){if(PV.r||PV.fail)return PV.r;
-  try{const cv=document.createElement('canvas');cv.width=cv.height=8;const r=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true});
-    r.debug.checkShaderErrors=false;r.outputEncoding=renderer.outputEncoding;r.setPixelRatio(1);
-    const sc=new THREE.Scene();sc.add(new THREE.HemisphereLight(0xfff4e0,0x3a3430,.95));const k=new THREE.DirectionalLight(0xffffff,.88);k.position.set(1.5,3,3);sc.add(k);
-    PV.r=r;PV.cv=cv;PV.sc=sc;}catch(e){PV.fail=true;}return PV.r;}
-/* 큰 미리보기: PV 캔버스를 보이는 무대(.stage)에 옮겨 넣고 바로 그린다 (그림을 읽어 옮기면 그래픽카드가 다른 일을 끝낼 때까지 기다리게 된다).
-   copy: 얼굴 그림처럼 한 번 찍어 out(2D)에 옮겨 둘 때 */
-function pvDraw(m,cam,out,W,H,copy){const r=pvGet();if(!r||!m)return false;const C=PV.cv;
-  if(copy){if(C.width<W||C.height<H)r.setSize(Math.max(C.width,W),Math.max(C.height,H),false);
-    r.setViewport(0,0,W,H);r.setScissor(0,0,W,H);r.setScissorTest(true);PV.sc.add(m);try{r.render(PV.sc,cam);}catch(e){}PV.sc.remove(m);r.setScissorTest(false);
-    if(out.width!==W||out.height!==H){out.width=W;out.height=H;}const g=out.getContext('2d');g.clearRect(0,0,W,H);g.drawImage(C,0,C.height-H,W,H,0,0,W,H);r.clear();return true;}
-  if(C.previousSibling!==out)out.after(C);if(C.width!==W||C.height!==H)r.setSize(W,H,false);
-  r.setViewport(0,0,W,H);PV.sc.add(m);try{r.render(PV.sc,cam);}catch(e){}PV.sc.remove(m);return true;}
-/* 홈 화면에서 쉬는 동안: 저장된 캐릭터들과 새 캐릭터 모습을 미리 구워 둔다 (1단계 셰이더, 2단계 작은 그림 한 번으로 모양·그림 올리기) */
-function pvWarm(){if(PV.warm>=2||performance.now()-PV.t0<700)return;if(!OLD_LOOK&&!(PM.data.m&&PM.data.f))return;
-  const r=pvGet();if(!r){PV.warm=2;return;}
-  if(!PV.wm){PV.wm=[];try{for(const c of loadChars().slice(0,8))PV.wm.push(makePlayerMesh(c.job,gearOf(c),charAp(c)));
-      PV.wm.push(makePlayerMesh(chosen,{helm:-1,armor:-1,boots:-1,weapon:-1,sub:-1},{...newAp}));}catch(e){}}
-  const cam=new THREE.PerspectiveCamera(30,1,.1,20);cam.position.set(0,1.2,4.9);cam.lookAt(0,1,0);
-  if(PV.warm===0){for(const m of PV.wm)PV.sc.add(m);try{r.compile(PV.sc,cam);}catch(e){}for(const m of PV.wm)PV.sc.remove(m);PV.warm=1;PV.t1=performance.now();return;}
-  if(performance.now()-PV.t1<1500)return;
-  for(const m of PV.wm)PV.sc.add(m);r.setViewport(0,0,8,8);try{r.render(PV.sc,cam);}catch(e){}for(const m of PV.wm)PV.sc.remove(m);PV.wm=null;PV.warm=2;}
-/* 마우스로 끌면 돌고 휠로 확대 (휴대폰: 한 손가락 끌기·두 손가락 벌리기). 손을 떼고 4초 지나면 다시 천천히 돈다 */
-function apPreviewInput(el,st){const P=new Map();let pd=0;el.style.touchAction='none';el.style.cursor='grab';
-  const zoom=f=>{st.zoom=Math.min(1.25,Math.max(.5,st.zoom*f));st.idle=0;};
-  el.addEventListener('pointerdown',e=>{if(e.button>0)return;P.set(e.pointerId,[e.clientX,e.clientY]);try{el.setPointerCapture(e.pointerId);}catch(_){}el.style.cursor='grabbing';st.idle=0;st.held=true;
-    if(P.size===2){const [a,b]=[...P.values()];pd=Math.hypot(a[0]-b[0],a[1]-b[1]);}});
-  el.addEventListener('pointermove',e=>{const q=P.get(e.pointerId);if(!q)return;
-    if(P.size===1){st.yaw+=(e.clientX-q[0])*.012;st.idle=0;}
-    P.set(e.pointerId,[e.clientX,e.clientY]);
-    if(P.size===2){const [a,b]=[...P.values()];const d=Math.hypot(a[0]-b[0],a[1]-b[1]);if(pd>0&&d>0)zoom(pd/d);pd=d;}});
-  const up=e=>{P.delete(e.pointerId);pd=0;if(!P.size){el.style.cursor='grab';st.held=false;}};
-  el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
-  el.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(e.deltaY*.0012));},{passive:false});}
-// 작은 미리보기 화면 하나 (캔버스마다)
-function makeApPreview(cv,dist=4.9,ly=1.0){let st=null;return{dirty:true,tick(dt,job,ap,gear,alive){if(!alive)return;
-  if(!st){const c2=new THREE.PerspectiveCamera(30,1,.1,20);st={cam:c2,m:null,yaw:.4,zoom:1,idle:99,held:false,touched:false,zk:-1};if(cv.parentElement)apPreviewInput(cv.parentElement,st);}
-  const w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;const pr=Math.min(2,devicePixelRatio||1),W=Math.round(w*pr),H=Math.round(h*pr);
-  if(st.w!==w||st.h!==h){st.w=w;st.h=h;st.cam.aspect=w/h;st.cam.updateProjectionMatrix();}
-  if(st.zk!==st.zoom){st.zk=st.zoom;const t=Math.max(0,Math.min(1,(1-st.zoom)/.5)),y=ly+(1.68-ly)*t;st.cam.position.set(0,y+.2*st.zoom,dist*st.zoom);st.cam.lookAt(0,y,0);}
-  if(this.dirty&&(OLD_LOOK||PM.data[ap.g])){st.m=makePlayerMesh(job,gear,{...ap});this.dirty=false;if(st.idle>=4)st.yaw=.4;}
-  if(st.m){if(st.held||st.idle<4)st.idle+=st.held?0:dt;else st.yaw+=dt*.5;st.m.rotation.y=st.yaw;apRelaxPose(st.m,dt);pvDraw(st.m,st.cam,cv,W,H);}}};}
-let selId=null;
-const charAp=c=>apParse(c.ap)||(c.ap&&c.ap.g?c.ap:null)||apDefault();
-const PORTRAITS=new Map(),portraitWant=[];let charPicR=null;
-let selPrev=null;
-const newAp={...apDefault(),c:SHIRT_COLORS[0]};let apPrev=null;
-(function(){const box=$('#apBox');if(!box)return;buildApControls(box,newAp,()=>{if(apPrev)apPrev.dirty=true;});if(!OLD_LOOK){pmLoad('m').catch(()=>{});pmLoad('f').catch(()=>{});}})();
-// 미리보기: 새 캐릭터 화면이 열려 있을 때만 돈다
-function apPreviewTick(dt){
-  pvWarm();
-  if(!apPrev&&$('#apPrev'))apPrev=makeApPreview($('#apPrev'));
-  if(apPrev){$('#apWait').hidden=OLD_LOOK||!!PM.data[newAp.g];apPrev.tick(dt,chosen,newAp,{helm:-1,armor:-1,boots:-1,weapon:-1,sub:-1},!$('#start').hidden&&!$('#stepNew').hidden&&mode==='title');}
-  /* 캐릭터 선택창: 고른 캐릭터를 크게 돌려 보이고, 목록 얼굴 그림을 한 장씩 찍는다 */
-  if(mode!=='title'||$('#start').hidden||$('#stepList').hidden)return;
-  portraitStep();
-  if(!selPrev&&$('#selPrev'))selPrev=makeApPreview($('#selPrev'),5.6,1.15);   /* 선택창 무대는 작게(340px), 발이 바닥 그림자에 닿게 */
-  const c=selId&&loadCharsCached().find(x=>x.id===selId);
-  if(selPrev&&c)selPrev.tick(dt,c.job,charAp(c),gearOf(c),true);}
-let _lcT=0,_lc=[];function loadCharsCached(){const t=performance.now();if(t-_lcT>500){_lc=loadChars();_lcT=t;}return _lc;}
-function startStep(n){if(n===0)renderChars();   /* 목록은 보여 줄 때마다 지금 저장된 것으로 다시 그린다 (로그인으로 목록이 바뀐 뒤에도) */
-  $('#stepHome').hidden=n!==-1;$('#stepAuth').hidden=n!==2;$('#start').classList.toggle('home',n===-1);$('#stepList').hidden=n!==0;$('#stepNew').hidden=n!==1;if(n===1){if(apPrev)apPrev.dirty=true;setTimeout(()=>{try{$('#nick').focus();$('#nick').select();}catch(e){}},30);}}
-$('#toCreate').onclick=()=>startStep(1);$('#backList').onclick=()=>startStep(0);
-$('#toHome').onclick=()=>startStep(-1);$('#toList').onclick=()=>acctGate(()=>startStep(loadChars().length?0:1));
-(function(){
-  renderChars();
-  /* 이름이 비어 있으면 캐릭터를 만들 수 없다 */
-  const nickOk=()=>{const ok=!!($('#nick').value||'').trim();$('#go').disabled=!ok;return ok;};
-  $('#nick').addEventListener('input',()=>{nickOk();$('#nickShow').textContent=$('#nick').value.trim();});nickOk();
-  $('#go').onclick=()=>{if(!nickOk()){$('#nick').focus();return;}const name=$('#nick').value.trim(),T=OR.THOUSE;
-    startGame({id:'c'+Date.now().toString(36)+Math.floor(Math.random()*1e4),name,job:chosen,needBook:true,lv:1,exp:0,sp:0,skills:{},slots:Array(NSK).fill(null),x:T.x-2.9,z:T.z-2.5,y:0,ap:apCode(newAp)});};
-  $('#nick').addEventListener('keydown',e=>{if(e.key==='Enter')$('#go').click();});
-})();
-
-function loadChars(){
-  let list=[];
-  try{list=JSON.parse(localStorage.getItem('orlando3d.chars')||'[]');if(!Array.isArray(list))list=[];}catch(e){list=[];}
-  try{const old=JSON.parse(localStorage.getItem('orlando3d.v2')||'null');
-    if(old&&old.job&&JOBS[old.job]&&!list.some(c=>c.id==='legacy')){old.id='legacy';list.unshift(old);storeChars(list);localStorage.removeItem('orlando3d.v2');}}catch(e){}
-  for(const c of list)if(c&&JOB_ALIAS[c.job])c.job=JOB_ALIAS[c.job];
-  return list.filter(c=>c&&c.id&&JOBS[c.job]);
-}
-function storeChars(list){try{localStorage.setItem('orlando3d.chars',JSON.stringify(list));}catch(e){}}
-/* 캐릭터 선택창: 왼쪽 목록(얼굴 그림) · 오른쪽 고른 캐릭터를 크게 */
-function renderChars(){
-  const list=loadChars(),box=$('#chars');box.innerHTML='';
-  list.sort((a,b)=>(b.t||0)-(a.t||0));
-  if(!list.some(c=>c.id===selId))selId=list.length?list[0].id:null;
-  for(const c of list){
-    const b=document.createElement('button');b.type='button';b.className='char'+(c.id===selId?' on':'');
-    const im=document.createElement('img');im.alt='';const k=portraitKey(c);if(PORTRAITS.has(k))im.src=PORTRAITS.get(k);else portraitWant.push([k,c,im]);
-    const t=document.createElement('div'),n=document.createElement('b');n.textContent=c.name;const m=document.createElement('span');m.textContent=`${c.needBook?'모험가':(JOBS[c.job]||{name:''}).name} · Lv ${c.lv}`;t.append(n,m);
-    b.append(im,t);b.onclick=()=>{if(selId===c.id)return;selId=c.id;renderChars();};b.ondblclick=()=>startGame(c);
-    box.appendChild(b);
-  }
-  const c=list.find(x=>x.id===selId);$('#selBig').hidden=!c;
-  if(c){$('#selName').textContent=c.name;$('#selInfo').textContent=`${c.needBook?'모험가':JOBS[c.job].name} · Lv ${c.lv}`;if(selPrev)selPrev.dirty=true;
-    const d=$('#selDel');d.classList.remove('arm');d.textContent='삭제';}
-}
-$('#selPlay').onclick=()=>{const c=loadChars().find(x=>x.id===selId);if(c)startGame(c);};
-{const d=$('#selDel');let tm=0;d.onclick=()=>{if(!d.classList.contains('arm')){d.classList.add('arm');d.textContent='정말 삭제';clearTimeout(tm);tm=setTimeout(()=>{d.classList.remove('arm');d.textContent='삭제';},3000);return;}
-  clearTimeout(tm);storeChars(loadChars().filter(x=>x.id!==selId));selId=null;renderChars();};}
-/* 목록의 얼굴 그림: 캐릭터 모델을 얼굴 높이에서 찍어 둔다 (한 번에 하나씩, 그린 것은 기억) */
-function portraitKey(c){return c.job+'|'+(typeof c.ap==='string'?c.ap:apCode(charAp(c)))+'|'+JSON.stringify(gearOf(c));}
-function portraitStep(){const w=portraitWant.shift();if(!w)return;const [k,c,im]=w;
-  if(PORTRAITS.has(k)){im.src=PORTRAITS.get(k);return;}
-  try{if(!charPicR)charPicR={cv:document.createElement('canvas'),cam:new THREE.PerspectiveCamera(19,1,.1,20)};
-    const R=charPicR,ap=charAp(c),m=makePlayerMesh(c.job,gearOf(c),ap);m.rotation.y=.12;apRelaxPose(m,1);
-    const bare=makePlayerMesh(c.job,{helm:-1,armor:-1,boots:-1,weapon:-1,sub:-1,acc:-1,shs:0,wc:0},ap);bare.updateMatrixWorld(true);const hy=new THREE.Box3().setFromObject(bare).max.y-.27;
-    R.cam.position.set(0,hy+.02,1.75);R.cam.lookAt(0,hy,0);if(!pvDraw(m,R.cam,R.cv,128,128,true))return;
-    const url=R.cv.toDataURL('image/png');PORTRAITS.set(k,url);im.src=url;}catch(e){}}
 function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:spAll(),skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mhv:6,mentorReady:P.mentorReady,faith:P.faith|0||undefined,needBook:P.needBook||undefined,mq:P.mq||undefined,mqDone:P.mqDone||undefined,myHome:P.myHome||undefined,gq:P.gq&&Object.keys(P.gq).length?P.gq:undefined,gqDone:P.gqDone||undefined,gqPin:P.gqPin&&Object.keys(P.gqPin).length?P.gqPin:undefined,spc:P.spc&&Object.keys(P.spc).length?P.spc:undefined,poff:P.poff&&Object.keys(P.poff).length?P.poff:undefined,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap),gk:P.gk,guild:P.guild||undefined,gApply:P.gApply||undefined,gApps:P.gApps&&P.gApps.list.length?{gid:P.gApps.gid,list:P.gApps.list.map(a=>({n:a.n,k:a.k,t:a.t,no:a.no?1:undefined}))}:undefined,wbk:P.wbk&&Object.keys(P.wbk).length?P.wbk:undefined,shelf:P.shelf&&P.shelf.length?P.shelf:undefined,lak:P.lak||undefined}:null;}
 /* 같은 캐릭터를 창 두 개(또는 휴대폰에 남아 있던 옛 탭)에서 켜 두면, 옛 창이 나중에 저장하면서 새 창의 기록을 덮어썼다.
    만든 길드처럼 옛 창에 없던 것이 통째로 사라졌다. 그래서 저장할 때 이 창의 표(tab)를 남기고,
@@ -26612,7 +26761,8 @@ function toTitle(){standUp=null;if(CCAR.ride){CCAR.ride=null;sitting=false;}docu
 document.addEventListener('pointerlockchange',()=>{if(!isLocked()&&mode==='world'&&!quietUnlock)openMenu();quietUnlock=false;});
 
 // 애니 모델을 불러온 뒤 시작한다 (처음 한 번은 로딩 화면)
-function startGame(data){const ap=apParse(data.ap)||(data.ap&&data.ap.g?data.ap:null)||apDefault();
+function startGame(data){if(BOOT.on||BOOT.q){BOOT.wait(()=>startGame(data));return;}
+  const ap=apParse(data.ap)||(data.ap&&data.ap.g?data.ap:null)||apDefault();
   if(OLD_LOOK||PM.data[ap.g])return startGameNow(data);
   const L=$('#loading');L.hidden=false;$('#loadMsg').textContent='모험가를 불러오는 중…';
   pmLoad(ap.g).catch(()=>{}).then(()=>{L.hidden=true;startGameNow(data);});}
@@ -27015,7 +27165,6 @@ function npcAct(act){
 const enhCost=(id,lv)=>Math.round((80+GEAR_PRICE[ITEMS[id].tier]*.25)*Math.pow(lv+1,1.6));
 const enhRate=lv=>Math.max(.2,1-Math.max(0,lv-3)*.11);
 /* 재무청 금고: 이 기기(계정)의 모든 캐릭터가 함께 쓰는 골드. 캐릭터 기록과 같은 곳(localStorage)에 따로 둔다 */
-const BANK_KEY='orlando3d.bank';
 function bankRead(){try{const o=JSON.parse(localStorage.getItem(BANK_KEY)||'{}');const v=Math.max(0,Number(o.gold)||0);return {gold:Math.floor(v),v,t:Number(o.t)||0};}catch(e){return {gold:0,t:0};}}
 function bankGold(){return bankRead().gold;}
 function bankSet(g,t){g=Math.max(0,Math.floor(g));try{localStorage.setItem(BANK_KEY,JSON.stringify({gold:g,t:t??(bankRead().t||Date.now())}));return bankGold()===g;}catch(e){return false;}}
@@ -27038,133 +27187,6 @@ function bankMove(n){
   log(n>0?`재무청에 ${a} 골드를 맡겼다.`:`재무청에서 ${a} 골드를 찾았다.`,n>0?'sys':'good');
   renderBank(n>0?`${a} 골드, 잘 받았어요.`:`${a} 골드 여기 있어요.`);
 }
-/* ---------- 계정 (회원가입·로그인) ----------
-   서버(accounts.js)가 계정을 켜 두었으면 게임을 하기 전에 로그인하거나 게스트로 한다. 캐릭터 목록(orlando3d.chars)과 금고(orlando3d.bank)는
-   계정에 저장되고, 이 기기의 localStorage는 그 사본이 된다: 로그인할 때 서버 것과 합쳐(캐릭터마다 더 나중에 저장된 쪽) 쓰고, 바뀐 캐릭터만 몇 초마다 올린다.
-   계정이 없는 곳(시험판처럼 서버가 없을 때)과 게스트는 예전처럼 이 기기에만 저장한다.
-   게스트로 이 기기에 남긴 캐릭터·금고 골드는 그 기기에서 처음 로그인한 계정으로 옮긴다(mig: 옮기기가 끝날 때까지 기억).
-   gen: 로그인·로그아웃·게스트 고르기마다 새로 정하는 표. 다른 창에서 계정이 바뀌면 이 창은 그 사본을 건드리지 않는다 */
-const ACCT_KEY='orlando3d.acct';
-const ACCT={on:false,id:'',tok:'',guest:false,keep:true,dirty:false,mig:false,gen:'',stale:false,synced:false,sent:new Map(),bankSent:null,bankBoot:null,busy:false,boot:null,after:null,signup:false};
-const acctStored=()=>{try{return JSON.parse(localStorage.getItem(ACCT_KEY)||'{}')||{};}catch(e){return {};}};
-/* 로그인 유지: 켜면 표를 localStorage에 두어 브라우저를 다시 열어도 로그인된 채로, 끄면 sessionStorage에만 두어 브라우저를 닫으면 풀린다 */
-function acctRead(){const o=acctStored();ACCT.id=typeof o.id==='string'?o.id:'';ACCT.keep=o.keep!==false;let st='';try{st=sessionStorage.getItem(ACCT_KEY+'.tok')||'';}catch(e){}
-  ACCT.tok=ACCT.id&&typeof o.tok==='string'&&o.tok?o.tok:ACCT.id&&st.startsWith(ACCT.id+'.')?st:'';ACCT.dirty=!!o.dirty;ACCT.mig=!!(ACCT.id&&o.mig);ACCT.guest=!ACCT.id&&!!o.guest;ACCT.gen=typeof o.gen==='string'?o.gen:'';}
-function acctWrite(){if(ACCT.stale)return;
-  try{localStorage.setItem(ACCT_KEY,JSON.stringify(ACCT.id?{id:ACCT.id,tok:ACCT.keep?ACCT.tok:'',dirty:ACCT.dirty,mig:ACCT.mig||undefined,keep:ACCT.keep,gen:ACCT.gen}:ACCT.guest?{guest:1,keep:ACCT.keep,gen:ACCT.gen}:{keep:ACCT.keep,gen:ACCT.gen}));}catch(e){}
-  try{if(ACCT.tok&&!ACCT.keep)sessionStorage.setItem(ACCT_KEY+'.tok',ACCT.tok);else sessionStorage.removeItem(ACCT_KEY+'.tok');}catch(e){}}
-const acctNewGen=()=>{ACCT.gen=Math.random().toString(36).slice(2,10);};
-// 다른 창이 로그인·로그아웃·게스트를 골랐는가: 그러면 이 창은 더 저장하지도 올리지도 않고 새로 불러오게 한다
-function acctCheck(){if(ACCT.stale)return false;const g=acctStored().gen||'';if(g===ACCT.gen)return true;
-  ACCT.stale=true;ACCT.tok='';
-  if(P&&player&&mode!=='title'){saveStale=true;askPrompt('다른 창에서 계정이 바뀌었어요. 기록이 섞이지 않도록 이 창은 더 저장하지 않아요.','다시 불러오기','닫기',ok=>{if(ok)location.reload();});}
-  else location.reload();
-  return false;}
-addEventListener('storage',e=>{if(e.key===ACCT_KEY||e.key===null)acctCheck();});
-const acctCJ=c=>{const o={...c};delete o.tab;return JSON.stringify(o);};
-function acctRawChars(){try{const a=JSON.parse(localStorage.getItem('orlando3d.chars')||'[]');return Array.isArray(a)?a.filter(c=>c&&typeof c.id==='string'):[];}catch(e){return [];}}
-const acctBankRaw=()=>{try{return localStorage.getItem(BANK_KEY);}catch(e){return null;}};
-function acctClearLocal(){try{localStorage.setItem('orlando3d.chars','[]');localStorage.removeItem(BANK_KEY);}catch(e){}_lcT=0;selId=null;}
-async function acctApi(path,body,keep){const h={};if(body!==undefined)h['Content-Type']='application/json';if(ACCT.tok)h.Authorization='Bearer '+ACCT.tok;
-  const b=body===undefined?undefined:JSON.stringify(body);
-  const r=await fetch(path,{method:b===undefined?'GET':'POST',headers:h,body:b,cache:'no-store',keepalive:!!keep&&b!==undefined&&b.length<60000});
-  let j={};try{j=await r.json();}catch(e){}return {s:r.status,j};}
-// 지난번에 올린 것과 달라진 캐릭터·지운 캐릭터·금고
-function acctDiff(all){const list=acctRawChars(),chars=[],ids=new Set();
-  for(const c of list){ids.add(c.id);const s=acctCJ(c);if(all||ACCT.sent.get(c.id)!==s)chars.push([c,s]);}
-  const gone=all?[]:[...ACCT.sent.keys()].filter(id=>!ids.has(id));
-  const br=acctBankRaw(),bank=(all||br!==ACCT.bankSent)&&br!=null?br:null;
-  return {chars,gone,bank,br,empty:!chars.length&&!gone.length&&bank==null};}
-// 바뀐 것을 서버에 올린다. migrate: 게스트로 쓰던 이 기기의 기록을 통째로 올리고 금고 골드는 계정 금고에 더한다
-async function acctPush(opt={}){
-  if(!ACCT.on||!ACCT.tok||ACCT.busy||!acctCheck())return false;
-  if(!opt.migrate&&!ACCT.synced)return false;   /* 서버 것과 합치기 전에는 올리지 않는다 (금고를 덮어쓰지 않게) */
-  const d=acctDiff(opt.migrate);if(d.empty){if(ACCT.dirty){ACCT.dirty=false;acctWrite();}return true;}
-  if(!ACCT.dirty){ACCT.dirty=true;acctWrite();}
-  let bank;try{bank=d.bank!=null?JSON.parse(d.bank):undefined;}catch(e){}
-  const body={chars:d.chars.map(([c])=>{const o={...c};delete o.tab;return o;}),gone:d.gone};if(bank)body[opt.migrate?'bankAdd':'bank']=bank;
-  ACCT.busy=true;
-  try{const r=await acctApi('/api/save',body,opt.keep);
-    if(r.s===401){acctLost();return false;}
-    if(r.s!==200||ACCT.stale)return false;
-    for(const [c,s] of d.chars)ACCT.sent.set(c.id,s);for(const id of d.gone)ACCT.sent.delete(id);ACCT.bankSent=d.br;
-    if(acctDiff().empty){ACCT.dirty=false;acctWrite();}return true;
-  }catch(e){return false;}finally{ACCT.busy=false;}}
-/* 서버의 계정 기록을 이 기기 사본과 합친다: 캐릭터마다 더 나중에 저장된 쪽, 이 기기에서만 새로 만든 캐릭터는 남기고 다른 곳에서 지운 캐릭터는 지운다.
-   금고는 이 기기에서 올리지 못한 변화가 있으면(dirty) 이 기기 것, 아니면 서버 것. 이긴 이 기기 것은 다음 올리기에 실린다 */
-function acctApply(d){const srv=Array.isArray(d.chars)?d.chars.filter(c=>c&&typeof c.id==='string'):[],gone=d.gone&&typeof d.gone==='object'?d.gone:{};
-  const local=new Map(acctRawChars().map(c=>[c.id,c])),out=[];
-  for(const c of srv){const l=local.get(c.id);out.push(l&&(l.t||0)>(c.t||0)?l:c);local.delete(c.id);}
-  for(const [id,l] of local)if(!gone[id])out.push(l);
-  const sb=JSON.stringify(d.bank||{gold:0,t:0}),keepBank=ACCT.dirty&&acctBankRaw()!=null;
-  try{localStorage.setItem('orlando3d.chars',JSON.stringify(out));if(!keepBank)localStorage.setItem(BANK_KEY,sb);}catch(e){}
-  ACCT.sent=new Map(srv.map(c=>[c.id,acctCJ(c)]));ACCT.bankSent=keepBank?sb:acctBankRaw();ACCT.synced=true;_lcT=0;}
-async function acctPull(){const r=await acctApi('/api/me');if(r.s===401){acctLost();return false;}if(r.s!==200||!acctCheck())return false;acctApply(r.j);return true;}
-// 로그인 표가 더 이상 맞지 않으면 (다른 곳에서 로그아웃·오래 안 씀): 이 기기 사본은 그 계정 것으로 남겨 두고(dirty 그대로) 다시 로그인하게 한다
-function acctLost(){ACCT.tok='';ACCT.synced=false;acctWrite();acctBar();}
-// 이 기기 사본을 계정과 맞춘다: 게스트 기록 옮기기(남아 있으면) → 서버 것과 합치기
-async function acctSync(){if(!ACCT.tok||ACCT.stale)return false;
-  if(ACCT.mig){if(!await acctPush({migrate:true}))return false;ACCT.mig=false;ACCT.dirty=false;acctWrite();}
-  return acctPull();}
-async function acctBootRun(){acctRead();ACCT.bankBoot=acctBankRaw();
-  try{const r=await Promise.race([acctApi('/api/acct'),new Promise((_,no)=>setTimeout(()=>no(0),8000))]);ACCT.on=r.s===200&&!!r.j.on;}catch(e){ACCT.on=false;}
-  if(ACCT.on&&ACCT.tok){try{await acctSync();}catch(e){}}
-  acctBar();if(mode==='title'&&!$('#stepList').hidden)renderChars();}
-ACCT.boot=acctBootRun();
-// 몇 초마다: 아직 서버와 못 맞췄으면 다시 맞추고, 맞췄으면 바뀐 것만 올린다
-setInterval(()=>{if(!ACCT.tok||ACCT.busy||ACCT.stale)return;if(ACCT.synced)acctPush();else acctSync().catch(()=>{});},4000);
-function acctMarkDirty(){if(!ACCT.tok||ACCT.stale||ACCT.mig)return;const ch=ACCT.synced?!acctDiff().empty:acctBankRaw()!==ACCT.bankBoot;if(ch&&!ACCT.dirty){ACCT.dirty=true;acctWrite();}}
-addEventListener('pagehide',()=>{if(!ACCT.tok||!acctCheck())return;try{if(P&&player&&mode!=='title'&&!saveStale)save();}catch(e){}acctMarkDirty();acctPush({keep:true});});
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&ACCT.tok){acctMarkDirty();acctPush({keep:true});}});
-// 머리줄의 로그인 단추
-function acctBar(){const bar=$('#acctBar');if(!bar)return;bar.hidden=!ACCT.on;
-  $('#acctName').textContent=ACCT.tok?ACCT.id:'';$('#acctBtn').textContent=ACCT.tok?'로그아웃':'로그인';}
-// 게임 시작 전: 계정이 켜져 있으면 로그인부터 (게스트를 골랐으면 그대로)
-async function acctGate(fn){if(ACCT.boot)await ACCT.boot;if(ACCT.on&&!ACCT.tok&&!ACCT.guest){acctOpen(false,fn);return;}fn();}
-/* 게스트: 로그인 없이 예전처럼 이 기기에만 저장한다. 로그인 표가 끊긴 계정의 사본이 남아 있으면 지운다
-   (남겨 두면 그 계정 캐릭터가 게스트 것이 되어, 나중에 다른 계정으로 로그인할 때 그 계정으로 옮겨져 버린다) */
-function acctGuest(){if(!acctCheck())return;if(ACCT.id)acctClearLocal();
-  ACCT.id='';ACCT.tok='';ACCT.dirty=false;ACCT.mig=false;ACCT.synced=false;ACCT.guest=true;ACCT.sent=new Map();ACCT.bankSent=null;acctNewGen();acctWrite();acctBar();
-  const f=ACCT.after;ACCT.after=null;if(f)f();else startStep(loadChars().length?0:1);}
-function acctOpen(signup,after){ACCT.after=after||null;acctMode(signup);startStep(2);$('#auKeep').checked=ACCT.keep;
-  const id=$('#auId');if(!id.value&&ACCT.id)id.value=ACCT.id;setTimeout(()=>{try{(id.value?$('#auPw'):id).focus();}catch(e){}},30);}
-function acctMode(signup){ACCT.signup=signup;$('#auTitle').textContent=signup?'회원가입':'로그인';$('#auGo').textContent=signup?'가입하기':'로그인';
-  $('#auSwap').textContent=signup?'로그인':'회원가입';$('#auPw2L').hidden=!signup;$('#auPw').autocomplete=signup?'new-password':'current-password';$('#auErr').textContent='';}
-const ACCT_ERR={id:'아이디는 영문 소문자와 숫자 4~16자로 해 주세요.',pw:'비밀번호는 6~64자로 해 주세요.',taken:'이미 있는 아이디예요.',wrong:'아이디나 비밀번호가 맞지 않아요.',many:'너무 여러 번 시도했어요. 잠시 뒤에 다시 해 주세요.',net:'서버에 닿지 않아요. 잠시 뒤에 다시 해 주세요.'};
-async function acctSubmit(){if(!acctCheck()||$('#auGo').disabled)return;const err=$('#auErr'),go=$('#auGo'),keep=$('#auKeep').checked,signup=ACCT.signup;
-  const id=$('#auId').value.trim().toLowerCase(),pw=$('#auPw').value;
-  if(!/^[a-z0-9]{4,16}$/.test(id)){err.textContent=ACCT_ERR.id;return;}
-  if(pw.length<6||pw.length>64){err.textContent=ACCT_ERR.pw;return;}
-  if(signup&&pw!==$('#auPw2').value){err.textContent='비밀번호가 서로 달라요.';return;}
-  err.textContent='';go.disabled=true;
-  try{let r;try{r=await acctApi(signup?'/api/signup':'/api/login',{id,pw});}catch(e){r={s:0,j:{}};}
-    if(!acctCheck())return;
-    if(r.s!==200||!r.j.tok){err.textContent=ACCT_ERR[r.j.err]||ACCT_ERR.net;return;}
-    const prev=ACCT.id,name=r.j.name;
-    if(prev&&prev!==name){acctClearLocal();ACCT.dirty=false;ACCT.mig=false;}   /* 다른 계정이 남긴 사본은 버린다 */
-    else if(!prev){ACCT.dirty=false;ACCT.mig=acctRawChars().length>0||bankGold()>0;   /* 게스트 기록은 이 계정으로 옮긴다 */
-      if(ACCT.mig){const list=acctRawChars();for(const c of list)if(c.id==='legacy')c.id='c'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);   /* 기기마다 같은 이름표가 있을 수 있어 바꿔 둔다 */
-        try{localStorage.setItem('orlando3d.chars',JSON.stringify(list));}catch(e){}}}
-    ACCT.id=name;ACCT.tok=r.j.tok;ACCT.guest=false;ACCT.keep=keep;ACCT.synced=false;ACCT.sent=new Map();ACCT.bankSent=null;ACCT.bankBoot=prev===name?ACCT.bankBoot:acctBankRaw();
-    acctNewGen();acctWrite();
-    if(!await acctSync()&&!ACCT.stale){err.textContent=ACCT_ERR.net;}
-    $('#auPw').value='';$('#auPw2').value='';acctBar();
-    const f=ACCT.after;ACCT.after=null;if(f)f();else startStep(-1);
-  }finally{go.disabled=false;}}
-async function acctLogout(){if(!acctCheck())return;const btn=$('#acctBtn');btn.disabled=true;
-  try{try{if(P&&player&&mode!=='title'&&!saveStale)save();}catch(e){}
-    for(let i=0;i<20&&ACCT.busy;i++)await new Promise(ok=>setTimeout(ok,150));
-    const ok=ACCT.mig||!ACCT.synced?await acctSync():true;
-    if(!ok||!await acctPush()){askPrompt('기록을 아직 다 올리지 못했어요. 잠시 뒤에 다시 해 주세요.','확인','닫기',()=>{});return;}
-    try{await acctApi('/api/logout',{});}catch(e){}
-    ACCT.id='';ACCT.tok='';ACCT.dirty=false;ACCT.mig=false;ACCT.synced=false;ACCT.sent=new Map();ACCT.bankSent=null;acctNewGen();acctWrite();acctClearLocal();
-    acctBar();startStep(-1);}finally{btn.disabled=false;}}
-$('#acctBtn').onclick=()=>{if(ACCT.tok)acctLogout();else acctOpen(false,null);};
-$('#auForm').onsubmit=e=>{e.preventDefault();acctSubmit();};
-$('#auSwap').onclick=()=>{acctMode(!ACCT.signup);};
-$('#auBack').onclick=()=>startStep(-1);$('#auGuest').onclick=()=>acctGuest();
-$('#auId').addEventListener('input',e=>{const v=e.target.value.toLowerCase().replace(/[^a-z0-9]/g,'');if(v!==e.target.value)e.target.value=v;});
-for(const s of ['#auId','#auPw','#auPw2']){const el=$(s);el.addEventListener('keydown',e=>e.stopPropagation());el.addEventListener('keyup',e=>e.stopPropagation());}
 function renderBank(msg){
   renderNpc(msg||'맡기실 골드가 있나요?',box=>{box.dataset.noskip='1';
     const b=bankGold(),row=document.createElement('div');row.className='enh';
@@ -29246,7 +29268,7 @@ canvas.addEventListener('wheel',e=>{
 function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
 await BOOT.y(true);Perf.init();mergeStaticGroups(3);await BOOT.y(true);LightPool.init();InstChunks.init();await BOOT.y(true);Rebase.run();
 addEventListener('resize',resize);resize();
-const clock=new THREE.Clock();let tAll=0;
+const clock=new THREE.Clock();
 /* ---------- 오를란도의 하루: 이 세계만의 시간이 따로 흐른다. 하루(24시)가 실제 2시간 — 1시가 실제 5분. 모든 사람이 같은 시각을 본다(실제 시각에서 계산).
    새벽(4–7)·아침(7–11)·낮(11–17)·저녁(17–20)·밤(20–4). 바깥에서만 빛이 달라진다 ----------
    각 때의 빛: 해 세기, 하늘빛 세기, 해 색, 하늘(배경) 어둡기와 물드는 색. 때가 바뀌는 한 시간 동안 부드럽게 넘어간다 */
@@ -30784,7 +30806,11 @@ if(window.ORLANDO_WS){
   const wsDead=setInterval(()=>{if(monsGot||srvVer!==null){clearInterval(wsDead);return;}   // 연결이 한 번도 안 되고 두 번 이상 끊겼을 때만 (느린 기기에서 잘못 넘어가지 않게)
     if((window.__wsFails||0)>=2){clearInterval(wsDead);window.__wsOff=true;mnet=makeLocalMonsterNet();setupNetMonsters(mnet);mnet.start();log('서버에 연결되지 않아 혼자 하기로 시작했어요.','sys');}},1000);
   setTimeout(()=>{if(!monsGot&&srvVer!==null)log('서버에서 몬스터 정보를 받지 못했어요. 서버 파일이 최신인지 확인해 주세요.','bad');},8000);}
-await BOOT.y(true);BOOT.ready();loop();requestAnimationFrame(()=>requestAnimationFrame(()=>BOOT.done()));
+/* 다 지었다. 기다리던 '모험 시작'이 있으면 시작 창 뒤에서 그래픽카드에 세상을 조금 올린 뒤(titleWarm, 길어도 6초) 들어간다 */
+function bootGo(){if(!BOOT.q){BOOT.done();return;}const t0=performance.now();
+  (function w(){const n=TW.list?TW.list.length:0;if(!TW.done&&!warmGpu.done&&performance.now()-t0<6000){BOOT.msg('불러오는 중… '+Math.min(99,90+Math.floor(9*(n?TW.i/n:0)))+'%');requestAnimationFrame(w);return;}
+    BOOT.done();BOOT.run();})();}
+await BOOT.y(true);BOOT.ready();loop();requestAnimationFrame(()=>requestAnimationFrame(bootGo));
 
 /* ---------- 메인 퀘스트 · 옛 친구의 책 ----------
    메인 퀘스트는 퀘스트 창 맨 위 '메인' 칸에 뜬다. 하나가 끝나면 조건에 맞는 다음 것이 뜬다.
