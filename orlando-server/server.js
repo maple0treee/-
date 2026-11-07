@@ -39,6 +39,8 @@ try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'pmodel'))) if (/^[a-z0-
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'models'))) { if (/^[a-z0-9_]+\.glb\.wasm$/.test(fn)) files['/models/' + fn] = { file: 'models/' + fn, type: 'application/octet-stream', cache: 'public, max-age=86400' };   /* 이름 끝 .wasm: 아티팩트가 .glb 를 올려 주지 않아서 (내용은 glb) */ } } catch (e) {}
 // 마르쿠스 주민 모델 (public/citbake/*.json)
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'citbake'))) { if (/^[a-z0-9_]+\.json$/.test(fn)) files['/citbake/' + fn] = { file: 'citbake/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; else if (/^[a-z0-9_]+\.webp$/.test(fn)) files['/citbake/' + fn] = { file: 'citbake/' + fn, type: 'image/webp', cache: 'public, max-age=86400' }; } } catch (e) {}
+// 빚어 구운 사람 모양 몬스터 (public/monbake/*.json, tools/monbake.js)
+try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'monbake'))) if (/^[a-z0-9_]+\.json$/.test(fn)) files['/monbake/' + fn] = { file: 'monbake/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; } catch (e) {}
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'npcbake'))) if (/^[a-z0-9_]+\.json$/.test(fn)) files['/npcbake/' + fn] = { file: 'npcbake/' + fn, type: 'application/json; charset=utf-8', cache: 'public, max-age=86400' }; } catch (e) {}
 // 배경 음악 (public/music/*.mp3): 압축하지 않고, 부분 요청(Range)을 받아 준다 (휴대폰 브라우저가 음악을 나눠 받는다)
 try { for (const fn of fs.readdirSync(path.join(PUBLIC, 'fonts'))) if (/^[A-Za-z0-9_-]+\.woff2$/.test(fn)) files['/fonts/' + fn] = { file: 'fonts/' + fn, type: 'font/woff2', cache: 'public, max-age=2592000' }; } catch (e) {}

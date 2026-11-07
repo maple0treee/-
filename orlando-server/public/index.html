@@ -2806,7 +2806,7 @@ const BOOT=(()=>{const L=document.getElementById('loading'),M=document.getElemen
   setInterval(()=>{try{window.__frzPass();}catch(e){}},5000);
 })();
 /* 큰 파일(모델·음악·구운 NPC)은 CDN(GitHub 공개 저장소)에서 먼저 받고, 안 되면 이 서버에서 받는다 → 서버 대역폭 절약 */
-const ASSET_RE=/^(models\/|npcbake\/|pmodel\/|citbake\/|music\/|player\.glb)/;
+const ASSET_RE=/^(models\/|npcbake\/|pmodel\/|citbake\/|monbake\/|music\/|player\.glb)/;
 function cdnURL(u){return window.ORLANDO_CDN&&typeof u==='string'&&ASSET_RE.test(u)?window.ORLANDO_CDN+u:u;}
 (function(){if(!window.ORLANDO_CDN)return;
   const of=window.fetch.bind(window);window.fetch=(u,o)=>{const c=cdnURL(u);if(c===u)return of(u,o);return of(c,o).then(r=>r.ok?r:of(u,o)).catch(()=>of(u,o));};
@@ -5618,6 +5618,70 @@ function makeBipedMonster(D){
   return g;
 }
 
+/* ---------- 빚어 구운 사람 모양 몬스터 (거인·오우거·트롤·나무 거인·예티·산적·불도마뱀) ----------
+   tools/monbake.js 가 거리 함수로 한 덩어리로 빚고 면을 줄여 monbake/<종류>.json 에 구워 둔다.
+   관절마다 뼈가 있어 팔꿈치·무릎이 휘고, 관절 둘레 살은 두 뼈에 나눠 붙어 부드럽게 늘어난다.
+   몬스터가 처음 나오면 그 종류 파일을 받고, 받기 전에는 원래 모양이 보이다가 받으면 바꿔 입는다.
+   가까이 볼 모양과 멀리서 볼 모양(면이 적은)을 같이 담아 거리에 따라 바꾼다. */
+const MONB={ver:'1',dir:'monbake/',types:new Set(['redgiant','cliffgiant','frostgiant','hillgiant','peakgiant','firegiant','valleyogre','rockogre','fieldogre','gorgeogre','flameogre','woodtroll','pinetroll','hilltroll','oldtroll','cavetroll','lavatroll','treant','yeti','snowyeti','bandit','salamander']),data:{},req:{}};
+function monBakeGeo(p){const ab=s=>{const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u.buffer;};
+  const n=p.n,qP=new Uint16Array(ab(p.P)),qN=new Int8Array(ab(p.N)),qC=new Uint8Array(ab(p.C)),qS=new Uint8Array(ab(p.S)),qW=new Uint8Array(ab(p.W)),I=p.i32?new Uint32Array(ab(p.I)):new Uint16Array(ab(p.I));
+  const P=new Float32Array(n*3),N=new Float32Array(n*3),C=new Float32Array(n*3),SI=new Uint16Array(n*4),SW=new Float32Array(n*4),lin=new Float32Array(256);
+  for(let i=0;i<256;i++){const s=i/255;lin[i]=s<=.04045?s/12.92:Math.pow((s+.055)/1.055,2.4);}
+  for(let i=0;i<n;i++){for(let a=0;a<3;a++){const k=i*3+a;P[k]=p.lo[a]+qP[k]/65535*(p.hi[a]-p.lo[a]);N[k]=qN[k]/127;C[k]=lin[qC[k]];}
+    const w=qW[i]/255;SI[i*4]=qS[i*2];SI[i*4+1]=qS[i*2+1];SW[i*4]=w;SW[i*4+1]=1-w;}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(P,3));g.setAttribute('normal',new THREE.BufferAttribute(N,3));g.setAttribute('color',new THREE.BufferAttribute(C,3));
+  g.setAttribute('skinIndex',new THREE.BufferAttribute(SI,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(SW,4));g.setIndex(new THREE.BufferAttribute(I,1));
+  g.computeBoundingSphere();g.boundingSphere.radius*=1.5;return g;}
+function monBakeDecode(r){return {h:r.h*(r.size||1),size:r.size||1,anim:r.anim||{},bones:r.bones,mats:r.mats||{},lod:r.lod.map(l=>l.map(p=>({g:p.g,geo:monBakeGeo(p)})))};}
+function monBakeMat(o){if(o.glow)return new THREE.MeshBasicMaterial({vertexColors:true,skinning:true});
+  return new THREE.MeshStandardMaterial({vertexColors:true,skinning:true,roughness:o.r??.8,metalness:o.m||0,transparent:!!o.tr,opacity:o.tr||1,flatShading:false});}
+/* 받은 모양으로 g 를 채운다 (원래 조각은 걷어 낸다). 움직임(U.anim)·쓰러짐(U.die)도 새로 단다 */
+function monBakeBuild(t,D,g){const R=MONB.data[t];
+  for(const ch of [...g.children])g.remove(ch);
+  const by={},bones=R.bones.map(b=>{const B=new THREE.Bone();B.name=b.n;by[b.n]=B;return B;});
+  R.bones.forEach((b,i)=>{const B=bones[i],p=b.p?R.bones.find(q=>q.n===b.p):null;B.position.set(b.o[0]-(p?p.o[0]:0),b.o[1]-(p?p.o[1]:0),b.o[2]-(p?p.o[2]:0));if(p)by[b.p].add(B);});
+  const wrap=new THREE.Group();wrap.scale.setScalar(R.size);wrap.add(by.root);g.add(wrap);wrap.updateMatrixWorld(true);
+  const inv=R.bones.map(b=>new THREE.Matrix4().makeTranslation(-b.o[0],-b.o[1],-b.o[2]));
+  const sk=new THREE.Skeleton(bones,inv),mats=[],hi=[],lo=[],I=new THREE.Matrix4();
+  const mk=(L,arr)=>{for(const p of L){const mo=R.mats[p.g]||{},m=monBakeMat(mo);if(!mo.glow)mats.push(m);const sm=new THREE.SkinnedMesh(p.geo,m);sm.bind(sk,I);sm.castShadow=p.g==='body';sm.frustumCulled=true;wrap.add(sm);arr.push(sm);}};
+  mk(R.lod[0],hi);mk(R.lod[1],lo);lo.forEach(o=>o.visible=false);
+  const loG=new Set(R.lod[1].map(p=>p.g));hi.forEach((o,i)=>{o.userData._lodPair=loG.has(R.lod[0][i].g);});
+  const U=g.userData;U.mats=mats;U.body=wrap;U.legL=U.legR=U.armL=U.armR=U.torso=null;U.head=by.head;U.tail=null;U.flame=null;U.crack=null;U.baked=t;
+  const A=R.anim||{},S={ph:Math.random()*6,w:0,up:0,hit:0,dead:0,lo:false,t:Math.random()*9},B=by,hip0=B.hip.position.y;
+  const stride=(A.heavy?.5:.6)*(R.h/2),hn=A.hunch||0;
+  if(t==='salamander'&&B.t3){const fm=new THREE.MeshBasicMaterial({color:0xffa030,transparent:true,opacity:.85,blending:THREE.AdditiveBlending,depthWrite:false});
+    const f=new THREE.Mesh(new THREE.ConeGeometry(.07,.32,7),fm);f.position.set(0,-.05,-.3);f.rotation.x=-1.2;B.t3.add(f);U.flame=f;}
+  const lod=m=>{const l=(m&&m._lod|0)>=2;if(l!==S.lo){S.lo=l;hi.forEach(o=>{if(o.userData._lodPair)o.visible=!l;});lo.forEach(o=>o.visible=l);}};
+  const pose=(dt,mv,windup,lunge,flash)=>{const sc=D.scale||1;S.t+=dt;
+    S.w+=((mv>.15?1:0)-S.w)*Math.min(1,dt*6);const w=S.w;
+    if(mv>.05)S.ph+=dt*Math.min(14,mv/(stride*sc))*Math.PI*.5;
+    S.up+=((windup?1:0)-S.up)*Math.min(1,dt*7);S.hit+=((lunge?1:0)-S.hit)*Math.min(1,dt*(lunge?22:5));
+    const up=S.up*(1-S.hit),hit=S.hit,base=1-Math.max(up,hit),ph=S.ph,br=Math.sin(S.t*1.7);
+    for(const s of [-1,1]){const k=s<0?'L':'R',p=ph+(s<0?0:Math.PI),sw=Math.sin(p);
+      const th=-sw*.5*w,kn=Math.pow(Math.max(0,Math.cos(p)),1.5)*.95*w+.06*w;
+      let thx=th*base,knx=kn*base,shx=sw*.42*w*base+br*.02*(1-w),elx=-(.18+.22*w*(.5+.5*sw))*base,shz=s*.04*br*(1-w);
+      if(k==='R'){shx+=-2.6*up+(-1.05)*hit;elx+=-.75*up-.1*hit;shz+=.28*up;thx+=.2*up+.32*hit;knx+=.22*up+.3*hit;}
+      else{shx+=-.55*up+.25*hit;elx+=-.6*up-.3*hit;shz+=-.25*up-.15*hit;thx+=-.25*up-.48*hit;knx+=.08*up+.4*hit;}
+      B['th'+k].rotation.x=thx;B['kn'+k].rotation.x=knx;B['ft'+k].rotation.x=-(thx+knx)*.75;
+      B['sh'+k].rotation.set(shx,0,shz);B['el'+k].rotation.x=elx;B['ha'+k].rotation.x=k==='R'?(-.3*up+.55*hit):0;}
+    B.hip.position.y=hip0-Math.abs(Math.cos(ph))*.035*w*base-.07*hit-.02*up;B.hip.rotation.y=Math.sin(ph)*.09*w;
+    B.spine.rotation.set(br*.025+.1*w*base-.24*up+.42*hit-.12*(flash||0),-Math.sin(ph)*.12*w+.25*up-.2*hit,0);
+    B.head.rotation.set(-.1*w*base*hn-.12*up+.15*hit-.25*(flash||0),Math.sin(S.t*.37)*.4*(1-w)*base,0);
+    if(B.t1){B.t1.rotation.y=Math.sin(S.t*2.2+ph)*.25;B.t2.rotation.y=Math.sin(S.t*2.2+ph-.8)*.3;B.t3.rotation.y=Math.sin(S.t*2.2+ph-1.6)*.35;B.t1.rotation.x=.1*hit;}};
+  U.anim=(m,mv,windup,dt)=>{lod(m);pose(dt,mv,windup,m.lunge>0,m.flash>0?m.flash/.18:0);};
+  U.die=(m,dt)=>{S.dead=Math.min(1,S.dead+dt/.75);const k=1-Math.pow(1-S.dead,2.2);pose(dt,0,0,0,0);
+    B.root.rotation.x=-1.3*k;B.root.position.z=-.25*k;for(const s of [-1,1]){const q=s<0?'L':'R';B['th'+q].rotation.x+=-.55*k;B['kn'+q].rotation.x+=.85*k;B['sh'+q].rotation.z+=s*.9*k;B['sh'+q].rotation.x+=-.7*k;B['el'+q].rotation.x+=-.3*k;}
+    B.head.rotation.x+=-.45*k;B.spine.rotation.x+=-.2*k;};
+  U.pose=pose;U.bones=B;
+  return g;}
+function monBakeLoad(t){if(MONB.req[t])return MONB.req[t];
+  return MONB.req[t]=fetch(MONB.dir+t+'.json?v='+MONB.ver).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).then(r=>{MONB.data[t]=monBakeDecode(r);return MONB.data[t];});}
+/* 원래 모양 대신 빚어 구운 모양: 받아 둔 게 있으면 바로 입히고, 없으면 받아 와서 그 종류 몬스터를 모두 바꿔 입힌다 */
+function monBakeHook(t,D,g){if(!MONB.types.has(t))return false;if(MONB.data[t]){monBakeBuild(t,D,g);g.userData.h=MONB.data[t].h;return true;}
+  monBakeLoad(t).then(()=>monBakeSwap(t)).catch(e=>console.warn('monbake',t,e));return false;}
+function monBakeSwap(t){for(const m of monsters){if(m.t!==t||m.mesh.userData.baked||m.dying!==null)continue;const g=m.mesh,s=m.D.scale||1;
+  monBakeBuild(t,m.D,g);g.userData.h=MONB.data[t].h*s;m._parts=null;m._lod=-1;}}
 function makeMonsterMesh(t){
   const D=Object.assign({tyKey:t},MON[t]);let g;
   if(MON2_BUILD[t])g=MON2_BUILD[t](D);
@@ -5627,6 +5691,7 @@ function makeMonsterMesh(t){
   else g=makeBipedMonster(D);
   if(g.userData.mats)g.userData.mats=g.userData.mats.filter(m=>!m.emissive||m.emissive.getHex()===0);
   if(typeof monGlbHook==='function')monGlbHook(t,D,g);
+  monBakeHook(t,D,g);
   if(D.glow&&g.userData.mats)g.userData.mats.forEach(m=>{if(m.emissive&&m.emissive.getHex()===0)m.emissive.set(D.glow).multiplyScalar(.5);});
   const s=D.scale||1;g.scale.setScalar(s);
   g.traverse(o=>{if(o.isMesh){if(!o.geometry.boundingSphere)o.geometry.computeBoundingSphere();o.castShadow=o.geometry.boundingSphere.radius>.14;}});
