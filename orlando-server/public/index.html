@@ -8479,6 +8479,12 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
   hideBase(S.upper);
   const T=bin(S.upper,new THREE.Vector3(bw,1,bw)),seed=(hairC^shirtC)%97*.37;
   const chest=f?.18:.195,waist=f?.145:.16,BY=.045;   /* BY: 허리띠 높이 */
+  /* 여자 가슴: 앞 양쪽이 둥글게 도드라지고, 아래쪽은 또렷하게 닫히며 그늘이 진다 (몸판·조끼가 같이 따른다) */
+  const bustF=(az,y)=>{if(!f)return [0,0];let d=0,sh=0;for(const c of [-.43,.43]){const ga=Math.exp(-Math.pow((az-c)/.3,2)),dy=y-.395,gy=Math.exp(-Math.pow(dy/(dy<0?.05:.085),2));
+      d+=.044*ga*gy;sh+=.16*ga*Math.exp(-Math.pow((y-.335)/.022,2));}return [d,sh];};
+  /* 가슴 둘레는 옆모습 점을 촘촘히 (둥근 모양이 각지지 않게) */
+  const bustDense=pr=>{if(!f)return pr;const o=[];for(let i=0;i<pr.length;i++){o.push(pr[i]);const q=pr[i+1];if(!q)break;const y0=pr[i][1],y1=q[1];
+      if(Math.max(y0,y1)>.27&&Math.min(y0,y1)<.5){const n=Math.ceil(Math.abs(y1-y0)/.012);for(let k=1;k<n;k++){const t=k/n;o.push([pr[i][0]+(q[0]-pr[i][0])*t,y0+(y1-y0)*t]);}}}return o;};
   const robe=X.u===3,shirt=X.u===1,tunic=X.u===0;
   /* 몸판: 허리띠 위로 천이 살짝 부풀어 늘어지고(블라우징), 아래 자락은 퍼지며 세로 주름, 옆·뒤 솔기, 가슴 아래 당긴 주름 */
   const short_=shirt||vest,hemTo=robe?-.64:short_?-.085:-.2,hemR=robe?.29:short_?waist+.03:.212;
@@ -8486,6 +8492,7 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
   {const n=robe?9:short_?3:6;for(let k=n;k>=1;k--){const t=k/n;bodyPr.push([waist+.03+(hemR-waist-.03)*Math.pow(t,1.25),hemTo*t]);}}
   bodyPr.push([waist+.022,BY-.03],[waist+.004,BY-.008],[waist+.002,BY+.012],[waist+.02,BY+.04],[waist+.022,BY+.07],[waist+.008,.12],[chest*.93,.24],[chest*.99,.33],[chest,.41],[chest*.96,.48],[chest*.88,.53],[.15,.565],[.115,.59],[.09,.605],[0,.61]);
   const bodyFold=(az,y)=>{let r=[0,0];
+    r=lkAdd(r,bustF(az,y));
     if(y<BY-.02)r=lkAdd(r,lkDrape(az,y,BY-.01,hemTo,robe?.016:.011,robe?11:8,seed));
     r=lkAdd(r,lkBunch(az,y,BY+.045,.028,.006,120,seed));   /* 허리띠 위로 모인 천 */
     if(y>.12&&y<.3)r=lkAdd(r,lkDrape(az,-y,-.3,-.14,.0035,5,seed+1));
@@ -8495,7 +8502,7 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     if(!robe&&y>.4){const g=Math.exp(-Math.pow(az*.18/.012,2))*_lkSS(.4,.5,y);r=lkAdd(r,[-.012*g,g*.75]);}
     return r;};
   const bodyM=lkCloth(vest?underC:shirtC,robe?'wool':'weave');mm.push(bodyM);
-  add(T,lkGarment(bodyPr,72,{fold:bodyFold,z:.76}),bodyM);
+  add(T,lkGarment(bustDense(bodyPr),72,{fold:bodyFold,z:.76}),bodyM);
   const trimC=dk(shirtC,.62),mTrim=lkCloth(trimC,'trim',{vertexColors:false});mTrim.map=lkTex('trim').map;mm.push(mTrim);
   const mThread=M(dk(shirtC,.45),{roughness:.8});
   /* 아래 단: 수놓은 띠 + 말아 꿰맨 끝 */
@@ -8520,13 +8527,14 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     const mBtn=M(0xe8e0cc,{roughness:.35});for(let i=0;i<6;i++){const y=.53-i*.1;add(T,new THREE.CylinderGeometry(.0075,.0075,.004,14),mBtn,0,y,zf(y)+.01,[Math.PI/2,0,0]);}
     for(const s of [-1,1]){const sh=new THREE.Shape();sh.moveTo(0,0);sh.lineTo(s*.07,-.005);sh.quadraticCurveTo(s*.075,-.03,s*.05,-.075);sh.lineTo(s*.012,-.02);sh.lineTo(0,0);
       const cg=new THREE.ExtrudeGeometry(sh,{depth:.004,bevelEnabled:true,bevelThickness:.002,bevelSize:.002,bevelSegments:1,curveSegments:6});add(T,cg,bodyM,s*.008,.605,.095,[-.55,0,s*-.05]);}
+    if(!f){   /* 가슴 주머니는 남자 셔츠만 */
     add(T,new THREE.BoxGeometry(.06,.065,.008),bodyM,.085,.36,chest*.99*.76-.004,[-.08,.32,0]);add(T,new THREE.BoxGeometry(.062,.022,.01),mThread,.085,.395,chest*.99*.76-.002,[-.08,.32,0]);
-    add(T,new THREE.CylinderGeometry(.006,.006,.004,10),mBtn,.085,.39,chest*.99*.76+.004,[Math.PI/2-.08,0,0]);}
+    add(T,new THREE.CylinderGeometry(.006,.006,.004,10),mBtn,.085,.39,chest*.99*.76+.004,[Math.PI/2-.08,0,0]);}}
   /* 조끼: 앞이 V로 트인 덧옷, 앞 끝이 뾰족하게 내려오고, 가장자리 바느질 테두리, 단추 넷, 주머니 둘 */
   if(vest){const vg=y=>.16+.55*_lkSS(.12,.56,y),vy0=-.11,mVest=lkCloth(shirtC,'wool');mm.push(mVest);
     const vpr=[[waist+.036,vy0],[waist+.036,BY-.02],[waist+.036,BY+.03],[waist+.034,.1],[chest*.97+.012,.26],[chest+.014,.4],[chest*.96+.012,.48],[chest*.88+.01,.53],[.152,.565],[.13,.575]];
-    const vfold=(az,y)=>{let r=lkBunch(az,y,BY+.06,.03,.004,90,seed+3);for(const s of [-1,1])r=lkAdd(r,lkSeam(az,s*Math.PI/2,.2));return r;};
-    const geo=lkGarment(vpr,64,{fold:vfold,z:.76,gap:vg});
+    const vfold=(az,y)=>{let r=lkBunch(az,y,BY+.06,.03,.004,90,seed+3);r=lkAdd(r,bustF(az,y));for(const s of [-1,1])r=lkAdd(r,lkSeam(az,s*Math.PI/2,.2));return r;};
+    const geo=lkGarment(bustDense(vpr),64,{fold:vfold,z:.76,gap:vg});
     /* 앞 끝이 아래로 뾰족 */{const p=geo.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i);if(y<0&&z>0){const fr=Math.max(0,z/(waist*.76+.03));p.setY(i,y-.06*Math.pow(fr,3)*(1-Math.min(1,Math.abs(x)/.09)*.4));}}geo.computeVertexNormals();}
     add(T,geo,mVest);
     /* 테두리 (앞섶·아래 단) */
