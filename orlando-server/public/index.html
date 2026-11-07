@@ -396,12 +396,12 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 .selwrap{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px}
 .sellist{display:grid;gap:6px;align-content:start}
 #chars{display:grid;gap:6px}
-.char{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;padding:7px 12px 7px 8px;background:#2a2118;border:1px solid var(--line);border-radius:4px;text-align:left;color:inherit}
+.char{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:12px;padding:7px 12px 7px 8px;background:#2a2118;border:1px solid var(--line);border-radius:4px;text-align:left;color:inherit}
 .char:hover{border-color:var(--brass)}
 .char.on{border-color:#e8c272;background:linear-gradient(90deg,rgba(232,194,114,.18),#2a2118 70%)}
 .char img{width:44px;height:44px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#5a4630,#2a1f14);box-shadow:0 0 0 1px #2a1d10,0 0 0 2px #c9a05a}
 .char img:not([src]){visibility:visible}
-.char b{font-family:var(--f-display);font-weight:400;font-size:18px;color:var(--me);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.char div{display:grid;gap:1px;min-width:0}.char b{font-family:var(--f-display);font-weight:400;font-size:18px;color:var(--me);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .char span{font-size:13px;color:var(--dim)}
 .newchar{padding:14px;background:none;border:1px dashed var(--line);border-radius:4px;color:var(--brass);font-family:var(--f-display);font-size:16px}
 .newchar:hover{border-color:var(--brass)}
@@ -1398,7 +1398,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     <div class="card panel" id="stepList" hidden>
       <h1>오를란도</h1>
       <div class="selwrap">
-        <div class="sellist"><div id="chars"></div><button type="button" class="newchar" id="toCreate">+ 새 캐릭터</button></div>
+        <div class="sellist"><button type="button" class="newchar" id="toCreate">+ 새 캐릭터</button><div id="chars"></div></div>
         <div class="selbig" id="selBig" hidden>
           <div class="who"><b id="selName"></b><span id="selInfo"></span></div>
           <div class="stage"><canvas id="selPrev"></canvas></div>
@@ -26380,13 +26380,26 @@ function pvWarm(){if(PV.warm>=2||performance.now()-PV.t0<700)return;if(!OLD_LOOK
   if(PV.warm===0){for(const m of PV.wm)PV.sc.add(m);try{r.compile(PV.sc,cam);}catch(e){}for(const m of PV.wm)PV.sc.remove(m);PV.warm=1;PV.t1=performance.now();return;}
   if(performance.now()-PV.t1<1500)return;
   for(const m of PV.wm)PV.sc.add(m);r.setViewport(0,0,8,8);try{r.render(PV.sc,cam);}catch(e){}for(const m of PV.wm)PV.sc.remove(m);PV.wm=null;PV.warm=2;}
+/* 마우스로 끌면 돌고 휠로 확대 (휴대폰: 한 손가락 끌기·두 손가락 벌리기). 손을 떼고 4초 지나면 다시 천천히 돈다 */
+function apPreviewInput(el,st){const P=new Map();let pd=0;el.style.touchAction='none';el.style.cursor='grab';
+  const zoom=f=>{st.zoom=Math.min(1.25,Math.max(.5,st.zoom*f));st.idle=0;};
+  el.addEventListener('pointerdown',e=>{if(e.button>0)return;P.set(e.pointerId,[e.clientX,e.clientY]);try{el.setPointerCapture(e.pointerId);}catch(_){}el.style.cursor='grabbing';st.idle=0;st.held=true;
+    if(P.size===2){const [a,b]=[...P.values()];pd=Math.hypot(a[0]-b[0],a[1]-b[1]);}});
+  el.addEventListener('pointermove',e=>{const q=P.get(e.pointerId);if(!q)return;
+    if(P.size===1){st.yaw+=(e.clientX-q[0])*.012;st.idle=0;}
+    P.set(e.pointerId,[e.clientX,e.clientY]);
+    if(P.size===2){const [a,b]=[...P.values()];const d=Math.hypot(a[0]-b[0],a[1]-b[1]);if(pd>0&&d>0)zoom(pd/d);pd=d;}});
+  const up=e=>{P.delete(e.pointerId);pd=0;if(!P.size){el.style.cursor='grab';st.held=false;}};
+  el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
+  el.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(e.deltaY*.0012));},{passive:false});}
 // 작은 미리보기 화면 하나 (캔버스마다)
 function makeApPreview(cv,dist=4.9,ly=1.0){let st=null;return{dirty:true,tick(dt,job,ap,gear,alive){if(!alive)return;
-  if(!st){const c2=new THREE.PerspectiveCamera(30,1,.1,20);c2.position.set(0,ly+.2,dist);c2.lookAt(0,ly,0);st={cam:c2,m:null,yaw:.4};}
+  if(!st){const c2=new THREE.PerspectiveCamera(30,1,.1,20);st={cam:c2,m:null,yaw:.4,zoom:1,idle:99,held:false,touched:false,zk:-1};if(cv.parentElement)apPreviewInput(cv.parentElement,st);}
   const w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;const pr=Math.min(2,devicePixelRatio||1),W=Math.round(w*pr),H=Math.round(h*pr);
   if(st.w!==w||st.h!==h){st.w=w;st.h=h;st.cam.aspect=w/h;st.cam.updateProjectionMatrix();}
-  if(this.dirty&&(OLD_LOOK||PM.data[ap.g])){st.m=makePlayerMesh(job,gear,{...ap});this.dirty=false;st.yaw=.4;}
-  if(st.m){st.yaw+=dt*.5;st.m.rotation.y=st.yaw;apRelaxPose(st.m,dt);pvDraw(st.m,st.cam,cv,W,H);}}};}
+  if(st.zk!==st.zoom){st.zk=st.zoom;const t=Math.max(0,Math.min(1,(1-st.zoom)/.5)),y=ly+(1.68-ly)*t;st.cam.position.set(0,y+.2*st.zoom,dist*st.zoom);st.cam.lookAt(0,y,0);}
+  if(this.dirty&&(OLD_LOOK||PM.data[ap.g])){st.m=makePlayerMesh(job,gear,{...ap});this.dirty=false;if(st.idle>=4)st.yaw=.4;}
+  if(st.m){if(st.held||st.idle<4)st.idle+=st.held?0:dt;else st.yaw+=dt*.5;st.m.rotation.y=st.yaw;apRelaxPose(st.m,dt);pvDraw(st.m,st.cam,cv,W,H);}}};}
 let selId=null;
 const charAp=c=>apParse(c.ap)||(c.ap&&c.ap.g?c.ap:null)||apDefault();
 const PORTRAITS=new Map(),portraitWant=[];let charPicR=null;
@@ -26434,8 +26447,8 @@ function renderChars(){
   for(const c of list){
     const b=document.createElement('button');b.type='button';b.className='char'+(c.id===selId?' on':'');
     const im=document.createElement('img');im.alt='';const k=portraitKey(c);if(PORTRAITS.has(k))im.src=PORTRAITS.get(k);else portraitWant.push([k,c,im]);
-    const n=document.createElement('b');n.textContent=c.name;const m=document.createElement('span');m.textContent=`Lv ${c.lv}`;
-    b.append(im,n,m);b.onclick=()=>{if(selId===c.id)return;selId=c.id;renderChars();};b.ondblclick=()=>startGame(c);
+    const t=document.createElement('div'),n=document.createElement('b');n.textContent=c.name;const m=document.createElement('span');m.textContent=`${c.needBook?'모험가':(JOBS[c.job]||{name:''}).name} · Lv ${c.lv}`;t.append(n,m);
+    b.append(im,t);b.onclick=()=>{if(selId===c.id)return;selId=c.id;renderChars();};b.ondblclick=()=>startGame(c);
     box.appendChild(b);
   }
   const c=list.find(x=>x.id===selId);$('#selBig').hidden=!c;
