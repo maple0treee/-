@@ -26405,7 +26405,8 @@ function apPreviewTick(dt){
   const c=selId&&loadCharsCached().find(x=>x.id===selId);
   if(selPrev&&c)selPrev.tick(dt,c.job,charAp(c),gearOf(c),true);}
 let _lcT=0,_lc=[];function loadCharsCached(){const t=performance.now();if(t-_lcT>500){_lc=loadChars();_lcT=t;}return _lc;}
-function startStep(n){$('#stepHome').hidden=n!==-1;$('#stepAuth').hidden=n!==2;$('#start').classList.toggle('home',n===-1);$('#stepList').hidden=n!==0;$('#stepNew').hidden=n!==1;if(n===1){if(apPrev)apPrev.dirty=true;setTimeout(()=>{try{$('#nick').focus();$('#nick').select();}catch(e){}},30);}}
+function startStep(n){if(n===0)renderChars();   /* 목록은 보여 줄 때마다 지금 저장된 것으로 다시 그린다 (로그인으로 목록이 바뀐 뒤에도) */
+  $('#stepHome').hidden=n!==-1;$('#stepAuth').hidden=n!==2;$('#start').classList.toggle('home',n===-1);$('#stepList').hidden=n!==0;$('#stepNew').hidden=n!==1;if(n===1){if(apPrev)apPrev.dirty=true;setTimeout(()=>{try{$('#nick').focus();$('#nick').select();}catch(e){}},30);}}
 $('#toCreate').onclick=()=>startStep(1);$('#backList').onclick=()=>startStep(0);
 $('#toHome').onclick=()=>startStep(-1);$('#toList').onclick=()=>acctGate(()=>startStep(loadChars().length?0:1));
 (function(){
@@ -26960,19 +26961,32 @@ function bankMove(n){
   renderBank(n>0?`${a} 골드, 잘 받았어요.`:`${a} 골드 여기 있어요.`);
 }
 /* ---------- 계정 (회원가입·로그인) ----------
-   서버(accounts.js)가 계정을 켜 두었으면 게임을 하기 전에 로그인한다. 캐릭터 목록(orlando3d.chars)과 금고(orlando3d.bank)는
-   계정에 저장되고, 이 기기의 localStorage는 그 사본이 된다: 로그인할 때 서버 것을 받아 쓰고, 바뀐 캐릭터만 몇 초마다 올린다.
-   계정이 없는 곳(시험판처럼 서버가 없을 때)에서는 예전처럼 이 기기에만 저장한다.
-   로그인하지 않은 채 이 기기에 있던 캐릭터·금고 골드는 처음 로그인한 계정으로 옮긴다 */
+   서버(accounts.js)가 계정을 켜 두었으면 게임을 하기 전에 로그인하거나 게스트로 한다. 캐릭터 목록(orlando3d.chars)과 금고(orlando3d.bank)는
+   계정에 저장되고, 이 기기의 localStorage는 그 사본이 된다: 로그인할 때 서버 것과 합쳐(캐릭터마다 더 나중에 저장된 쪽) 쓰고, 바뀐 캐릭터만 몇 초마다 올린다.
+   계정이 없는 곳(시험판처럼 서버가 없을 때)과 게스트는 예전처럼 이 기기에만 저장한다.
+   게스트로 이 기기에 남긴 캐릭터·금고 골드는 그 기기에서 처음 로그인한 계정으로 옮긴다(mig: 옮기기가 끝날 때까지 기억).
+   gen: 로그인·로그아웃·게스트 고르기마다 새로 정하는 표. 다른 창에서 계정이 바뀌면 이 창은 그 사본을 건드리지 않는다 */
 const ACCT_KEY='orlando3d.acct';
-const ACCT={on:false,id:'',tok:'',guest:false,keep:true,dirty:false,sent:new Map(),bankSent:null,busy:false,boot:null,after:null,signup:false};
+const ACCT={on:false,id:'',tok:'',guest:false,keep:true,dirty:false,mig:false,gen:'',stale:false,synced:false,sent:new Map(),bankSent:null,bankBoot:null,busy:false,boot:null,after:null,signup:false};
+const acctStored=()=>{try{return JSON.parse(localStorage.getItem(ACCT_KEY)||'{}')||{};}catch(e){return {};}};
 /* 로그인 유지: 켜면 표를 localStorage에 두어 브라우저를 다시 열어도 로그인된 채로, 끄면 sessionStorage에만 두어 브라우저를 닫으면 풀린다 */
-function acctRead(){try{const o=JSON.parse(localStorage.getItem(ACCT_KEY)||'{}');ACCT.id=typeof o.id==='string'?o.id:'';ACCT.keep=o.keep!==false;let st='';try{st=sessionStorage.getItem(ACCT_KEY+'.tok')||'';}catch(e){}ACCT.tok=typeof o.tok==='string'&&o.tok?o.tok:st.startsWith(ACCT.id+'.')?st:'';ACCT.dirty=!!o.dirty;ACCT.guest=!ACCT.id&&!!o.guest;}catch(e){}}
-function acctWrite(){try{localStorage.setItem(ACCT_KEY,JSON.stringify(ACCT.id?{id:ACCT.id,tok:ACCT.keep?ACCT.tok:'',dirty:ACCT.dirty,keep:ACCT.keep}:ACCT.guest?{guest:1,keep:ACCT.keep}:{keep:ACCT.keep}));}catch(e){}
+function acctRead(){const o=acctStored();ACCT.id=typeof o.id==='string'?o.id:'';ACCT.keep=o.keep!==false;let st='';try{st=sessionStorage.getItem(ACCT_KEY+'.tok')||'';}catch(e){}
+  ACCT.tok=ACCT.id&&typeof o.tok==='string'&&o.tok?o.tok:ACCT.id&&st.startsWith(ACCT.id+'.')?st:'';ACCT.dirty=!!o.dirty;ACCT.mig=!!(ACCT.id&&o.mig);ACCT.guest=!ACCT.id&&!!o.guest;ACCT.gen=typeof o.gen==='string'?o.gen:'';}
+function acctWrite(){if(ACCT.stale)return;
+  try{localStorage.setItem(ACCT_KEY,JSON.stringify(ACCT.id?{id:ACCT.id,tok:ACCT.keep?ACCT.tok:'',dirty:ACCT.dirty,mig:ACCT.mig||undefined,keep:ACCT.keep,gen:ACCT.gen}:ACCT.guest?{guest:1,keep:ACCT.keep,gen:ACCT.gen}:{keep:ACCT.keep,gen:ACCT.gen}));}catch(e){}
   try{if(ACCT.tok&&!ACCT.keep)sessionStorage.setItem(ACCT_KEY+'.tok',ACCT.tok);else sessionStorage.removeItem(ACCT_KEY+'.tok');}catch(e){}}
+const acctNewGen=()=>{ACCT.gen=Math.random().toString(36).slice(2,10);};
+// 다른 창이 로그인·로그아웃·게스트를 골랐는가: 그러면 이 창은 더 저장하지도 올리지도 않고 새로 불러오게 한다
+function acctCheck(){if(ACCT.stale)return false;const g=acctStored().gen||'';if(g===ACCT.gen)return true;
+  ACCT.stale=true;ACCT.tok='';
+  if(P&&player&&mode!=='title'){saveStale=true;askPrompt('다른 창에서 계정이 바뀌었어요. 기록이 섞이지 않도록 이 창은 더 저장하지 않아요.','다시 불러오기','닫기',ok=>{if(ok)location.reload();});}
+  else location.reload();
+  return false;}
+addEventListener('storage',e=>{if(e.key===ACCT_KEY||e.key===null)acctCheck();});
 const acctCJ=c=>{const o={...c};delete o.tab;return JSON.stringify(o);};
 function acctRawChars(){try{const a=JSON.parse(localStorage.getItem('orlando3d.chars')||'[]');return Array.isArray(a)?a.filter(c=>c&&typeof c.id==='string'):[];}catch(e){return [];}}
 const acctBankRaw=()=>{try{return localStorage.getItem(BANK_KEY);}catch(e){return null;}};
+function acctClearLocal(){try{localStorage.setItem('orlando3d.chars','[]');localStorage.removeItem(BANK_KEY);}catch(e){}_lcT=0;selId=null;}
 async function acctApi(path,body,keep){const h={};if(body!==undefined)h['Content-Type']='application/json';if(ACCT.tok)h.Authorization='Bearer '+ACCT.tok;
   const b=body===undefined?undefined:JSON.stringify(body);
   const r=await fetch(path,{method:b===undefined?'GET':'POST',headers:h,body:b,cache:'no-store',keepalive:!!keep&&b!==undefined&&b.length<60000});
@@ -26983,78 +26997,89 @@ function acctDiff(all){const list=acctRawChars(),chars=[],ids=new Set();
   const gone=all?[]:[...ACCT.sent.keys()].filter(id=>!ids.has(id));
   const br=acctBankRaw(),bank=(all||br!==ACCT.bankSent)&&br!=null?br:null;
   return {chars,gone,bank,br,empty:!chars.length&&!gone.length&&bank==null};}
-// 바뀐 것을 서버에 올린다. migrate: 로그인하지 않고 쓰던 이 기기의 기록을 통째로 올리고 금고 골드는 계정 금고에 더한다
+// 바뀐 것을 서버에 올린다. migrate: 게스트로 쓰던 이 기기의 기록을 통째로 올리고 금고 골드는 계정 금고에 더한다
 async function acctPush(opt={}){
-  if(!ACCT.on||!ACCT.tok||ACCT.busy)return !ACCT.busy;
-  const d=acctDiff(opt.all||opt.migrate);if(d.empty){if(ACCT.dirty){ACCT.dirty=false;acctWrite();}return true;}
+  if(!ACCT.on||!ACCT.tok||ACCT.busy||!acctCheck())return false;
+  if(!opt.migrate&&!ACCT.synced)return false;   /* 서버 것과 합치기 전에는 올리지 않는다 (금고를 덮어쓰지 않게) */
+  const d=acctDiff(opt.migrate);if(d.empty){if(ACCT.dirty){ACCT.dirty=false;acctWrite();}return true;}
   if(!ACCT.dirty){ACCT.dirty=true;acctWrite();}
   let bank;try{bank=d.bank!=null?JSON.parse(d.bank):undefined;}catch(e){}
   const body={chars:d.chars.map(([c])=>{const o={...c};delete o.tab;return o;}),gone:d.gone};if(bank)body[opt.migrate?'bankAdd':'bank']=bank;
   ACCT.busy=true;
   try{const r=await acctApi('/api/save',body,opt.keep);
     if(r.s===401){acctLost();return false;}
-    if(r.s!==200)return false;
+    if(r.s!==200||ACCT.stale)return false;
     for(const [c,s] of d.chars)ACCT.sent.set(c.id,s);for(const id of d.gone)ACCT.sent.delete(id);ACCT.bankSent=d.br;
     if(acctDiff().empty){ACCT.dirty=false;acctWrite();}return true;
   }catch(e){return false;}finally{ACCT.busy=false;}}
-// 서버의 계정 기록을 이 기기에 깐다
-function acctApply(d){const chars=Array.isArray(d.chars)?d.chars.filter(c=>c&&typeof c.id==='string'):[];
-  try{localStorage.setItem('orlando3d.chars',JSON.stringify(chars));localStorage.setItem(BANK_KEY,JSON.stringify(d.bank||{gold:0,t:0}));}catch(e){}
-  ACCT.sent=new Map(chars.map(c=>[c.id,acctCJ(c)]));ACCT.bankSent=acctBankRaw();_lcT=0;}
-async function acctPull(){const r=await acctApi('/api/me');if(r.s===401){acctLost();return false;}if(r.s!==200)return false;acctApply(r.j);return true;}
-// 로그인 표가 더 이상 맞지 않으면 (다른 곳에서 로그아웃 등): 이 기기 기록은 그 계정 것으로 남겨 두고 다시 로그인하게 한다
-function acctLost(){ACCT.tok='';acctWrite();acctBar();}
-// 로그인·가입한 뒤: 이 기기 기록을 계정과 맞춘다
-async function acctSync(prevId){const guest=!prevId,mine=prevId===ACCT.id;
-  if(guest&&acctRawChars().length||guest&&bankGold()>0){
-    const list=acctRawChars();for(const c of list)if(c.id==='legacy')c.id='c'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);   /* 기기마다 같은 이름표가 있을 수 있어 바꿔 둔다 */
-    try{localStorage.setItem('orlando3d.chars',JSON.stringify(list));}catch(e){}
-    if(!await acctPush({migrate:true}))return false;}
-  else if(mine&&ACCT.dirty){if(!await acctPush({all:true}))return false;}
+/* 서버의 계정 기록을 이 기기 사본과 합친다: 캐릭터마다 더 나중에 저장된 쪽, 이 기기에서만 새로 만든 캐릭터는 남기고 다른 곳에서 지운 캐릭터는 지운다.
+   금고는 이 기기에서 올리지 못한 변화가 있으면(dirty) 이 기기 것, 아니면 서버 것. 이긴 이 기기 것은 다음 올리기에 실린다 */
+function acctApply(d){const srv=Array.isArray(d.chars)?d.chars.filter(c=>c&&typeof c.id==='string'):[],gone=d.gone&&typeof d.gone==='object'?d.gone:{};
+  const local=new Map(acctRawChars().map(c=>[c.id,c])),out=[];
+  for(const c of srv){const l=local.get(c.id);out.push(l&&(l.t||0)>(c.t||0)?l:c);local.delete(c.id);}
+  for(const [id,l] of local)if(!gone[id])out.push(l);
+  const sb=JSON.stringify(d.bank||{gold:0,t:0}),keepBank=ACCT.dirty&&acctBankRaw()!=null;
+  try{localStorage.setItem('orlando3d.chars',JSON.stringify(out));if(!keepBank)localStorage.setItem(BANK_KEY,sb);}catch(e){}
+  ACCT.sent=new Map(srv.map(c=>[c.id,acctCJ(c)]));ACCT.bankSent=keepBank?sb:acctBankRaw();ACCT.synced=true;_lcT=0;}
+async function acctPull(){const r=await acctApi('/api/me');if(r.s===401){acctLost();return false;}if(r.s!==200||!acctCheck())return false;acctApply(r.j);return true;}
+// 로그인 표가 더 이상 맞지 않으면 (다른 곳에서 로그아웃·오래 안 씀): 이 기기 사본은 그 계정 것으로 남겨 두고(dirty 그대로) 다시 로그인하게 한다
+function acctLost(){ACCT.tok='';ACCT.synced=false;acctWrite();acctBar();}
+// 이 기기 사본을 계정과 맞춘다: 게스트 기록 옮기기(남아 있으면) → 서버 것과 합치기
+async function acctSync(){if(!ACCT.tok||ACCT.stale)return false;
+  if(ACCT.mig){if(!await acctPush({migrate:true}))return false;ACCT.mig=false;ACCT.dirty=false;acctWrite();}
   return acctPull();}
-async function acctBootRun(){acctRead();
+async function acctBootRun(){acctRead();ACCT.bankBoot=acctBankRaw();
   try{const r=await Promise.race([acctApi('/api/acct'),new Promise((_,no)=>setTimeout(()=>no(0),8000))]);ACCT.on=r.s===200&&!!r.j.on;}catch(e){ACCT.on=false;}
-  if(ACCT.on&&ACCT.tok){try{await acctSync(ACCT.id);}catch(e){}}
+  if(ACCT.on&&ACCT.tok){try{await acctSync();}catch(e){}}
   acctBar();if(mode==='title'&&!$('#stepList').hidden)renderChars();}
 ACCT.boot=acctBootRun();
-setInterval(()=>{if(ACCT.tok)acctPush();},4000);
-addEventListener('pagehide',()=>{if(!ACCT.tok)return;try{if(P&&player&&mode!=='title'&&!saveStale)save();}catch(e){}if(!acctDiff().empty){ACCT.dirty=true;acctWrite();}acctPush({keep:true});});
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&ACCT.tok)acctPush({keep:true});});
+// 몇 초마다: 아직 서버와 못 맞췄으면 다시 맞추고, 맞췄으면 바뀐 것만 올린다
+setInterval(()=>{if(!ACCT.tok||ACCT.busy||ACCT.stale)return;if(ACCT.synced)acctPush();else acctSync().catch(()=>{});},4000);
+function acctMarkDirty(){if(!ACCT.tok||ACCT.stale||ACCT.mig)return;const ch=ACCT.synced?!acctDiff().empty:acctBankRaw()!==ACCT.bankBoot;if(ch&&!ACCT.dirty){ACCT.dirty=true;acctWrite();}}
+addEventListener('pagehide',()=>{if(!ACCT.tok||!acctCheck())return;try{if(P&&player&&mode!=='title'&&!saveStale)save();}catch(e){}acctMarkDirty();acctPush({keep:true});});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&ACCT.tok){acctMarkDirty();acctPush({keep:true});}});
 // 머리줄의 로그인 단추
 function acctBar(){const bar=$('#acctBar');if(!bar)return;bar.hidden=!ACCT.on;
   $('#acctName').textContent=ACCT.tok?ACCT.id:'';$('#acctBtn').textContent=ACCT.tok?'로그아웃':'로그인';}
-// 게임 시작 전: 계정이 켜져 있으면 로그인부터
+// 게임 시작 전: 계정이 켜져 있으면 로그인부터 (게스트를 골랐으면 그대로)
 async function acctGate(fn){if(ACCT.boot)await ACCT.boot;if(ACCT.on&&!ACCT.tok&&!ACCT.guest){acctOpen(false,fn);return;}fn();}
-/* 게스트: 로그인 없이 예전처럼 이 기기에만 저장한다. 나중에 로그인하면 이 기기 기록이 그 계정으로 옮겨진다 */
-function acctGuest(){if(ACCT.id&&!ACCT.dirty){try{localStorage.setItem('orlando3d.chars','[]');localStorage.removeItem(BANK_KEY);}catch(e){}_lcT=0;selId=null;}   /* 로그인 표가 끊긴 계정의 사본은 서버에 있으니 비운다 */
-  ACCT.id='';ACCT.tok='';ACCT.dirty=false;ACCT.guest=true;ACCT.sent=new Map();ACCT.bankSent=null;acctWrite();acctBar();
+/* 게스트: 로그인 없이 예전처럼 이 기기에만 저장한다. 로그인 표가 끊긴 계정의 사본이 남아 있으면 지운다
+   (남겨 두면 그 계정 캐릭터가 게스트 것이 되어, 나중에 다른 계정으로 로그인할 때 그 계정으로 옮겨져 버린다) */
+function acctGuest(){if(!acctCheck())return;if(ACCT.id)acctClearLocal();
+  ACCT.id='';ACCT.tok='';ACCT.dirty=false;ACCT.mig=false;ACCT.synced=false;ACCT.guest=true;ACCT.sent=new Map();ACCT.bankSent=null;acctNewGen();acctWrite();acctBar();
   const f=ACCT.after;ACCT.after=null;if(f)f();else startStep(loadChars().length?0:1);}
 function acctOpen(signup,after){ACCT.after=after||null;acctMode(signup);startStep(2);$('#auKeep').checked=ACCT.keep;
   const id=$('#auId');if(!id.value&&ACCT.id)id.value=ACCT.id;setTimeout(()=>{try{(id.value?$('#auPw'):id).focus();}catch(e){}},30);}
 function acctMode(signup){ACCT.signup=signup;$('#auTitle').textContent=signup?'회원가입':'로그인';$('#auGo').textContent=signup?'가입하기':'로그인';
   $('#auSwap').textContent=signup?'로그인':'회원가입';$('#auPw2L').hidden=!signup;$('#auPw').autocomplete=signup?'new-password':'current-password';$('#auErr').textContent='';}
 const ACCT_ERR={id:'아이디는 영문 소문자와 숫자 4~16자로 해 주세요.',pw:'비밀번호는 6~64자로 해 주세요.',taken:'이미 있는 아이디예요.',wrong:'아이디나 비밀번호가 맞지 않아요.',many:'너무 여러 번 시도했어요. 잠시 뒤에 다시 해 주세요.',net:'서버에 닿지 않아요. 잠시 뒤에 다시 해 주세요.'};
-async function acctSubmit(){if(ACCT.busy)return;const err=$('#auErr'),go=$('#auGo');
+async function acctSubmit(){if(!acctCheck()||$('#auGo').disabled)return;const err=$('#auErr'),go=$('#auGo'),keep=$('#auKeep').checked,signup=ACCT.signup;
   const id=$('#auId').value.trim().toLowerCase(),pw=$('#auPw').value;
   if(!/^[a-z0-9]{4,16}$/.test(id)){err.textContent=ACCT_ERR.id;return;}
   if(pw.length<6||pw.length>64){err.textContent=ACCT_ERR.pw;return;}
-  if(ACCT.signup&&pw!==$('#auPw2').value){err.textContent='비밀번호가 서로 달라요.';return;}
+  if(signup&&pw!==$('#auPw2').value){err.textContent='비밀번호가 서로 달라요.';return;}
   err.textContent='';go.disabled=true;
-  try{const prev=ACCT.id,saveTok=ACCT.tok;ACCT.tok='';
-    let r;try{r=await acctApi(ACCT.signup?'/api/signup':'/api/login',{id,pw});}catch(e){r={s:0,j:{}};}
-    if(r.s!==200||!r.j.tok){ACCT.tok=saveTok;err.textContent=ACCT_ERR[r.j.err]||ACCT_ERR.net;return;}
-    if(prev&&prev!==r.j.name){try{localStorage.setItem('orlando3d.chars','[]');localStorage.removeItem(BANK_KEY);}catch(e){}}   /* 다른 계정이 남긴 사본은 버린다 */
-    ACCT.id=r.j.name;ACCT.tok=r.j.tok;ACCT.guest=false;ACCT.keep=$('#auKeep').checked;ACCT.dirty=prev===ACCT.id&&ACCT.dirty;ACCT.sent=new Map();ACCT.bankSent=null;acctWrite();
-    if(!await acctSync(prev&&prev!==ACCT.id?ACCT.id:prev)){err.textContent=ACCT_ERR.net;}
+  try{let r;try{r=await acctApi(signup?'/api/signup':'/api/login',{id,pw});}catch(e){r={s:0,j:{}};}
+    if(!acctCheck())return;
+    if(r.s!==200||!r.j.tok){err.textContent=ACCT_ERR[r.j.err]||ACCT_ERR.net;return;}
+    const prev=ACCT.id,name=r.j.name;
+    if(prev&&prev!==name){acctClearLocal();ACCT.dirty=false;ACCT.mig=false;}   /* 다른 계정이 남긴 사본은 버린다 */
+    else if(!prev){ACCT.dirty=false;ACCT.mig=acctRawChars().length>0||bankGold()>0;   /* 게스트 기록은 이 계정으로 옮긴다 */
+      if(ACCT.mig){const list=acctRawChars();for(const c of list)if(c.id==='legacy')c.id='c'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);   /* 기기마다 같은 이름표가 있을 수 있어 바꿔 둔다 */
+        try{localStorage.setItem('orlando3d.chars',JSON.stringify(list));}catch(e){}}}
+    ACCT.id=name;ACCT.tok=r.j.tok;ACCT.guest=false;ACCT.keep=keep;ACCT.synced=false;ACCT.sent=new Map();ACCT.bankSent=null;ACCT.bankBoot=prev===name?ACCT.bankBoot:acctBankRaw();
+    acctNewGen();acctWrite();
+    if(!await acctSync()&&!ACCT.stale){err.textContent=ACCT_ERR.net;}
     $('#auPw').value='';$('#auPw2').value='';acctBar();
     const f=ACCT.after;ACCT.after=null;if(f)f();else startStep(-1);
   }finally{go.disabled=false;}}
-async function acctLogout(){const btn=$('#acctBtn');btn.disabled=true;
+async function acctLogout(){if(!acctCheck())return;const btn=$('#acctBtn');btn.disabled=true;
   try{try{if(P&&player&&mode!=='title'&&!saveStale)save();}catch(e){}
-    if(!await acctPush()){askPrompt('기록을 아직 다 올리지 못했어요. 잠시 뒤에 다시 해 주세요.','확인','닫기',()=>{});return;}
+    for(let i=0;i<20&&ACCT.busy;i++)await new Promise(ok=>setTimeout(ok,150));
+    const ok=ACCT.mig||!ACCT.synced?await acctSync():true;
+    if(!ok||!await acctPush()){askPrompt('기록을 아직 다 올리지 못했어요. 잠시 뒤에 다시 해 주세요.','확인','닫기',()=>{});return;}
     try{await acctApi('/api/logout',{});}catch(e){}
-    ACCT.id='';ACCT.tok='';ACCT.dirty=false;ACCT.sent=new Map();ACCT.bankSent=null;acctWrite();
-    try{localStorage.setItem('orlando3d.chars','[]');localStorage.removeItem(BANK_KEY);}catch(e){}_lcT=0;selId=null;
+    ACCT.id='';ACCT.tok='';ACCT.dirty=false;ACCT.mig=false;ACCT.synced=false;ACCT.sent=new Map();ACCT.bankSent=null;acctNewGen();acctWrite();acctClearLocal();
     acctBar();startStep(-1);}finally{btn.disabled=false;}}
 $('#acctBtn').onclick=()=>{if(ACCT.tok)acctLogout();else acctOpen(false,null);};
 $('#auForm').onsubmit=e=>{e.preventDefault();acctSubmit();};
