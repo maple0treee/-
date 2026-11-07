@@ -8299,6 +8299,7 @@ const THIEF_KY=1.57;
 /* 내 캐릭터·다른 모험가 걸음 (주민 걸음 stickWalkPose와 같은 생각): 몸이 실제로 움직인 만큼 디딘 발이 땅에 붙어 있게 한다.
    빠르면 걷기 → 달리기(두 발이 다 뜨는 때가 생기고, 디딘 무릎이 굽고, 뒤꿈치를 차올린다). 뒤로 가면 뒷걸음, 옆으로 가면 다리를 가는 쪽으로 돌린다. 비탈에서는 앞발이 비탈 높이에 닿는다 */
 const PG_AMP=.4,PG_LEG=.91,PG_H0=.45+.46*Math.cos(.05),PG_R=.9;
+const _pgH=n=>{const x=Math.sin(n*127.1+311.7)*43758.5453;return (x-Math.floor(x))*2-1;};   /* 걸음 번호마다 정해진 -1~1 값 */
 const _pgWrap=u=>((u+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
 /* 두 마디 다리 IK: 엉덩이에서 본 발목 자리(z 앞+, y 위+) → [엉덩이 각, 무릎 각] (무릎은 뒤로만 굽음) */
 function pgIK(z,y){let d=Math.hypot(y,z);d=Math.min(.909,Math.max(.2,d));const k=Math.acos(Math.max(-1,Math.min(1,(d*d-.45*.45-.46*.46)/(2*.45*.46))));
@@ -8312,7 +8313,7 @@ function pgParams(v){const A=PG_AMP*Math.max(.12,Math.min(1.4,v/1.25)),Z=PG_LEG*
   return {A,Z,Zf,Zb,om,rf,be:v>1e-3?Math.min(.5,om*(Zf+Zb)/(2*v*Math.PI)):.5};}
 function stickGait(mesh,S,want,t){
   let G=S.gait;const p=mesh.position;
-  if(!G){G=S.gait={ph:0,w:0,vx:0,vy:0,vz:0,t,px:p.x,py:p.y,pz:p.z,yaw:0,back:false,s:0,v:0,be:.5,rf:0,dir:1,hx:[S.L.hip.position.x,S.R.hip.position.x]};S.L.hip.rotation.order='YXZ';S.R.hip.rotation.order='YXZ';}
+  if(!G){G=S.gait={ph:0,w:0,vx:0,vy:0,vz:0,t,px:p.x,py:p.y,pz:p.z,yaw:0,back:false,s:0,v:0,be:.5,rf:0,dir:1,hx:[S.L.hip.position.x,S.R.hip.position.x],sd:Math.random()*97,tw:0,lean:0};S.L.hip.rotation.order='YXZ';S.R.hip.rotation.order='YXZ';}
   let dt=t-G.t;G.t=t;
   if(dt>0&&dt<.25){const ix=(p.x-G.px)/dt,iy=(p.y-G.py)/dt,iz=(p.z-G.pz)/dt;
     if(Math.hypot(ix,iz)>45){G.vx=G.vy=G.vz=0;}else{const k=Math.min(1,dt*14);G.vx+=(ix-G.vx)*k;G.vy+=(iy-G.vy)*k;G.vz+=(iz-G.vz)*k;}}   /* 순간이동은 걸음으로 치지 않는다 */
@@ -8327,7 +8328,9 @@ function stickGait(mesh,S,want,t){
   if(vh>.5){const sl=Math.max(-.7,Math.min(.7,G.vy/sc/vh))*G.dir;G.s+=(sl-G.s)*Math.min(1,dt*6);}else G.s-=G.s*Math.min(1,dt*4);
   G.w+=((want&&v>.25?1:0)-G.w)*Math.min(1,dt*8);
   /* 뒷걸음은 앞뒤가 바뀌므로 달리기 모양(앞 짧게·뒤 길게)을 뒤집는다 */
-  const P_=pgParams(v),om=P_.om,be=P_.be,rf=G.back?P_.rf*.5:P_.rf,Zf=G.dir>0?P_.Zf:P_.Zb,Zb=G.dir>0?P_.Zb:P_.Zf;G.be=be;G.rf=rf;G.ph+=dt*om*G.dir;
+  /* 걸음마다 조금씩 다르게: 한 걸음(위상 π)마다 보폭·박자(곱 m, 보폭을 늘린 만큼 박자를 늦춰 발은 그대로 붙어 있다)와 발 드는 높이를 바꾼다 */
+  const sn_=Math.floor(G.ph/Math.PI),m=1+.1*_pgH(sn_+G.sd),lv=1+.3*_pgH(sn_*1.7+G.sd+5);
+  const P_=pgParams(v),om=P_.om/m,be=P_.be,rf=G.back?P_.rf*.5:P_.rf,Zf=(G.dir>0?P_.Zf:P_.Zb)*m,Zb=(G.dir>0?P_.Zb:P_.Zf)*m;G.be=be;G.rf=rf;G.ph+=dt*om*G.dir;
   const w=G.w,s=G.s,bp=be*Math.PI,Ls=Zf+Zb;
   /* 몸 높이: 걸으면 디딘 다리 위로 넘어가며 가운데서 가장 높고, 달리면 무릎을 살짝 굽혀 받고 두 발이 다 뜨면 포물선 */
   const uL=_pgWrap(G.ph),uR=_pgWrap(G.ph+Math.PI),zAt=u=>Zf-Ls*(u/bp+1)/2;
@@ -8338,18 +8341,20 @@ function stickGait(mesh,S,want,t){
   gy-=Math.abs(s)*.06;
   /* 뒤로 밀어내는 발(몸 뒤 .15m 너머)은 발끝으로 딛으므로 높이를 낮추지 않는다 */
   if(stz!=null&&(stz>-.15||rf<.3||G.back))gy=Math.min(gy,Math.sqrt(PG_R*PG_R-stz*stz)-PG_H0+s*stz);
-  const yw=G.yaw*w,hp=Math.cos(yw),hs=Math.sin(yw);
-  [[S.L,uL,G.hx[0]],[S.R,uR,G.hx[1]]].forEach(([Lg,u,x0])=>{let z,y,stance=Math.abs(u)<=bp,f=0;
+  /* 골반은 앞으로 내딛는 다리 쪽이 앞으로 나오게 비틀고(어깨는 반대로), 엉덩이 자리가 움직인 만큼 발 자리를 되돌려 디딘 발은 그대로 둔다 */
+  const ptw=-Math.sin(G.ph)*(.13+.06*Math.min(1,v/3))*(1-.3*rf)*(1+.15*_pgH(sn_*2.3+G.sd+9))*w;G.tw=ptw;
+  const yw=G.yaw*w;
+  [[S.L,uL,G.hx[0],1.1,.15],[S.R,uR,G.hx[1],.93,.08]].forEach(([Lg,u,x0,lk,to])=>{let z,y,stance=Math.abs(u)<=bp,f=0;   /* 왼다리·오른다리도 조금 다르게 (드는 높이, 발끝 벌림) */
     if(stance){z=zAt(u);y=-(PG_H0+gy)+s*z;}
     else{f=(u>bp?u-bp:u+2*Math.PI-bp)/Math.max(1e-3,2*Math.PI-2*bp);const fe=Math.pow(f,1+.4*rf),e=(1-Math.cos(Math.PI*fe))/2;z=-Zb+Ls*e;
-      const hl=Math.min(.45,.1*Math.min(1,v/1.2)+rf*(.06+.015*v));y=-(PG_H0+gy)+s*z+hl*Math.sin(Math.PI*Math.pow(f,1-.35*rf));}
-    const [a,k]=pgIK(z,y);Lg.hip.rotation.set(a*w,yw,0);Lg.knee.rotation.x=.05+(k-.05)*w;
-    Lg.hip.position.x=x0*hp;Lg.hip.position.z=-x0*hs;
+      const hl=Math.min(.5,(.1*Math.min(1,v/1.2)+rf*(.06+.015*v))*lv*lk);y=-(PG_H0+gy)+s*z+hl*Math.sin(Math.PI*Math.pow(f,1-.35*rf));}
+    const pa=yw+ptw,[a,k]=pgIK(z+x0*Math.sin(ptw),y);Lg.hip.rotation.set(a*w,yw,0);Lg.knee.rotation.x=.05+(k-.05)*w;
+    Lg.hip.position.x=x0*Math.cos(pa);Lg.hip.position.z=-x0*Math.sin(pa);
     let fr;if(stance){const ay=-(.45*Math.cos(a)+.46*Math.cos(a+k)),h=Math.max(0,ay-y);fr=-(a+k)-Math.atan(s)+Math.asin(Math.min(1,h/.13));}   /* 디딘 발은 땅(비탈)에 평평하게, 밀어낼 때는 발끝으로 */
     else fr=-(a+k)*(1-.6*Math.sin(Math.PI*f));
-    Lg.foot.rotation.x=fr*w;});
+    Lg.foot.rotation.set(fr*w,Math.sign(x0)*to*w,0);});
   G.gy=gy*w;return G;}
-function stickGaitOff(S){const G=S.gait;if(!G)return;for(let i=0;i<2;i++){const Lg=i?S.R:S.L;Lg.hip.rotation.y=0;Lg.hip.position.x=G.hx[i];Lg.hip.position.z=0;Lg.foot.rotation.x=0;}G.gy=0;}
+function stickGaitOff(S){const G=S.gait;if(!G)return;for(let i=0;i<2;i++){const Lg=i?S.R:S.L;Lg.hip.rotation.y=0;Lg.hip.position.x=G.hx[i];Lg.hip.position.z=0;Lg.foot.rotation.x=0;Lg.foot.rotation.y=0;}G.gy=0;G.tw=0;}
 function animStick(mesh,speed,t,swing,air,alt,mo){
   const S=mesh.userData.stick;if(!S)return;if(S.one)alt=false;
   const k=Math.min(1,speed),atk=swing<1;
@@ -8377,15 +8382,15 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
     if(lf>.15&&!air){S.L.hip.rotation.x=-.6;S.L.knee.rotation.x=1.1;S.R.hip.rotation.x=.1;S.R.knee.rotation.x=.6;}
     const kr=ex&&ex.kr?ex.kr:0;if(kr>0){S.R.hip.rotation.x=-kr*1.35;S.R.knee.rotation.x=kr*1.5;S.L.knee.rotation.x=Math.max(S.L.knee.rotation.x,kr*.2);}}
   // 걸을 때 팔 흔들기 (공격 중이 아닐 때만)
-  const sw=atk?0:s*.6,rel=atk?0:grf*.75;   /* 달릴 때는 팔꿈치를 굽혀 크게 흔든다 */
-  S.AR.sh.rotation.set(q[0]+sw,0,q[1]+(air&&!atk?.4:0));S.AR.el.rotation.x=q[2]-k*.2-rel;{const hr=q[8]||0,lh=S.style==='dagger'&&alt&&!(atk&&mo&&mo.k3);S.AR.hand.rotation.x=lh?0:hr;S.AL.hand.rotation.x=lh?hr:0;}
+  const sw=atk?0:s*.6,rel=atk?0:grf*.75,swR=sw*(s>0?1.12:.9),swL=sw*(s>0?.88:1.06);   /* 오른팔이 조금 더 크게, 앞뒤로도 다르게 흔든다 */   /* 달릴 때는 팔꿈치를 굽혀 크게 흔든다 */
+  S.AR.sh.rotation.set(q[0]+swR,0,q[1]+(air&&!atk?.4:0));S.AR.el.rotation.x=q[2]-k*.2-rel;{const hr=q[8]||0,lh=S.style==='dagger'&&alt&&!(atk&&mo&&mo.k3);S.AR.hand.rotation.x=lh?0:hr;S.AL.hand.rotation.x=lh?hr:0;}
   if(S.shield&&S.style!=='shield'&&!(atk&&mo&&mo.k3)){q=q.slice();q[3]=.28;q[4]=-.1;q[5]=-1.86;}
   // 방패를 든 팔: 위팔을 안으로 비틀어 아래팔이 몸 앞을 가로지르게 (방패가 몸에 붙는다)
   const twL=S.shield&&!(atk&&mo&&mo.k3)?SHIELD_TW:0;
-  S.AL.sh.rotation.set(q[3]-(S.style==='bow'||S.shield?sw*.3:sw),twL,q[4]-(air&&!atk?.4:0));S.AL.el.rotation.x=q[5]-(S.style==='bow'||S.shield?0:rel);
-  S.upper.rotation.set(q[7]+k*.08+(GT&&!GT.back?grf*.1:0),q[6],0);
+  S.AL.sh.rotation.set(q[3]-(S.style==='bow'||S.shield?swL*.3:swL),twL,q[4]-(air&&!atk?.4:0));S.AL.el.rotation.x=q[5]-(S.style==='bow'||S.shield?0:rel);
+  S.upper.rotation.set(q[7]+k*.08+(GT&&!GT.back?grf*.1:0),q[6]-(GT&&!atk?GT.tw*1.25:0),GT&&!atk?Math.cos(GT.ph)*.055*gw*(1-.4*GT.rf):0);   /* 걸을 때 어깨는 골반과 엇갈려 돌고, 디딘 다리 쪽으로 살짝 기운다 */
   S.AR.hand.rotation.y=ex&&ex.wy?ex.wy:0;S.AR.hand.rotation.z=0;if(S.fwd&&S.w)S.w.rotation.y=-THIEF_KY+(atk&&mo&&mo.v==='reap'?reapTwist(swing):atk&&mo&&mo.v==='reapOut'?reapTwist2(swing):0);
-  S.head.position.y=.88+Math.sin(t*2)*.012*(1-k);S.head.rotation.y=-q[6]*.6;S.head.rotation.x=ex&&ex.rl>.2&&ex.rl<6?.7:0;   // 구르는 동안 턱 당기기 (몸 축 방향과 무관하게 앞으로)
+  S.head.position.y=.88+Math.sin(t*2)*.012*(1-k);S.head.rotation.y=-q[6]*.6+(GT&&!atk?GT.tw*.9:0);if(GT||S._hz){S.head.rotation.z=GT&&!atk?-Math.cos(GT.ph)*.03*gw:0;S._hz=!!GT;}S.head.rotation.x=ex&&ex.rl>.2&&ex.rl<6?.7:0;   // 구르는 동안 턱 당기기 (몸 축 방향과 무관하게 앞으로)
   stickLegs(mesh,S,t,k,air,atk,mo,swing,q,ex);   // 스킬 동작 하반신: 디딤·무릎·골반·무게 이동
   // 활과 지팡이는 손 방향과 상관없이 세워 든다
   if(S.xb){const xl=typeof player!=='undefined'&&mesh===player?xlMine():(mesh.userData.xl??-1);
