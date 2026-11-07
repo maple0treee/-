@@ -218,6 +218,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brass);outline-
 #start>.card#stepAuth{width:min(380px,100%)}
 #auForm{display:grid;gap:14px;margin-top:14px}
 .aui{font-family:var(--f-body);font-size:17px;padding:10px 12px;background:linear-gradient(#0e0905,#1a130c);border:1px solid #0e0804;box-shadow:inset 0 0 0 1px rgba(200,160,90,.5),inset 0 3px 8px rgba(0,0,0,.6);border-radius:2px;color:var(--parch);letter-spacing:normal;-webkit-user-select:text;user-select:text}
+#auForm .aukeep{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--parch);cursor:pointer;width:max-content}.aukeep input{width:18px;height:18px;margin:0;accent-color:#d2a654;cursor:pointer}
 #auErr{margin:0;min-height:1.3em;font-size:14px;color:#ff9c84}
 .aubtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 #stepHome{position:relative;z-index:1;grid-row:1;grid-column:1;align-self:stretch;display:grid}
@@ -1357,6 +1358,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
         <label class="f" for="auId">아이디<input id="auId" class="aui" maxlength="16" autocomplete="username" autocapitalize="off" spellcheck="false"></label>
         <label class="f" for="auPw">비밀번호<input id="auPw" class="aui" type="password" maxlength="64" autocomplete="current-password"></label>
         <label class="f" for="auPw2" id="auPw2L" hidden>비밀번호 확인<input id="auPw2" class="aui" type="password" maxlength="64" autocomplete="new-password"></label>
+        <label class="aukeep"><input type="checkbox" id="auKeep" checked>로그인 유지</label>
         <p id="auErr" role="alert"></p>
         <button class="cta" id="auGo" type="submit">로그인</button>
         <div class="aubtns"><button class="ghost" id="auSwap" type="button">회원가입</button><button class="ghost" id="auBack" type="button">뒤로</button></div>
@@ -26926,9 +26928,11 @@ function bankMove(n){
    계정이 없는 곳(시험판처럼 서버가 없을 때)에서는 예전처럼 이 기기에만 저장한다.
    로그인하지 않은 채 이 기기에 있던 캐릭터·금고 골드는 처음 로그인한 계정으로 옮긴다 */
 const ACCT_KEY='orlando3d.acct';
-const ACCT={on:false,id:'',tok:'',guest:false,dirty:false,sent:new Map(),bankSent:null,busy:false,boot:null,after:null,signup:false};
-function acctRead(){try{const o=JSON.parse(localStorage.getItem(ACCT_KEY)||'{}');ACCT.id=typeof o.id==='string'?o.id:'';ACCT.tok=typeof o.tok==='string'?o.tok:'';ACCT.dirty=!!o.dirty;ACCT.guest=!ACCT.id&&!!o.guest;}catch(e){}}
-function acctWrite(){try{localStorage.setItem(ACCT_KEY,JSON.stringify(ACCT.id?{id:ACCT.id,tok:ACCT.tok,dirty:ACCT.dirty}:ACCT.guest?{guest:1}:{}));}catch(e){}}
+const ACCT={on:false,id:'',tok:'',guest:false,keep:true,dirty:false,sent:new Map(),bankSent:null,busy:false,boot:null,after:null,signup:false};
+/* 로그인 유지: 켜면 표를 localStorage에 두어 브라우저를 다시 열어도 로그인된 채로, 끄면 sessionStorage에만 두어 브라우저를 닫으면 풀린다 */
+function acctRead(){try{const o=JSON.parse(localStorage.getItem(ACCT_KEY)||'{}');ACCT.id=typeof o.id==='string'?o.id:'';ACCT.keep=o.keep!==false;let st='';try{st=sessionStorage.getItem(ACCT_KEY+'.tok')||'';}catch(e){}ACCT.tok=typeof o.tok==='string'&&o.tok?o.tok:st.startsWith(ACCT.id+'.')?st:'';ACCT.dirty=!!o.dirty;ACCT.guest=!ACCT.id&&!!o.guest;}catch(e){}}
+function acctWrite(){try{localStorage.setItem(ACCT_KEY,JSON.stringify(ACCT.id?{id:ACCT.id,tok:ACCT.keep?ACCT.tok:'',dirty:ACCT.dirty,keep:ACCT.keep}:ACCT.guest?{guest:1,keep:ACCT.keep}:{keep:ACCT.keep}));}catch(e){}
+  try{if(ACCT.tok&&!ACCT.keep)sessionStorage.setItem(ACCT_KEY+'.tok',ACCT.tok);else sessionStorage.removeItem(ACCT_KEY+'.tok');}catch(e){}}
 const acctCJ=c=>{const o={...c};delete o.tab;return JSON.stringify(o);};
 function acctRawChars(){try{const a=JSON.parse(localStorage.getItem('orlando3d.chars')||'[]');return Array.isArray(a)?a.filter(c=>c&&typeof c.id==='string'):[];}catch(e){return [];}}
 const acctBankRaw=()=>{try{return localStorage.getItem(BANK_KEY);}catch(e){return null;}};
@@ -26988,7 +26992,7 @@ async function acctGate(fn){if(ACCT.boot)await ACCT.boot;if(ACCT.on&&!ACCT.tok&&
 function acctGuest(){if(ACCT.id&&!ACCT.dirty){try{localStorage.setItem('orlando3d.chars','[]');localStorage.removeItem(BANK_KEY);}catch(e){}_lcT=0;selId=null;}   /* 로그인 표가 끊긴 계정의 사본은 서버에 있으니 비운다 */
   ACCT.id='';ACCT.tok='';ACCT.dirty=false;ACCT.guest=true;ACCT.sent=new Map();ACCT.bankSent=null;acctWrite();acctBar();
   const f=ACCT.after;ACCT.after=null;if(f)f();else startStep(loadChars().length?0:1);}
-function acctOpen(signup,after){ACCT.after=after||null;acctMode(signup);startStep(2);
+function acctOpen(signup,after){ACCT.after=after||null;acctMode(signup);startStep(2);$('#auKeep').checked=ACCT.keep;
   const id=$('#auId');if(!id.value&&ACCT.id)id.value=ACCT.id;setTimeout(()=>{try{(id.value?$('#auPw'):id).focus();}catch(e){}},30);}
 function acctMode(signup){ACCT.signup=signup;$('#auTitle').textContent=signup?'회원가입':'로그인';$('#auGo').textContent=signup?'가입하기':'로그인';
   $('#auSwap').textContent=signup?'로그인':'회원가입';$('#auPw2L').hidden=!signup;$('#auPw').autocomplete=signup?'new-password':'current-password';$('#auErr').textContent='';}
@@ -27003,7 +27007,7 @@ async function acctSubmit(){if(ACCT.busy)return;const err=$('#auErr'),go=$('#auG
     let r;try{r=await acctApi(ACCT.signup?'/api/signup':'/api/login',{id,pw});}catch(e){r={s:0,j:{}};}
     if(r.s!==200||!r.j.tok){ACCT.tok=saveTok;err.textContent=ACCT_ERR[r.j.err]||ACCT_ERR.net;return;}
     if(prev&&prev!==r.j.name){try{localStorage.setItem('orlando3d.chars','[]');localStorage.removeItem(BANK_KEY);}catch(e){}}   /* 다른 계정이 남긴 사본은 버린다 */
-    ACCT.id=r.j.name;ACCT.tok=r.j.tok;ACCT.guest=false;ACCT.dirty=prev===ACCT.id&&ACCT.dirty;ACCT.sent=new Map();ACCT.bankSent=null;acctWrite();
+    ACCT.id=r.j.name;ACCT.tok=r.j.tok;ACCT.guest=false;ACCT.keep=$('#auKeep').checked;ACCT.dirty=prev===ACCT.id&&ACCT.dirty;ACCT.sent=new Map();ACCT.bankSent=null;acctWrite();
     if(!await acctSync(prev&&prev!==ACCT.id?ACCT.id:prev)){err.textContent=ACCT_ERR.net;}
     $('#auPw').value='';$('#auPw2').value='';acctBar();
     const f=ACCT.after;ACCT.after=null;if(f)f();else startStep(-1);
