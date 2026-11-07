@@ -99,6 +99,7 @@
     function spawnWyvern() {
       return makeMon('wyvern', 'wlair', { x: WLAIR.x, z: WLAIR.z - 8 }, 62, { dragon: true, r: 3.4 * (MON.wyvern.scale || 1), ry: 0, cd: { breath: 3, tail: 6, stomp: 9, dive: 11, meteor: 14 }, gap: 0, sks: [], phase: 1, idleT: 0, mv: null, skSeq: 0, said: 0 });
     }
+    if (OR.huntCounts) OR.huntCounts();   // 사냥터 넓이만큼 (shared.js HUNT)
     for (const z in ZONE_COUNT) for (let k = 0; k < ZONE_COUNT[z]; k++) spawn(z);
     spawnWyvern();
     spawnBoss();
