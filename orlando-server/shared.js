@@ -541,6 +541,27 @@
   };
   const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, m2a: 60, m2b: 60, m2c: 60, m2d: 60, hwood: 30, hlake: 30, hcave: 22, hcrys: 22, hfall: 22, hden: 22, hpeak: 28, hscree: 26, hridge: 24, htop: 14,   /* 2026-11-07 허칠 맵을 작게 떼면서 줄임 */   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
   for (const L of MLINES_ALL) if (L.off) for (const [id] of L.zones) { delete ZONE_COUNT[id]; delete ZONE_MON[id]; }   // 꺼 둔 땅에는 몬스터가 나오지 않는다
+  /* ---------- 사냥터 넓이만큼 몬스터 (2026-11-07 원호: "사냥터 크기에 비례해서 몬스터가 더 많았으면") ----------
+     사냥터마다 실제로 걸을 수 있는 넓이(m², 벽·벼랑·굴 벽 안)를 재서 HUNT.M2 넓이마다 한 마리를 둔다 (허칠 숲·호숫가·봉우리 맵과 같은 빽빽함).
+     위 ZONE_COUNT 숫자는 가장 적은 수로 남는다: 굴처럼 좁고 긴 맵은 넓이로 재면 너무 적어서 손으로 정한 수를 그대로 쓴다.
+     맵을 새로 나누거나 크기를 바꿔도 ZONE_COUNT·ZONE_MON 에 그 땅(ISLES)만 있으면 수가 저절로 맞는다.
+     하레나 둘레 길은 좁은 길이라 이미 빽빽해서 그대로, 옛 땅 넷(실바·아르부스·카올리스·수브쿠스)은 가는 길이 없어서 그대로 */
+  const HUNT = { M2: 300, MAX: 300, N: 2000, FIXED: { forest: 1, plains: 1, swamp: 1, ruins: 1, wwest: 1, wnorth: 1, wsouth: 1, weast: 1, silva: 1, arbus: 1, kaolis: 1, subcus: 1 } };
+  /* 걸을 수 있는 넓이: 땅 둘레 네모 안에 고르게 흩은 점(할턴 수열, 늘 같은 점) 가운데 그 땅이면서 붙잡기(worldClamp)가 밀어내지 않는 점의 비율 */
+  function zoneArea(z, N = HUNT.N) {
+    const I = ISLES[z]; if (!I) return 0;
+    const m = I.R + 40, x0 = I.x - m, z0 = I.z - m, W = 2 * m, hal = (i, b) => { let f = 1, r = 0; while (i > 0) { f /= b; r += f * (i % b); i = Math.floor(i / b); } return r; };
+    let n = 0; const p = { x: 0, z: 0 };
+    for (let i = 1; i <= N; i++) { const x = x0 + hal(i, 2) * W, zz = z0 + hal(i, 3) * W; if (zoneAt(x, zz) !== z) continue; p.x = x; p.z = zz; worldClamp(p, 0); if (Math.abs(p.x - x) + Math.abs(p.z - zz) < 0.01) n++; }
+    return n / N * W * W;
+  }
+  /* 몬스터를 낳기 전에 한 번 (서버·혼자 하기 sim 시작할 때): 땅마다 수를 넓이로 다시 정한다 */
+  function huntCounts() {
+    if (HUNT.done) return HUNT.area; HUNT.done = true; HUNT.area = {};
+    for (const z in ZONE_COUNT) { if (HUNT.FIXED[z] || !ISLES[z]) continue; const A = zoneArea(z); HUNT.area[z] = Math.round(A);
+      if (A > 0) ZONE_COUNT[z] = Math.max(ZONE_COUNT[z], Math.min(HUNT.MAX, Math.round(A / HUNT.M2))); }
+    return HUNT.area;
+  }
   // 지역별 레벨: 두 번째 지역은 도시에서 멀수록 강하다
   function levelAt(zone, x, z) {
     const d2 = Math.hypot(x - C2.x, z - C2.z);
@@ -611,6 +632,6 @@
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { HCH, boardTierOf, MHUNT, MLINES, MH, THOUSE, inTHouse, MYHOME, inMyHome, GHOUSE, inGHouse, BAKERY, inBakery, MSHOP, inMShop, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { HCH, boardTierOf, MHUNT, MLINES, MH, THOUSE, inTHouse, MYHOME, inMyHome, GHOUSE, inGHouse, BAKERY, inBakery, MSHOP, inMShop, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, HUNT, zoneArea, huntCounts, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
