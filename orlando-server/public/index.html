@@ -387,7 +387,7 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 #start #stepList h1{font-size:clamp(44px,8vw,72px)}
 .selwrap{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px}
 .sellist{display:grid;gap:6px;align-content:start}
-#chars{display:grid;gap:6px}
+#chars{display:grid;gap:6px;align-content:start;max-height:430px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;scrollbar-width:thin;scrollbar-color:#8a6a3a transparent}#chars::-webkit-scrollbar{width:6px}#chars::-webkit-scrollbar-thumb{background:#8a6a3a;border-radius:3px}
 .char{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:12px;padding:7px 12px 7px 8px;background:#2a2118;border:1px solid var(--line);border-radius:4px;text-align:left;color:inherit}
 .char:hover{border-color:var(--brass)}
 .char.on{border-color:#e8c272;background:linear-gradient(90deg,rgba(232,194,114,.18),#2a2118 70%)}
@@ -418,7 +418,7 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 #apBox{display:grid;gap:10px;align-content:start}
 .apgrp{display:grid;gap:8px;padding:12px 14px;border:1px solid rgba(110,85,48,.6);border-radius:4px;background:rgba(0,0,0,.18)}
 .apgrp h4{margin:0 0 2px;font-family:var(--f-display);font-weight:400;font-size:15px;color:#d4ae63;letter-spacing:.08em}
-@media(max-width:720px){.selwrap,.newwrap{grid-template-columns:1fr}.selbig,.newside{order:-1}.selbig .stage{height:250px}.newside{grid-template-rows:260px auto auto}.selbig .who b{font-size:26px}}
+@media(max-width:720px){.selwrap,.newwrap{grid-template-columns:1fr}.selbig,.newside{order:-1}.selbig .stage{height:250px}#chars{max-height:300px}.newside{grid-template-rows:260px auto auto}.selbig .who b{font-size:26px}}
 .menu-card{width:min(360px,100%);max-height:calc(100vh - 40px);overflow-y:auto}
 .keylist{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:4px 0 0;font-size:13px}.keylist dt{color:var(--brass,#d4ae63);font-weight:600;white-space:nowrap}.keylist dd{margin:0;color:#e8dcc0}
 .opts{display:grid;gap:4px;border-top:1px solid var(--line);padding-top:12px}
@@ -26409,9 +26409,13 @@ function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
   grp('몸');sl('키','hv');sl('체형','wv');if(ap.g==='f')sl('가슴','sv');
   grp('옷');opt('윗옷',TOPS,'u');sw('윗옷 색',SHIRT_COLORS,'c');opt('아래',BOTTOMS,'l');sw('아래 색',PANTS_COLORS,'p');opt('신발',SHOES,'o');}
 // 미리보기 자세: 무기 없이 팔을 편하게 내리고 손도 편다
-/* 석궁은 윗몸 앞에 자세대로 두고 두 손이 찾아가 쥐므로(animStick), 팔을 내려 버리면 석궁이 몸에 박힌다: 석궁이면 쥔 자세 그대로 둔다 */
-function apRelaxPose(m,dt){const u=m.userData,xb=!!(u.stick&&u.stick.xb);u.relax=xb?0:1;animStick(m,0,tAll,1,false,false,null);const S=u.stick;
-  if(S&&!xb){S.AR.sh.rotation.set(-.04,0,.1);S.AR.el.rotation.x=-.2;S.AL.sh.rotation.set(-.04,0,-.1);S.AL.el.rotation.x=-.2;S.AR.hand.rotation.x=0;S.AL.hand.rotation.x=0;S.upper.rotation.set(0,0,0);}
+/* 석궁은 원래 윗몸 앞에 놓이고 두 손이 찾아가 쥔다(animStick). 미리보기에서는 팔을 편히 내리고(쥔 자세는 팔이 몸에 박혔다)
+   석궁은 오른손에 아래로 늘어뜨려 든다 */
+const _apXV=new THREE.Vector3(),AP_XB=[0,-.05,.05,-1.45,0,0];
+function apRelaxPose(m,dt){const u=m.userData,xb=!!(u.stick&&u.stick.xb);u.relax=1;animStick(m,0,tAll,1,false,false,null);const S=u.stick;
+  if(S){S.AR.sh.rotation.set(-.04,0,.1);S.AR.el.rotation.x=-.2;S.AL.sh.rotation.set(-.04,0,-.1);S.AL.el.rotation.x=-.2;S.AR.hand.rotation.x=0;S.AL.hand.rotation.x=0;S.upper.rotation.set(0,0,0);}
+  if(S&&xb&&S.w){m.updateMatrixWorld(true);S.AR.hand.getWorldPosition(_apXV);S.upper.worldToLocal(_apXV);
+    S.w.position.set(_apXV.x+AP_XB[0],_apXV.y+AP_XB[1],_apXV.z+AP_XB[2]);S.w.rotation.set(AP_XB[3],AP_XB[4],AP_XB[5]);S.w.updateMatrix();if(S.xbH)S.xbH.visible=false;}
   if(!u.anime&&u.ap&&PM.data[u.ap.g])pmAttach(m,u.job,u.gear,u.ap);
   if(u.anime){if(!u.relaxF){u.relaxF=1;pmFingers(u.anime,'L','relax');pmFingers(u.anime,'R','relax');}pmPose(m,u.anime,dt);}}
 /* 미리보기·얼굴 그림은 모두 WebGL 하나(PV)로 그려 각 캔버스에 옮겨 붙인다. 캔버스마다 WebGL을 따로 만들면
