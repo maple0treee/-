@@ -21,7 +21,7 @@ function page(p) {
 <meta name="description" content="${esc(p.desc)}">
 <meta name="robots" content="index,follow">
 <link rel="canonical" href="${url}">
-<link rel="icon" type="image/png" href="/icon/favicon-32.png">
+<link rel="icon" type="image/png" href="/icon/favicon-32.png?v=2">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&display=swap">
 <meta property="og:type" content="article"><meta property="og:site_name" content="Orlando"><meta property="og:locale" content="ko_KR">
 <meta property="og:url" content="${url}"><meta property="og:title" content="${esc(p.title)} - 오를란도"><meta property="og:description" content="${esc(p.desc)}"><meta property="og:image" content="${SITE}/og.jpg?v=2">
