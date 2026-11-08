@@ -130,8 +130,10 @@
     const chk = (C) => { const o = [C[0]]; for (let i = 0; i + 1 < C.length; i++) { const A = C[i], B = C[i + 1]; o.push(A.map((v, k) => v * 0.75 + B[k] * 0.25), A.map((v, k) => v * 0.25 + B[k] * 0.75)); } o.push(C[C.length - 1]); return o; };   /* 꺾인 굴길을 둥글게 */
     H.pl = pl; H.chk = chk; H.T = pl(chk(chk(H.TUN))); H.TL = H.T[H.T.length - 1].s;
     /* 꺾은선에서 가장 가까운 자리 (거리·길이 s·반폭 w·천장 c) */
-    H.near = (L, x, z) => { let b = null; for (let i = 0; i + 1 < L.length; i++) { const A = L[i], B = L[i + 1], dx = B.x - A.x, dz = B.z - A.z, l2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - A.x) * dx + (z - A.z) * dz) / l2)), px = A.x + dx * t, pz = A.z + dz * t, d = Math.hypot(x - px, z - pz);
-      if (!b || d < b.d) b = { d, x: px, z: pz, i, t, s: A.s + (B.s - A.s) * t, w: A.w + (B.w - A.w) * t, c: A.c + (B.c - A.c) * t }; } return b; };
+    /* (빠르게: 가장 가까운 토막을 먼저 찾고 답 객체는 한 번만 만든다. 같은 식이라 답은 똑같다) */
+    H.near = (L, x, z) => { let bi = -1, bd = 0, bt = 0; for (let i = 0; i + 1 < L.length; i++) { const A = L[i], B = L[i + 1], dx = B.x - A.x, dz = B.z - A.z, l2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - A.x) * dx + (z - A.z) * dz) / l2)), d = Math.hypot(x - (A.x + dx * t), z - (A.z + dz * t));
+      if (bi < 0 || d < bd) { bi = i; bd = d; bt = t; } } if (bi < 0) return null; const A = L[bi], B = L[bi + 1], t = bt;
+      return { d: bd, x: A.x + (B.x - A.x) * t, z: A.z + (B.z - A.z) * t, i: bi, t, s: A.s + (B.s - A.s) * t, w: A.w + (B.w - A.w) * t, c: A.c + (B.c - A.c) * t }; };
     H.rb = (a) => H.RB + 8 * Math.sin(3 * a + 1.1) + 5 * Math.sin(5 * a + 2.3) + 2.5 * Math.sin(11 * a + 0.4);   /* 벼랑 둘레: 들쭉날쭉 */
     /* 벼랑 틈: 봉우리 산길이 벼랑 둘레를 지나는 자리 */
     { const P = pl(H.PEAK), dT = (q) => Math.hypot(q.x - H.TOP.x, q.z - H.TOP.z) - H.rb(Math.atan2(q.z - H.TOP.z, q.x - H.TOP.x)); for (let i = 0; i + 1 < P.length; i++) { const a = dT(P[i]), b = dT(P[i + 1]); if (a >= 0 && b < 0) { const k = a / (a - b); H.GATE = { x: P[i].x + (P[i + 1].x - P[i].x) * k, z: P[i].z + (P[i + 1].z - P[i].z) * k }; break; } }
