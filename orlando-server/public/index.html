@@ -1735,8 +1735,10 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     const chk = (C) => { const o = [C[0]]; for (let i = 0; i + 1 < C.length; i++) { const A = C[i], B = C[i + 1]; o.push(A.map((v, k) => v * 0.75 + B[k] * 0.25), A.map((v, k) => v * 0.25 + B[k] * 0.75)); } o.push(C[C.length - 1]); return o; };   /* 꺾인 굴길을 둥글게 */
     H.pl = pl; H.chk = chk; H.T = pl(chk(chk(H.TUN))); H.TL = H.T[H.T.length - 1].s;
     /* 꺾은선에서 가장 가까운 자리 (거리·길이 s·반폭 w·천장 c) */
-    H.near = (L, x, z) => { let b = null; for (let i = 0; i + 1 < L.length; i++) { const A = L[i], B = L[i + 1], dx = B.x - A.x, dz = B.z - A.z, l2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - A.x) * dx + (z - A.z) * dz) / l2)), px = A.x + dx * t, pz = A.z + dz * t, d = Math.hypot(x - px, z - pz);
-      if (!b || d < b.d) b = { d, x: px, z: pz, i, t, s: A.s + (B.s - A.s) * t, w: A.w + (B.w - A.w) * t, c: A.c + (B.c - A.c) * t }; } return b; };
+    /* (빠르게: 가장 가까운 토막을 먼저 찾고 답 객체는 한 번만 만든다. 같은 식이라 답은 똑같다) */
+    H.near = (L, x, z) => { let bi = -1, bd = 0, bt = 0; for (let i = 0; i + 1 < L.length; i++) { const A = L[i], B = L[i + 1], dx = B.x - A.x, dz = B.z - A.z, l2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - A.x) * dx + (z - A.z) * dz) / l2)), d = Math.hypot(x - (A.x + dx * t), z - (A.z + dz * t));
+      if (bi < 0 || d < bd) { bi = i; bd = d; bt = t; } } if (bi < 0) return null; const A = L[bi], B = L[bi + 1], t = bt;
+      return { d: bd, x: A.x + (B.x - A.x) * t, z: A.z + (B.z - A.z) * t, i: bi, t, s: A.s + (B.s - A.s) * t, w: A.w + (B.w - A.w) * t, c: A.c + (B.c - A.c) * t }; };
     H.rb = (a) => H.RB + 8 * Math.sin(3 * a + 1.1) + 5 * Math.sin(5 * a + 2.3) + 2.5 * Math.sin(11 * a + 0.4);   /* 벼랑 둘레: 들쭉날쭉 */
     /* 벼랑 틈: 봉우리 산길이 벼랑 둘레를 지나는 자리 */
     { const P = pl(H.PEAK), dT = (q) => Math.hypot(q.x - H.TOP.x, q.z - H.TOP.z) - H.rb(Math.atan2(q.z - H.TOP.z, q.x - H.TOP.x)); for (let i = 0; i + 1 < P.length; i++) { const a = dT(P[i]), b = dT(P[i + 1]); if (a >= 0 && b < 0) { const k = a / (a - b); H.GATE = { x: P[i].x + (P[i + 1].x - P[i].x) * k, z: P[i].z + (P[i + 1].z - P[i].z) * k }; break; } }
@@ -4595,6 +4597,12 @@ const InstChunks={list:[],
    몇 mm 떨어진 면끼리 앞뒤가 바뀌며 깜빡인다. 메시마다 가운데를 빼서 작은 좌표로 바꾸고 그만큼 mesh.position으로 옮겨 둔다
    (보이는 자리는 그대로, 빼기는 자바스크립트의 64비트 계산에서 끝난다). 움직이는 메시와 여럿이 함께 쓰는 모양은 건드리지 않는다 */
 const Rebase={done:new WeakSet(),watch:[],t:0,_I:new THREE.Matrix4(),_M:new THREE.Matrix4(),
+  /* g.translate와 똑같은 결과를 Vector3 없이 바로 (위치에 더하고, 법선은 three처럼 다시 길이 1로). 첫 로딩에서 수만 개를 옮겨 오래 걸렸다 */
+  shift(g,x,y,z){const P=g.attributes.position,N=g.attributes.normal;
+    if(P.isInterleavedBufferAttribute||P.itemSize!==3||g.attributes.tangent||(N&&(N.isInterleavedBufferAttribute||N.itemSize!==3))){g.translate(x,y,z);return;}
+    const a=P.array,n=P.count*3;for(let i=0;i<n;i+=3){const X=a[i],Y=a[i+1],Z=a[i+2];a[i]=((X+0*Y)+0*Z)+x;a[i+1]=((0*X+Y)+0*Z)+y;a[i+2]=((0*X+0*Y)+Z)+z;}P.needsUpdate=true;
+    if(N){const b=N.array,m=N.count*3;for(let i=0;i<m;i+=3){const P0=b[i],Q0=b[i+1],R0=b[i+2],p=(P0+0*Q0)+0*R0,q=(0*P0+Q0)+0*R0,r=(0*P0+0*Q0)+R0,l=1/(Math.sqrt(p*p+q*q+r*r)||1);b[i]=p*l;b[i+1]=q*l;b[i+2]=r*l;}N.needsUpdate=true;}
+    if(g.boundingBox!==null)g.computeBoundingBox();if(g.boundingSphere!==null)g.computeBoundingSphere();},
   run(){
     const use=new Map();scene.traverse(o=>{if(o.isMesh&&o.geometry)use.set(o.geometry,(use.get(o.geometry)||0)+1);});
     scene.updateMatrixWorld();const c=new THREE.Vector3(),I=this._I,M=this._M;
@@ -4607,7 +4615,7 @@ const Rebase={done:new WeakSet(),watch:[],t:0,_I:new THREE.Matrix4(),_M:new THRE
         for(let i=0;i<o.count;i++){o.getMatrixAt(i,M);M.elements[12]-=c.x;M.elements[13]-=c.y;M.elements[14]-=c.z;o.setMatrixAt(i,M);}im.needsUpdate=true;
         this.watch.push({o,a:im,v:im.version,c:c.clone()});}
       else{if(use.get(g)!==1)return;if(!g.boundingBox)g.computeBoundingBox();g.boundingBox.getCenter(c);if(Math.hypot(c.x,c.z)<300)return;c.set(Math.round(c.x),Math.round(c.y),Math.round(c.z));
-        g.translate(-c.x,-c.y,-c.z);g.computeBoundingSphere();this.watch.push({o,a:P,v:P.version,c:c.clone()});}
+        this.shift(g,-c.x,-c.y,-c.z);g.computeBoundingSphere();this.watch.push({o,a:P,v:P.version,c:c.clone()});}
       o.position.copy(c);o.updateMatrix();o.updateMatrixWorld(true);});
   },
   /* 나중에 생긴 메시도 챙기고, 옮긴 뒤 누가 꼭짓점을 세상 좌표로 다시 쓰면(움직이는 것) 되돌린다 */
@@ -13838,7 +13846,16 @@ function marcusPlan(){if(MARCUS.plan)return MARCUS.plan;
   const segDist=(x,y,a,b)=>{const vx=b[0]-a[0],vy=b[1]-a[1],L=vx*vx+vy*vy||1,k=Math.max(0,Math.min(1,((x-a[0])*vx+(y-a[1])*vy)/L));return Math.hypot(a[0]+vx*k-x,a[1]+vy*k-y);};
   const polyDist=(P,x,y,closed=true)=>{let d=1e9;for(let i=0;i<P.length-(closed?0:1);i++){const q=segDist(x,y,P[i],P[(i+1)%P.length]);if(q<d)d=q;}return d;};
   /* 같은 자리를 잇달아 물으면(땅 높이 → 물 깊이 → 땅 색) 지난 답을 그대로 준다: 결과는 똑같다 */
-  let _wdX=NaN,_wdY=NaN,_wdV=0;const wallDist=(x,y)=>{if(x===_wdX&&y===_wdY)return _wdV;const d=polyDist(wall,x,y);_wdX=x;_wdY=y;return _wdV=inPoly(wall,x,y)?-d:d;};   /* 안쪽 음수 */
+  let _wdX=NaN,_wdY=NaN,_wdV=0;const wallDist=(x,y)=>{if(x===_wdX&&y===_wdY)return _wdV;const d=wallAbs(x,y);_wdX=x;_wdY=y;return _wdV=inPoly(wall,x,y)?-d:d;};
+  /* 성벽까지 거리(polyDist(wall)와 똑같은 값)를 빠르게: 24m 칸마다 '그 칸 안 어느 점에서든 가장 가까울 수 있는 성벽 토막'만 골라 두고 그것만 잰다.
+     (토막까지 거리는 볼록 함수라 칸 안 최댓값은 네 귀퉁이 중 하나. 그 최솟값보다 칸에서 더 먼 토막은 답이 될 수 없다) */
+  const WD_C=24,_wdG=new Map();
+  function wallAbs(x,y){const i=Math.floor(x/WD_C),j=Math.floor(y/WD_C),k=(i+4096)*8192+(j+4096),n=wall.length;let L=_wdG.get(k);
+    if(!L){const x0=i*WD_C,x1=x0+WD_C,y0=j*WD_C,y1=y0+WD_C,lb=new Float64Array(n);let mu=1e9;
+      for(let e=0;e<n;e++){const a=wall[e],b=wall[(e+1)%n],dx=Math.max(Math.min(a[0],b[0])-x1,0,x0-Math.max(a[0],b[0])),dy=Math.max(Math.min(a[1],b[1])-y1,0,y0-Math.max(a[1],b[1]));lb[e]=Math.hypot(dx,dy);
+        const ub=Math.max(segDist(x0,y0,a,b),segDist(x1,y0,a,b),segDist(x0,y1,a,b),segDist(x1,y1,a,b));if(ub<mu)mu=ub;}
+      L=[];for(let e=0;e<n;e++)if(lb[e]<=mu+1e-3)L.push(e);if(!isFinite(x)||!isFinite(y))L=[...Array(n).keys()];_wdG.set(k,L);}
+    let d=1e9;for(let t=0;t<L.length;t++){const e=L[t],q=segDist(x,y,wall[e],wall[(e+1)%n]);if(q<d)d=q;}return d;}   /* 안쪽 음수 */
   const inZone=(z,x,y,m)=>{if(z.shape==='circle')return Math.hypot(x-z.x,y-z.y)<z.r+m;
     if(z.shape==='rect'){const a=-(z.rot||0)*PI/180,dx=x-z.x,dy=y-z.y,lx=dx*Math.cos(a)-dy*Math.sin(a),ly=dx*Math.sin(a)+dy*Math.cos(a);return Math.abs(lx)<z.w/2+m&&Math.abs(ly)<z.h/2+m;}
     if(inPoly(z.pts,x,y))return true;return m>0&&polyDist(z.pts,x,y)<m;};
@@ -15339,7 +15356,8 @@ function makeCitizens(cx,cz){
   CROWD.ready=true;
   /* 사람 모형 미리 만들어 두기: 종류(60가지)마다 두 벌씩 창고에 넣는다. 처음 만드는 데 종류당 15ms쯤 걸려서, 놀다가 새 종류가 나타날 때마다 화면이 멈칫했다.
      로딩이 1~2초 길어지는 대신 노는 중에는 창고에서 꺼내기만 한다 */
-  if(CIT_OLD()){const t0=performance.now();for(let t=0;t<CITM.ids.length;t++){const pool=CROWD.spool[t]||(CROWD.spool[t]=[]);while(pool.length<2)pool.push(citStickMake(t));}console.log('crowd prewarm',(performance.now()-t0|0)+'ms');}
+  /* 첫 로딩을 줄이려고 세상을 다 지은 뒤에(타이머는 BOOT가 그때까지 미룬다) 한 번에 6ms씩 나눠 만든다. 그 전에 필요하면 citStickInst가 바로 만든다 */
+  if(CIT_OLD()){let t=0;const step=()=>{const t0=performance.now();while(t<CITM.ids.length&&performance.now()-t0<6){const pool=CROWD.spool[t]||(CROWD.spool[t]=[]);if(pool.length<2)pool.push(citStickMake(t));else t++;}if(t<CITM.ids.length)setTimeout(step,20);};setTimeout(step,0);}
 }
 /* 주민 한 명의 지금 자리: 시계로 정한다 */
 /* 말 거는 동안 붙잡힌 주민: 시계를 멈춰 그 자리에 서서 플레이어 쪽을 본다. 대화가 끝나면 멈췄던 자리에서 이어 간다 */
@@ -21729,13 +21747,14 @@ const MHR=(()=>{const MH=OR.MH,ISL=OR.ISLES,Zs=OR.MHUNT.map(k=>ISL[k]).filter(I=
     branches.push({pts,x0,x1,z0,z1});}
   const segD=(a,b,x,z)=>{const dx=b.x-a.x,dz=b.z-a.z,l2=dx*dx+dz*dz||1,t=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/l2)),qx=a.x+dx*t,qz=a.z+dz*t;return {d:Math.hypot(x-qx,z-qz),x:qx,z:qz};};
   const branchNear=(B,x,z)=>{const P=B.pts;let bi=0,bd=1e9;for(let i=0;i<P.length;i+=6){const d=Math.abs(P[i].x-x)+Math.abs(P[i].z-z);if(d<bd){bd=d;bi=i;}}
-    let r={d:1e9,x:0,z:0};for(let i=Math.max(0,bi-14);i<Math.min(P.length-1,bi+14);i++){const q=segD(P[i],P[i+1],x,z);if(q.d<r.d)r=q;}return r;};
+    /* segD와 같은 식을 객체 없이 (답은 똑같다) */
+    let rd=1e9,rx=0,rz=0;for(let i=Math.max(0,bi-14);i<Math.min(P.length-1,bi+14);i++){const a=P[i],b=P[i+1],dx=b.x-a.x,dz=b.z-a.z,l2=dx*dx+dz*dz||1,t=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/l2)),qx=a.x+dx*t,qz=a.z+dz*t,d=Math.hypot(x-qx,z-qz);if(d<rd){rd=d;rx=qx;rz=qz;}}return {d:rd,x:rx,z:rz};};
   /* 가장 가까운 길 위의 자리와 거리 */
   let nX=NaN,nZ=NaN,nO=null;   /* 같은 자리를 잇달아 물으면 지난 답 (받는 쪽은 읽기만 한다) */
   const near=(x,z)=>{if(x===nX&&z===nZ)return nO;nX=x;nZ=z;return nO=near0(x,z);};
   const near0=(x,z)=>{const a0=angN(Math.atan2(z-cz,x-cx));let bd=1e9,bx=x,bz=z;
     for(const A of arcs){const q=ringPt(Math.max(A[0],Math.min(A[1],a0))),d=Math.hypot(x-q.x,z-q.z);if(d<bd){bd=d;bx=q.x;bz=q.z;}}
-    for(const g of gates){const Q=OR.MH.segQ(g,x,z);if(Q.d<bd){bd=Q.d;bx=Q.x;bz=Q.z;}}
+    for(const g of gates){const dx=g.bx-g.ax,dz=g.bz-g.az,t=Math.max(0,Math.min(1,((x-g.ax)*dx+(z-g.az)*dz)/(dx*dx+dz*dz))),qx=g.ax+dx*t,qz=g.az+dz*t,d=Math.hypot(x-qx,z-qz);if(d<bd){bd=d;bx=qx;bz=qz;}}   /* OR.MH.segQ와 같은 식을 객체 없이 */
     for(const B of branches){if(x<B.x0-bd||x>B.x1+bd||z<B.z0-bd||z>B.z1+bd)continue;const Q=branchNear(B,x,z);if(Q.d<bd){bd=Q.d;bx=Q.x;bz=Q.z;}}
     return {d:bd,x:bx,z:bz};};
   /* 지도에 그릴 길 (점 목록) */
