@@ -7229,6 +7229,7 @@ function xbSet(w,d,k){const x=w&&w.userData.xb;if(!x)return;d=d<.01?0:d>.99?1:d;
     for(const [m,t] of [[x.L,x.tipL],[x.R,x.tipR]]){_xbD.subVectors(_xbC,t);m.scale.y=_xbD.length();m.position.copy(t).add(_xbC).multiplyScalar(.5);m.quaternion.setFromUnitVectors(_xbUp,_xbD.normalize());}}
   if(x.k!==k){x.k=k;xbShowBolt(x.bolts,k);}}
 // 석궁 위 두 손 자리 (석궁 기준): 오른손은 손잡이(원점), 왼손은 앞 받침, 화살을 얹는 홈
+const XB_POLE_R=new THREE.Vector3(.75,-1,-.35),XB_POLE_L=new THREE.Vector3(-.75,-1,-.2);   /* 석궁 쥔 두 팔: 팔꿈치는 아래·바깥으로 (몸통 속으로 파고들지 않게) */
 const XB_FORE=new THREE.Vector3(0,-.04,.075),XB_RAIL=new THREE.Vector3(0,.13,.08),XB_GRIP=new THREE.Vector3(0,0,-.17);   /* 오른손 손잡이: 활에서 떨어진 개머리 쪽 */
 // 화살 장전하기에서 오른손이 가는 곳: g 손잡이 → q 등의 화살통 → r 홈 (화살을 얹는다) → g
 const XB_RH=[[0,'g'],[.12,'g'],[.32,'q'],[.4,'q'],[.6,'r'],[.68,'r'],[.86,'g'],[1,'g']];
@@ -7259,6 +7260,13 @@ function xbPose(T,st){return st.set==='idle'?T.idle:xbLerp(T[st.set],st.p);}
 function xbRightHand(T,st,M,out){const pt=a=>a==='q'?new THREE.Vector3(...T.q):(a==='r'?XB_RAIL.clone():XB_GRIP.clone()).applyMatrix4(M);
   if(st.set!=='load')return out.copy(XB_GRIP).applyMatrix4(M);const [A,B,k]=xbKey(XB_RH,st.p);return out.copy(pt(A)).lerp(pt(B),k);}
 // 막대 팔을 목표점(윗몸 기준)에 닿게: 위팔·아래팔 길이가 같은 두 마디 팔, 어깨는 x·z만 돌린다
+/* 팔 두 마디 IK. pole(윗몸 기준 방향)을 주면 팔꿈치가 그쪽으로 빠진다 (예: 아래·바깥) — 안 주면 예전처럼 어깨를 x·z로만 돌려 팔꿈치가 몸 안쪽으로 파고들 수 있다 */
+const _srU=new THREE.Vector3(),_srP=new THREE.Vector3(),_srY=new THREE.Vector3(),_srZ=new THREE.Vector3(),_srX=new THREE.Vector3(),_srM=new THREE.Matrix4();
+function stickReachPole(arm,t,pole){const L=.36,s=arm.sh.position;_srU.subVectors(t,s);let d=_srU.length();if(d<1e-5)return;_srU.multiplyScalar(1/d);d=Math.max(.08,Math.min(2*L-.002,d));
+  const a=Math.acos(Math.min(1,d/(2*L)));_srP.copy(pole).addScaledVector(_srU,-pole.dot(_srU));if(_srP.lengthSq()<1e-6)_srP.set(0,-1,0).addScaledVector(_srU,-(-_srU.y));_srP.normalize();
+  _srY.copy(_srU).multiplyScalar(-Math.cos(a)).addScaledVector(_srP,-Math.sin(a));   /* 팔 +y = 팔꿈치에서 어깨 쪽 */
+  _srZ.copy(_srU).addScaledVector(_srY,-_srU.dot(_srY)).normalize();               /* 팔 +z = 아래팔이 굽는 쪽 (손 쪽) */
+  _srX.crossVectors(_srY,_srZ);_srM.makeBasis(_srX,_srY,_srZ);arm.sh.quaternion.setFromRotationMatrix(_srM);arm.el.rotation.x=-2*a;}
 function stickReach(arm,t){const L=.36,s=arm.sh.position,dx=t.x-s.x,dy=t.y-s.y,dz=t.z-s.z;let d=Math.hypot(dx,dy,dz);d=Math.max(.08,Math.min(2*L-.002,d));
   const e=-Math.acos(Math.max(-1,Math.min(1,(d*d-2*L*L)/(2*L*L)))),vy=-L-L*Math.cos(e),vz=-L*Math.sin(e);
   const sz=Math.max(-1,Math.min(1,-dx/vy)),Y=vy*Math.sqrt(1-sz*sz);
@@ -9060,9 +9068,9 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
   if(S.xb){const xl=typeof player!=='undefined'&&mesh===player?xlMine():(mesh.userData.xl??-1);
     const st=xbState(mo,swing,xl),c=xbPose(XB3,st);S.w.position.set(c[0],c[1],c[2]);S.w.rotation.set(c[3],c[4],c[5]);S.w.scale.setScalar(.85);S.w.updateMatrix();
     xbSet(S.xb,st.draw,st.rail);xbShowBolt(S.xbH,st.hand);
-    stickReach(S.AR,xbRightHand(XB3,st,S.w.matrix,_xbT));stickReach(S.AL,_xbT.copy(XB_FORE).applyMatrix4(S.w.matrix));S.AR.hand.rotation.set(0,0,0);S.AL.hand.rotation.set(0,0,0);}
+    stickReachPole(S.AR,xbRightHand(XB3,st,S.w.matrix,_xbT),XB_POLE_R);stickReachPole(S.AL,_xbT.copy(XB_FORE).applyMatrix4(S.w.matrix),XB_POLE_L);S.AR.hand.rotation.set(0,0,0);S.AL.hand.rotation.set(0,0,0);}
   else if(S.style==='bow'){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.w.rotation.set(-lx,0,-S.AL.sh.rotation.z);
-    if(S.nock)S.nock.visible=atk&&(mo&&mo.k3&&mo.v==='bowdraw'?swing>.1:mo&&mo.k3&&mo.v==='bowshot'?swing<.05:(swing>.15&&swing<.6));
+    if(S.nock)S.nock.visible=atk&&!(mo&&mo.v==='roll')&&(mo&&mo.k3&&mo.v==='bowdraw'?swing>.1:mo&&mo.k3&&mo.v==='bowshot'?swing<.05:(swing>.15&&swing<.6));
     S.bowDrawOn=!!(atk&&mo&&mo.k3&&(mo.v==='bowdraw'?swing>.1:mo.v==='bowshot'?swing<.05:false));
     if(S.nock&&S.nock.visible){if(mo&&mo.k3&&(mo.v==='bowdraw'||mo.v==='bowshot')){   // 화살은 몸이 보는 앞쪽을 똑바로 향한다
         mesh.updateMatrixWorld(true);const q=_bq1;S.AR.hand.getWorldQuaternion(q);const mq=_bq2;mesh.getWorldQuaternion(mq);
@@ -9070,6 +9078,7 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
       else{const rx=S.AR.sh.rotation.x+S.AR.el.rotation.x;S.nock.rotation.set(-rx,0,0);}}}
   if(S.shield){const lx=S.AL.sh.rotation.x+S.AL.el.rotation.x;S.shield.rotation.set(-lx,-twL+(atk&&mo&&mo.v==='pedge'?pedgeTwist(swing):0),-S.AL.sh.rotation.z);}
   if(S.style==='staff'){const rx=S.AR.sh.rotation.x+S.AR.el.rotation.x;S.w.rotation.set(-rx*.82,0,-S.AR.sh.rotation.z*.8);}
+  if(atk&&mo&&mo.k3&&!air)stickFix(mesh,S,mo,swing,ex);   /* 양손 무기 두 손으로 쥐기, 구를 때 땅 위로, 무기가 땅에 박히지 않게 */
   // 앉기: 바닥에 엉덩이를 대고 무릎을 세워 앉는다 (공격하면 일어난다)
   const sk=sitEase(mesh.userData.sitK||0);
   if(sk>0){const L=(a,b)=>a+(b-a)*sk;
@@ -9084,6 +9093,75 @@ function animStick(mesh,speed,t,swing,air,alt,mo){
     if(!atk){S.AR.sh.rotation.set(-.85,0,.12);S.AR.el.rotation.x=-.6;S.AL.sh.rotation.set(-.85,0,-.12);S.AL.el.rotation.x=-.6;S.upper.rotation.x=.1;}}}
 }
 
+/* ---------- 3인칭 동작 바로잡기 (스킬 동작 열쇠 자세 위에 마지막으로) ----------
+   1) 양손 동작(mo.two)인 큰 도끼·망치: 왼손을 자루 위로 가져가 두 손으로 쥔다 (동작 처음·끝에서 부드럽게 잡고 놓는다)
+   2) 구르기: 몸 어느 곳도 땅 밑으로 들어가지 않게 몸 전체를 올린다 (숙이기·웅크리기가 구르는 회전과 겹쳐 머리가 땅에 박혔다)
+   3) 검·도끼·망치: 내려찍는 동작에서 무기가 땅 밑으로 들어가면 손목을 꺾어 땅 위에 닿게 한다
+   4) 팔·오른손 무기가 제 머리·몸통을 뚫고 지나가면 어깨를 조금 돌려 밖으로 뺀다 (활·석궁은 시위 손이 뺨에 붙어야 해서 빼지 않음) */
+const _sfV=new THREE.Vector3(),_sfT=new THREE.Vector3(),_sfQ=new THREE.Quaternion(),_sfQ2=new THREE.Quaternion(),_sfMI=new THREE.Matrix4(),_sfMW=new THREE.Matrix4(),_sfPL=new THREE.Vector3(-.8,-1,-.15);
+const SF_PTS=[['head',0,0,0,.21],['AL.hand',0,0,0,.05],['AR.hand',0,0,0,.05],['AL.el',0,0,0,.06],['AR.el',0,0,0,.06],['L.knee',0,0,0,.07],['R.knee',0,0,0,.07],['L.knee',0,-.46,0,.06],['R.knee',0,-.46,0,.06],['upper',0,.62,0,.17],['upper',0,.3,0,.19],['upper',0,0,0,.18]];
+const SF_BACK=[[0,.36,-.25],[.1,.62,-.24],[.1,.1,-.24],[0,.62,-.22],[-.12,.4,-.22],[.12,.4,-.22]];
+function _sfObj(S,k){const i=k.indexOf('.');return i<0?S[k]:S[k.slice(0,i)][k.slice(i+1)];}
+function _sfBox(S){if(S._wbb&&S._wbbW===S.w)return S._wbb;const inv=new THREE.Matrix4(),bb=new THREE.Box3(),b=new THREE.Box3();S.w.updateMatrixWorld(true);inv.copy(S.w.matrixWorld).invert();
+  S.w.traverse(o=>{if(!o.isMesh||!o.geometry||!o.geometry.attributes.position)return;if(!o.geometry.boundingBox)o.geometry.computeBoundingBox();b.copy(o.geometry.boundingBox).applyMatrix4(_sfMW.multiplyMatrices(inv,o.matrixWorld));bb.union(b);});
+  const c=[];if(!bb.isEmpty())for(let i=0;i<8;i++)c.push(new THREE.Vector3(i&1?bb.max.x:bb.min.x,i&2?bb.max.y:bb.min.y,i&4?bb.max.z:bb.min.z));S._wbb=c;S._wbbW=S.w;return c;}
+function _sfLow(S,c){let m=9;_sfMW.multiplyMatrices(_sfMI,S.w.matrixWorld);for(const p of c){_sfV.copy(p).applyMatrix4(_sfMW);if(_sfV.y<m)m=_sfV.y;}return m;}
+function _sfIn(o,p){while(o){if(o===p)return true;o=o.parent;}return false;}
+function _sfFwd(S,c){let m=-9;_sfMW.multiplyMatrices(_sfMI,S.w.matrixWorld);for(const p of c){_sfV.copy(p).applyMatrix4(_sfMW);if(_sfV.z>m)m=_sfV.z;}return m;}
+/* 팔이 머리·몸통을 뚫고 지나가면 (예: 머리 뒤로 칼을 들 때 아래팔이 얼굴을 지남, 방패를 머리 위로 들 때 두 팔이 얼굴에 박힘) 어깨를 조금 돌려 팔을 밖으로 뺀다 */
+const _sfUI=new THREE.Matrix4(),_sfA=new THREE.Vector3(),_sfB=new THREE.Vector3(),_sfC=new THREE.Vector3(),_sfD=new THREE.Vector3(),_sfAx=new THREE.Vector3(),_sfRq=new THREE.Quaternion();
+const SF_ARM=[['el',0,.18],['el',0,0],['el',0,-.12],['el',0,-.24],['hand',0,0]];
+function sfArmOut(S,A,bw){const hc=S.head.position,sp=A.sh.position;
+  for(let it=0;it<4;it++){let best=0;
+    for(const [k,x,y] of SF_ARM){const o=k==='el'?(y>0?A.sh:A.el):A.hand;o.localToWorld(_sfA.set(x,k==='el'&&y>0?-.36+y:y,0)).applyMatrix4(_sfUI);
+      /* 머리 (머리카락 두께 포함) */
+      _sfB.subVectors(_sfA,hc);let dl=_sfB.length(),dep=.26-dl;if(dep>best&&dl>1e-4){best=dep;_sfD.copy(_sfB).multiplyScalar(1/dl);_sfC.copy(_sfA);}
+      /* 몸통: 허리~가슴 높이의 둥근 기둥 (몸 너비 bw) */
+      if(_sfA.y>.06&&_sfA.y<.5){const rx=_sfA.x/bw,r=Math.hypot(rx,_sfA.z);dep=.16-r;if(dep>best&&r>1e-4){best=dep;_sfD.set(rx/r,0,_sfA.z/r);_sfC.copy(_sfA);}}}
+    if(best<.008)return;
+    _sfAx.subVectors(_sfC,sp);const L=_sfAx.length();if(L<.05)return;_sfAx.cross(_sfD);if(_sfAx.lengthSq()<1e-8)return;_sfAx.normalize();
+    _sfRq.setFromAxisAngle(_sfAx,Math.min(.6,best*1.15/L));A.sh.quaternion.premultiply(_sfRq);A.sh.updateMatrixWorld(true);}}
+/* 오른손에 든 무기가 제 머리·몸통을 뚫으면 그 팔을 어깨에서 조금 돌려 빼낸다 (예: 망치 머리가 얼굴에 겹침) */
+function _sfSamp(o){if(o.userData._sfs)return o.userData._sfs;const inv=new THREE.Matrix4(),M=new THREE.Matrix4(),out=[];o.updateMatrixWorld(true);inv.copy(o.matrixWorld).invert();
+  o.traverse(c=>{if(!c.isMesh||!c.geometry||!c.geometry.attributes.position)return;const P=c.geometry.attributes.position,st=Math.max(1,Math.floor(P.count/30));M.multiplyMatrices(inv,c.matrixWorld);
+    for(let i=0;i<P.count;i+=st)out.push(new THREE.Vector3().fromBufferAttribute(P,i).applyMatrix4(M));});
+  o.userData._sfs=out;return out;}
+function sfWpnOut(S,A,o,bw){const pts=_sfSamp(o),hc=S.head.position,sp=A.sh.position;if(!pts.length)return;
+  for(let it=0;it<4;it++){let best=0;_sfMW.multiplyMatrices(_sfUI,o.matrixWorld);
+    for(const p of pts){_sfA.copy(p).applyMatrix4(_sfMW);
+      _sfB.subVectors(_sfA,hc);let dl=_sfB.length(),dep=.24-dl;if(dep>best&&dl>1e-4){best=dep;_sfD.copy(_sfB).multiplyScalar(1/dl);_sfC.copy(_sfA);}
+      if(_sfA.y>.08&&_sfA.y<.5){const rx=_sfA.x/bw,r=Math.hypot(rx,_sfA.z);dep=.14-r;if(dep>best&&r>1e-4){best=dep;_sfD.set(rx/r,0,_sfA.z/r);_sfC.copy(_sfA);}}}
+    if(best<.01)return;
+    _sfAx.subVectors(_sfC,sp);const L=_sfAx.length();if(L<.05)return;_sfAx.cross(_sfD);if(_sfAx.lengthSq()<1e-8)return;_sfAx.normalize();
+    _sfRq.setFromAxisAngle(_sfAx,Math.min(.5,best*1.15/L));A.sh.quaternion.premultiply(_sfRq);A.sh.updateMatrixWorld(true);}}
+function stickFix(mesh,S,mo,swing,ex){
+  const two=!!(mo.two&&S.style==='sword'&&S.w&&!S.shield),roll=!!(ex&&ex.rl),wpn=!!(S.w&&!S.xb&&(S.style==='sword'||roll&&S.style!=='shield'));
+  const arms=!S.xb&&S.style!=='bow';
+  if(!two&&!roll&&!wpn&&!arms)return;
+  mesh.updateMatrixWorld(true);_sfMI.copy(mesh.matrixWorld).invert();
+  if(roll){let mn=9;const sc=S.body.scale.y||1;
+    for(const [k,x,y,z,r] of SF_PTS){_sfObj(S,k).localToWorld(_sfV.set(x,y,z)).applyMatrix4(_sfMI);mn=Math.min(mn,_sfV.y-r*sc);}
+    for(const [x,y,z] of SF_BACK){S.upper.localToWorld(_sfV.set(x,y,z)).applyMatrix4(_sfMI);mn=Math.min(mn,_sfV.y);}   /* 등·화살통 */
+    if(mn<0){S.body.position.y-=mn;S.body.updateMatrixWorld(true);}}
+  if(wpn){const c=_sfBox(S);let y=c.length?_sfLow(S,c):9;
+    const lh=_sfIn(S.w,S.AL.hand),h=lh?S.AL.hand:S.AR.hand,A=lh?S.AL:S.AR;   /* 무기를 쥔 손 (활은 왼손) */
+    if(y<-.02){const r0=h.rotation.x;let best=r0,by=y,bf=-9;
+      /* 두 쪽으로 꺾어 보고, 땅 위에 닿는 것 가운데 무기 끝이 앞을 향하는 쪽 (다리 사이로 뒤를 향하지 않게) */
+      for(const sg of [-1,1])for(let k=1;k<=12;k++){h.rotation.x=r0+sg*k*.1;h.updateMatrixWorld(true);const v=_sfLow(S,c);
+        if(v>=-.02){const f=_sfFwd(S,c);if(by<-.02||f>bf){by=v;bf=f;best=h.rotation.x;}break;}if(by<-.02&&v>by){by=v;best=h.rotation.x;}}
+      h.rotation.x=best;h.updateMatrixWorld(true);
+      if(by<-.02){const a=A.sh,ax=a.rotation.x;let bx=ax;   /* 손목만으로 모자라면 팔을 조금 든다 */
+        for(let k=1;k<=8;k++){a.rotation.x=ax-k*.08;a.updateMatrixWorld(true);const v=_sfLow(S,c);if(v>by){by=v;bx=a.rotation.x;}if(v>=-.02)break;}
+        a.rotation.x=bx;a.updateMatrixWorld(true);}}}
+  if(arms){_sfUI.copy(S.upper.matrixWorld).invert();const bw=Math.abs(S.AR.sh.position.x)/.23||1;
+    if(S.w&&S.style!=='shield'&&!_sfIn(S.w,S.AL.hand))sfWpnOut(S,S.AR,S.w,bw);
+    sfArmOut(S,S.AR,bw);if(!two)sfArmOut(S,S.AL,bw);}
+  if(two){const w=Math.max(0,Math.min(1,swing/.12,(1-swing)/.12));
+    if(w>0){S.AR.hand.localToWorld(_sfT.set(0,0,.24));S.upper.worldToLocal(_sfT);
+      _sfQ.copy(S.AL.sh.quaternion);const e0=S.AL.el.rotation.x;stickReachPole(S.AL,_sfT,_sfPL);
+      if(w<1){_sfQ2.copy(S.AL.sh.quaternion);S.AL.sh.quaternion.copy(_sfQ).slerp(_sfQ2,w);S.AL.el.rotation.x=e0+(S.AL.el.rotation.x-e0)*w;}
+      S.AL.hand.rotation.set(0,0,0);S.AL.sh.updateMatrixWorld(true);if(arms)sfArmOut(S,S.AL,Math.abs(S.AR.sh.position.x)/.23||1);}}
+}
 /* ---------- 스킬 동작 하반신: 디딤·무릎·골반·무게 이동 ----------
    공격·스킬을 쓰는 동안 두 발을 땅에 디뎌 붙여 두고(미끄러지지 않게), 골반을 무게가 실리는 발 쪽으로 옮기며 낮추고, 허리 비틀기를 골반과 가슴에 나눠 싣는다.
    다리는 두 마디 IK(넓적다리 .45·정강이 .46)로 디딘 발에 맞추고, 발 자리가 바뀌어야 하면 한 발씩 들어 옮겨 딛는다(내딛기·물러딛기).
