@@ -265,6 +265,12 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 .aprow.s button[aria-pressed="true"]{border-color:var(--brass);background:#3d3122;box-shadow:inset 0 0 0 1px var(--brass)}
 .aprow.t button{padding:5px 9px;font-size:12.5px;background:#2e261c;border:1px solid var(--line);border-radius:6px;color:var(--parch)}
 .aprow.t button[aria-pressed="true"]{border-color:var(--brass);background:#3d3122;box-shadow:inset 0 0 0 1px var(--brass)}
+.aprow.a .apar{display:grid;grid-template-columns:34px minmax(0,1fr) 34px;align-items:center;gap:6px;flex:1;min-width:0;max-width:300px}
+.apar button{height:34px;padding:0;display:grid;place-items:center;background:linear-gradient(180deg,#3c2c1a,#1a120a);color:#f2e6c8;border:1px solid #0e0804;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(200,160,90,.42),inset 0 1px 0 rgba(255,230,170,.2),0 0 0 1px #5a4220,0 2px 5px rgba(0,0,0,.55)}
+.apar button:hover{color:#fff4d4;box-shadow:inset 0 0 0 1px rgba(240,207,122,.7),0 0 0 1px #8a6a30,0 0 12px rgba(240,200,110,.3)}
+.apar .apn{display:flex;align-items:center;justify-content:center;gap:8px;height:34px;border:1px solid rgba(110,85,48,.7);border-radius:2px;background:rgba(0,0,0,.28);padding:0 8px;min-width:0}
+.apar .apn b{font-family:var(--f-bold);font-weight:normal;font-size:14px;color:#ffeab0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apar .apn i{font-style:normal;font-size:11px;color:var(--dim);white-space:nowrap}
 .aprow .swc{width:24px;height:24px;border-radius:50%;border:2px solid rgba(0,0,0,.35);padding:0}
 .aprow .swc[aria-pressed="true"]{border-color:var(--brass);box-shadow:0 0 0 2px rgba(212,174,99,.5)}
 .apprev{position:relative;border:1px solid var(--line);border-radius:6px;background:radial-gradient(ellipse at 50% 70%,#3d3122,#211b14);min-height:300px}
@@ -8561,6 +8567,9 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
   const bins=new Map();const bin=(par,sc)=>{let b=bins.get(par);if(!b){b=new THREE.Group();if(sc)b.scale.copy(sc);bins.set(par,b);}return b;};
   const add=(par,geo,m,x=0,y=0,z=0,r,s)=>{const q=new THREE.Mesh(geo,m);q.position.set(x,y,z);if(r){q.rotation.order='YXZ';q.rotation.set(r[0],r[1],r[2]||0);}if(s)q.scale.set(s[0],s[1],s[2]);par.add(q);return q;};
   const sph=(r,a=20,b=14)=>new THREE.SphereGeometry(r,a,b);
+  /* 관절을 넘어 한 장으로 이어진 소매·바지: 두 마디(위·아래)에 살을 나눠 붙여(스키닝) 굽히면 천이 휘어진다.
+     geo는 위 마디(bones[0]) 기준 좌표, wf(y)는 아래 마디를 따르는 정도(0~1). 다 지은 뒤 맨 끝에서 묶는다 */
+  const skinQ=[],skinAdd=(par,geo,m,bones,wf)=>{skinQ.push({par,geo,m,bones,wf});};
   /* 천으로 싼 관절 공: uv를 실제 길이로 잡아 천 결 굵기가 소매·바지와 같게 */
   const clothBall=r=>{const g=sph(r,28,18),uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*Math.PI*2*r/LK_TILE,uv.getY(i)*Math.PI*r/LK_TILE);g.setAttribute('color',new THREE.Float32BufferAttribute(new Array(uv.count*3).fill(.86),3));return g;};
   const bw=apBody(ap).bw*(f?.93:1),armor=(G.armor??-1)>=1,bootsG=(G.boots??-1)>=0&&S.L.foot.userData.boot;
@@ -8703,17 +8712,21 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     hideBase(A.sh);hideBase(A.el);hideBase(A.hand);
     const SH=bin(A.sh),EL=bin(A.el),HD=bin(A.hand),sl=bodyM,sk=seed+sd*1.7;
     /* 어깨 덮개(소매산) + 윗팔: 겨드랑이 쪽 당긴 주름, 팔꿈치 위 모인 주름 */
-    add(SH,clothBall(.062),sl,0,-.022,0,null,[1,.9,1]);
-    /* 어깨 머리: 몸통 쪽에 붙은 둥근 살로 몸통 어깨선과 팔 위를 잇는다 (팔이 몸통 옆에 기둥처럼 따로 서 보이지 않게) */
-    add(T,clothBall(.066),sl,A.sh.position.x-sd*.035,A.sh.position.y+.004,0,null,[1.3,.62,.95]);   /* 어깨: 둥근 어깨 살(공 관절)로 몸통과 이어, 팔을 들어도 기둥처럼 꺾여 보이지 않는다 */
-    add(SH,lkGarment([[0,-.01],[.058,-.01],[.064,-.05],[.063,-.15],[.058,-.26],[.055,-.33],[.051,-.37],[.04,-.395],[.022,-.41],[0,-.414]],36,
-      {fold:(az,y)=>{let r=lkBunch(az,y,-.3,.035,.003,140,sk);r=lkAdd(r,lkDrape(az,-y,.05,.25,.004,4,sk));r=lkAdd(r,lkSeam(az,sd*-Math.PI/2,.06));return r;}}),sl);
-    /* 소매산 솔기 (어깨 둘레 도드라진 선) */
-        add(EL,clothBall(.054),sl);   /* 팔꿈치: 윗소매 끝(둥글게 닫힘)과 아래 소매 시작의 굵기를 맞춰, 굽혀도 이음새가 안 보인다 */
-    if(bell){add(EL,lkGarment([[0,0],[.052,0],[.058,-.09],[.074,-.2],[.086,-.27],[.08,-.276],[.05,-.2],[0,-.2]],40,{fold:(az,y)=>lkDrape(az,y,-.05,-.27,.009,7,sk)}),sl);
-      add(EL,lkBand(.088,.084,-.29,-.25,40),mTrim);}
-    else{add(EL,lkGarment([[0,-.01],[.05,-.01],[.052,-.05],[.046,-.14],[.044,-.2],[.047,-.235],[.046,-.255],[0,-.255]],32,
-        {fold:(az,y)=>{let r=lkBunch(az,y,-.07,.03,.003,170,sk+2);r=lkAdd(r,lkBunch(az,y,-.215,.03,.005,150,sk+4));r=lkAdd(r,lkSeam(az,sd*-Math.PI/2,.047));return r;}}),sl);
+    /* 소매: 어깨에서 손목까지 한 장. 팔꿈치 둘레는 위팔·아래팔에 나눠 붙어 굽히면 천이 꺾이지 않고 휜다 (예전엔 두 토막 사이에 공을 끼워 소시지처럼 보였다) */
+    /* 어깨: 소매 위를 둥근 소매산으로 닫아 몸통 어깨선에 바로 잇는다 (예전엔 몸통에 붙인 납작한 덩어리와 공이 따로 놀아 어깨가 불룩 튀어나와 보였다) */
+    const EY=-.36,elW=y=>_lkSS(EY+.07,EY-.07,y);
+    add(EL,clothBall(.047),sl);   /* 팔꿈치 속 공: 곧을 땐 소매 안에 숨고, 굽히면 바깥 모서리를 둥글게 채운다 */
+    const upPr=[[0,.052],[.03,.047],[.048,.034],[.059,.014],[.064,-.015],[.065,-.05],[.063,-.15],[.058,-.26],[.055,-.33],[.053,EY]];
+    const upFold=(az,y)=>{let r=lkBunch(az,y,-.3,.035,.003,140,sk);r=lkAdd(r,lkDrape(az,-y,.05,.25,.004*(1-elW(y)),4,sk));return r;};
+    /* 소매산 안쪽(몸통 쪽)을 몸통 속으로 넓혀, 팔이 몸통 옆에 따로 선 기둥처럼 보이지 않고 어깨선으로 이어진다 */
+    add(T,clothBall(.06),sl,A.sh.position.x/bw,A.sh.position.y-.008,0,null,[1/bw,1,1/bw]);   /* 어깨 속 공(몸통에 붙음): 팔을 내리면 소매산 안에 숨고, 팔을 들면 몸통과 팔 사이를 둥글게 메운다 */
+    const shIn=geo=>{const P=geo.attributes.position;for(let i=0;i<P.count;i++){const x=P.getX(i),y=P.getY(i);if(x*sd<0)P.setX(i,x*(1+1.1*_lkSS(-.16,.0,y)));}geo.computeVertexNormals();return geo;};
+    if(bell)skinAdd(A.sh,shIn(lkGarment(upPr.concat([[.055,EY-.09],[.074,EY-.2],[.086,EY-.27],[.08,EY-.276],[.05,EY-.2],[0,EY-.2]]),40,
+        {fold:(az,y)=>{let r=upFold(az,y);if(y>EY)r=lkAdd(r,lkSeam(az,sd*-Math.PI/2,.06));else r=lkAdd(r,lkDrape(az,y,EY-.05,EY-.27,.009,7,sk));return r;}})),sl,[A.sh,A.el],elW);
+    else skinAdd(A.sh,shIn(lkGarment(upPr.concat([[.051,EY-.05],[.046,EY-.14],[.044,EY-.2],[.047,EY-.235],[.046,EY-.255],[0,EY-.255]]),36,
+        {fold:(az,y)=>{let r=upFold(az,y);r=lkAdd(r,lkBunch(az,y,EY-.07,.03,.003,170,sk+2));r=lkAdd(r,lkBunch(az,y,EY-.215,.03,.005,150,sk+4));r=lkAdd(r,lkSeam(az,sd*-Math.PI/2,y>EY?.06:.047));return r;}})),sl,[A.sh,A.el],elW);
+    if(bell)add(EL,lkBand(.088,.084,-.29,-.25,40),mTrim);
+    else{
       /* 소매 끝: 셔츠는 단추 커프스, 튜닉·조끼는 수놓은 띠 */
       add(EL,lkBand(.049,.047,-.285,-.25,32),shirt?bodyM:mTrim);
       {const rg=new THREE.TorusGeometry(.0475,.004,6,32);rg.rotateX(Math.PI/2);add(EL,rg,bodyM,0,-.285,0);}
@@ -8729,14 +8742,14 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     const HP=bin(Lg.hip),KN=bin(Lg.knee),lw=bw*.95+.05,sk=seed+sd*3.1;
     const thighFold=(az,y)=>{let r=lkDrape(az,-y,.0,.4,.005,5,sk);r=lkAdd(r,lkBunch(az,y,-.42,.035,.003,120,sk,Math.PI));r=lkAdd(r,lkSeam(az,sd*Math.PI/2,.08));r=lkAdd(r,lkSeam(az,-sd*Math.PI/2,.08,.0015));return r;};
     if(shorts){add(HP,lkGarment([[0,.06],[.084,.06],[.096,-.02],[.094,-.2],[.093,-.27],[0,-.27]],36,{fold:thighFold}),mPantsC,0,0,0,null,[lw,1,1]);
-      add(HP,lkBand(.096,.094,-.285,-.25,36),mTrim,0,0,0,null,[lw,1,1]);
-      add(HP,lkLathe([[0,-.2],[.066,-.2],[.06,-.4],[.057,-.45],[.046,-.485],[.026,-.5],[0,-.505]],18),mSkin,0,0,0,null,[lw,1,1]);}
-    else add(HP,lkGarment([[0,.06],[.08,.06],[.09,-.02],[.084,-.2],[.072,-.36],[.064,-.42],[.058,-.46],[.046,-.49],[.026,-.505],[0,-.51]],36,{fold:thighFold}),mPantsC,0,0,0,null,[lw,1,1]);
-    const shinM=shorts?mSkin:mPantsC;add(KN,shorts?sph(.059,20,14):clothBall(.059),shinM);   /* 무릎: 허벅지 끝을 둥글게 닫고 정강이 시작과 굵기를 맞춘다 */
-    const bootTop=bootsG?-.45:X.o===0?-.17:X.o===1?-.3:-.42;
-    if(shorts)add(KN,lkLathe([[0,0],[.058,0],[.056,-.1],[.05,-.25],[.045,-.4],[.042,-.45],[0,-.45]],18),mSkin);
-    else add(KN,lkGarment([[0,-.01],[.055,-.01],[.059,-.05],[.054,-.18],[.05,-.3],[.048,-.42],[.046,-.45],[0,-.45]],32,
-      {fold:(az,y)=>{let r=lkBunch(az,y,-.08,.03,.003,140,sk+1,0);r=lkAdd(r,lkBunch(az,y,bootTop+.02,.03,.007,130,sk+2));r=lkAdd(r,lkSeam(az,sd*Math.PI/2,.05));return r;}}),mPantsC);
+      add(HP,lkBand(.096,.094,-.285,-.25,36),mTrim,0,0,0,null,[lw,1,1]);}
+    /* 다리: 엉덩이에서 발목까지 한 장 (반바지면 맨살 다리, 아니면 바지). 무릎 둘레는 허벅지·정강이에 나눠 붙어 굽히면 휜다 */
+    const KY=-.45,knW=y=>_lkSS(KY+.07,KY-.07,y),bootTop=bootsG?-.45:X.o===0?-.17:X.o===1?-.3:-.42;
+    const thick=geo=>{const P=geo.attributes.position;for(let i=0;i<P.count;i++)P.setX(i,P.getX(i)*(lw+(1-lw)*knW(P.getY(i))));geo.computeVertexNormals();return geo;};   /* 허벅지만 체형 따라 굵게 */
+    add(KN,shorts?sph(.055,20,14):clothBall(.056),shorts?mSkin:mPantsC);   /* 무릎 속 공: 굽히면 무릎 앞을 둥글게 */
+    if(shorts)skinAdd(Lg.hip,thick(lkLathe([[0,-.2],[.066,-.2],[.06,-.4],[.058,KY],[.056,KY-.1],[.05,KY-.25],[.045,KY-.4],[.042,KY-.45],[0,KY-.45]],24)),mSkin,[Lg.hip,Lg.knee],knW);
+    else skinAdd(Lg.hip,thick(lkGarment([[0,.06],[.08,.06],[.09,-.02],[.084,-.2],[.072,-.36],[.064,-.42],[.06,KY],[.058,KY-.05],[.054,KY-.18],[.05,KY-.3],[.048,KY-.42],[.046,KY-.45],[0,KY-.45]],36,
+      {fold:(az,y)=>{if(y>KY)return thighFold(az,y);let r=lkBunch(az,y,KY-.08,.03,.003,140,sk+1,0);r=lkAdd(r,lkBunch(az,y,KY+bootTop+.02,.03,.007,130,sk+2));r=lkAdd(r,lkSeam(az,sd*Math.PI/2,.05));return r;}})),mPantsC,[Lg.hip,Lg.knee],knW);
     if(bootsG)continue;   /* 갑옷 장화를 신었으면 그 모양 그대로 */
     /* 장화 목: 가죽 결, 위는 바깥으로 접어 내린 단, 발목 주름, 뒤 솔기, 버클 띠 */
     const r0=.066,mLeaD=M(0x2a1a10,{roughness:.6}),mMetal=M(0xa89a7a,{roughness:.35,metalness:.7});
@@ -8755,21 +8768,37 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     if(X.o===2){const st=new THREE.Mesh(new THREE.TorusGeometry(.05,.005,5,24,Math.PI),mLeaD);st.position.set(0,-.005,.01);st.scale.set(1.05,1,1.4);st.rotation.x=-.3;ft.add(st);}}
   /* --- 머리·얼굴 --- */
   hideBase(H);H.geometry=new THREE.SphereGeometry(.22,40,28);
+  for(const o of H.children)if(o.isMesh&&!o.userData.gear&&o.material.color&&o.material.color.getHex()===0x14110e)o.visible=false;   /* 막대 인형의 각진 옛 눈알(8각 공)은 숨긴다: 새 눈과 겹쳐 울퉁불퉁한 회색 덩어리로 보였다 */
   const HB=bin(H),R=.22;
   const surf=(x,y,lift=0)=>{const z=Math.sqrt(Math.max(0,R*R-x*x-y*y)),n=new THREE.Vector3(x,y,z).normalize();return {p:n.clone().multiplyScalar(R+lift),q:new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),n)};};
   const onF=(geo,m,x,y,lift,s,rz=0)=>{const a=surf(x,y,lift),q=new THREE.Mesh(geo,m);q.position.copy(a.p);q.quaternion.copy(a.q);if(rz)q.rotateZ(rz);if(s)q.scale.set(s[0],s[1],s[2]);HB.add(q);return q;};
   onF(sph(.024,14,10),mSkin,0,-.03,-.012,[.8,.9,.7]);
   if(X.f===1||X.f===3){const bl=M(0xf09a8a,{transparent:true,opacity:.42,roughness:.9,depthWrite:false});[-1,1].forEach(s=>onF(new THREE.CircleGeometry(.026,18),bl,s*.105,-.045,.002,[1.25,.8,1]));}
   if(X.f>=2){const fm=M(dk(skC,.7),{roughness:.9});[[-.1,-.02],[-.118,-.035],[-.088,-.04],[-.108,-.055],[.1,-.02],[.118,-.035],[.088,-.04],[.108,-.055],[-.03,-.012],[.03,-.012]].forEach(([x,y])=>onF(new THREE.CircleGeometry(.0045,8),fm,x,y,.001));}
-  /* 눈: 보통(까만 알)·또렷한(눈동자 색+빛 점)·가는·졸린 */
-  const eyeC=new THREE.Color(ap.e??0x14110e).multiplyScalar(.75).getHex(),mEye=M(0x1a1410,{roughness:.25});
-  const mWh=M(0xffffff,{roughness:.2,emissive:0xffffff,emissiveIntensity:.4});
+  /* 눈: 보통·또렷한·가는·졸린. 머리 겉면에 붙인 얇은 그림판(겉면을 따라 휘고 결도 머리와 같다)이라
+     알을 박아 넣던 때처럼 울퉁불퉁 각지거나 회색 덩어리로 튀어나오지 않는다. 겹은 조금씩 띄운다 */
+  const eyeC=new THREE.Color(ap.e??0x5a3a26),mEye=M(0x140f0b,{roughness:.9}),mIris=M(eyeC.getHex(),{roughness:.35,emissive:eyeC.getHex(),emissiveIntensity:.12});
+  const mPup=M(0x0a0705,{roughness:.6});   /* 반짝이는 빛 점(채광)은 넣지 않는다 */
+  const decal=(cx,cy,bd,lift,m,N=40,RN=4)=>{const P=[],I=[],Rl=R+lift;
+    const pt=(x,y)=>{const z=Math.sqrt(Math.max(0,Rl*Rl-x*x-y*y));P.push(x,y,z);};
+    pt(cx,cy);for(let r=1;r<=RN;r++){const f=r/RN;for(let i=0;i<N;i++){const [bx,by]=bd(i/N*Math.PI*2);pt(cx+bx*f,cy+by*f);}}
+    for(let i=0;i<N;i++)I.push(0,1+i,1+(i+1)%N);
+    for(let r=1;r<RN;r++){const o0=1+(r-1)*N,o1=1+r*N;for(let i=0;i<N;i++){const j=(i+1)%N;I.push(o0+i,o1+i,o1+j,o0+i,o1+j,o0+j);}}
+    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(P,3));geo.setIndex(I);
+    const nr=P.map((v,i)=>v/Rl);geo.setAttribute('normal',new THREE.Float32BufferAttribute(nr,3));
+    geo.setAttribute('uv',new THREE.Float32BufferAttribute(new Array(P.length/3*2).fill(.5),2));add(HB,geo,m);};
+  const oval=(rx,ry,top=9,bot=-9)=>t=>[Math.cos(t)*rx,Math.min(top,Math.max(bot,Math.sin(t)*ry))];
   [-1,1].forEach(s=>{const ex=s*.074,ey=.025;
-    if(X.y===1){onF(sph(.034,18,12),mEye,ex,ey,-.008,[.86,1.12,.42]);onF(sph(.027,18,12),M(eyeC,{roughness:.25}),ex,ey-.005,-.002,[.82,1.0,.4]);
-      onF(sph(.009,8,6),mWh,ex-s*.011,ey+.013,.003,[1,1,.5]);onF(sph(.0045,8,6),mWh,ex+s*.009,ey-.014,.003,[1,1,.5]);}
-    else if(X.y===2)onF(sph(.031,18,12),mEye,ex,ey,-.004,[1.0,.42,.42]);
-    else if(X.y===3){onF(sph(.031,18,12),mEye,ex,ey-.004,-.006,[.95,.75,.42]);onF(lkLock([[-.034,0,0],[0,.004,0],[.034,0,0]],.006,.004,6,8),mSkinD,ex,ey+.012,.002);}
-    else onF(sph(.031,18,12),mEye,ex,ey,-.006,[.82,1.12,.42]);
+    if(X.y===1){   /* 또렷한: 큰 눈, 눈동자 색이 아래로 차고 동공, 위 눈꺼풀 선이 굵다 */
+      decal(ex,ey,oval(.025,.033),.0012,mEye);decal(ex,ey-.006,oval(.019,.024),.0022,mIris);decal(ex,ey-.004,oval(.009,.012),.003,mPup);
+      decal(ex,ey+.027,t=>{const c=Math.cos(t);return [c*.029,Math.sin(t)*.0055+(1-c*c)*.0015+(s*c>0?.001:0)];},.0016,mEye);}
+    else if(X.y===2){   /* 가는: 가늘게 뜬 눈, 가운데가 살짝 위로 휜다 */
+      decal(ex,ey-.002,t=>{const c=Math.cos(t),w=1-c*c;return [c*.025,Math.sin(t)*.0075*Math.pow(w,.35)+.004*w];},.0012,mEye);}
+    else if(X.y===3){   /* 졸린: 위 눈꺼풀이 반쯤 덮어 윗변이 평평하고, 그 위에 눈꺼풀 선 */
+      decal(ex,ey-.004,oval(.022,.026,.005),.0012,mEye);decal(ex,ey-.01,oval(.015,.016,.002),.0022,mIris);
+      decal(ex,ey+.003,t=>{const c=Math.cos(t);return [c*.026,Math.sin(t)*.0035-(c*c)*.002];},.0016,mEye);}
+    else{   /* 보통: 세로로 긴 동그란 눈, 아래쪽에 눈동자 색이 비친다 */
+      decal(ex,ey,oval(.021,.029),.0012,mEye);decal(ex,ey-.008,oval(.015,.016),.0022,mIris);}
     const by=ey+(X.y===1?.07:.064),bt=[.0055,.008,.0038,.006][X.w],br=[(f?-.05:.08),.06,-.02,.34][X.w];
     onF(lkLock([[-.024,-.003,0],[0,.004,0],[.024,0,0]],bt,bt*.55,6,10),mHairD,ex+s*.004,by,.002,null,s*br);});
   /* 수염 (남자) */
@@ -8866,6 +8895,13 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
   for(const [par,b] of bins){lkMerge(b,par);}
   for(const o of [S.L.foot,S.R.foot])o.traverse(q=>{if(q.isMesh)q.castShadow=true;});
   S.body.scale.setScalar(apBody(ap).hs);
+  /* 관절을 넘는 소매·바지: 지금(곧게 선) 자세를 기준으로 두 마디에 묶는다 */
+  if(skinQ.length){g.updateMatrixWorld(true);const skM=new Map();   /* 스키닝 재질은 따로 (같은 재질을 막대 조각과 같이 쓰면 셰이더가 엉킨다) */
+    for(const q of skinQ){const P=q.geo.attributes.position,n=P.count,si=new Uint16Array(n*4),sw=new Float32Array(n*4);
+      for(let i=0;i<n;i++){let w=q.wf(P.getY(i),P.getX(i));if(typeof w==='number')w=[1-w,w];for(let k=0;k<w.length;k++){si[i*4+k]=k;sw[i*4+k]=w[k];}}
+      q.geo.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(si,4));q.geo.setAttribute('skinWeight',new THREE.Float32BufferAttribute(sw,4));
+      let m=skM.get(q.m);if(!m){m=q.m.clone();m.skinning=true;skM.set(q.m,m);mm.push(m);}const sm=new THREE.SkinnedMesh(q.geo,m);sm.castShadow=true;sm.frustumCulled=false;sm.userData.gear=1;
+      q.par.add(sm);sm.bind(new THREE.Skeleton(q.bones));}}
   u.look={skin:skC,sleeve:underC,top:X.u};u.mats.push(...mm);
 }
 /* 공격 동작: 직업(무기)마다 다른 열쇠 자세를 시간에 따라 섞는다
@@ -10658,8 +10694,15 @@ function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
   grp('얼굴·머리');
   const gr=row('성별','g');for(const [g,nm] of [['m','남자'],['f','여자']]){const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',ap.g===g);
     b.onclick=()=>{if(ap.g!==g){ap.g=g;ap.s=0;ap.d=0;delete ap.sv;buildApControls(box,ap,onChange);}onChange();};gr.appendChild(b);}
-  const hs=row('머리','s');HAIR_STYLES[ap.g].forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap.s|0)===i);
-    b.onclick=()=>{ap.s=i;hs.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};hs.appendChild(b);});
+  /* 목록이 긴 칸(머리·눈썹·얼굴)은 좌우 화살표로 하나씩 넘긴다. 끝에서 넘기면 처음으로 */
+  const CHEV=d=>`<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="${d<0?'M10.5 2.5 5 8l5.5 5.5':'M5.5 2.5 11 8l-5.5 5.5'}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const arrow=(label,list,key,def=0)=>{const w=row(label,'a'),bx=document.createElement('div');bx.className='apar';
+    const L=document.createElement('button'),R=document.createElement('button'),mid=document.createElement('div'),nm=document.createElement('b'),n=document.createElement('i');
+    L.type=R.type='button';L.innerHTML=CHEV(-1);R.innerHTML=CHEV(1);L.setAttribute('aria-label',label+' 이전');R.setAttribute('aria-label',label+' 다음');mid.className='apn';
+    const show=()=>{const i=(ap[key]??def)|0;nm.textContent=list[i];n.textContent=(i+1)+' / '+list.length;};
+    const go=d=>{ap[key]=(((ap[key]??def)|0)+d+list.length)%list.length;show();onChange();};
+    L.onclick=()=>go(-1);R.onclick=()=>go(1);mid.append(nm,n);bx.append(L,mid,R);w.appendChild(bx);show();};
+  arrow('머리',HAIR_STYLES[ap.g],'s');
   const sw=(label,list,key)=>{const w=row(label,'c');for(const c of list){const b=document.createElement('button');b.type='button';b.className='swc';b.style.background='#'+c.toString(16).padStart(6,'0');b.setAttribute('aria-pressed',ap[key]===c);b.setAttribute('aria-label',label);
     b.onclick=()=>{ap[key]=c;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);}};
   sw('머리색',HAIR_COLORS,'h');sw('눈색',EYE_COLORS,'e');
@@ -10667,7 +10710,7 @@ function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
     b.onclick=()=>{ap.k=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});}
   const opt=(label,list,key,def=0)=>{const w=row(label,'t');list.forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap[key]??def)===i);
     b.onclick=()=>{ap[key]=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});};
-  opt('눈',EYE_SHAPES,'y');opt('눈썹',BROWS,'w');opt('얼굴',FACE_MARKS,'f',1);if(ap.g!=='f')opt('수염',BEARDS,'d');
+  opt('눈',EYE_SHAPES,'y');arrow('눈썹',BROWS,'w');arrow('얼굴',FACE_MARKS,'f',1);if(ap.g!=='f')opt('수염',BEARDS,'d');
   /* 몸: 밀대로 조금씩 (키·체형·가슴) */
   const sl=(label,key)=>{const w=row(label,'r'),r=document.createElement('input');r.type='range';r.min=0;r.max=35;r.step=1;r.value=apBody(ap)[key];r.setAttribute('aria-label',label);
     r.oninput=()=>{const B=apBody(ap);ap.hv=B.hv;ap.wv=B.wv;ap.sv=B.sv;ap[key]=+r.value;onChange();};w.appendChild(r);};
