@@ -8437,7 +8437,9 @@ function lkAniHair(st){
       for(let m=0;m<=M;m++){const pl=m/M*pm,r=R+.009,p=new Vs(Math.sin(az)*Math.sin(pl)*r,Math.cos(pl)*r,Math.cos(az)*Math.sin(pl)*r);pos.push(p.x,p.y,p.z);
         const sh=(.82+.12*Math.cos(pl)+.25*band(p,az))*(st.capShade?st.capShade(p):1);col.push(sh,sh,sh);}}
     for(let a=0;a<A;a++)for(let m=0;m<M;m++){const i=base+a*(M+1)+m,j=i+M+1;idx.push(i,i+1,j,j,i+1,j+1);}}
-  st.build({flow,lock,surf,rnd,Vs});
+  /* 짙은 줄(브릿지): f 안에서 그린 다발을 머리색보다 k배 어둡게 */
+  const dark=(k,f)=>{const c0=col.length;f();for(let i=c0;i<col.length;i++)col[i]*=k;};
+  st.build({flow,lock,surf,rnd,Vs,dark});
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col.map(v=>Math.min(1.3,v)),3));g.setIndex(idx);g.computeVertexNormals();return g;}
 const LK_ANI={
   /* 흐트러진 앞머리: 이마를 고르게 덮는 앞머리, 턱까지 오는 옆 다발, 뒤로 뻗친 뾰족 다발 */
@@ -8463,6 +8465,28 @@ const LK_ANI={
       lock([p0,p1,p2,p3],w,.1,1.3,new Vs(0,bk,up).normalize());};
     for(const x of [0,-.038,.038]){const side=x?1:0;
       for(let i=0;i<6;i++){const t=i/5,th=.7-t*1.95+(side?.1:0);blade(x+(rnd()-.5)*.01,th,(.21+.07*Math.sin(Math.PI*Math.min(1,t*1.4)))*(side?.78:1)*(.9+.2*rnd()),.13-.03*t,1.0-.55*t+.1*rnd(),.25+.6*t);}}}},
+  /* 뾰족 덥수룩 머리: 짧고 덥수룩하게 뾰족뾰족 뻗은 머리. 앞머리는 눈썹 아래까지 갈라져 내려오고(가운데 한 가닥은 눈 사이로), 정수리에 가는 가닥 몇 개가 솟고, 정수리에서 앞으로 짙은 줄 하나 */
+  m_spiky:{cap:[.95,1.7,1.9],seed:.29,capShade:p=>1-.55*(1-_lkSS(.02,.045,Math.abs(p.x)))*_lkSS(.12,.19,p.y)*_lkSS(-.06,.04,p.z),build:({flow,lock,surf,rnd,Vs,dark})=>{
+    /* 앞머리: 굵고 끝이 뾰족한 다발이 갈라져 눈썹 아래까지, 가운데 한 가닥은 눈 사이로 */
+    const BG=[[.03,.02,-.035,.1],[-.27,-.33,.03,.12],[.3,.36,.02,.12],[-.55,-.66,.04,.11],[.58,.7,.035,.11],[-.82,-.95,.0,.1],[.84,.98,-.01,.1]];
+    for(const [a0,a1,y1,w] of BG)flow(a0*.45,.215,a1,y1,w,.02,.01,.03,.012,0,1.08,.003);
+    for(const [a0,a1,y1,w] of [[-.13,-.16,.06,.09],[.16,.2,.055,.09],[-.42,-.5,.07,.09],[.44,.53,.065,.09],[-.7,-.8,.06,.085],[.72,.83,.055,.085]])flow(a0*.45,.215,a1,y1,w,.018,.008,.022,.006,0,1.08,.003);
+    /* 옆: 귀 위로 덮이며 끝이 바깥으로 뻗친 짧은 다발 */
+    for(const s of [-1,1])for(const [a,y1] of [[1.08,-.04],[1.3,-.07],[1.52,-.05],[1.72,-.08]])flow(s*a*.7,.2,s*(a+.05),y1-.02*rnd(),.12,.022,.01,.03,.025+.015*rnd(),0,1.1,.003);
+    /* 뒤: 목덜미에서 끝이 바깥으로 튄 다발 */
+    const n=11;for(let i=0;i<n;i++){const a=(i/(n-1)*2-1)*Math.PI*.4+Math.PI,az=((a+Math.PI)%(2*Math.PI))-Math.PI;
+      flow(az*.98,.21,az*1.02,-.08-.04*rnd(),.13,.022,.01,.03,.04+.03*rnd(),0,1.1,.003);}
+    /* 뒤 가운데 겹: 정수리부터 뒤통수를 덮으며 끝이 들쭉날쭉 */
+    for(let k=0;k<2;k++)for(let i=0;i<9;i++){const a=((i+k*.5)/8.5*2-1)*Math.PI*.55+Math.PI,az=((a+Math.PI)%(2*Math.PI))-Math.PI;
+      flow(az*1.02,.232,az,(k?.06:-.02)-.04*rnd(),.13,.024,.014+k*.012,.036+k*.014,.035+.03*rnd(),0,1.12,.006);}
+    /* 위 겹: 정수리에서 사방으로 뻗다가 끝이 살짝 들린 덥수룩한 다발 */
+    for(let i=0;i<12;i++){const az=(i/12)*Math.PI*2-Math.PI+.25*rnd(),fr=Math.abs(az)<1;
+      flow(az*.95,.23,az,(fr?.15:.1)+.02*rnd(),.13,.022,.012,.03,(fr?.008:.022)+.015*rnd(),0,1.15,.004);}
+    /* 정수리에서 앞으로 짙은 줄 하나 (끝은 앞머리 뿌리로 뾰족하게) */
+    dark(.3,()=>{flow(0,.234,0,.12,.055,.02,.036,.05,.004,0,1.15);flow(-.05,.232,-.16,.14,.032,.018,.038,.05,.006,0,1.1);});
+    /* 정수리에 솟은 가는 가닥 (짙게) */
+    dark(.35,()=>{for(const [dx,dz,L,w] of [[-.7,-.6,.06,.026],[.6,-.8,.065,.024],[.1,-.4,.05,.02],[.9,.1,.045,.018],[-.9,.0,.04,.018]]){const p0=new Vs(dx*.05,.236,-.02+dz*.05),d=new Vs(dx,.8,dz).normalize(),bend=new Vs(dx*.4,-.3,dz*.4);
+      lock([p0,p0.clone().addScaledVector(d,L*.45),p0.clone().addScaledVector(d,L*.85).addScaledVector(bend,L*.25),p0.clone().addScaledVector(d,L).addScaledVector(bend,L*.6)],w,.012,1.05,new Vs(0,0,1));}});}},
   /* 일자 단발: 눈썹 위 일자 앞머리, 턱선에서 끊긴 옆머리(뒤는 조금 짧게), 한쪽 얼굴 옆으로 가슴까지 오는 가는 다발 */
   f_bob:{cap:[.92,1.85,1.9],build:({flow,lock,surf,Vs})=>{
     const nb=13;for(let i=0;i<nb;i++){const t=i/(nb-1)*2-1,az=t*.82;flow(az*.55,.215,az,.07+.012*t*t+.004*Math.sin(i*2.3),.075,.014,.008,.02,.002,0,24);}
@@ -8838,6 +8862,7 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       'm:긴 앞머리':()=>sh({side:-.12,back:-.2,vol:.02,bg:{n:7,y:-.02,sw:.42,ln:.05,v:.03}}),
       'm:솟은 머리':()=>ani('m_spikeup',{bang:.14,side:0,back:-.11,vol:.007,tipF:.012,tipB:.01,groove:.002,C:30,tipL:.03}),
       'm:흐트러진 앞머리':()=>ani('m_messy',{side:-.12,back:-.2,vol:.022,tipB:.05,C:10,bg:{n:9,y:.04}}),
+      'm:뾰족 덥수룩 머리':()=>ani('m_spiky',{side:-.11,back:-.2,vol:.026,puff:.5,tipF:.05,tipB:.05,C:12,bg:{n:8,y:.03,v:.035,mess:.12}}),
       'f:긴 생머리':()=>sh(Object.assign({},LONG,{pa:.12,back:-.6,bg:{n:9,y:.07}})),
       'f:어깨 머리':()=>sh(Object.assign({},LONG,{pa:.12,side:-.26,back:-.36,bg:{n:9,y:.07,sw:.12}})),
       'f:올림 단발':()=>{sh({side:-.09,back:-.17,vol:.016,tipB:.01,bg:{n:7,y:.08}});bun(0,.15,-.18,.08);},
@@ -9165,7 +9190,7 @@ function makeGrimoire(tier=0){
 const PM={ver:'6',data:{},loading:{},tmpl:{},scale:{m:1.1,f:1.06}};
 const HAIR_COLORS=[0x2a2220,0x5a3a22,0x9a5a30,0xd8b070,0xe8e2d8,0xb03a2e,0x3a5aa8,0x6a4aa0,0x7a7a82,0xf0d898,0xe09ab0,0x2a7a5a];
 const EYE_COLORS=[0x5a3a22,0x3a6aa8,0x3a9a6a,0x9a3a3a,0xb08a2a,0x7a4ab0,0x4a4a54,0x2a8a9a,0xb8bccc,0xe0782a];
-const HAIR_STYLES={m:['짧은 머리','스포츠 머리','뾰족 머리','덥수룩 머리','단발','흐트러진 머리','덮은 머리','긴 머리','묶은 긴 머리','대머리','옆 가르마','꽁지머리','곱슬 머리','넘긴 머리','가운데 가르마','울프컷','투블럭','반묶음','긴 앞머리','흐트러진 앞머리','솟은 머리'],f:['긴 생머리','어깨 머리','올림 단발','단발','보브','히메컷','뻗친 머리','짧은 머리','대머리','포니테일','양갈래','땋은 머리','곱슬 긴 머리','앞머리 없는 긴 머리','시스루 앞머리','사이드 뱅','하프 업','똥머리 두 개','숏컷','웨이브 단발','높은 포니테일','흐트러진 긴 머리','일자 단발']};
+const HAIR_STYLES={m:['짧은 머리','스포츠 머리','뾰족 머리','덥수룩 머리','단발','흐트러진 머리','덮은 머리','긴 머리','묶은 긴 머리','대머리','옆 가르마','꽁지머리','곱슬 머리','넘긴 머리','가운데 가르마','울프컷','투블럭','반묶음','긴 앞머리','흐트러진 앞머리','솟은 머리','뾰족 덥수룩 머리'],f:['긴 생머리','어깨 머리','올림 단발','단발','보브','히메컷','뻗친 머리','짧은 머리','대머리','포니테일','양갈래','땋은 머리','곱슬 긴 머리','앞머리 없는 긴 머리','시스루 앞머리','사이드 뱅','하프 업','똥머리 두 개','숏컷','웨이브 단발','높은 포니테일','흐트러진 긴 머리','일자 단발']};
 // 피부색(곱하는 색), 키(배율), 윗옷색(0은 직업색), 바지색
 const SKIN_TONES=[0xffffff,0xfff1ec,0xf3d6b8,0xdfb48c,0xb98258,0x8c5c3e];
 const HEIGHTS=[.94,.97,1,1.03,1.06];
