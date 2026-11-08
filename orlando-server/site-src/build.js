@@ -23,8 +23,8 @@ function page(p) {
 <link rel="canonical" href="${url}">
 <link rel="icon" type="image/png" href="/icon/favicon-32.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&display=swap">
-<meta property="og:type" content="article"><meta property="og:site_name" content="오를란도"><meta property="og:locale" content="ko_KR">
-<meta property="og:url" content="${url}"><meta property="og:title" content="${esc(p.title)} - 오를란도"><meta property="og:description" content="${esc(p.desc)}"><meta property="og:image" content="${SITE}/og.jpg">
+<meta property="og:type" content="article"><meta property="og:site_name" content="Orlando"><meta property="og:locale" content="ko_KR">
+<meta property="og:url" content="${url}"><meta property="og:title" content="${esc(p.title)} - 오를란도"><meta property="og:description" content="${esc(p.desc)}"><meta property="og:image" content="${SITE}/og.jpg?v=2">
 <meta name="google-adsense-account" content="${PUB}">
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${PUB}" crossorigin="anonymous"></script>
 <style>
