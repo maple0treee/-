@@ -26786,7 +26786,7 @@ function startGame(data){if(BOOT.on||BOOT.q){BOOT.wait(()=>startGame(data));retu
   const L=$('#loading');L.hidden=false;$('#loadMsg').textContent='모험가를 불러오는 중…';
   pmLoad(ap.g).catch(()=>{}).then(()=>{L.hidden=true;startGameNow(data);});}
 function startGameNow(data){if(JOB_ALIAS[data.job])data={...data,job:JOB_ALIAS[data.job]};
-  setTimeout(precompileAll,4000);setTimeout(precompileAll,12000);setTimeout(()=>warmGpu(),1500);
+  setTimeout(precompileAll,4000);setTimeout(precompileAll,12000);setTimeout(function wg(){if(!TW.done&&TW.list)return setTimeout(wg,1500);warmGpu();},1500);   /* 남은 것을 조금씩 올리는 중(titleWarm)이면 다 올린 뒤에 (한 번에 다 그리면 몇 초 멈춘다) */
   P={...data,buffs:{}};delete P.tab;saveStale=false;saveClaimT=Date.now();if(!P.id)P.id='c'+Date.now().toString(36);P.seat=null;P.ride=null;P.drunk=0;P.blackout=false;
   wpnMigrate(data);P.gold=data.gold||0;P.equip={weapon:null,sub:null,helm:null,armor:null,boots:null,acc:null,...(data.equip||{})};
   for(const k in P.equip)if(P.equip[k]&&!ITEMS[P.equip[k]])P.equip[k]=null;
@@ -30783,6 +30783,8 @@ function loopBody(){
   /* 첫 화면(시작 창)은 불투명해서 뒤의 세상이 보이지 않는다: 그동안은 세상을 그리지 않는다 (물체 4만 개를 매 프레임 그리느라 로딩이 끝난 뒤에도 첫 화면이 늦게 떴다) */
   if(mode==='title'&&!START_EL.hidden){titleWarm();return;}
   renderer.render(scene,camera);if(typeof ninVisionRender==='function')ninVisionRender();
+  /* 시작 창에서 다 못 올린 세상은 게임 안에서도 프레임마다 조금씩 이어서 올린다 (들어가기 전에 다 올릴 때까지 기다리지 않는다) */
+  if(!TW.done&&TW.list)titleWarm(true);
 }
 const START_EL=document.getElementById('start');
 /* 그 대신 시작 창이 떠 있는 동안 세상 물체를 몇백 개씩 보이지 않는 작은 화면(8x8)에 그려 모양·그림을 그래픽카드에 미리 올려 둔다.
@@ -30793,7 +30795,7 @@ const TW={list:null,lights:null,i:0,n:200,rt:null,done:false,L:29,fence:null,wai
    그래픽카드가 앞 묶음을 다 그린 뒤에만 다음 묶음을 보낸다: 끝없이 쌓아 두면 캐릭터 그림처럼 결과를 기다리는 일이 그게 다 끝날 때까지(몇 초) 멈췄다 */
 function twLayers(B,on){const L=TW.L;if(on){TW.had=new Set();for(const o of TW.lights)if(o.layers.mask&(1<<L))TW.had.add(o);else o.layers.enable(L);for(const o of B)if(o.layers.mask&(1<<L))TW.had.add(o);else o.layers.enable(L);}
   else{for(const o of TW.lights)if(!TW.had.has(o))o.layers.disable(L);for(const o of B)if(!TW.had.has(o))o.layers.disable(L);TW.had=null;}}
-function titleWarm(){if(TW.done||warmGpu.done)return;
+function titleWarm(game){if(TW.done||warmGpu.done)return;if(game&&!TW.g){TW.g=1;TW.n=Math.min(TW.n,60);}   /* 게임 안: 한 번에 적게 (프레임이 끊기지 않게) */
   const gl=renderer.getContext();
   if(TW.ext===undefined)TW.ext=gl.getExtension('KHR_parallel_shader_compile')||null;
   if(TW.fence){if(gl.getSyncParameter(TW.fence,gl.SYNC_STATUS)!==gl.SIGNALED){TW.slow=1;if(++TW.wait>3){TW.wait=0;TW.n=Math.max(25,TW.n>>1);}return;}gl.deleteSync(TW.fence);TW.fence=null;TW.wait=0;}
@@ -30817,7 +30819,7 @@ function titleWarm(){if(TW.done||warmGpu.done)return;
   if(gl.fenceSync){TW.fence=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0);gl.flush();}
   renderer.setRenderTarget(prev);renderer.shadowMap.needsUpdate=nu;camera.layers.mask=mask;
   twLayers(B,false);for(const o of fc)o.frustumCulled=true;for(const o of iv)o.visible=false;
-  const dt=performance.now()-t0,slow=TW.slow;TW.slow=0;TW.n=dt<6&&!slow?Math.min(TW.n*2,3000):dt>24?Math.max(25,TW.n>>1):TW.n;}
+  const dt=performance.now()-t0,slow=TW.slow;TW.slow=0;TW.n=TW.g?(dt<2&&!slow?Math.min(TW.n*2,400):dt>5?Math.max(10,TW.n>>1):TW.n):dt<6&&!slow?Math.min(TW.n*2,3000):dt>24?Math.max(25,TW.n>>1):TW.n;}
 sun.position.set(30,60,20);
 if(!window.ORLANDO_WS){mnet=makeLocalMonsterNet();setupNetMonsters(mnet);mnet.start();}renderOnline();
 /* 서버에 닿지 않으면(서버가 꺼졌거나, 서버 없이 올린 사본) 몬스터를 이 기기에서 돌려 혼자서라도 할 수 있게 한다 */
@@ -30825,9 +30827,9 @@ if(window.ORLANDO_WS){
   const wsDead=setInterval(()=>{if(monsGot||srvVer!==null){clearInterval(wsDead);return;}   // 연결이 한 번도 안 되고 두 번 이상 끊겼을 때만 (느린 기기에서 잘못 넘어가지 않게)
     if((window.__wsFails||0)>=2){clearInterval(wsDead);window.__wsOff=true;mnet=makeLocalMonsterNet();setupNetMonsters(mnet);mnet.start();log('서버에 연결되지 않아 혼자 하기로 시작했어요.','sys');}},1000);
   setTimeout(()=>{if(!monsGot&&srvVer!==null)log('서버에서 몬스터 정보를 받지 못했어요. 서버 파일이 최신인지 확인해 주세요.','bad');},8000);}
-/* 다 지었다. 기다리던 '모험 시작'이 있으면 시작 창 뒤에서 그래픽카드에 세상을 조금 올린 뒤(titleWarm, 길어도 6초) 들어간다 */
+/* 다 지었다. 기다리던 '모험 시작'이 있으면 바로 들어간다 (그래픽카드에 올리기는 0.8초만 기다리고 나머지는 게임 안에서 조금씩: 예전에는 6초까지 기다렸다) */
 function bootGo(){if(!BOOT.q){BOOT.done();return;}const t0=performance.now();
-  (function w(){const n=TW.list?TW.list.length:0;if(!TW.done&&!warmGpu.done&&performance.now()-t0<6000){BOOT.msg('불러오는 중… '+Math.min(99,90+Math.floor(9*(n?TW.i/n:0)))+'%');requestAnimationFrame(w);return;}
+  (function w(){const n=TW.list?TW.list.length:0;if(!TW.done&&!warmGpu.done&&performance.now()-t0<800){BOOT.msg('불러오는 중… '+Math.min(99,90+Math.floor(9*(n?TW.i/n:0)))+'%');requestAnimationFrame(w);return;}
     BOOT.done();BOOT.run();})();}
 await BOOT.y(true);BOOT.ready();loop();requestAnimationFrame(()=>requestAnimationFrame(bootGo));
 
