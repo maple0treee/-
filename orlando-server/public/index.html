@@ -265,6 +265,12 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 .aprow.s button[aria-pressed="true"]{border-color:var(--brass);background:#3d3122;box-shadow:inset 0 0 0 1px var(--brass)}
 .aprow.t button{padding:5px 9px;font-size:12.5px;background:#2e261c;border:1px solid var(--line);border-radius:6px;color:var(--parch)}
 .aprow.t button[aria-pressed="true"]{border-color:var(--brass);background:#3d3122;box-shadow:inset 0 0 0 1px var(--brass)}
+.aprow.a .apar{display:grid;grid-template-columns:34px minmax(0,1fr) 34px;align-items:center;gap:6px;flex:1;min-width:0;max-width:300px}
+.apar button{height:34px;padding:0;display:grid;place-items:center;background:linear-gradient(180deg,#3c2c1a,#1a120a);color:#f2e6c8;border:1px solid #0e0804;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(200,160,90,.42),inset 0 1px 0 rgba(255,230,170,.2),0 0 0 1px #5a4220,0 2px 5px rgba(0,0,0,.55)}
+.apar button:hover{color:#fff4d4;box-shadow:inset 0 0 0 1px rgba(240,207,122,.7),0 0 0 1px #8a6a30,0 0 12px rgba(240,200,110,.3)}
+.apar .apn{display:flex;align-items:center;justify-content:center;gap:8px;height:34px;border:1px solid rgba(110,85,48,.7);border-radius:2px;background:rgba(0,0,0,.28);padding:0 8px;min-width:0}
+.apar .apn b{font-family:var(--f-bold);font-weight:normal;font-size:14px;color:#ffeab0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apar .apn i{font-style:normal;font-size:11px;color:var(--dim);white-space:nowrap}
 .aprow .swc{width:24px;height:24px;border-radius:50%;border:2px solid rgba(0,0,0,.35);padding:0}
 .aprow .swc[aria-pressed="true"]{border-color:var(--brass);box-shadow:0 0 0 2px rgba(212,174,99,.5)}
 .apprev{position:relative;border:1px solid var(--line);border-radius:6px;background:radial-gradient(ellipse at 50% 70%,#3d3122,#211b14);min-height:300px}
@@ -10688,8 +10694,15 @@ function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
   grp('얼굴·머리');
   const gr=row('성별','g');for(const [g,nm] of [['m','남자'],['f','여자']]){const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',ap.g===g);
     b.onclick=()=>{if(ap.g!==g){ap.g=g;ap.s=0;ap.d=0;delete ap.sv;buildApControls(box,ap,onChange);}onChange();};gr.appendChild(b);}
-  const hs=row('머리','s');HAIR_STYLES[ap.g].forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap.s|0)===i);
-    b.onclick=()=>{ap.s=i;hs.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};hs.appendChild(b);});
+  /* 목록이 긴 칸(머리·눈썹·얼굴)은 좌우 화살표로 하나씩 넘긴다. 끝에서 넘기면 처음으로 */
+  const CHEV=d=>`<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="${d<0?'M10.5 2.5 5 8l5.5 5.5':'M5.5 2.5 11 8l-5.5 5.5'}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const arrow=(label,list,key,def=0)=>{const w=row(label,'a'),bx=document.createElement('div');bx.className='apar';
+    const L=document.createElement('button'),R=document.createElement('button'),mid=document.createElement('div'),nm=document.createElement('b'),n=document.createElement('i');
+    L.type=R.type='button';L.innerHTML=CHEV(-1);R.innerHTML=CHEV(1);L.setAttribute('aria-label',label+' 이전');R.setAttribute('aria-label',label+' 다음');mid.className='apn';
+    const show=()=>{const i=(ap[key]??def)|0;nm.textContent=list[i];n.textContent=(i+1)+' / '+list.length;};
+    const go=d=>{ap[key]=(((ap[key]??def)|0)+d+list.length)%list.length;show();onChange();};
+    L.onclick=()=>go(-1);R.onclick=()=>go(1);mid.append(nm,n);bx.append(L,mid,R);w.appendChild(bx);show();};
+  arrow('머리',HAIR_STYLES[ap.g],'s');
   const sw=(label,list,key)=>{const w=row(label,'c');for(const c of list){const b=document.createElement('button');b.type='button';b.className='swc';b.style.background='#'+c.toString(16).padStart(6,'0');b.setAttribute('aria-pressed',ap[key]===c);b.setAttribute('aria-label',label);
     b.onclick=()=>{ap[key]=c;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);}};
   sw('머리색',HAIR_COLORS,'h');sw('눈색',EYE_COLORS,'e');
@@ -10697,7 +10710,7 @@ function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
     b.onclick=()=>{ap.k=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});}
   const opt=(label,list,key,def=0)=>{const w=row(label,'t');list.forEach((nm,i)=>{const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',(ap[key]??def)===i);
     b.onclick=()=>{ap[key]=i;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);});};
-  opt('눈',EYE_SHAPES,'y');opt('눈썹',BROWS,'w');opt('얼굴',FACE_MARKS,'f',1);if(ap.g!=='f')opt('수염',BEARDS,'d');
+  opt('눈',EYE_SHAPES,'y');arrow('눈썹',BROWS,'w');arrow('얼굴',FACE_MARKS,'f',1);if(ap.g!=='f')opt('수염',BEARDS,'d');
   /* 몸: 밀대로 조금씩 (키·체형·가슴) */
   const sl=(label,key)=>{const w=row(label,'r'),r=document.createElement('input');r.type='range';r.min=0;r.max=35;r.step=1;r.value=apBody(ap)[key];r.setAttribute('aria-label',label);
     r.oninput=()=>{const B=apBody(ap);ap.hv=B.hv;ap.wv=B.wv;ap.sv=B.sv;ap[key]=+r.value;onChange();};w.appendChild(r);};
