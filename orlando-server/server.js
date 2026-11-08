@@ -174,7 +174,7 @@ function cleanPresence(d) {
     pp: Array.isArray(d.pp) && d.pp.length === 3 && d.pp.every((v) => typeof v === 'number' && isFinite(v)) ? d.pp.map(n) : null,
     hd: d.hd ? 1 : 0,
     mo: typeof d.mo === 'string' && /^[a-z0-9]{0,16}$/.test(d.mo) ? d.mo : '',
-    xl: d.xl === 0 || d.xl === 1 || d.xl === 2 ? d.xl : -1,
+    xl: Number.isInteger(d.xl) && d.xl >= 0 && d.xl <= 5 ? d.xl : -1,   // 0~2 석궁병 장전 화살, 3~5 크로스헌터 화살
     lu: Array.isArray(d.lu) ? d.lu.slice(0, 12).filter((q) => Array.isArray(q) && q.length === 2 && q.every((x) => typeof x === 'number' && isFinite(x))).map((q) => [n(q[0]), n(q[1])]) : null,   // 잠복한 트랩헌터의 덫·지뢰 자리
     mt: typeof d.mt === 'string' && /^[a-z]{0,8}$/.test(d.mt) ? d.mt : '',
     cr: typeof d.cr === 'string' && /^k\d{1,2}s\d$/.test(d.cr) ? d.cr : '',
