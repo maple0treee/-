@@ -8755,21 +8755,40 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     if(X.o===2){const st=new THREE.Mesh(new THREE.TorusGeometry(.05,.005,5,24,Math.PI),mLeaD);st.position.set(0,-.005,.01);st.scale.set(1.05,1,1.4);st.rotation.x=-.3;ft.add(st);}}
   /* --- 머리·얼굴 --- */
   hideBase(H);H.geometry=new THREE.SphereGeometry(.22,40,28);
+  for(const o of H.children)if(o.isMesh&&!o.userData.gear&&o.material.color&&o.material.color.getHex()===0x14110e)o.visible=false;   /* 막대 인형의 각진 옛 눈알(8각 공)은 숨긴다: 새 눈과 겹쳐 울퉁불퉁한 회색 덩어리로 보였다 */
   const HB=bin(H),R=.22;
   const surf=(x,y,lift=0)=>{const z=Math.sqrt(Math.max(0,R*R-x*x-y*y)),n=new THREE.Vector3(x,y,z).normalize();return {p:n.clone().multiplyScalar(R+lift),q:new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),n)};};
   const onF=(geo,m,x,y,lift,s,rz=0)=>{const a=surf(x,y,lift),q=new THREE.Mesh(geo,m);q.position.copy(a.p);q.quaternion.copy(a.q);if(rz)q.rotateZ(rz);if(s)q.scale.set(s[0],s[1],s[2]);HB.add(q);return q;};
   onF(sph(.024,14,10),mSkin,0,-.03,-.012,[.8,.9,.7]);
   if(X.f===1||X.f===3){const bl=M(0xf09a8a,{transparent:true,opacity:.42,roughness:.9,depthWrite:false});[-1,1].forEach(s=>onF(new THREE.CircleGeometry(.026,18),bl,s*.105,-.045,.002,[1.25,.8,1]));}
   if(X.f>=2){const fm=M(dk(skC,.7),{roughness:.9});[[-.1,-.02],[-.118,-.035],[-.088,-.04],[-.108,-.055],[.1,-.02],[.118,-.035],[.088,-.04],[.108,-.055],[-.03,-.012],[.03,-.012]].forEach(([x,y])=>onF(new THREE.CircleGeometry(.0045,8),fm,x,y,.001));}
-  /* 눈: 보통(까만 알)·또렷한(눈동자 색+빛 점)·가는·졸린 */
-  const eyeC=new THREE.Color(ap.e??0x14110e).multiplyScalar(.75).getHex(),mEye=M(0x1a1410,{roughness:.25});
-  const mWh=M(0xffffff,{roughness:.2,emissive:0xffffff,emissiveIntensity:.4});
+  /* 눈: 보통·또렷한·가는·졸린. 머리 겉면에 붙인 얇은 그림판(겉면을 따라 휘고 결도 머리와 같다)이라
+     알을 박아 넣던 때처럼 울퉁불퉁 각지거나 회색 덩어리로 튀어나오지 않는다. 겹은 조금씩 띄운다 */
+  const eyeC=new THREE.Color(ap.e??0x5a3a26),mEye=M(0x140f0b,{roughness:.9}),mIris=M(eyeC.getHex(),{roughness:.35,emissive:eyeC.getHex(),emissiveIntensity:.12});
+  const mPup=M(0x0a0705,{roughness:.6}),mWh=M(0xffffff,{roughness:.2,emissive:0xffffff,emissiveIntensity:.6});
+  const decal=(cx,cy,bd,lift,m,N=40,RN=4)=>{const P=[],I=[],Rl=R+lift;
+    const pt=(x,y)=>{const z=Math.sqrt(Math.max(0,Rl*Rl-x*x-y*y));P.push(x,y,z);};
+    pt(cx,cy);for(let r=1;r<=RN;r++){const f=r/RN;for(let i=0;i<N;i++){const [bx,by]=bd(i/N*Math.PI*2);pt(cx+bx*f,cy+by*f);}}
+    for(let i=0;i<N;i++)I.push(0,1+i,1+(i+1)%N);
+    for(let r=1;r<RN;r++){const o0=1+(r-1)*N,o1=1+r*N;for(let i=0;i<N;i++){const j=(i+1)%N;I.push(o0+i,o1+i,o1+j,o0+i,o1+j,o0+j);}}
+    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(P,3));geo.setIndex(I);
+    const nr=P.map((v,i)=>v/Rl);geo.setAttribute('normal',new THREE.Float32BufferAttribute(nr,3));
+    geo.setAttribute('uv',new THREE.Float32BufferAttribute(new Array(P.length/3*2).fill(.5),2));add(HB,geo,m);};
+  const oval=(rx,ry,top=9,bot=-9)=>t=>[Math.cos(t)*rx,Math.min(top,Math.max(bot,Math.sin(t)*ry))];
   [-1,1].forEach(s=>{const ex=s*.074,ey=.025;
-    if(X.y===1){onF(sph(.034,18,12),mEye,ex,ey,-.008,[.86,1.12,.42]);onF(sph(.027,18,12),M(eyeC,{roughness:.25}),ex,ey-.005,-.002,[.82,1.0,.4]);
-      onF(sph(.009,8,6),mWh,ex-s*.011,ey+.013,.003,[1,1,.5]);onF(sph(.0045,8,6),mWh,ex+s*.009,ey-.014,.003,[1,1,.5]);}
-    else if(X.y===2)onF(sph(.031,18,12),mEye,ex,ey,-.004,[1.0,.42,.42]);
-    else if(X.y===3){onF(sph(.031,18,12),mEye,ex,ey-.004,-.006,[.95,.75,.42]);onF(lkLock([[-.034,0,0],[0,.004,0],[.034,0,0]],.006,.004,6,8),mSkinD,ex,ey+.012,.002);}
-    else onF(sph(.031,18,12),mEye,ex,ey,-.006,[.82,1.12,.42]);
+    if(X.y===1){   /* 또렷한: 큰 눈, 눈동자 색이 아래로 차고 동공·빛 점 둘, 위 눈꺼풀 선이 굵다 */
+      decal(ex,ey,oval(.025,.033),.0012,mEye);decal(ex,ey-.006,oval(.019,.024),.0022,mIris);decal(ex,ey-.004,oval(.009,.012),.003,mPup);
+      decal(ex,ey+.027,t=>{const c=Math.cos(t);return [c*.029,Math.sin(t)*.0055+(1-c*c)*.0015+(s*c>0?.001:0)];},.0016,mEye);
+      decal(ex-s*.009,ey+.011,oval(.0062,.0072),.0038,mWh,20,2);decal(ex+s*.008,ey-.016,oval(.003,.003),.0038,mWh,14,1);}
+    else if(X.y===2){   /* 가는: 가늘게 뜬 눈, 가운데가 살짝 위로 휜다 */
+      decal(ex,ey-.002,t=>{const c=Math.cos(t),w=1-c*c;return [c*.025,Math.sin(t)*.0075*Math.pow(w,.35)+.004*w];},.0012,mEye);}
+    else if(X.y===3){   /* 졸린: 위 눈꺼풀이 반쯤 덮어 윗변이 평평하고, 그 위에 눈꺼풀 선 */
+      decal(ex,ey-.004,oval(.022,.026,.005),.0012,mEye);decal(ex,ey-.01,oval(.015,.016,.002),.0022,mIris);
+      decal(ex,ey+.003,t=>{const c=Math.cos(t);return [c*.026,Math.sin(t)*.0035-(c*c)*.002];},.0016,mEye);
+      decal(ex-s*.007,ey-.008,oval(.0042,.0042),.0032,mWh,16,1);}
+    else{   /* 보통: 세로로 긴 동그란 눈, 아래쪽에 눈동자 색이 비치고 빛 점 하나 */
+      decal(ex,ey,oval(.021,.029),.0012,mEye);decal(ex,ey-.008,oval(.015,.016),.0022,mIris);
+      decal(ex-s*.007,ey+.01,oval(.0055,.0062),.0032,mWh,18,2);}
     const by=ey+(X.y===1?.07:.064),bt=[.0055,.008,.0038,.006][X.w],br=[(f?-.05:.08),.06,-.02,.34][X.w];
     onF(lkLock([[-.024,-.003,0],[0,.004,0],[.024,0,0]],bt,bt*.55,6,10),mHairD,ex+s*.004,by,.002,null,s*br);});
   /* 수염 (남자) */
