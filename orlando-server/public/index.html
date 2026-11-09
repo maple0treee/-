@@ -29671,7 +29671,7 @@ function makeWsRoom(){
     try{ws=new WebSocket(url);}catch(e){setTimeout(open,retry);return;}
     ws.onopen=()=>{retry=1000;setConn(true);send({t:'p',d:mine});};
     ws.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch(err){return;}
-      if(m.t==='hello'){myId=m.id;srvVer=m.v||0;if(m.b){if(window.__build&&window.__build!==m.b)autoUpdate();window.__build=window.__build||m.b;}peers.clear();for(const k in (m.peers||{}))peers.set(k,m.peers[k]||{});firePeers();
+      if(m.t==='hello'){myId=m.id;srvVer=m.v||0;window.__helloAt=performance.now();if(m.b){if(window.__build&&window.__build!==m.b)autoUpdate();window.__build=window.__build||m.b;}peers.clear();for(const k in (m.peers||{}))peers.set(k,m.peers[k]||{});firePeers();
         if(srvVer!==SERVER_VER)setTimeout(()=>log(`서버 파일이 게임과 맞지 않아요 (서버 v${srvVer||'옛날'}, 게임 v${SERVER_VER}). GitHub에 server.js, shared.js, sim.js, colliders.json을 다시 올려 주세요.`,'bad'),1500);}
       else if(m.t==='p'&&m.id){peers.set(m.id,m.d||{});firePeers();}
       else if(m.t==='join'&&m.id){if(!peers.has(m.id))peers.set(m.id,{});firePeers();}
@@ -31386,7 +31386,11 @@ if(!window.ORLANDO_WS){mnet=makeLocalMonsterNet();setupNetMonsters(mnet);mnet.st
 if(window.ORLANDO_WS){
   const wsDead=setInterval(()=>{if(monsGot||srvVer!==null){clearInterval(wsDead);return;}   // 연결이 한 번도 안 되고 두 번 이상 끊겼을 때만 (느린 기기에서 잘못 넘어가지 않게)
     if((window.__wsFails||0)>=2){clearInterval(wsDead);window.__wsOff=true;mnet=makeLocalMonsterNet();setupNetMonsters(mnet);mnet.start();log('서버에 연결되지 않아 혼자 하기로 시작했어요.','sys');}},1000);
-  setTimeout(()=>{if(!monsGot&&srvVer!==null)log('서버에서 몬스터 정보를 받지 못했어요. 서버 파일이 최신인지 확인해 주세요.','bad');},8000);}
+  /* 서버에 이어졌는데 몬스터 목록이 안 왔으면(느린 기기·연결이 잠깐 끊김 등) 서버에 다시 달라고 한다. 그래도 30초 넘게 안 오면 그때만 알린다 */
+  {let asked=0,askAt=0,warned=false;const mChk=setInterval(()=>{if(monsGot||window.__wsOff){clearInterval(mChk);return;}
+    if(srvVer===null||!window.__helloAt||!mnet||!mnet.connected||!mnet.connected())return;const now=performance.now(),since=now-window.__helloAt;
+    if(since>6000&&now-askAt>8000&&asked<4){asked++;askAt=now;try{mnet.emit('mreq',{});}catch(e){}}
+    if(!warned&&asked>=4&&now-askAt>8000){warned=true;clearInterval(mChk);log('서버에서 몬스터 정보를 받지 못했어요. 새로고침해 주세요.','bad');}},1000);}}
 /* 다 지었다. 기다리던 '모험 시작'이 있으면 바로 들어간다 (그래픽카드에 올리기는 0.8초만 기다리고 나머지는 게임 안에서 조금씩: 예전에는 6초까지 기다렸다) */
 function bootGo(){if(!BOOT.q){BOOT.done();return;}const t0=performance.now();
   (function w(){const n=TW.list?TW.list.length:0;if(!TW.done&&!warmGpu.done&&performance.now()-t0<800){BOOT.msg('불러오는 중… '+Math.min(99,90+Math.floor(9*(n?TW.i/n:0)))+'%');requestAnimationFrame(w);return;}

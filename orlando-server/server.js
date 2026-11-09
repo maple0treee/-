@@ -391,6 +391,13 @@ wss.on('connection', (ws) => {
       guildApp(m.d);
     } else if (m.t === 'gcan') {
       guildAppCancel(m.d);
+    } else if (m.t === 'mreq') {
+      // 게임이 처음 몬스터 목록(mons)을 못 받았다고 다시 달라고 할 때 (5초에 한 번까지)
+      const now = Date.now();
+      if (now - (ws.mreqAt || 0) < 5000) return;
+      ws.mreqAt = now;
+      sim.join(id, (msg) => send(ws, msg));
+      sim.presence(id, ws.pres);
     } else if (m.t === 'hit') {
       sim.hit(id, m.d);
     } else if (m.t === 'fx' && m.d && typeof m.d === 'object') {
