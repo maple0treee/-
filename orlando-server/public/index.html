@@ -9495,12 +9495,22 @@ let SCYB3={
   scydash:[[.18,{tw:.3,ln:.65,cr:.3,fl:.3,wf:.8}],[.62,{tw:.32,ln:.7,cr:.32,fl:.32,wf:.85}],[.82,{tw:-.3,ln:.3,cr:.2,fl:.3,wf:.5}]],
   scyfade:[[.3,{ln:.2,cr:.25,wf:.1}],[.85,{ln:.18,cr:.22}]],
   scyplant:[[.3,{ln:-.1,lf:.1,kr:.4}],[.48,{ln:.3,cr:.4,wf:.3}],[.85,{ln:.28,cr:.36,wf:.25}]]};
-/* 1인칭 큰 낫: 3인칭 자세(SCYK3)에 몸 돌림(SCYB3의 tw·sp)을 더한 뒤 눈앞 공간으로 옮겨 쓴다 (앞뒤가 뒤집히므로 a→π-a, r→π-r).
-   SCYFM = [옆 배율, 높이 기준, 높이 배율, 앞 배율, 앞 띄움, 돌림 줄임(날이 화면 안에 들게), 가장 많이 눕힘], SCYF.sc = 1인칭 낫 크기 */
-let SCYFM=[.9,.7,.6,.4,.85,.55,1.75],SCYF={sc:.7};
-function scyToFP(k,b){const y=b?(b.tw||0)+(b.sp||0):0,c=Math.cos(y),s=Math.sin(y),x=k[0]*c+k[2]*s,z=Math.max(0,-k[0]*s+k[2]*c);
-  const A=Math.atan2(Math.sin(k[3]+y),Math.cos(k[3]+y));return [x*SCYFM[0],(k[1]-SCYFM[1])*SCYFM[2],-(z*SCYFM[3]+SCYFM[4]),Math.PI-A*SCYFM[5],Math.min(k[4],SCYFM[6]),Math.PI-k[5]];}
-function scyFPKeys(v){const K=SCYK3[v],B=SCYB3[v];return K?K.map(([t,k],i)=>[t,scyToFP(k,B&&B[i]&&B[i][1])]):null;}
+/* 1인칭 큰 낫: 자루가 화면을 가로질러 보이게 따로 짠다 (3인칭 자세를 그대로 옮기면 자루가 눈앞 멀리로 뻗어 점처럼 보인다).
+   자세 = [오른손 x,y,z(눈 기준), 화면 위 자루 각도 θ(0=위, +면 오른쪽), 앞으로 눕힘 f, 날 돌림 ψ(0이면 날이 θ가 줄어드는 쪽, π면 느는 쪽)] */
+let SCYF={sc:.55,idle:[.3,-.48,-.95,-.5,.2,3.14]};
+let SCYKF={
+  scyreap:[[.28,[.5,-.12,-.95,.7,.15,0]],[.4,[.5,-.1,-.95,.8,.15,0]],[.54,[.05,-.32,-.95,-1.5,.3,0]],[.78,[-.08,-.3,-.95,-1.9,.45,0]]],
+  scyrise:[[.26,[-.22,-.3,-.95,-1.9,.45,3.14]],[.36,[-.25,-.3,-.95,-2.0,.45,3.14]],[.52,[.35,-.2,-.95,.4,.15,3.14]],[.78,[.42,-.15,-.95,.9,.15,3.14]]],
+  scyharvest:[[.2,[.5,-.35,-.95,1.5,.5,0]],[.32,[.52,-.36,-.95,1.65,.5,0]],[.5,[.15,-.4,-.95,.2,.55,0]],[.66,[-.2,-.38,-.95,-1.0,.5,0]],[.82,[-.3,-.35,-.95,-1.5,.45,0]]],
+  scydash:[[.18,[.4,-.3,-.95,1.9,.45,3.14]],[.62,[.42,-.3,-.95,1.95,.45,3.14]],[.82,[.1,-.3,-.95,-.3,.35,0]]],
+  scyfade:[[.3,[.05,-.5,-.95,0,.1,3.14]],[.85,[.05,-.5,-.95,0,.1,3.14]]],
+  scyplant:[[.3,[.15,-.2,-.95,-.1,.1,3.14]],[.48,[.15,-.55,-.95,-.1,.15,3.14]],[.85,[.15,-.52,-.95,-.1,.15,3.14]]]};
+const _scfD=new THREE.Vector3(),_scfP=new THREE.Vector3(),_scfW=new THREE.Vector3(),_scfB=new THREE.Vector3(),_scfZ=new THREE.Vector3(),_scfM=new THREE.Matrix4();
+function scyPlaceFP(H,k,sc){const cf=Math.cos(k[4]);_scfD.set(Math.sin(k[3])*cf,Math.cos(k[3])*cf,-Math.sin(k[4])).normalize();
+  _scfP.set(-_scfD.y,_scfD.x,0);if(_scfP.lengthSq()<1e-6)_scfP.set(1,0,0);_scfP.normalize();   /* 화면 안에서 자루에 직각 (θ가 줄어드는 쪽) */
+  _scfW.crossVectors(_scfD,_scfP);_scfB.copy(_scfP).multiplyScalar(Math.cos(k[5])).addScaledVector(_scfW,Math.sin(k[5]));_scfZ.crossVectors(_scfB,_scfD);
+  _scfM.makeBasis(_scfB,_scfD,_scfZ);H.quaternion.setFromRotationMatrix(_scfM);
+  H.position.set(k[0],k[1],k[2]).addScaledVector(_scfD,-SCY_G0*sc);H.scale.setScalar(sc);H.updateMatrix();}
 let SCY_FHR=[0,0,0],SCY_FHL=[0,0,0];
 let SCY_PR=new THREE.Vector3(.8,-.5,-.3),SCY_PL=new THREE.Vector3(-.8,-.5,-.3);
 function scyLerp(keys,idle,p,out){let a=[0,idle],b=[1,idle];
@@ -10695,7 +10705,7 @@ function reapTwist(p){return -1.57*(p<.42?0:p<.75?(p-.42)/.33:p<.92?1-(p-.75)/.1
 const _motionCache={};
 function motionFor(style,id){
   const o=MOTION_OF[id];if(!o)return null;const key=style+':'+id;
-  if(!_motionCache[key]){const k3=legAug(o.v,verb3(o.v,o,style)),fp=verbFP(o.v,o,style);_motionCache[key]={k3,fp,dur:o.dur||.6,v:o.v,two:!!o.two,dir:o.dir,sc:SCYK3[o.v]||null,scf:scyFPKeys(o.v)};}
+  if(!_motionCache[key]){const k3=legAug(o.v,verb3(o.v,o,style)),fp=verbFP(o.v,o,style);_motionCache[key]={k3,fp,dur:o.dur||.6,v:o.v,two:!!o.two,dir:o.dir,sc:SCYK3[o.v]||null,scf:SCYKF[o.v]||null};}
   return _motionCache[key];
 }
 // 열쇠 사이를 부드럽게 섞기 (빠진 값은 쉬는 자세)
@@ -26608,11 +26618,11 @@ function updateViewModel(dt,moving){
   if(u.xbow){const xl=xlMine(),st=xbState(myMo,swingT,xl),c=xbPose(XBF,st),w=u.xbow;
     w.position.set(c[0]+sx,c[1]+sy-jumpY*.02,c[2]);w.rotation.set(c[3],Math.PI+c[4],c[5]);w.updateMatrix();xbSet(w,st.draw,st.rail);xbShowBolt(u.xbH,st.hand);
     xbRightHand(XBF,st,w.matrix,u.R.position);u.R.rotation.set(.2,0,0);u.L.position.copy(XB_FORE).applyMatrix4(w.matrix);u.L.rotation.set(.3,0,.5);u.R.visible=u.L.visible=true;}
-  if(u.scy){const H=u.scy,fi=SCYF.idle||(SCYF.idle=scyToFP(SCY3.idle,null)),k=myMo&&swingT<1&&myMo.scf?scyLerp(myMo.scf,fi,swingT,_scyK):fi;scyPlace(H,k);H.matrix.scale(_scyT.set(SCYF.sc,SCYF.sc,SCYF.sc));
+  if(u.scy){const H=u.scy,fi=SCYF.idle,k=myMo&&swingT<1&&myMo.scf?scyLerp(myMo.scf,fi,swingT,_scyK):fi;scyPlaceFP(H,k,SCYF.sc);
     H.matrix.elements[12]+=sx;H.matrix.elements[13]+=sy;H.matrixWorldNeedsUpdate=true;
     u.R.position.set(0,SCY_G0,0).applyMatrix4(H.matrix);u.L.position.set(0,SCY_G0+SCY_GRIP,0).applyMatrix4(H.matrix);
     u.R.quaternion.copy(H.quaternion);u.R.rotateX(SCY_FHR[0]);u.R.rotateY(SCY_FHR[1]);u.R.rotateZ(SCY_FHR[2]);
-    u.L.quaternion.copy(H.quaternion);u.L.rotateX(SCY_FHL[0]);u.L.rotateY(SCY_FHL[1]);u.L.rotateZ(SCY_FHL[2]);u.R.visible=u.L.visible=true;}   /* 큰 낫: 두 손을 자루에 */   /* 큰 낫: 왼손을 자루에 */
+    u.L.quaternion.copy(H.quaternion);u.L.rotateX(SCY_FHL[0]);u.L.rotateY(SCY_FHL[1]);u.L.rotateZ(SCY_FHL[2]);u.R.visible=u.L.visible=true;}   /* 큰 낫: 두 손을 자루에 */
   if(u.A){for(const h of [u.R,u.L]){h.position.y+=.07;h.position.z+=.03;}viewModel.updateMatrixWorld(true);u.R.userData.arm.visible=u.L.userData.arm.visible=false;try{pmFPPose(u.A,viewModel,{R:u.R,L:u.L});}catch(e){}}else{fpArm(u.R);fpArm(u.L);}
   if(u.style==='sword'&&(P.job==='barbarian')){const w=u.R.userData.wpn;if(w){if(w.userData.ry0===undefined)w.userData.ry0=w.rotation.y;w.rotation.y=w.userData.ry0+(myMoId==='axeb2'&&swingT<1?Math.PI:0);}}
   if(u.style==='dagger'){const w=u.R.userData.wpn;if(w){if(w.userData.rx0===undefined)w.userData.rx0=w.rotation.x;w.rotation.x=w.userData.rx0+(P&&P.deepHold&&!((myMoId==='deepstab'||myMoId==='sassn')&&swingT<.82)?Math.PI:0);}}
