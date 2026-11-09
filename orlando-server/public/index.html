@@ -28023,29 +28023,40 @@ function killMonster(m,mine=true,partyN=1){
   dropLoot(m);questKill(m);if(typeof lqKill==='function')lqKill(m);
   gainExp(exp);partyShareExp(exp);
 }
-function levelUpFx(lv){sfx('levelup');
+function levelUpFx(lv,n=1){sfx('levelup');
   document.querySelectorAll('.lvup').forEach(e=>e.remove());
   const o=document.createElement('div');o.className='lvup';
   const w=document.createElement('div');const b=document.createElement('b');b.textContent='LEVEL UP';
-  const s=document.createElement('span');s.textContent=`Lv ${lv} · SP +1`;w.append(b,s);o.appendChild(w);
+  const s=document.createElement('span');s.textContent=`Lv ${lv} · SP +${n}`;w.append(b,s);o.appendChild(w);
   document.body.appendChild(o);setTimeout(()=>o.remove(),1900);
 }
 // 도적 계열(도적·약탈자·암살자)은 경험치를 더 얻고 장비도 더 자주 줍는다
 const ROGUE_LINE={rogue:1,thief:1,assassin:1,ninja:1,stalker:1};const ROGUE_EXP=1.3,ROGUE_GEAR=1.6;
 const hasPilfer=()=>!!(P&&P.skills&&P.skills.pilfer>0);
 const expMul=()=>hasPilfer()?ROGUE_EXP:1;
+/* 레벨업 중 생긴 오류: 레벨은 계속 오르게 하고, 무엇이 왜 실패했는지 한 번씩 남긴다 */
+function lvErr(w,e){console.error('레벨업 '+w,e);const k=w+(e&&e.message);lvErr.seen=lvErr.seen||new Set();if(lvErr.seen.has(k))return;lvErr.seen.add(k);try{log(`레벨업 오류 (${w}): ${e&&e.message||e}`,'bad');}catch(_){}}
 function gainExp(n){
   if(P.lv>=MAX_LV){P.exp=0;updateHud();return;}
   n=Math.round(n*expMul());P.exp+=n;
+  /* 한 번에 여러 레벨이 오를 수 있다. 레벨마다 붙는 일(능력치·스승 부르기·퀘스트) 하나가 오류를 내도
+     나머지 레벨은 끝까지 오르게 하나씩 감싸고, 소리·빛·접속자 알림은 다 오른 뒤 한 번만 한다 */
+  let up=0;
   while(P.lv<MAX_LV&&P.exp>=needExp(P.lv)){
-    P.exp-=needExp(P.lv);P.lv++;computeStats(P);P.hp=P.maxhp;P.mp=P.maxmp;
-    log(`레벨 업! Lv ${P.lv}`,'sys');levelUpFx(P.lv);
-    spawnFx(0xf3cf6a,player.position.clone().add(new THREE.Vector3(0,1,0)),2.4,.8);
-    if(advLv(P.job)!=null&&P.lv>=advLv(P.job)&&!P.mentorReady){P.mentorReady=true;summonMentor();}
-    if(P.lv===100)updateQuestHud();   /* Lv 100 메인 퀘스트 */
-    publishPresence(true);renderOnline();
+    P.exp-=needExp(P.lv);P.lv++;up++;
+    try{computeStats(P);}catch(e){lvErr('능력치',e);}
+    P.hp=P.maxhp;P.mp=P.maxmp;
+    log(`레벨 업! Lv ${P.lv}`,'sys');
+    try{if(advLv(P.job)!=null&&P.lv>=advLv(P.job)&&!P.mentorReady){P.mentorReady=true;summonMentor();}}catch(e){lvErr('스승',e);}
+    try{if(P.lv===100)updateQuestHud();}catch(e){lvErr('퀘스트',e);}   /* Lv 100 메인 퀘스트 */
   }
-  updateHud();save();
+  if(up){
+    try{levelUpFx(P.lv,up);}catch(e){lvErr('글씨',e);}
+    try{spawnFx(0xf3cf6a,player.position.clone().add(new THREE.Vector3(0,1,0)),2.4,.8);}catch(e){lvErr('빛',e);}
+    try{publishPresence(true);renderOnline();}catch(e){lvErr('접속자',e);}
+  }
+  try{updateHud();}catch(e){lvErr('HUD',e);}
+  save();
 }
 function meleeHit(range,mult,o={}){
   const f=flatFwd();let n=0;
@@ -29619,7 +29630,10 @@ function sendChat(){
     if(P.seat!=null)seatLeave();if(P.ride&&typeof rideOff==='function')rideOff(true);toggleFly(true);return;}
   if(text==='/class'){if(!(JOBS[P.job].adv||[]).length){toast('더 전직할 직업이 없어요');return;}openMentor();return;} // 테스트: 레벨·스승과 상관없이 전직 창
   if(text==='/gold'){P.gold+=10000;log('[테스트] 10000 골드를 받았다','sys');invDirty();updateHud();save();return;}
-  if(text==='/levelup'){const to=Math.min(MAX_LV,P.lv+20);while(P.lv<to)gainExp(needExp(P.lv)-P.exp);log(`[테스트] 레벨이 올랐다 → Lv ${P.lv}`,'sys');return;}
+  if(text==='/levelup'){   /* 테스트: 20레벨 한 번에. 경험치 배율과 상관없이 정확히 레벨을 채우고, 중간에 오류가 나도 끝까지 오른다 */
+    const to=Math.min(MAX_LV,P.lv+20);let err=null;
+    for(let i=0;i<40&&P.lv<to;i++){const lv=P.lv;try{gainExp(Math.ceil((needExp(P.lv)-P.exp)/expMul())+1);}catch(e){err=err||e;console.error('/levelup',e);if(P.lv===lv)break;}}
+    log(`[테스트] 레벨이 올랐다 → Lv ${P.lv}`,'sys');if(err)log(`[테스트] 레벨 오르는 중 오류: ${err&&err.message||err}`,'bad');return;}
   if(performance.now()-chatAt<700){toast('조금 천천히 말해 주세요');return;}chatAt=performance.now();
   if(/^\/(g|길드)\s+/.test(text)){const t=text.replace(/^\/(g|길드)\s+/,'');if(t)guildChat(t);return;}
   if(/^\/(p|파티)\s+/.test(text)){const t=text.replace(/^\/(p|파티)\s+/,'');if(!party){toast('파티가 없어요');return;}if(!t)return;logChat(`[파티] ${P.name}`,t,true);for(const m of party.members)if(m.id!==myPeer())dm(m.id,{k:'pchat',m:t});return;}
