@@ -11446,10 +11446,26 @@ await BOOT.y();(function buildRegion2(){
 
   if(typeof harenaModels==='function')harenaModels(HPL);
   /* 바깥 산줄기 (길 끝 너머) */
-  for(let i=0;i<90;i++){
-    const a=i/90*Math.PI*2+sr(-.03,.03),d=sr(166,178),x=C2.x+Math.cos(a)*d,z=C2.z+Math.sin(a)*d,s=sr(8,15);
-    const m=new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),mat(0x5e5446));m.position.set(x,heightAt(x,z)+s*.2,z);m.scale.y=sr(.9,1.7);m.rotation.set(srand()*3,srand()*3,0);scene.add(m);
-  }
+  /* 2026-11-09: 예전 십이면체 덩어리 90개 → 울퉁불퉁한 바위산 모양 6가지(꺾인 면·지층 띠·위쪽 밝은 모래빛)를 한 덩어리로 합쳐 한 번에 그린다.
+     자리·크기·돌림에 쓰는 난수(srand) 개수와 차례는 예전과 같다 */
+  {const VAR=[],C=new THREE.Color(),hs=(x,y,z)=>{const v=Math.sin(x*127.1+y*311.7+z*74.7)*43758.5453;return v-Math.floor(v);};
+    for(let k=0;k<6;k++){const g=new THREE.IcosahedronGeometry(1,2),P=g.attributes.position,col=new Float32Array(P.count*3),V=new THREE.Vector3();
+      /* 같은 자리 꼭짓점은 같은 값으로 밀어 틈이 생기지 않게 */
+      for(let i=0;i<P.count;i++){V.fromBufferAttribute(P,i).normalize();const n=hs(Math.round(V.x*40)+k*7,Math.round(V.y*40),Math.round(V.z*40)),n2=hs(Math.round(V.x*9)+k,Math.round(V.y*9)+3,Math.round(V.z*9));
+        const up0=Math.max(0,V.y),rr=(.8+n*.2+n2*.22)*(1-.55*up0*up0),yy=V.y<0?V.y*.3:V.y*(1.2+n2*.4+n*.15);   /* 위로 갈수록 좁아져 봉우리가 진다 */P.setXYZ(i,V.x*rr,yy,V.z*rr);
+        const band=.5+.5*Math.sin(yy*9+n2*2.5),up=Math.max(0,V.y);C.setHex(0x5e5446).lerp(new THREE.Color(0x7a6a52),band*.55).lerp(new THREE.Color(0xb39a72),up*up*.6).multiplyScalar(.9+n*.18);
+        col[i*3]=C.r;col[i*3+1]=C.g;col[i*3+2]=C.b;}
+      g.setAttribute('color',new THREE.BufferAttribute(col,3));g.computeVertexNormals();VAR.push(g);}
+    const parts=[],m4=new THREE.Matrix4(),q4=new THREE.Quaternion(),e4=new THREE.Euler();
+    for(let i=0;i<90;i++){
+      const a=i/90*Math.PI*2+sr(-.03,.03),d=sr(166,178),x=C2.x+Math.cos(a)*d,z=C2.z+Math.sin(a)*d,s=sr(8,15);
+      const sy=sr(.9,1.7),rx=srand()*3,ry=srand()*3;
+      /* 예전처럼 마구 돌리면 납작한 밑면이 옆으로 서므로 기울기는 조금만 */
+      e4.set((rx-1.5)*.08,ry,(ry-1.5)*.06);q4.setFromEuler(e4);m4.compose(new THREE.Vector3(x,heightAt(x,z)-s*.15,z),q4,new THREE.Vector3(s*1.1,s*sy,s*1.1));
+      const g=VAR[i%6].clone();g.applyMatrix4(m4);parts.push(g);}
+    const geo=new THREE.BufferGeometry();for(const nm of ['position','normal','color']){let n=0;for(const g of parts)n+=g.attributes[nm].array.length;const arr=new Float32Array(n);let o=0;for(const g of parts){arr.set(g.attributes[nm].array,o);o+=g.attributes[nm].array.length;}geo.setAttribute(nm,new THREE.BufferAttribute(arr,3));}
+    geo.computeBoundingSphere();parts.forEach(g=>g.dispose());VAR.forEach(g=>g.dispose());
+    const m=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.92,flatShading:true}));m.receiveShadow=true;scene.add(m);}
 })();
 
 /* 하레나 풍경 모델 그리기: models/harena.glb (Quaternius Stylized Nature MegaKit, CC0)
@@ -12687,21 +12703,55 @@ function addMudHouse(x,y,z,ry,o){
   ROOFS.push({x,z,r:Math.min(W,D)*.52,y:y+H+.16});if(o.floors>1){const c=new THREE.Vector3(o._ox||0,0,o._oz||0).applyMatrix4(world);ROOFS.push({x:c.x,z:c.z,r:Math.min(W,D)*.3,y:y+top+.16});colliders.push({x:c.x,z:c.z,r:Math.min(W,D)*.3+.1,h:top+.2});}
   return H+.1;
 }
-// 대추야자: 마디진 줄기가 살짝 휘고, 꼭대기에 늘어진 잎과 열매 송이
+// 대추야자 (2026-11-09 다시 빚음): 밑동이 불룩하고 잎자국 마디가 층층이 진 줄기가 살짝 휘고,
+// 꼭대기에는 가운데 줄기(잎자루)를 따라 좁은 잎조각이 양쪽으로 빗살처럼 돋은 깃꼴 잎이 활처럼 늘어진다.
+// 아래에는 마른 갈색 잎 몇 장과 섬유 덮개, 대추 송이. 삼각형을 정적 묶음(houseBatch)에 바로 넣어 그리기 횟수는 늘지 않는다
 function addPalm(x,y,z,h,seed){
-  const B=houseBatch();const r=k=>{const v=Math.sin((seed+3)*91.7+k*37.1)*43758.5453;return v-Math.floor(v);};
-  const lean=(r(1)-.5)*.35,dir=r(2)*Math.PI*2,n=Math.max(5,Math.round(h/.7));let px=x,py=y,pz=z;
-  for(let i=0;i<n;i++){const t=i/n,seg=h/n,bend=lean*t*t*2.2;
-    const m=new THREE.Matrix4().compose(new THREE.Vector3(px,py+seg/2,pz),new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(dir)*bend,0,Math.cos(dir)*bend)),new THREE.Vector3(1,1,1));
-    hbPush(B.op,new THREE.CylinderGeometry(.17-.05*t,.2-.05*t,seg*1.05,6),m,i%2?0x7a5c3a:0x6a4e30);
-    px+=-Math.cos(dir)*Math.sin(bend)*seg;pz+=Math.sin(dir)*Math.sin(bend)*seg;py+=seg*Math.cos(bend);}
-  // 잎: 길쭉하게 늘인 납작한 원뿔을 사방으로 늘어뜨린다
-  const nf=9;for(let i=0;i<nf;i++){const a=i/nf*Math.PI*2+r(3),droop=.5+r(4+i)*.5,L=2.2+r(10+i)*.8;
-    const g=new THREE.ConeGeometry(.32,L,4,1);g.translate(0,L/2,0);g.scale(1,1,.18);
-    const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(0,a,0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,-(Math.PI/2-droop+.45))));
-    hbPush(B.op,g,new THREE.Matrix4().compose(new THREE.Vector3(px,py,pz),q,new THREE.Vector3(1,1,1)),i%3?0x5f8a34:0x4f7a2a);}
-  // 열매 송이
-  for(let i=0;i<3;i++){const a=i/3*Math.PI*2+r(20);hbPush(B.op,new THREE.SphereGeometry(.2,5,4),new THREE.Matrix4().compose(new THREE.Vector3(px+Math.cos(a)*.25,py-.35,pz+Math.sin(a)*.25),new THREE.Quaternion(),new THREE.Vector3(1,1.3,1)),0xb0702a);}
+  const B=houseBatch(),O=B.op;const r=k=>{const v=Math.sin((seed+3)*91.7+k*37.1)*43758.5453;return v-Math.floor(v);};
+  const C=new THREE.Color(),_a=new THREE.Vector3(),_b=new THREE.Vector3(),_n=new THREE.Vector3();
+  /* 삼각형 하나 (면 법선, 꼭짓점마다 색). ds면 뒷면도 */
+  const tri=(A,Bv,Cv,ca,cb,cc,ds)=>{_a.subVectors(Bv,A);_b.subVectors(Cv,A);_n.crossVectors(_a,_b).normalize();
+    const put=(P,c,s)=>{O.pos.push(P.x,P.y,P.z);O.nor.push(_n.x*s,_n.y*s,_n.z*s);O.col.push(c.r,c.g,c.b);};
+    put(A,ca,1);put(Bv,cb,1);put(Cv,cc,1);if(ds){put(A,ca,-1);put(Cv,cc,-1);put(Bv,cb,-1);}};
+  const col=(h,k=1)=>new THREE.Color(h).multiplyScalar(k);
+  const lean=(r(1)-.5)*.35,dir=r(2)*Math.PI*2;
+  /* 줄기 가운데 선 */
+  const NS=Math.max(10,Math.round(h/.4)),spine=[];
+  {let px=x,py=y,pz=z;for(let i=0;i<=NS;i++){spine.push(new THREE.Vector3(px,py,pz));const t=i/NS,bend=lean*t*t*2.2,seg=h/NS;
+    px+=-Math.cos(dir)*Math.sin(bend)*seg;pz+=Math.sin(dir)*Math.sin(bend)*seg;py+=seg*Math.cos(bend);}}
+  /* 줄기: 8모 고리를 층층이. 마디마다 위가 살짝 좁고 아래가 넓어 잎자국 턱이 진다 */
+  {const S=6,ring=(c,rad,ph)=>{const out=[];for(let k=0;k<S;k++){const a=k/S*Math.PI*2+ph;out.push(new THREE.Vector3(c.x+Math.cos(a)*rad,c.y,c.z+Math.sin(a)*rad));}return out;};
+    for(let i=0;i<NS;i++){const t=i/NS,t1=(i+1)/NS,base=.2-.07*t,base1=.2-.07*t1,flare=i===0?.12:i===1?.05:0;
+      const r0=base+.035+flare,r1=base1-.012,ph=(i%2)*.45;
+      const A=ring(spine[i],r0,ph),Bq=ring(spine[i+1],r1,ph),k0=i%2?.92:1,cA=col(0x7a5c3a,k0*1.05),cB=col(0x5e4429,k0);
+      for(let k=0;k<S;k++){const k1=(k+1)%S;tri(A[k],Bq[k],A[k1],cA,cB,cA);tri(A[k1],Bq[k],Bq[k1],cA,cB,cB);}}}
+  const top=spine[NS];
+  /* 섬유 덮개: 꼭대기 아래 거친 갈색 고깔 */
+  {const S=7,hgt=.55,rb=.24,cT=col(0x6a4a2a),cS=col(0x4a3420);for(let k=0;k<S;k++){const a0=k/S*Math.PI*2,a1=(k+1)/S*Math.PI*2,rr=rb*(1+(r(60+k)-.5)*.3);
+    const P0=new THREE.Vector3(top.x+Math.cos(a0)*rr,top.y-hgt,top.z+Math.sin(a0)*rr),P1=new THREE.Vector3(top.x+Math.cos(a1)*rr,top.y-hgt,top.z+Math.sin(a1)*rr);tri(P0,new THREE.Vector3(top.x,top.y+.12,top.z),P1,cS,cT,cS);}}
+  /* 깃꼴 잎 하나: a 방향, el 처음 들린 각, L 길이, green(bool) */
+  const frond=(a,el,L,dead,kk)=>{const N=dead?7:10,ca=Math.cos(a),sa=Math.sin(a),pts=[];
+    let px=top.x,py=top.y,pz=top.z,vx=ca*Math.cos(el),vy=Math.sin(el),vz=sa*Math.cos(el);const g=dead?.9:.75+r(kk)*.35,st=L/N;
+    for(let i=0;i<=N;i++){pts.push(new THREE.Vector3(px,py,pz));vy-=g*st*(dead?1.4:1);const l=Math.hypot(vx,vy,vz);vx/=l;vy/=l;vz/=l;px+=vx*st;py+=vy*st;pz+=vz*st;}
+    const sx=-sa,sz=ca;   /* 옆 방향 */
+    const base=dead?0x7a6040:[0x6a9a3a,0x5f8e34,0x76a242,0x588a30][Math.floor(r(kk+1)*4)],cR=col(base,.62),cTip=col(base,1.18);
+    for(let i=1;i<N;i++){const t=i/N,P=pts[i],Q=pts[i+1],len=(dead?.4:.74)*Math.sin(Math.PI*Math.min(1,t*1.05+.08))*(1-t*.3)*L/2.6;
+      const dx=Q.x-P.x,dy=Q.y-P.y,dz=Q.z-P.z;
+      for(const sd of [-1,1]){const T=new THREE.Vector3(P.x+sx*sd*len+dx*2.2,P.y-len*(dead?.8:.38)+(dead?0:.05)+dy*2.2,P.z+sz*sd*len+dz*2.2);
+        const M=new THREE.Vector3(P.x+dx*.45,P.y+dy*.45+.015,P.z+dz*.45);
+        tri(P,M,T,cR,cR,cTip,true);}}
+    /* 잎자루: 가는 띠 */
+    for(let i=0;i<N;i++){const P=pts[i],Q=pts[i+1],w=.045*(1-i/N)+.012,cc=col(dead?0x6a5030:0x7c8a3a);
+      tri(new THREE.Vector3(P.x+sx*w,P.y+.02,P.z+sz*w),new THREE.Vector3(Q.x+sx*w*.8,Q.y+.02,Q.z+sz*w*.8),new THREE.Vector3(P.x-sx*w,P.y+.02,P.z-sz*w),cc,cc,cc);
+      tri(new THREE.Vector3(P.x-sx*w,P.y+.02,P.z-sz*w),new THREE.Vector3(Q.x+sx*w*.8,Q.y+.02,Q.z+sz*w*.8),new THREE.Vector3(Q.x-sx*w*.8,Q.y+.02,Q.z-sz*w*.8),cc,cc,cc);}};
+  const nf=10;for(let i=0;i<nf;i++){const a=i/nf*Math.PI*2+r(3)+(r(30+i)-.5)*.3,inner=i%3===0;
+    frond(a,inner?1.05+r(4+i)*.25:.55+r(4+i)*.4,(2.4+r(10+i)*.9)*(inner?.85:1)*(h/6.5)**.3,false,40+i);}
+  for(let i=0;i<3;i++)frond(i/3*Math.PI*2+r(70),-.35-r(71+i)*.4,1.5+r(75+i)*.5,true,80+i);   /* 마른 잎 */
+  /* 대추 송이: 꼭대기 아래 늘어진 송이 둘·셋 */
+  {const ico=new THREE.OctahedronGeometry(.08,0),pa=ico.attributes.position,cD=[col(0xb0702a),col(0x8a4a1c),col(0xc08a3a)];
+    const nb=2;for(let b=0;b<nb;b++){const a=b/nb*Math.PI*2+r(91);
+      for(let k=0;k<9;k++){const rr=.18+(k%3)*.06,yy=-.32-Math.floor(k/3)*.11,aa=a+(k%3-1)*.35;const cx=top.x+Math.cos(aa)*rr,cy=top.y+yy,cz=top.z+Math.sin(aa)*rr,cc=cD[(k+b)%3];
+        for(let v=0;v<pa.count;v+=3)tri(new THREE.Vector3(pa.getX(v)+cx,pa.getY(v)*1.3+cy,pa.getZ(v)+cz),new THREE.Vector3(pa.getX(v+1)+cx,pa.getY(v+1)*1.3+cy,pa.getZ(v+1)+cz),new THREE.Vector3(pa.getX(v+2)+cx,pa.getY(v+2)*1.3+cy,pa.getZ(v+2)+cz),cc,cc,cc);}}ico.dispose();}
   colliders.push({x,z,r:.35});
 }
 await BOOT.y();(function buildTown(){
@@ -23010,6 +23060,18 @@ function hchGateModel(root,cx,cz,g,hAt,cave){const C=OR.HCH,A=C.areaOf(g.a),B=C.
 function hchCopyColliders(col0,I,fam){const A=col0 instanceof Set?colliders.filter(c=>!col0.has(c)):colliders.slice(col0);for(const z of OR.HCH.ZONES){const J=OR.ISLES[z];if(J===I||OR.HCH.fam(z)!==fam)continue;const dx=J.x-I.x,dz=J.z-I.z;
   for(const c of A){const p={x:c.x+dx,z:c.z+dz};J.clamp(p,0);if(Math.hypot(p.x-c.x-dx,p.z-c.z-dz)<(c.r||2)+4)colliders.push({...c,x:c.x+dx,z:c.z+dz});}}}
 function hchVeilTick(t){for(const m of HCH_VEILS){m.map.offset.y=-t*.12;m.opacity=m.userData.o*(.8+.2*Math.sin(t*1.7));}}
+/* 눈밭 결 (2026-11-09): 흰 눈 위에만 바람에 쓸린 큰 얼룩·잔물결 그늘과 푸른 기, 햇빛 쪽으로 반짝이는 눈 알갱이.
+   잡음 그림(NAT.noiseTex) 두 번 읽기만 더한다 */
+function snowGroundMat(m){m.onBeforeCompile=sh=>{sh.uniforms.uSnN={value:NAT.noiseTex};
+    sh.vertexShader='varying vec3 vSnW;\n'+sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\nvSnW=(modelMatrix*vec4(transformed,1.)).xyz;');
+    sh.fragmentShader='uniform sampler2D uSnN;varying vec3 vSnW;\n'+sh.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+{vec4 n=texture2D(uSnN,vSnW.xz*.012);float w=smoothstep(.62,.8,min(diffuseColor.r,diffuseColor.b))*smoothstep(-.1,.0,diffuseColor.b-diffuseColor.r);
+ float rip=texture2D(uSnN,vSnW.xz*vec2(.09,.22)+n.rg*.6).b;
+ diffuseColor.rgb*=mix(1.,.88+.07*n.r+.05*n.g+.06*rip,w);diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.9,.95,1.05),w*smoothstep(.55,.2,n.g)*.6);}`)
+      .replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+{float w=smoothstep(.62,.8,min(diffuseColor.r,diffuseColor.b));float g=texture2D(uSnN,vSnW.xz*1.9+cameraPosition.xz*.035).a*texture2D(uSnN,vSnW.zx*2.7-cameraPosition.zx*.02).a;
+ float d=length(vSnW-cameraPosition);totalEmissiveRadiance+=vec3(1.,.98,.94)*smoothstep(.5,.62,g)*w*(1.-smoothstep(8.,30.,d))*1.6;}`);};
+  m.customProgramCacheKey=()=>'snowg';return m;}
 async function buildHMaps(){
   const C=OR.HCH,HM=HMAP,sm=OR.smooth,run=async it=>{let r;while(!(r=it.next()).done)await HCHL.y();return r.value;};
   let _s=7717;const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647,rr=(a,b)=>a+rnd()*(b-a);
@@ -23045,7 +23107,7 @@ async function buildHMaps(){
         cl[i*3]=tmp.r;cl[i*3+1]=tmp.g;cl[i*3+2]=tmp.b;}
       g.setAttribute('color',new THREE.BufferAttribute(cl,3));
       g.translate(cx,0,cz);return g;};
-    {const m=new THREE.Mesh(await run(ground()),new THREE.MeshStandardMaterial({vertexColors:true,roughness:.86,metalness:0}));m.receiveShadow=true;m.castShadow=true;root.add(m);}
+    {const m=new THREE.Mesh(await run(ground()),snowGroundMat(new THREE.MeshStandardMaterial({vertexColors:true,roughness:.86,metalness:0})));m.receiveShadow=true;m.castShadow=true;root.add(m);}
     await HCHL.y();
     /* ===== 전나무: 둘레 벼랑 아래 빽빽이 (숲길은 길가 숲까지). 길 가까이는 정교한 모형, 먼 벽은 가벼운 모형 ===== */
     const HS=3,hs=new Set(),hk=(x,zz)=>Math.floor(x/HS)+','+Math.floor(zz/HS),hi=[[],[],[]],lo=[[],[],[]],dn=DENS[z];
