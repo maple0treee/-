@@ -11296,6 +11296,8 @@ let BOARD=boardLoad(),boardZ=0;
 const boardSave=()=>{try{localStorage.setItem(BOARD_KEY,JSON.stringify(BOARD));}catch(e){}};
 /* 쪽지마다 정해진 난수 (0~1, 같은 쪽지는 늘 같은 값): 사람이 손으로 꽂은 것처럼 자리·기울기·크기를 조금씩 흐트린다 */
 const noteRnd=(id,k)=>{let h=2166136261^k;for(const ch of String(id))h=Math.imul(h^ch.charCodeAt(0),16777619);h=Math.imul(h^(h>>>15),2246822507);h^=h>>>13;return (h>>>0)/4294967296;};
+/* 쪽지 크기: 내 캐릭터 중 가장 높은 레벨이 1.25배, 레벨에 비례해 작아짐(최소 .7) + 손으로 붙인 듯 ±4%. 손으로 크기를 바꾼 쪽지(sm)는 그 크기를 지킨다 */
+const noteSize=(c,list)=>{const top=Math.max(1,...list.map(x=>x.lv|0));return +((.7+.55*Math.min(1,(c.lv|0)/top))*(.96+noteRnd(c.id,4)*.08)).toFixed(3);};
 const noteTilt=id=>Math.round((noteRnd(id,1)*2-1)*90)/10;   /* -9~9도 */
 const newAp={...apDefault(),c:SHIRT_COLORS[0]};let apPrev=null;
 (function(){const box=$('#apBox');if(!box)return;buildApControls(box,newAp,()=>{if(apPrev)apPrev.dirty=true;});if(!OLD_LOOK){pmLoad('m').catch(()=>{});pmLoad('f').catch(()=>{});}})();
@@ -11337,10 +11339,10 @@ function storeChars(list){try{localStorage.setItem('orlando3d.chars',JSON.string
 function boardDefault(list){const bw=$('#board').clientWidth||1000,cols=bw<560?2:bw<900?3:4,rows=Math.ceil(list.length/cols)||1,o={};
   list.forEach((c,i)=>{const r=Math.floor(i/cols),k=i%cols,n=Math.min(cols,list.length-r*cols);
     const id=c.id,jx=(noteRnd(id,2)*2-1)*.32/cols,jy=noteRnd(id,3)*(rows>2?.12/rows:.05);
-    o[id]={x:Math.min(.9,Math.max(.1,(k+.5)/n*(n/cols)+(1-n/cols)/2+jx)),y:.05+r*(rows>2?.9/rows:.46)+jy,s:+(.92+noteRnd(id,4)*.14).toFixed(3),r:noteTilt(id),z:Math.floor(noteRnd(id,5)*list.length)};});return o;}
+    o[id]={x:Math.min(.9,Math.max(.1,(k+.5)/n*(n/cols)+(1-n/cols)/2+jx)),y:.05+r*(rows>2?.9/rows:.46)+jy,s:noteSize(c,list),r:noteTilt(id),z:Math.floor(noteRnd(id,5)*list.length)};});return o;}
 /* 쪽지 크기: 캐릭터 수에 맞춰 판을 채우도록 (한 줄이면 크게, 줄이 늘면 줄마다 들어가게). 쪽지 높이는 너비의 약 1.8배 (자리 간격은 boardDefault 와 같은 칸 수로) */
 function boardScale(){const b=$('#board');if(!b||!b.clientWidth)return;const w=b.clientWidth,h=b.clientHeight,n=Math.max(1,loadChars().length),cols=w<560?2:w<900?3:4,rows=Math.ceil(n/cols);
-  const k=Math.min(w/(cols*235),h*(rows>2?.88/rows:rows>1?.45:.82)/350);b.style.setProperty('--k',Math.max(.4,Math.min(1.45,k)).toFixed(3));}
+  const k=Math.min(w/(cols*235),h*(rows>2?.88/rows:rows>1?.45:.82)/350);b.style.setProperty('--k',Math.max(.4,Math.min(1.45,k/1.12)).toFixed(3));}   /* 가장 큰 쪽지(1.25배)도 들어가게 */
 if(window.ResizeObserver&&$('#board'))new ResizeObserver(boardScale).observe($('#board'));
 function noteApply(el,p){el.style.left=(p.x*100)+'%';el.style.top=(p.y*100)+'%';el.style.setProperty('--s',p.s);el.style.setProperty('--r',p.r+'deg');el.style.zIndex=10+(p.z|0);}
 function renderChars(){
@@ -11349,7 +11351,7 @@ function renderChars(){
   if(!list.some(c=>c.id===selId))selId=list.length?list[0].id:null;
   const vis=$('#board').clientWidth>0,def=list.some(c=>!BOARD[c.id])?boardDefault(list):null;   /* 판이 숨어 있을 때 정한 자리는 기억하지 않는다 (보일 때 판 크기로 다시) */
   for(const c of list){
-    const p=BOARD[c.id]||def[c.id];if(vis)BOARD[c.id]=p;boardZ=Math.max(boardZ,p.z|0);
+    const p=BOARD[c.id]||def[c.id];if(!p.sm)p.s=noteSize(c,list);if(vis)BOARD[c.id]=p;boardZ=Math.max(boardZ,p.z|0);
     const el=document.createElement('div');el.className='note'+(c.id===selId?' on':'');el.dataset.id=c.id;el.tabIndex=0;
     const pin=document.createElement('i');pin.className='pin';
     const ph=document.createElement('div');ph.className='ph';const im=document.createElement('img');im.alt='';ph.appendChild(im);
@@ -11376,18 +11378,18 @@ function noteInput(el,c){const P=new Map();let mode='',timer=0,sx=0,sy=0,ox=0,oy
     if(e.target.classList.contains('grip')){mode='size';front();return;}
     if(e.target.classList.contains('pin'))lift();else timer=setTimeout(lift,350);});
   el.addEventListener('pointermove',e=>{if(!P.has(e.pointerId))return;P.set(e.pointerId,[e.clientX,e.clientY]);const b=B();
-    if(mode==='pinch'&&P.size>=2){const [a,q]=[...P.values()];p().s=s0*Math.hypot(a[0]-q[0],a[1]-q[1])/d0;clampP(p());noteApply(el,p());return;}
+    if(mode==='pinch'&&P.size>=2){const [a,q]=[...P.values()];p().s=s0*Math.hypot(a[0]-q[0],a[1]-q[1])/d0;p().sm=1;clampP(p());noteApply(el,p());return;}
     const dx=e.clientX-sx,dy=e.clientY-sy;
     if(!mode){if(Math.hypot(dx,dy)>8)clearTimeout(timer);return;}
     if(mode==='move'){p().x=ox+dx/b.width;p().y=oy+dy/b.height;}
-    else if(mode==='size'){const w=el.offsetWidth||170;p().s=s0*(1+(dx+dy)/2/w);}
+    else if(mode==='size'){const w=el.offsetWidth||170;p().s=s0*(1+(dx+dy)/2/w);p().sm=1;}
     clampP(p());noteApply(el,p());});
   const up=e=>{if(!P.has(e.pointerId))return;P.delete(e.pointerId);clearTimeout(timer);
     if(P.size)return;el.classList.remove('lift');
     if(mode){boardSave();mode='';return;}
     if(e.type==='pointerup'){const t=performance.now();if(t-lastTap<350){lastTap=0;startGame(c);}else lastTap=t;}};
   el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
-  el.addEventListener('wheel',e=>{e.preventDefault();noteSelect(c.id);p().s*=Math.exp(-e.deltaY*.0012);clampP(p());noteApply(el,p());clearTimeout(el._wt);el._wt=setTimeout(boardSave,300);},{passive:false});
+  el.addEventListener('wheel',e=>{e.preventDefault();noteSelect(c.id);p().s*=Math.exp(-e.deltaY*.0012);p().sm=1;clampP(p());noteApply(el,p());clearTimeout(el._wt);el._wt=setTimeout(boardSave,300);},{passive:false});
   el.addEventListener('keydown',e=>{if(e.key==='Enter')startGame(c);});}
 $('#bdTidy').onclick=()=>{const list=loadChars().sort((a,b)=>(b.t||0)-(a.t||0));BOARD=boardDefault(list);boardZ=0;renderChars();};
 $('#selPlay').onclick=()=>{const c=loadChars().find(x=>x.id===selId);if(c)startGame(c);};
