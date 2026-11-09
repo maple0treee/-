@@ -171,6 +171,7 @@ function cleanPresence(d) {
     sd: d.sd ? 1 : 0,
     ss: Math.max(0, Math.min(7, Math.floor(n(d.ss)))),
     dc: Array.isArray(d.dc) && d.dc.length >= 2 && d.dc.slice(0, 3).every((v) => typeof v === 'number' && isFinite(v)) ? d.dc.slice(0, 3).map(n) : null,
+    sc: Array.isArray(d.sc) && d.sc.length === 2 && d.sc.every((v) => typeof v === 'number' && isFinite(v)) ? d.sc.map(n) : null,   // 사이드루터의 살아있는 허수아비 자리
     pp: Array.isArray(d.pp) && d.pp.length === 3 && d.pp.every((v) => typeof v === 'number' && isFinite(v)) ? d.pp.map(n) : null,
     hd: d.hd ? 1 : 0,
     mo: typeof d.mo === 'string' && /^[a-z0-9]{0,16}$/.test(d.mo) ? d.mo : '',

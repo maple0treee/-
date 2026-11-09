@@ -39,6 +39,8 @@
     const send = (id, msg) => {
       if (typeof id === 'string' && id.startsWith('lu:')) return;   // 트랩헌터가 숨어서 깔아 둔 덫·지뢰 (미끼): 치지 않는다
       if (typeof id === 'string' && id.startsWith('dc:')) { if (msg.t !== 'matk') return; const o = clients.get(id.slice(3)); if (o) o.send({ t: 'dch', i: msg.i, atk: msg.atk }); return; }
+      // 'sc:<id>'는 사이드루터의 살아있는 허수아비: 허수아비를 친 공격은 주인에게 따로 알린다
+      if (typeof id === 'string' && id.startsWith('sc:')) { if (msg.t !== 'matk') return; const o = clients.get(id.slice(3)); if (o) o.send({ t: 'sch', i: msg.i, atk: msg.atk }); return; }
       const c = clients.get(id); if (c) c.send(msg);
     };
     const broadcast = (msg, except) => { for (const [id, c] of clients) if (id !== except) c.send(msg); };
@@ -147,6 +149,8 @@
           const t = { x: q[0], z: q[1] };
           if (!SAFE[zoneAt(t.x, t.z)]) out.push({ id: 'lu:' + id + ':' + k, x: t.x, z: t.z, dun: t.z > 300 && t.x < 800, rot: inRotunda(t), sd: true, lu: true });
         });
+        // 사이드루터의 살아있는 허수아비: 몬스터는 사람으로 알고 노린다 (숨어 있어도 허수아비는 보인다)
+        if (Array.isArray(p.sc)) { const q = { x: p.sc[0], z: p.sc[1] }; if (!SAFE[zoneAt(q.x, q.z)]) out.push({ id: 'sc:' + id, x: q.x, z: q.z, dun: q.z > 300 && q.x < 800, rot: inRotunda(q), sc: true, own: id }); }
         if (p.hd) continue;
         if (SAFE[zoneAt(p.x, p.z)]) continue;
         out.push({ id, x: p.x, z: p.z, dun: p.z > 300 && p.x < 800, rot: inRotunda(p), sd: !!p.sd });
@@ -427,7 +431,9 @@
     // ---------- 매 틱 ----------
     function tick() {
       if (!clients.size) return;
-      const ts = targetsFor(), tsB = ts.filter((t) => !t.lu);   // 우두머리는 미끼에 속지 않는다
+      const ts = targetsFor(), tsB = ts.filter((t) => !t.lu && !t.sc);   // 우두머리는 미끼에 속지 않는다
+      // 허수아비가 서면 그 사람을 노리던 가까운 몬스터는 허수아비로 옮겨 간다
+      for (const t of ts) if (t.sc) for (const m of monsters.values()) if (m.aggroOn === t.own && !(m.taunt > 0) && Math.hypot(t.x - m.x, t.z - m.z) < 25) m.aggroOn = t.id;
       // 쉴더가 스쿠툼을 박아 두면 그 쉴더를 노리던 몬스터는 스쿠툼을 노린다
       // 도발당해 그 쉴더를 노리던 몬스터만 옮겨 간다 (그냥 박아 둔 스쿠툼은 아무도 끌지 않는다)
       { const dcs = new Set(ts.filter((t) => t.dc).map((t) => t.id)); if (dcs.size) for (const m of monsters.values()) if (m.aggroOn && m.taunt > 0 && dcs.has('dc:' + m.aggroOn)) m.aggroOn = 'dc:' + m.aggroOn; }
@@ -468,7 +474,7 @@
           if (t.dc && t.id !== m.aggroOn) continue;
           const far = false;   // (단단한 감각은 없어졌다)
           if ((homeD > (far ? 80 : 60) && !m.summon) || d > (far ? 55 : 40)) continue;   /* 더 멀리까지 쫓아온다 */
-          const pri = t.id === m.aggroOn ? d - 6 : d;
+          const pri = (t.id === m.aggroOn ? d - 6 : d) - (t.sc ? 8 : 0);   // 허수아비를 먼저 노린다
           if ((d < (t.lu ? 30 : t.sd ? 22 : 14) || t.id === m.aggroOn) && pri < best) { best = pri; tgt = t; }   /* 더 멀리서 알아챈다 (9 → 14m) */
         }
         if (m.taunt > 0) { m.taunt -= TICK; const tt = ts.find((q) => q.id === m.aggroOn && (dun ? q.rot : !q.dun)); if (tt) tgt = tt; }

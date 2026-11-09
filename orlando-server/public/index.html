@@ -2509,6 +2509,8 @@ setInterval(tick,400);
     const send = (id, msg) => {
       if (typeof id === 'string' && id.startsWith('lu:')) return;   // 트랩헌터가 숨어서 깔아 둔 덫·지뢰 (미끼): 치지 않는다
       if (typeof id === 'string' && id.startsWith('dc:')) { if (msg.t !== 'matk') return; const o = clients.get(id.slice(3)); if (o) o.send({ t: 'dch', i: msg.i, atk: msg.atk }); return; }
+      // 'sc:<id>'는 사이드루터의 살아있는 허수아비: 허수아비를 친 공격은 주인에게 따로 알린다
+      if (typeof id === 'string' && id.startsWith('sc:')) { if (msg.t !== 'matk') return; const o = clients.get(id.slice(3)); if (o) o.send({ t: 'sch', i: msg.i, atk: msg.atk }); return; }
       const c = clients.get(id); if (c) c.send(msg);
     };
     const broadcast = (msg, except) => { for (const [id, c] of clients) if (id !== except) c.send(msg); };
@@ -2617,6 +2619,8 @@ setInterval(tick,400);
           const t = { x: q[0], z: q[1] };
           if (!SAFE[zoneAt(t.x, t.z)]) out.push({ id: 'lu:' + id + ':' + k, x: t.x, z: t.z, dun: t.z > 300 && t.x < 800, rot: inRotunda(t), sd: true, lu: true });
         });
+        // 사이드루터의 살아있는 허수아비: 몬스터는 사람으로 알고 노린다 (숨어 있어도 허수아비는 보인다)
+        if (Array.isArray(p.sc)) { const q = { x: p.sc[0], z: p.sc[1] }; if (!SAFE[zoneAt(q.x, q.z)]) out.push({ id: 'sc:' + id, x: q.x, z: q.z, dun: q.z > 300 && q.x < 800, rot: inRotunda(q), sc: true, own: id }); }
         if (p.hd) continue;
         if (SAFE[zoneAt(p.x, p.z)]) continue;
         out.push({ id, x: p.x, z: p.z, dun: p.z > 300 && p.x < 800, rot: inRotunda(p), sd: !!p.sd });
@@ -2897,7 +2901,9 @@ setInterval(tick,400);
     // ---------- 매 틱 ----------
     function tick() {
       if (!clients.size) return;
-      const ts = targetsFor(), tsB = ts.filter((t) => !t.lu);   // 우두머리는 미끼에 속지 않는다
+      const ts = targetsFor(), tsB = ts.filter((t) => !t.lu && !t.sc);   // 우두머리는 미끼에 속지 않는다
+      // 허수아비가 서면 그 사람을 노리던 가까운 몬스터는 허수아비로 옮겨 간다
+      for (const t of ts) if (t.sc) for (const m of monsters.values()) if (m.aggroOn === t.own && !(m.taunt > 0) && Math.hypot(t.x - m.x, t.z - m.z) < 25) m.aggroOn = t.id;
       // 쉴더가 스쿠툼을 박아 두면 그 쉴더를 노리던 몬스터는 스쿠툼을 노린다
       // 도발당해 그 쉴더를 노리던 몬스터만 옮겨 간다 (그냥 박아 둔 스쿠툼은 아무도 끌지 않는다)
       { const dcs = new Set(ts.filter((t) => t.dc).map((t) => t.id)); if (dcs.size) for (const m of monsters.values()) if (m.aggroOn && m.taunt > 0 && dcs.has('dc:' + m.aggroOn)) m.aggroOn = 'dc:' + m.aggroOn; }
@@ -2938,7 +2944,7 @@ setInterval(tick,400);
           if (t.dc && t.id !== m.aggroOn) continue;
           const far = false;   // (단단한 감각은 없어졌다)
           if ((homeD > (far ? 80 : 60) && !m.summon) || d > (far ? 55 : 40)) continue;   /* 더 멀리까지 쫓아온다 */
-          const pri = t.id === m.aggroOn ? d - 6 : d;
+          const pri = (t.id === m.aggroOn ? d - 6 : d) - (t.sc ? 8 : 0);   // 허수아비를 먼저 노린다
           if ((d < (t.lu ? 30 : t.sd ? 22 : 14) || t.id === m.aggroOn) && pri < best) { best = pri; tgt = t; }   /* 더 멀리서 알아챈다 (9 → 14m) */
         }
         if (m.taunt > 0) { m.taunt -= TICK; const tt = ts.find((q) => q.id === m.aggroOn && (dun ? q.rot : !q.dun)); if (tt) tgt = tt; }
@@ -3233,7 +3239,8 @@ const JOBS={
   bmage:{name:'배틀메이지',from:'wizard',tier:2,bonus:[45,8,4,20],color:0x7a3a5a,weapon:'staff',sub:'grimoire',crit:.12,pitch:'짧은 지팡이 하나로 적에게 파고든다. 가까이서 치고, 터트리고, 빠져나온다.'},
   wizz:{name:'위저드',from:'wizard',tier:2,bonus:[20,10,2,45],color:0x3a2a8a,weapon:'staff',sub:'grimoire',crit:.12,pitch:'멀리서 큰 마법을 다룬다.'},
   shielder:{name:'쉴더',from:'guardian',tier:2,bonus:[110,5,8,15],color:0x4f6a8a,weapon:'shield',noun:'방패',crit:.06,pitch:'사각방패 스쿠툼과 원형방패 파르마를 번갈아 든다. 도발하고, 던지고, 땅에 박아 적을 붙잡아 둔다.'},
-  thief:{name:'약탈자',from:'rogue',aspd:1.12,bmul:1.9,bonus:[25,10,2,10],color:0x5a4a2f,weapon:'dagger',crit:.2,pitch:'단검 한 자루와 그물, 그리고 허리춤의 포션. 붙잡고, 들이켜고, 끝장낸다.'},
+  thief:{name:'약탈자',from:'rogue',adv:['sidelooter'],aspd:1.12,bmul:1.9,bonus:[25,10,2,10],color:0x5a4a2f,weapon:'dagger',crit:.2,pitch:'단검 한 자루와 그물, 그리고 허리춤의 포션. 붙잡고, 들이켜고, 끝장낸다.'},
+  sidelooter:{name:'사이드루터',from:'thief',tier:2,aspd:1.08,bmul:1.9,bonus:[45,11,3,15],color:0x3a4038,weapon:'dagger',noun:'낫',crit:.2,pitch:'낫으로 앞을 휩쓸어 거두고, 피할 수 없이 다가가 끝을 앞당긴다. 몸을 비우고 지나가거나, 허수아비를 세워 두고 돌아온다.'},
   assassin:{name:'암살자',from:'rogue',adv:['ninja','stalker'],aspd:.98,spd:.18,hpMul:.75,bonus:[10,6,1,10],color:0x2b2633,weapon:'dagger',crit:.28,pitch:'수리검으로 표식을 새기고, 땅을 깨우며 파고들어, 거꾸로 쥔 단검으로 끝낸다.'},
   stalker:{name:'어쌔신',from:'assassin',tier:2,aspd:.96,spd:.2,hpMul:.78,bonus:[30,11,2,15],color:0x24202c,weapon:'dagger',crit:.3,pitch:'표식을 새긴 적을 찾아 단검 한 번에 끝낸다. 숨고, 뿌리고, 흩뜨린다.'},
   ninja:{name:'닌자',from:'assassin',tier:2,aspd:1.0,spd:.22,hpMul:.8,bonus:[30,10,2,15],color:0x1e1c26,weapon:'dagger',noun:'수리검',crit:.3,pitch:'수리검을 꽂고, 그 수만큼 파고든다. 연막 속을 달리고, 사슬낫을 휩쓴다. 먼저 치지 않으면 아무도 알아채지 못한다.'},
@@ -3291,6 +3298,12 @@ const SKILLS={
     {id:'plunder',name:'약탈하기',max:6,req:30,mp:10,cd:4,type:'loot',mult:2.8,range:2.8,color:0xe04040,desc:'단검을 빠르게 찔러 넣었다가 비틀어 뽑아 앞의 적 하나에게 280% 피해. 이 스킬로 적을 처치하면 골드·물약·장비 가운데 하나를 꼭 얻는다'},
     {id:'lasso',name:'올가미 날리기',max:6,req:32,mp:10,cd:8,type:'loot',mult:.8,range:18,slow:4,color:0xc8a070,desc:'앞의 적 하나에게 올가미를 날려 80% 피해를 주고 4초 동안 느리게 만든다. 올가미에 걸린 적은 HP 40% 미만부터 처형할 수 있다'},
     {id:'bombs',name:'폭약 뿌리기',max:3,req:35,mp:16,cd:12,type:'loot',radius:2.8,color:0xffa030,desc:'뒤로 뛰어오르며 앞쪽에 폭약을 뿌린다. 폭약에 휘말린 적에게 200 + 가진 골드의 5%만큼 피해'}],
+  sidelooter:[
+    {id:'sharvest',name:'영혼 수확',max:5,req:60,mp:14,cd:6,type:'sl',mult:2.4,range:4.8,cos:.34,color:0x8af0d0,desc:'낫을 크게 휘둘러 앞쪽 부채꼴 안의 적들에게 240% 피해. 이 스킬로 적을 처형하면 골드·물약·장비 가운데 하나를 꼭 얻는다'},
+    {id:'inevit',name:'불가피함',max:5,req:60,mp:10,cd:9,type:'sl',range:14,ex:.1,exPer:.025,dur:6,color:0x9a7ad8,desc:'노린 적에게 짧게 돌진한다 (피해 없음). 6초 동안 그 적의 처형 가능 HP가 10% 올라간다 (단계마다 +2.5%)'},
+    {id:'intang',name:'무형화',max:5,req:62,mp:12,cd:14,type:'sl',dur:3,spd:.6,spdPer:.05,color:0xb8e8ff,desc:'3초 동안 몸이 무형이 된다. 이동 속도 60% 증가 (단계마다 +5%), 적의 몸과 공격을 그대로 통과한다'},
+    {id:'scarecrow',name:'살아있는 허수아비',max:4,req:65,mp:18,cd:20,type:'sl',dur:10,hp:.5,hpPer:.1,radius:4.5,radiusPer:.5,pct:.05,color:0xd8b060,desc:'선 자리에 10초 동안 허수아비를 세운다. 몬스터는 허수아비를 사람으로 알고 공격한다. 다시 쓰거나 허수아비가 부서지면 허수아비 자리로 돌아오며, 둘레의 적에게 가진 골드의 5%만큼 피해. 단계마다 허수아비가 단단해지고 피해 범위가 넓어진다'},
+    {id:'sldoom',name:'다가오는 죽음',type:'passive',max:1,req:60,mp:0,cd:0,bmul:.4,per:.03,maxN:5,dur:6,desc:'(지속) 기본 공격 피해가 크게 줄어든다 (40%). 대신 기본 공격에 맞은 적은 6초 동안 처형 가능 HP가 3%씩 올라간다 (최대 5번, 15%)'}],
   assassin:[
     {id:'deepstab',name:'깊게 찌르기',max:6,req:35,mp:14,cd:2.5,type:'sin',mult:4.6,range:3,color:0xb060ff,desc:'단검을 위로 던져 거꾸로 잡는다. 5초 안에 일반공격을 하면 오른쪽 아래에서 왼쪽 위로 비스듬히 깊게 베어 앞의 적 하나에게 460% 피해. 이걸로 적을 처치하면 4초 동안 은신하고(이동 속도 40% 증가, 은신 뒤 첫 기본 공격은 피해 2배) 돌진의 재사용 대기시간이 초기화된다'},
     {id:'quakedash',name:'돌진',max:3,req:32,mp:12,cd:8,type:'sin',dist:7,ddur:.22,erupt:.9,radius:2,color:0xffa030,hide:4,markR:6,desc:'움직이던 방향으로 빠르게 돌진한다(피해 없음). 돌진하고 나면 4초 동안 은신한다(이동 속도 40% 증가, 은신 뒤 첫 기본 공격 피해 2배). 돌진을 마친 자리 6m 안의 적에게 8초 동안 암살 표식을 남겨, 표식이 있는 적을 공격하면 60% 추가 피해'},
@@ -3372,7 +3385,7 @@ const isTrait=S=>!!(S&&S.trait);   // 특성: 직업을 얻으면 바로 열리�
 const skMax=S=>S&&(S.max||(isTrait(S)?1:SKILL_MAX));   // 특성만 1단계, 패시브도 액티브처럼 강화된다  // 스킬마다 최대 단계 (업그레이드가 없는 스킬은 1)
 const SK={};Object.values(SKILLS).forEach(l=>l.forEach(s=>SK[s.id]=s));
 /* 스킬 단계별 재사용 시간: 1단계는 원래 값(S.cd), 최대 단계는 CD_TOP 값이고 그 사이는 고르게 줄어든다 */
-const CD_TOP={thrust1:2.5,parry:5.5,swing:4,guardcut:6,downcut:4.5,guardstrike:7,dashcut:5.5,duel:21,axechop:2.5,axespin:5.5,tow:6,rage:17.5,hurl:5.5,uplift:6,quake:11,bravecharge:9,sraise:7.5,dleap:9,fmark:6,blockade:17.5,raise:5.5,push:5.5,leap:5.5,ambush:3,sprint:9,plunder:3,lasso:6,bombs:9,deepstab:2,quakedash:6,shuriken:3,nshuri:2.5,nrush:7,nsmoke:10,nchain:12.5,sassn:5.5,starget:7.5,sbomb:9,sfeint:10,orb:3,release:7,scripture:12,spread:6,guide:14,lbeam:3,lmark:7.5,lelem:9,approach:4.5,counterm:5.5,leapblast:9,whack:3,angel:17.5,grasp:7.5,beams:7,farblast:12.5,arrows:4.5,pull:6,xload:4.5,xtrap:4.5,xroll:2.5,tchalk:6,tmine:4,tambush:14,tpoach:17.5,xarrows:.8,xhook:7.5,xroll2:4.5,xamp:11,triple:4.5,pull2:2.5,barrage:4.5};
+const CD_TOP={thrust1:2.5,parry:5.5,swing:4,guardcut:6,downcut:4.5,guardstrike:7,dashcut:5.5,duel:21,axechop:2.5,axespin:5.5,tow:6,rage:17.5,hurl:5.5,uplift:6,quake:11,bravecharge:9,sraise:7.5,dleap:9,fmark:6,blockade:17.5,raise:5.5,push:5.5,leap:5.5,ambush:3,sprint:9,plunder:3,lasso:6,bombs:9,deepstab:2,quakedash:6,shuriken:3,nshuri:2.5,nrush:7,nsmoke:10,nchain:12.5,sassn:5.5,starget:7.5,sbomb:9,sfeint:10,orb:3,release:7,scripture:12,spread:6,guide:14,lbeam:3,lmark:7.5,lelem:9,approach:4.5,counterm:5.5,leapblast:9,whack:3,angel:17.5,grasp:7.5,beams:7,farblast:12.5,arrows:4.5,pull:6,xload:4.5,xtrap:4.5,xroll:2.5,tchalk:6,tmine:4,tambush:14,tpoach:17.5,xarrows:.8,xhook:7.5,xroll2:4.5,xamp:11,sharvest:4.5,inevit:6.5,intang:10,scarecrow:14,triple:4.5,pull2:2.5,barrage:4.5};
 function skCdAt(S,lv,base){const b=base==null?S.cd:base,top=CD_TOP[S.id],mx=skMax(S);if(!b||!top||!S.cd||mx<2)return b;const l=Math.min(mx,Math.max(1,lv||1));return Math.round(b*(1-(1-top/S.cd)*(l-1)/(mx-1))*10)/10;}
 const skCd=(S,base)=>skCdAt(S,P&&P.skills[S.id]||1,base);   // 지금 배운 단계의 재사용 시간
 function skCdTxt(S,lvl,base){const c=skCdAt(S,Math.max(1,lvl),base);if(lvl<1||lvl>=skMax(S))return `${c}초`;const n=skCdAt(S,lvl+1,base);return n<c?`${c}초 (다음 단계 ${n}초)`:`${c}초`;}
@@ -3385,7 +3398,7 @@ const hasSpc=id=>!!(P&&P.spc&&P.spc[id]);
 /* 패시브 켜고 끄기: P.poff[id]=1 이면 배웠어도 효과가 없다. pas(id) = 켜져 있을 때의 단계 */
 const pOff=id=>!!(P&&P.poff&&P.poff[id]);
 const pas=id=>P&&!pOff(id)?(P.skills[id]||0):0;
-const BUFF_NAME={nchain:'사슬낫',nsmoke:'연막',mshield:'보호막',scripture:'경전',atk:'공격↑',def:'방어↑',speed:'속도↑',crit:'치명타',regen:'재생',fam:'익숙한 감각',rage:'분노',hide:'은신',draw:'속사',roll:'구르기',dup:'복제',agile:'능동적인 감각',pull:'시위 당기기',vet:'노련한 감각',xamp:'증폭',hot:'치유 중',lz:'빛의 지형'};
+const BUFF_NAME={intang:'무형',nchain:'사슬낫',nsmoke:'연막',mshield:'보호막',scripture:'경전',atk:'공격↑',def:'방어↑',speed:'속도↑',crit:'치명타',regen:'재생',fam:'익숙한 감각',rage:'분노',hide:'은신',draw:'속사',roll:'구르기',dup:'복제',agile:'능동적인 감각',pull:'시위 당기기',vet:'노련한 감각',xamp:'증폭',hot:'치유 중',lz:'빛의 지형'};
 const SLOT_KEYS=['우클릭','휠↑','휠↓','휠클릭','E','R','T'];
 const NSK=SLOT_KEYS.length; // 스킬 칸 수
 const BASIC={
@@ -3484,7 +3497,8 @@ const ITEMS={
   ITEMS.cstf={name:'성직자의 석장',slot:'weapon',tier:4,req:30,st:{atk:20,hp:60,mp:30},jobs:['cleric','priest','monk'],fixed:true,cls:'cleric',desc:'성직자가 되면 받는 전용 석장'};
   ITEMS.pstf={name:'사제의 지팡이',slot:'weapon',tier:6,req:60,st:{atk:36,hp:120,mp:70},jobs:['priest'],fixed:true,cls:'priest',desc:'사제가 되면 받는 빛의 지팡이'};
   ITEMS.mkst={name:'승려의 석장',slot:'weapon',tier:6,req:60,st:{atk:40,hp:160,def:4},jobs:['monk'],fixed:true,cls:'monk',desc:'승려가 되면 받는 석장'};
-  ITEMS.tkuk={name:'약탈자의 쿠크리',slot:'weapon',tier:4,req:30,st:{atk:24,crit:.06},jobs:['thief'],fixed:true,cls:'thief',desc:'약탈자가 되면 받는 전용 쿠크리'};
+  ITEMS.tkuk={name:'약탈자의 쿠크리',slot:'weapon',tier:4,req:30,st:{atk:24,crit:.06},jobs:['thief','sidelooter'],fixed:true,cls:'thief',desc:'약탈자가 되면 받는 전용 쿠크리'};
+  ITEMS.slsc={name:'사이드루터의 낫',slot:'weapon',tier:5,req:60,st:{atk:34,crit:.07},jobs:['sidelooter'],fixed:true,cls:'sidelooter',desc:'사이드루터가 되면 받는 전용 낫'};
   ITEMS.adag={name:'암살자의 단검',slot:'weapon',tier:4,req:30,st:{atk:22,crit:.1},jobs:['assassin','ninja','stalker'],fixed:true,cls:'assassin',desc:'암살자가 되면 받는 전용 단검'};
   ITEMS.sdag={name:'어쌔신의 단검',slot:'weapon',tier:5,req:60,st:{atk:34,crit:.12},jobs:['stalker'],fixed:true,cls:'stalker',desc:'어쌔신이 되면 받는 전용 단검'};
   ITEMS.nkun={name:'수리검',slot:'weapon',tier:5,req:60,st:{atk:34,crit:.12},jobs:['ninja'],fixed:true,cls:'ninja',desc:'닌자가 되면 받는 전용 수리검. 기본 공격으로 던진다'};
@@ -3552,7 +3566,7 @@ function computeStats(P){
 // 검사·방패병는 전사의 검+방패 스킬을 쓰지 않는다 (자기 스킬만)
 const NO_BASE={};
 // 한 손에만 단검을 드는 직업
-const ONE_DAGGER={rogue:1,thief:1,assassin:1,ninja:1,stalker:1};
+const ONE_DAGGER={rogue:1,thief:1,sidelooter:1,assassin:1,ninja:1,stalker:1};
 // 석궁을 드는 직업 (생김새·쏘는 동작이 석궁)
 const XB_JOB={hunter:1,trapper:1,xhunter:1};
 // 없어진 직업은 새 직업으로 (폭발궁 → 트랩헌터)
@@ -7524,6 +7538,72 @@ function wpnMerge(g){const keep=new Set(),mark=o=>{if(o&&o.isObject3D)o.traverse
     const bg=new THREE.BufferGeometry();bg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));bg.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));bg.setIndex(idx);bg.computeBoundingSphere();
     const me=new THREE.Mesh(bg,m);me.castShadow=true;g.add(me);}
   return g;}
+/* 사이드루터의 낫: 손은 y=0, 자루는 +y로, 날은 자루 끝에서 +x 쪽으로 휘어 나간다 (날은 x-y 평면, 안쪽 오목한 쪽이 벤다)
+   SICKLE_V: 낫 모양 시안 표. SL_LOOK 번이 게임 속 낫 (sickleBuild(g,o)) */
+const SICKLE_V=[
+  /* 0 영혼 초승달: 검게 그을린 쇠, 등을 따라 옅은 초록 영혼 홈, 가죽 감은 검은 자루 */
+  {name:'영혼 초승달',hl:.46,hr:.019,hc:0x2a2420,wc:0x4a3a30,fc:0x5a5e64,L:.42,arch:.2,dr:.16,w:.075,th:.012,bc:0x30353a,ec:0xc8d4d0,gl:0x8af0d0,pom:'ring'},
+  /* 1 조선낫: 곧고 두꺼운 날이 자루와 거의 직각, 끝만 살짝 휜다. 나무 자루에 놋쇠 슴베 고리 */
+  {name:'조선낫',hl:.4,hr:.021,hc:0x7a5434,wc:null,fc:0xb08a3a,L:.34,arch:.05,dr:.02,w:.06,th:.016,bc:0x2a2a2c,ec:0xb8bcc0,gl:null,pom:'cap',korean:1},
+  /* 2 반달 수확낫: 얇은 날이 반원에 가깝게 휜다. 청동빛 날, 밝은 나무 자루 */
+  {name:'반달 수확낫',hl:.34,hr:.018,hc:0xa07848,wc:0x6a4a2a,fc:0x8a6a3a,L:.36,arch:.42,dr:.3,w:.04,th:.009,bc:0x9a7038,ec:0xe8c890,gl:null,pom:'knob'},
+  /* 3 톱니 약탈낫: 안쪽 날에 톱니, 녹슨 쇠, 약탈자 쿠크리처럼 붉은 천을 감은 자루와 놋쇠 */
+  {name:'톱니 약탈낫',hl:.42,hr:.02,hc:0x3a2418,wc:0x8a3a2a,fc:0xc79a3e,L:.4,arch:.18,dr:.12,w:.08,th:.013,bc:0x5a4a3a,ec:0xc0a080,gl:null,pom:'ring',teeth:7},
+  /* 4 쌍날 낫: 앞에는 초승달 날, 뒤에는 짧은 갈고리 가시. 은빛 쇠에 금 테 */
+  {name:'쌍날 낫',hl:.44,hr:.019,hc:0x1e1c22,wc:0x3a3440,fc:0xc79a3e,L:.38,arch:.22,dr:.15,w:.07,th:.012,bc:0xb8c0c8,ec:0xf0f4f8,gl:null,pom:'spike',back:1},
+  /* 5 뼈 낫: 등뼈 마디 같은 뼈 자루, 상아빛 날, 마디 사이로 초록 영혼 빛 */
+  {name:'뼈 낫',hl:.46,hr:.02,hc:0xd8ccb0,wc:null,fc:0xb8ac90,L:.4,arch:.24,dr:.18,w:.07,th:.014,bc:0xe0d4b8,ec:0xfff8e8,gl:0x8af0d0,pom:'skull',bone:1},
+  /* 6 사신의 큰 낫: 긴 장대 끝에 커다란 날 (두 손으로 드는 무기가 어울림) */
+  {name:'사신의 큰 낫',hl:1.25,hr:.02,hc:0x1a1816,wc:0x3a3030,fc:0x4a4e54,L:.62,arch:.2,dr:.2,w:.1,th:.014,bc:0x22262a,ec:0xb8c8c4,gl:0x8af0d0,pom:'spike',big:1},
+  /* 7 귀족의 낫: 금빛 덩굴 무늬 날 등, 보랏빛 보석, 흑단 자루 */
+  {name:'귀족의 낫',hl:.42,hr:.019,hc:0x141216,wc:null,fc:0xd8b050,L:.38,arch:.2,dr:.13,w:.065,th:.011,bc:0x9aa4ae,ec:0xf0f2f4,gl:0xb070ff,pom:'gem',gold:1},
+];
+let SL_LOOK=0;
+function sickleBuild(g,o){
+  const M=(c,x={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.6,metalness:0,flatShading:false},x));
+  const add=(m,x,y,z,rx=0,ry=0,rz=0)=>{m.position.set(x,y,z);m.rotation.set(rx,ry,rz);g.add(m);return m;};
+  const cyl=(a,b,h,m,s=14)=>new THREE.Mesh(new THREE.CylinderGeometry(a,b,h,s),m);
+  const sph=(r,m)=>new THREE.Mesh(new THREE.SphereGeometry(r,14,10),m);
+  const H=o.hl,R=o.hr,wood=M(o.hc,{roughness:o.bone?.55:.8}),fer=M(o.fc,{metalness:.75,roughness:.3}),steel=M(o.bc,{metalness:.8,roughness:.28}),edge=M(o.ec,{metalness:.9,roughness:.12});
+  const glow=o.gl?new THREE.MeshStandardMaterial({color:o.gl,emissive:o.gl,emissiveIntensity:.9,roughness:.4}):null;
+  /* 자루 */
+  if(o.bone){const n=Math.round(H/.045);for(let k=0;k<n;k++){const y=-.06+k*(H+.06)/n;add(cyl(R*1.05,R*.85,(H+.06)/n*.78,wood,10),0,y+.02,0);if(glow&&k%2)add(cyl(R*.7,R*.7,(H+.06)/n*.3,glow,8),0,y+(H+.06)/n*.5,0);}}
+  else{add(cyl(R*.92,R,H+.1,wood),0,H/2-.05,0);
+    if(o.wc!=null){const wm=M(o.wc,{roughness:.9});const n=o.big?6:5;for(let k=0;k<n;k++)add(new THREE.Mesh(new THREE.TorusGeometry(R*1.02,R*.28,6,16),wm),0,-.04+k*.022,0,Math.PI/2+.3,0,0);}}
+  if(o.big)for(const y of [.3,.65])add(cyl(R*1.25,R*1.25,.03,fer),0,y,0);
+  /* 자루 끝 */
+  const yb=-.1;
+  if(o.pom==='ring'){add(cyl(R*1.2,R*1.2,.03,fer),0,yb+.02,0);add(new THREE.Mesh(new THREE.TorusGeometry(.028,.007,8,18),fer),0,yb-.02,0);}
+  else if(o.pom==='cap')add(cyl(R*1.25,R*1.1,.035,fer),0,yb+.02,0);
+  else if(o.pom==='knob')add(sph(R*1.4,wood),0,yb+.01,0);
+  else if(o.pom==='spike'){add(cyl(R*1.2,R*1.2,.03,fer),0,yb+.02,0);const c=new THREE.Mesh(new THREE.ConeGeometry(R*1.1,.08,8),fer);add(c,0,yb-.03,0,Math.PI,0,0);}
+  else if(o.pom==='skull'){const s=sph(.032,wood);s.scale.set(1,1.1,1.05);add(s,0,yb-.01,0);if(glow)for(const sx of [-1,1])add(sph(.007,glow),sx*.012,yb,.026);}
+  else if(o.pom==='gem'){add(cyl(R*1.3,R*1.1,.03,fer),0,yb+.02,0);add(new THREE.Mesh(new THREE.OctahedronGeometry(.022,0),glow||fer),0,yb-.02,0);}
+  /* 날 뿌리 (자루를 감싼 쇠 고리) */
+  add(cyl(R*1.25,R*1.15,.06,fer),0,H-.01,0);if(o.korean)add(new THREE.Mesh(new THREE.TorusGeometry(R*1.25,.005,6,16),fer),0,H-.045,0,Math.PI/2,0,0);
+  /* 날: 등(위)은 크게 휘고, 안쪽(아래) 오목한 날이 벤다 */
+  const L=o.L,y0=H+.01,a=o.arch,dr=o.dr,w=o.w,sh=new THREE.Shape();
+  if(o.korean){sh.moveTo(-.022,y0+.02);sh.lineTo(L*.8,y0+.012);sh.quadraticCurveTo(L*1.02,y0+.01,L,y0-.04);sh.quadraticCurveTo(L*.75,y0-w*.75,L*.4,y0-w);sh.lineTo(.02,y0-w*.85);sh.lineTo(-.022,y0-.02);}
+  else{sh.moveTo(-.024,y0+.02);sh.quadraticCurveTo(L*.5,y0+.02+L*a,L,y0-dr*L*1.0);
+    if(o.teeth){const N=o.teeth;for(let k=1;k<=N;k++){const t=1-k/N,tt=t,px=L*tt,py=y0-dr*L*tt*tt-w*(1-tt)*.95+L*a*.55*4*tt*(1-tt)*.5;const ox=px+.012,oy=py-.022;sh.lineTo(ox,oy);sh.lineTo(px-.004,py);}sh.lineTo(.02,y0-w);}
+    else sh.quadraticCurveTo(L*.52,y0-w+L*a*.5,.02,y0-w);
+    sh.lineTo(-.024,y0-w*.7);}
+  const geo=new THREE.ExtrudeGeometry(sh,{depth:o.th*.3,bevelEnabled:true,bevelThickness:o.th*.35,bevelSize:o.th*.3,bevelSegments:1,curveSegments:16});geo.translate(0,0,-o.th*.15);geo.computeVertexNormals();
+  g.add(new THREE.Mesh(geo,[steel,edge]));
+  /* 등을 따라 홈 (영혼 빛) / 금빛 덩굴: 등 곡선과 날 곡선 사이 (등 쪽 30%), 양쪽 면에 */
+  const qb=(p0,p1,p2,t)=>[(1-t)*(1-t)*p0[0]+2*t*(1-t)*p1[0]+t*t*p2[0],(1-t)*(1-t)*p0[1]+2*t*(1-t)*p1[1]+t*t*p2[1]];
+  const SP=[[-.024,y0+.02],[L*.5,y0+.02+L*a],[L,y0-dr*L]],ED=[[L,y0-dr*L],[L*.52,y0-w+L*a*.5],[.02,y0-w]];
+  const inBl=(t,k)=>{const p=qb(...SP,t),q=qb(...ED,1-t);return [p[0]+(q[0]-p[0])*k,p[1]+(q[1]-p[1])*k];};
+  const zf=o.th*.5+.0015;
+  if(glow&&!o.gold&&!o.korean)for(const zs of [-1,1]){const pts=[];for(let k=0;k<=16;k++){const t=.1+k/16*.72,p=inBl(t,.32);pts.push(new THREE.Vector3(p[0],p[1],zs*zf));}
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),32,.0045*(1-0),6,false),glow));}
+  if(o.gold){const gm=M(0xd8b050,{metalness:.8,roughness:.25});for(const zs of [-1,1]){const pts=[];for(let k=0;k<=16;k++){const t=.06+k/16*.8,p=inBl(t,.18+.08*Math.sin(k*1.6));pts.push(new THREE.Vector3(p[0],p[1],zs*zf));}
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),48,.0035,6,false),gm));
+      for(let k=0;k<5;k++){const p=inBl(.14+k*.15,.3);const c=new THREE.Mesh(new THREE.TorusGeometry(.011,.0028,6,12,Math.PI*1.4),gm);add(c,p[0],p[1],zs*zf,0,0,k*1.1);}}
+    if(glow)for(const zs of [-1,1])add(new THREE.Mesh(new THREE.OctahedronGeometry(.014,0),glow),.035,y0-w*.45,zs*(zf+.004));}
+  /* 쌍날: 뿌리 뒤쪽의 짧은 갈고리 */
+  if(o.back){const b=new THREE.Shape();b.moveTo(-.01,y0+.015);b.quadraticCurveTo(-.08,y0+.05,-.13,y0+.0);b.quadraticCurveTo(-.08,y0+.01,-.01,y0-.025);const bg=new THREE.ExtrudeGeometry(b,{depth:o.th*.3,bevelEnabled:true,bevelThickness:o.th*.35,bevelSize:o.th*.3,bevelSegments:1,curveSegments:10});bg.translate(0,0,-o.th*.15);g.add(new THREE.Mesh(bg,[steel,edge]));}
+  g.traverse(q=>{if(q.isMesh)q.castShadow=true;});return g;}
 function stickWeapon(kind,job,tier=-1){
   const g=new THREE.Group();
   const mat=(c,o={})=>_mat(c,Object.assign({flatShading:false},o));   // 무기는 매끈하게 (보석·수정처럼 각진 것만 따로 flatShading:true)
@@ -7667,6 +7747,9 @@ function stickWeapon(kind,job,tier=-1){
     add(fuller(.0085,.17,.14+L*.82,.0175,tier>=4&&gemM?gemM:dark),0,0,0);   // 룬 등급부터 홈이 빛난다
     if(tier>=7){for(const s of [-1,1]){add(taper([[s*.1,.135,0],[s*.15,.15,0],[s*.19,.185,0],[s*.205,.235,0]],t=>.011*(1-t)+.002,gold,20,8),0,0,0);
       add(taper([[s*.09,.13,0],[s*.13,.17,.0],[s*.15,.215,0]],t=>.008*(1-t)+.0015,gold,16,6),0,0,0);}}   // 망령부터 날개 코등이
+  }else if(kind==='dagger'&&job==='sidelooter'){
+    // 사이드루터: 영혼 거두는 낫 (모양은 SICKLE_V 표, sickleBuild)
+    sickleBuild(g,SICKLE_V[SL_LOOK]||SICKLE_V[0]);
   }else if(kind==='dagger'&&thief){
     // 도둑: 앞으로 굽은 넓은 쿠크리, 놋쇠빛 날, 등에 톱니
     const blade=mat(0xc9ab72,Object.assign({metalness:.7,roughness:.3,flatShading:false},glow)),cloth=mat(0x8a3a2a,{roughness:.9});
@@ -8552,12 +8635,12 @@ function makeStickPlayer(job,gear){
     else{const S2=makeShield('tower',G.weapon);mountShield(S2,'tower',.85);sh.add(S2);}}
   else if(style==='fist'){w=new THREE.Group();AR.hand.add(w);
     if((G.sub??-1)>=0&&JOBS[job].sub==='shield'){const sh=new THREE.Group();const S2=makeShield('buckler',G.sub);mountShield(S2,'buckler',.8);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;}}
-  else{w=stickWeapon(style,dj,G.weapon);w.rotation.x=Math.PI/2;if(dj==='thief'||dj==='rogue')w.rotation.y=-THIEF_KY;AR.hand.add(w);
+  else{w=stickWeapon(style,dj,G.weapon);w.rotation.x=Math.PI/2;if(dj==='thief'||dj==='rogue'||dj==='sidelooter')w.rotation.y=-THIEF_KY;AR.hand.add(w);
     if(style==='dagger'&&!ONE_DAGGER[job]){w2=stickWeapon('dagger',dj,G.weapon);w2.rotation.x=Math.PI/2;AL.hand.add(w2);}
     if(style==='sword'&&(G.sub??-1)>=0){const sh=new THREE.Group();const S2=makeShield('buckler',G.sub);mountShield(S2,'buckler',.8);sh.add(S2);sh.position.set(0,-.02,0);AL.hand.add(sh);shield=sh;}}
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   const bodyG=new THREE.Group();while(g.children.length)bodyG.add(g.children[0]);g.add(bodyG);
-  g.userData={mats,stick:{shd:shdInfo,L,R,AL,AR,upper,torso,head,style,w,w2,shield,nock,xb,xbH,body:bodyG,one:!!ONE_DAGGER[job],fwd:dj==='thief'||dj==='rogue',rg:dj==='rogue'},weapon:w,head,torso};
+  g.userData={mats,stick:{shd:shdInfo,L,R,AL,AR,upper,torso,head,style,w,w2,shield,nock,xb,xbH,body:bodyG,one:!!ONE_DAGGER[job],fwd:dj==='thief'||dj==='rogue'||dj==='sidelooter',rg:dj==='rogue'},weapon:w,head,torso};
   return g;
 }
 /* 막대 인형에 외모 입히기: 새 캐릭터 화면·'외모 바꾸기'에서 고른 성별·머리·머리색·눈색·피부·키·체형·윗옷·바지 */
@@ -10733,7 +10816,7 @@ function sfxSkill(S,id){
   if(id==='lmark'){sfx('bo_burst',null,.8,1.3);return sfx('mg_shock',null,.5,1.2);}
   if(id==='lelem')return sfx('mg_basic',null,1,1.3);
   if(S.type==='trp')return;   /* 트랩헌터: 소리는 trpSkill이 낸다 */
-  if(S.type==='xh')return;   /* 크로스헌터: 소리는 xhSkill이 낸다 */
+  if(S.type==='xh'||S.type==='sl')return;   /* 크로스헌터·사이드루터: 소리는 직업 함수가 낸다 */
   if(id==='scripture'){sfx('buff',null,.9,.9);return sfx('heal',null,.5,1.2);}   /* 성직자 */
   if(id==='spread'){sfx('heal');return sfx('bo_burst',null,.6,1.3);}
   if(id==='guide')return sfx('buff',null,.8,.7);
@@ -26298,7 +26381,7 @@ function makeViewModel(job){const jobReal=job;job=drawJobOf(jobReal,P?wclsOf(P.e
   else if(style==='sword'){const w=stickWeapon(style,job,G.weapon);w.rotation.set(-.5,0,-.12);w.scale.setScalar(job==='barbarian'||job==='fowler'?.6:.85);if(job==='barbarian'||job==='fowler')w.position.y=-.08;R.add(w);
     if((G.sub??-1)>=0){L.visible=true;u.hasL=true;const sh=makeShield('buckler',G.sub);mountShield(sh,'buckler',.85,Math.PI-.4);L.add(sh);}}
   else if(style==='shield'){R.visible=false;u.noR=true;L.visible=true;const kd=jobReal==='shielder'?shdHandKind():'tower';const sg=new THREE.Group();if(jobReal==='shielder')u.hasL=true;if(kd){u.hasL=true;const tt=jobReal!=='shielder'?G.weapon:kd==='parma'?(G.shs?G.weapon:G.sub):(G.shs?G.sub:G.weapon);const sh=makeShield(kd,tt);mountShield(sh,kd,kd==='parma'?.9:.82,Math.PI+.35);sg.add(sh);}R.add(sg);u.shieldG=sg;u.swapLR=true;}   // 1인칭: 방패는 오른쪽 (왼손 동작을 좌우로 뒤집어 오른손에 준다)
-  else if(style==='dagger'){(ONE_DAGGER[job]?[R]:[R,L]).forEach((h,k)=>{let w=stickWeapon('dagger',job,G.weapon);if(job==='thief'||job==='rogue'){const g=new THREE.Group();w.rotation.y=job==='rogue'?-Math.PI/2:Math.PI/2;g.add(w);if(job==='thief')u.kIn=w;w=g;}else if(job==='stalker'){const g=new THREE.Group();w.rotation.y=Math.PI;g.add(w);w=g;}   /* 어쌔신 외날 탄토: 1인칭에서는 날이 도둑 쿠크리처럼 바깥(앞)을 보게 반 바퀴 돌린다 */const tz=ONE_DAGGER[job]?-.05:-.55;w.rotation.set(-.45,0,k?.55:tz);if(job==='ninja'){w.rotation.set(-.2,-.9,.3);w.scale.setScalar(1.15);}w.scale.setScalar(job==='ninja'?1.15:.95);h.add(w);});L.visible=!ONE_DAGGER[job];if(ONE_DAGGER[job])u.oneD=1;}
+  else if(style==='dagger'){(ONE_DAGGER[job]?[R]:[R,L]).forEach((h,k)=>{let w=stickWeapon('dagger',job,G.weapon);if(job==='thief'||job==='rogue'||job==='sidelooter'){const g=new THREE.Group();w.rotation.y=job==='rogue'?-Math.PI/2:Math.PI/2;g.add(w);if(job==='thief')u.kIn=w;w=g;}else if(job==='stalker'){const g=new THREE.Group();w.rotation.y=Math.PI;g.add(w);w=g;}   /* 어쌔신 외날 탄토: 1인칭에서는 날이 도둑 쿠크리처럼 바깥(앞)을 보게 반 바퀴 돌린다 */const tz=ONE_DAGGER[job]?-.05:-.55;w.rotation.set(-.45,0,k?.55:tz);if(job==='ninja'){w.rotation.set(-.2,-.9,.3);w.scale.setScalar(1.15);}w.scale.setScalar(job==='ninja'?1.15:.95);h.add(w);});L.visible=!ONE_DAGGER[job];if(ONE_DAGGER[job])u.oneD=1;}
   else if(style==='staff'){const w=stickWeapon('staff',job,G.weapon);if(job==='bmage'){w.scale.setScalar(.95);w.position.set(.02,.16,-.1);w.rotation.set(-1.05,0,-.2);}else if(w.userData.tall){w.scale.setScalar(.7);w.position.set(0,-.3,0);w.rotation.set(0,0,0);}else{w.scale.setScalar(.62);w.position.y=-.1;w.rotation.set(-.12,0,-.08);}R.add(w);u.orb=w.userData.orb;u.ring=w.userData.ring;L.visible=true;
     if(J.sub==='grimoire'&&(G.sub??-1)>=0){const bk=makeGrimoire(G.sub);bk.scale.setScalar(1.15);bk.position.set(.03,.0,-.05);bk.rotation.set(.45,0,.1);L.add(bk);u.hasL=true;u.grim=bk;}}
   else if(style==='bow'&&XB_JOB[job]){const w=stickWeapon('bow',job,G.weapon);w.scale.setScalar(.5);root.add(w);L.visible=true;u.hasL=true;u.xbow=w;   /* 석궁: 두 손으로 쥐고 앞을 겨눈다 (updateViewModel이 손을 석궁에 붙인다) */
@@ -28213,15 +28296,16 @@ function damageMonster(m,mult,o={}){
 function execOnDrop(m){if(mode!=='world'||!isRogueLine()||m.dummy||m.pvp||m.dying!==null||!(m.hp>0)||m.hp>=m.mh*execTh(m))return;
   if(P.lastHit!==m||tAll-P.lastHitT>8||tAll-(m.exSentT??-9)<.6)return;m.exSentT=tAll;damageMonster(m,1,{nohs:1});}
 function isRogueLine(){return !!P&&jobChain(P.job).includes('rogue');}   /* 도적·약탈자·암살자: 처형 가능 HP 표시 */
-function execTh(m){return m.lassoT>tAll?.4:P&&jobChain(P.job).includes('assassin')?.15:.1;}   /* 처형 가능 HP: 10% 미만 (암살자 계열은 15%, 올가미에 걸리면 40%) */
-function plunderReward(m){const lv=m.lv,r=Math.floor(Math.random()*3);let got='',sg=0,si=null;
+function execTh(m){const b=m.lassoT>tAll?.4:P&&jobChain(P.job).includes('assassin')?.15:.1;return P&&P.job==='sidelooter'?Math.min(.5,b+slExecAdd(m)):b;}   /* 사이드루터: 불가피함·다가오는 죽음만큼 더 (최대 50%) */   /* 처형 가능 HP: 10% 미만 (암살자 계열은 15%, 올가미에 걸리면 40%) */
+function plunderReward(m,lb='약탈'){const lv=m.lv,r=Math.floor(Math.random()*3);let got='',sg=0,si=null;
   if(r===0){const g=Math.round(lv*rnd(15,25)+20);P.gold+=g;got=`${g} 골드`;sg=g;}
   else if(r===1){const id=Math.random()<.6?(lv>=12?'hp_l':'hp_s'):(lv>=12?'mp_l':'mp_s');if(addItem(id)){got=ITEMS[id].name;si=id;}else{const g=Math.round(lv*rnd(15,25)+20);P.gold+=g;got=`${g} 골드`;sg=g;}}
   else{const id=pick(GEAR_BY_TIER[tierForLevel(lv)]);if(id&&addItem(id)){got=`[${itemName(id,P.job)}]`;si=id;}else{const g=Math.round(lv*rnd(15,25)+20);P.gold+=g;got=`${g} 골드`;sg=g;}}
-  log('약탈: '+got,'good');lootShow(null,sg,si?[[si,1]]:[]);const c=mCenter(m);VFX.burst(c,0xffd040,18,4,.5,{mix:0xffffff,up:.5});sfx('coin',c,1);updateHud();invDirty();}
+  log(lb+': '+got,'good');lootShow(null,sg,si?[[si,1]]:[]);const c=mCenter(m);VFX.burst(c,0xffd040,18,4,.5,{mix:0xffffff,up:.5});sfx('coin',c,1);updateHud();invDirty();}
 function killMonster(m,mine=true,partyN=1){
   if(mine&&P&&jobChain(P.job).includes('assassin')&&((m.deepT&&tAll-m.deepT<1.5)||(m.lastSk==='shuriken'&&tAll-m.lastSkT<1.5))&&(cds.quakedash||0)>0){cds.quakedash=0;spawnFx(0x6a50a0,player.position.clone().add(new THREE.Vector3(0,1.2,0)),1,.3);updateHud();}   /* 깊게 찌르기·투척하기로 처치: 돌진 초기화 */
   if(mine&&P&&m.lastSk==='plunder'&&tAll-m.lastSkT<1.5)plunderReward(m);
+  if(mine&&P&&P.job==='sidelooter'&&m.lastSk==='sharvest'&&tAll-m.lastSkT<1.5){slSoulFx(m);plunderReward(m,'수확');}   /* 영혼 수확으로 처형(도적 계열은 모든 처치가 처형): 골드·물약·장비 가운데 하나 */
   if(mine&&P&&P.job==='stalker'&&!m.sassnRst&&m.sassnMk&&tAll-m.sassnMk<3&&((cds.sassn||0)>0||(cds.starget||0)>0)){cds.sassn=0;cds.starget=0;spawnFx(0xb060ff,player.position.clone().add(new THREE.Vector3(0,1.2,0)),1.2,.35);updateHud();}   /* 깊게 찌르기 2로 표식 있는 적 처치: 두 스킬 초기화 */
   if(mine&&P&&P.job==='ninja'&&m.lastSk==='nrush'&&tAll-m.lastSkT<1.5&&(cds.nrush||0)>0){cds.nrush=0;spawnFx(0xb060ff,player.position.clone().add(new THREE.Vector3(0,1.2,0)),1,.3);updateHud();}
   if(mine&&m.deepT&&tAll-m.deepT<1.5&&P&&jobChain(P.job).includes('assassin')){P.hideT=tAll+4;P.hideNext=true;P.buffs.hide={v:1,t:4,max:4};VFX.burst(player.position.clone().add(new THREE.Vector3(0,1,0)),0x6a50a0,16,2.5,.5,{mix:0x202030});}
@@ -28245,7 +28329,7 @@ function levelUpFx(lv,n=1){sfx('levelup');
   document.body.appendChild(o);setTimeout(()=>o.remove(),1900);
 }
 // 도적 계열(도적·약탈자·암살자)은 경험치를 더 얻고 장비도 더 자주 줍는다
-const ROGUE_LINE={rogue:1,thief:1,assassin:1,ninja:1,stalker:1};const ROGUE_EXP=1.3,ROGUE_GEAR=1.6;
+const ROGUE_LINE={rogue:1,thief:1,sidelooter:1,assassin:1,ninja:1,stalker:1};const ROGUE_EXP=1.3,ROGUE_GEAR=1.6;
 const hasPilfer=()=>!!(P&&P.skills&&P.skills.pilfer>0);
 const expMul=()=>hasPilfer()?ROGUE_EXP:1;
 /* 레벨업 중 생긴 오류: 레벨은 계속 오르게 하고, 무엇이 왜 실패했는지 한 번씩 남긴다 */
@@ -28442,7 +28526,7 @@ function basicRim(job){if(JOBS[job].weapon!=='staff')return null;return job==='c
 // 익숙한 감각: 배운 단계만큼 조금씩 강해진다 (1단계 = 1)
 function famLv(){return P&&pas('familiar')?1+.25*(pas('familiar')-1):0;}
 // 이동 속도 배율 (버프·장비·익숙한 감각·은신·직업·활 당기기)
-function moveSpeedMul(){if(!P)return 1;return (typeof rideSpeedMul==='function'?rideSpeedMul():1)*(P.charge?.35:1)*buffV('speed')*(1+(P.spdBonus||0))*(1+famLv()*.03*(P.buffs.fam?P.famN||0:0))*(P.hideT>tAll?1.4:1)*(P.nchain?1.2:1)*(P.nsmokeIn?1.35:1)*(jobChain(P.job).includes('mage')?.82:1)*(P.job==='thief'?.92:1)*(P.buffs.agile?1+.05*P.buffs.agile.v:1)*(P.bowDraw?(P.bowDraw.pull&&P.bowDraw.pull.crit2?1-.7*bowDrawP():.5):1);}
+function moveSpeedMul(){if(!P)return 1;return (typeof rideSpeedMul==='function'?rideSpeedMul():1)*(P.charge?.35:1)*buffV('speed')*(1+(P.spdBonus||0))*(1+famLv()*.03*(P.buffs.fam?P.famN||0:0))*(P.hideT>tAll?1.4:1)*(P.nchain?1.2:1)*(P.buffs.intang?1+(P.slSpd||.6):1)*(P.nsmokeIn?1.35:1)*(jobChain(P.job).includes('mage')?.82:1)*(P.job==='thief'?.92:1)*(P.buffs.agile?1+.05*P.buffs.agile.v:1)*(P.bowDraw?(P.bowDraw.pull&&P.bowDraw.pull.crit2?1-.7*bowDrawP():.5):1);}
 // 움직이던 방향 (키 입력 기준, 없으면 null)
 function moveDir(){let f=0,r=0;if(keys.KeyW||keys.ArrowUp)f+=1;if(keys.KeyS||keys.ArrowDown)f-=1;if(keys.KeyD||keys.ArrowRight)r+=1;if(keys.KeyA||keys.ArrowLeft)r-=1;f-=joy.y;r+=joy.x;
   const l=Math.hypot(f,r);if(l<.1)return null;f/=l;r/=l;const fx=-Math.sin(cam.yaw),fz=-Math.cos(cam.yaw),rx=Math.cos(cam.yaw),rz=-Math.sin(cam.yaw);return{x:fx*f+rx*r,z:fz*f+rz*r};}
@@ -28968,6 +29052,7 @@ function basicAttackInner(){if(P&&P.ride){toast('탈것 위에서는 공격할 �
         VFX.slash(p,cam.yaw,0xf0e8d8,{r:1.6,arc:2.0,tilt:-.15,dur:.14,dir:1});},150);return;}
     // 2타는 원래 도적 일반공격 그대로
     shared(()=>meleeHit(B.range,B.mult*1.45,{color:0xffffff}));slashFx(player.position,cam.yaw,'dagger',null,true);return;}
+  if(B.kind==='melee'&&P.job==='sidelooter'&&P.equip.weapon){slBasic(B);return;}
   if(B.kind==='melee'&&P.job==='thief'&&P.equip.weapon){const sw=swingN;myMoId=swingN%2?'kb2':'kb1';myMo=motionFor('dagger',myMoId);
     setTimeout(()=>{if(mode!=='world'||!P||swingN!==sw)return;const n=shared(()=>meleeHit(B.range+.3,B.mult*(JOBS[P.job].bmul||1),{color:0xffffff}));
       const q=player.position,p=q.clone();p.y+=1.15;p.x-=Math.sin(cam.yaw)*.25;p.z-=Math.cos(cam.yaw)*.25;const a=sw%2===1;
@@ -29036,7 +29121,7 @@ function useSkillInner(i){
   if(S.type==='shd'){shdUse(S,lvl);return;}
   if(P.job==='shielder'&&!shdHandKind()&&SKJOB[id]!=='shielder'){toast('방패를 들고 있어야 쓸 수 있어요');return;}   // 손에 든 방패가 없으면 방패병·전사 방패 스킬은 못 쓴다
   const triRe=S.type==='triple'&&P.tri&&P.tri.id===id&&tAll<P.tri.until&&P.tri.n<=S.re;   /* 삼연 발사: 정해진 시간 안에 두 번 더 */
-  const hookRe=id==='xhook'&&XH.hook&&XH.hook.ph==='tied';   /* 갈고리 덫: 다시 쓰면 반대쪽 갈고리 (MP를 다시 쓰지 않는다) */
+  const hookRe=id==='xhook'&&XH.hook&&XH.hook.ph==='tied'||id==='scarecrow'&&!!SL.sc;   /* 허수아비: 서 있는 동안 다시 쓰면 돌아온다 (MP를 다시 쓰지 않는다) */   /* 갈고리 덫: 다시 쓰면 반대쪽 갈고리 (MP를 다시 쓰지 않는다) */
   const reUse=triRe||hookRe||(cds[id]||0)>0&&P.reLeap&&P.reLeap.id===id&&tAll<P.reLeap.until;   /* 파괴적 착지: 착지 후 4초 안에 한 번 더 */
   if(!reUse&&(cds[id]||0)>0){toast(`${S.name} 재사용 대기 ${Math.ceil(cds[id])}초`);return;}
   if(!P.equip.weapon){toast('맨손일 때는 기본 공격만 할 수 있어요');return;}
@@ -29047,6 +29132,7 @@ function useSkillInner(i){
   if(S.type==='leap'&&(jumpY>.05||P.leap||P.dash)){toast('땅에 발을 딛고 있어야 해요');return;}
   if(S.type==='smack'&&!frontTarget(S.range)){toast('바로 앞에 적이 있어야 해요');return;}
   if(S.type==='closein'&&!closeTarget(S.range)){toast('가까운 적이 없어요');return;}
+  if(id==='inevit'&&!slInevTarget(S)){toast('노릴 적이 없어요');return;}
   if(S.type==='backblast'&&(P.leap||P.dash))return;   /* 공중(점프 중)에서도 쓸 수 있다 */
   if(S.type==='farblast'&&P.fly){toast('지팡이 위에서는 쓸 수 없어요');return;}
   if(S.type==='chainz'&&!aimTarget(pas('agile')?S.range/4:S.range,.96)){toast('적을 조준해야 해요');return;}
@@ -29125,6 +29211,7 @@ function useSkillInner(i){
     case 'stk':fxAt=stkSkill(S,id,pw,opt);break;
     case 'trp':fxAt=trpSkill(S,id,pw,opt);break;
     case 'xh':fxAt=xhSkill(S,id,pw,opt,lvl);break;
+    case 'sl':fxAt=slSkill(S,id,pw,opt,lvl);break;
     case 'rage':{P.buffs.rage={v:1.7,t:S.dur*(1+.1*(pw-1)/.25)};flash('#d83020',.3);shakeT=Math.max(shakeT,.3);sfx('roar',null,1,.8);
       setTimeout(()=>{if(mode!=='world')return;const q=player.position.clone();VFX.shock(q,0xd83020,4,.5);VFX.aura(q,0xd83020,40,.9,1.6);VFX.burst(q.clone().setY(q.y+1.2),0xff5030,30,5,.6,{up:.4,mix:0xffd0a0});},300);updateHud();break;}
     case 'guard':{cds[id]=0;P.guardT=S.dur;P.guardRef=S.mult*pw;P.guardId=id;P.guardCd=skCd(S);P.guardPop=0;
@@ -29388,7 +29475,7 @@ function fixSkills(why){const valid=new Set(treeOf(P.job).map(s=>s.id));let back
 function bagGear(id,enh){return enh>0?{id,n:1,enh:enh|0}:{id,n:1};}
 function canWear(id,job){const I=ITEMS[id];if(!I)return false;if(I.jobs&&!I.jobs.includes(job))return false;if(I.cls&&I.cls!=='basic'&&!jobChain(job).includes(I.cls))return false;if(I.slot==='sub'&&!JOBS[job].sub)return false;return true;}
 // 직업에 맞는 장비를 한 번씩 준다: 전사는 나무 방패, 검사는 검사의 장검, 방패병은 방패병의 방패
-const CLASS_WEAPON={swordsman:'swd',guardian:'gsh',barbarian:'bax',fowler:'fham',swordmaster:'smsw',wizard:'wstf',cleric:'cstf',thief:'tkuk',assassin:'adag',ninja:'nkun',stalker:'sdag',hunter:'hbow',trapper:'tbow',xhunter:'xhbow',sniper:'sbow',priest:'pstf',monk:'mkst',bmage:'bwand',wizz:'wwand'};
+const CLASS_WEAPON={swordsman:'swd',guardian:'gsh',barbarian:'bax',fowler:'fham',swordmaster:'smsw',wizard:'wstf',cleric:'cstf',thief:'tkuk',sidelooter:'slsc',assassin:'adag',ninja:'nkun',stalker:'sdag',hunter:'hbow',trapper:'tbow',xhunter:'xhbow',sniper:'sbow',priest:'pstf',monk:'mkst',bmage:'bwand',wizz:'wwand'};
 function giveJobGear(quiet){
   // 쉴더: 스쿠툼은 주무기, 파르마는 보조무기 칸에 (예전의 한 묶음 방패는 둘로 나눈다)
   if(P.job==='shielder'||P.bag.some(e=>e.id==='shd')||P.equip.weapon==='shd'){
@@ -29665,7 +29752,7 @@ function publishPresence(force){
   if(!room||!P||!player)return;
   const now=performance.now();if(!force&&now-lastPres<100)return;lastPres=now;
   const f2=v=>isFinite(v)?+v.toFixed(2):0;
-  const pr={n:P.name,j:P.job,lv:P.lv,x:f2(player.position.x),y:f2(player.position.y),z:f2(player.position.z),r:f2(cam.yaw%(Math.PI*2)),sw:swingN,on:mode!=='title'?1:0,al:P.hp>0&&mode!=='title'?1:0,pt:party?party.id:null,h:+clamp(P.hp/P.maxhp,0,1).toFixed(2),g:gearCode(gearOf(P)),st:sitting||P.fly?1:0,hd:(P.hideT>tAll||(typeof ninHidden==='function'&&ninHidden()))?1:0,sd:pas('deepaura')?1:0,...shdPres(),mo:myMoId,xl:xlMine(),lu:trpLure(),ap:apCode(P.ap),cr:ccarPresence(),gd:guildPres(),mt:P.ride||'',pd:petPresence()};
+  const pr={n:P.name,j:P.job,lv:P.lv,x:f2(player.position.x),y:f2(player.position.y),z:f2(player.position.z),r:f2(cam.yaw%(Math.PI*2)),sw:swingN,on:mode!=='title'?1:0,al:P.hp>0&&mode!=='title'?1:0,pt:party?party.id:null,h:+clamp(P.hp/P.maxhp,0,1).toFixed(2),g:gearCode(gearOf(P)),st:sitting||P.fly?1:0,hd:(P.hideT>tAll||(typeof ninHidden==='function'&&ninHidden()))?1:0,sd:pas('deepaura')?1:0,...shdPres(),sc:slPres(),mo:myMoId,xl:xlMine(),lu:trpLure(),ap:apCode(P.ap),cr:ccarPresence(),gd:guildPres(),mt:P.ride||'',pd:petPresence()};
   const key=JSON.stringify(pr);if(key===lastPresKey)return;lastPresKey=key;
   room.presence(pr).catch(e=>{presErr=(e&&e.code)||'오류';renderOnline();});
 }
@@ -29711,7 +29798,7 @@ function syncPeers(peers){
     if(num(pr.sw)!==o.sw){if(o.swInit&&o.mesh&&!(typeof pr.mo==='string'&&pr.mo)&&!(o.mesh.userData.stick&&o.mesh.userData.stick.style==='fist'))slashFx(o.mesh.position,num(pr.r),JOBS[o.job].weapon,null,num(pr.sw)%2===1);if(o.swInit){if(pr.mo==='bdraw')sfx('bw_draw',o.mesh.position,.5);else if(pr.mo!=='bshot')sfx(o.mesh.userData.stick&&o.mesh.userData.stick.style==='fist'?'punch':JOBS[o.job].weapon==='dagger'?'stab':'swing',o.mesh.position,.5);}/* 활: 당길 때 시위 소리, 쏘는 소리는 화살(fx)에서 */o.sw=num(pr.sw);o.swT=0;o.moObj=typeof pr.mo==='string'&&pr.mo?motionFor(JOBS[o.job].weapon,pr.mo):null;}
     o.b.textContent=o.name;o.s.textContent=`${JOBS[job].name} Lv ${o.lv}`;guildTag(o,pr,p.peer);
   }
-  for(const [k,o] of others)if(!seen.has(k)){shdRemoteClear(o);scene.remove(o.mesh);o.tag.remove();others.delete(k);partyPeerLeft(k);}
+  for(const [k,o] of others)if(!seen.has(k)){shdRemoteClear(o);if(o.slSc){scene.remove(o.slSc);o.slSc=null;}scene.remove(o.mesh);o.tag.remove();others.delete(k);partyPeerLeft(k);}
   renderOnline();
 }
 function renderOnline(){
@@ -29747,7 +29834,7 @@ function updateOthers(dt){
     const s=screenOf(m.position.clone().add(new THREE.Vector3(0,2.3,0)));
     const d=m.position.distanceTo(camera.position);
     if(m.userData.ghostA!==(o.hd?.08:1))setGhost(m,o.hd?.08:1);
-    if(o.pr)shdRemote(o,o.pr);shdRemoteTick(o,dt);petRemote(o,dt);
+    if(o.pr){shdRemote(o,o.pr);slRemote(o,o.pr);}shdRemoteTick(o,dt);petRemote(o,dt);
     {const hm=OR.inMyHome(o.tx,o.tz);if(m.visible===hm)m.visible=!hm;if(hm){o.tag.hidden=true;if(o.cb)o.cb.hidden=true;continue;}}   /* 저마다 자기 집 안: 같은 방을 함께 쓰므로 서로 안 보이게 */
     if(s.ok&&d<60&&mode!=='title'&&!o.hd){o.tag.hidden=false;o.tag.style.left=s.x+'px';o.tag.style.top=s.y+'px';}else o.tag.hidden=true;
     if(o.chat){o.chat.t-=dt;if(o.cb.textContent!==o.chat.text)o.cb.textContent=o.chat.text;o.cb.hidden=o.chat.t<=0;if(o.chat.t<=0)o.chat=null;}
@@ -30068,7 +30155,7 @@ function updatePlayer(dt){
   }
   const bx=pos.x,bz=pos.z;
   if(P.fly)pushOutFly(pos,.5);else pushOut(pos,.5);if(typeof ccarPush==='function')ccarPush(pos,.5);
-  for(const m of alive()){if(!(m.D.boss||m.D.dragon))continue;const dx=pos.x-m.mesh.position.x,dz=pos.z-m.mesh.position.z,d=Math.hypot(dx,dz),mn=m.r+.5;if(d<mn&&d>1e-4){pos.x=m.mesh.position.x+dx/d*mn;pos.z=m.mesh.position.z+dz/d*mn;}}   // 보스 몸은 통과하지 못한다
+  if(!(P.buffs&&P.buffs.intang))for(const m of alive()){if(!(m.D.boss||m.D.dragon))continue;const dx=pos.x-m.mesh.position.x,dz=pos.z-m.mesh.position.z,d=Math.hypot(dx,dz),mn=m.r+.5;if(d<mn&&d>1e-4){pos.x=m.mesh.position.x+dx/d*mn;pos.z=m.mesh.position.z+dz/d*mn;}}   // 보스 몸은 통과하지 못한다
   OR.worldClamp(pos,.5);
   // 부딪히면 그 방향 속도는 사라진다
   if(dt>0){let cx=(pos.x-bx)/dt,cz=(pos.z-bz)/dt;const cl=Math.hypot(cx,cz);if(cl>6){cx*=6/cl;cz*=6/cl;}if(Math.abs(cx)>.01||Math.abs(cz)>.01){pvel.x+=cx*.9;pvel.z+=cz*.9;}}   /* 큰 물체 안에서 밀려날 때 튕겨 나가지 않게 */
@@ -30324,7 +30411,7 @@ function updateWorld(dt){
   invuln=Math.max(0,invuln-dt);
   updateNetMonsters(dt);
   if(mode!=='world')return;
-  updateProjs(dt);xtrapTick(dt);trpTick(dt);xhTick(dt);updateZones(dt);
+  updateProjs(dt);xtrapTick(dt);trpTick(dt);xhTick(dt);slTick(dt);updateZones(dt);
   // 스승과 상인
   let it=null;
   if(mentor){
@@ -30396,7 +30483,7 @@ function skCapMul(t,mlv){if(t<0)return 1;let n=0;for(let k=t;k<SK_CAP.length;k++
 function gapMul(mlv){const d=mlv-(P?P.lv:1);return d>0?Math.max(.03,1-.11*d):1;}           // 내가 주는 피해
 function gapTaken(mlv){const d=mlv-(P?P.lv:1);return d>0?1+.12*d:Math.max(.5,1+.04*d);}  // 내가 받는 피해
 function gapExp(mlv){const d=mlv-(P?P.lv:1);return d>0?1+.05*Math.min(d,8):d>=-6?1:Math.max(.05,1-.09*(-6-d));}   /* 경험치·전리품: 나보다 높은 몬스터는 레벨마다 5% 더(최대 40%), 6레벨 넘게 낮으면 레벨마다 9%씩 줄어든다 */
-function hurtByMonster(atk,mlv,name,mon){if(jumpY>3)return;   /* 공중 높이 떠 있으면 몬스터 공격이 닿지 않는다 */
+function hurtByMonster(atk,mlv,name,mon){if(jumpY>3)return;if(slIntangOn()){slPassFx(mon);return;}   /* 무형화: 몬스터 공격이 몸을 통과한다 */   /* 공중 높이 떠 있으면 몬스터 공격이 닿지 않는다 */
   if(mon&&mon.myTauntT>tAll)atk*=.5;
   if(P.blk&&mon&&mon.mesh&&Math.hypot(mon.mesh.position.x-player.position.x,mon.mesh.position.z-player.position.z)<P.blk.R)atk*=1-P.blk.weak;damagePlayer(atk*gapTaken(mlv)*(.88+Math.random()*.24),name,mon);}
 /* ---------- 바바리안 ---------- */
@@ -30456,6 +30543,98 @@ function barbSkill(S,id,pw,opt,bc){
     return null;}
   return null;}
 
+/* ---------- 사이드루터 (약탈자 2차 전직): 영혼 수확 · 불가피함 · 무형화 · 살아있는 허수아비 · 다가오는 죽음 ----------
+   처형 가능 HP는 execTh에 slExecAdd(m)을 더한다 (불가피함 m.slInevT/slInevA, 다가오는 죽음 m.slDoomT/slDoomN) */
+const SL={sc:null,kit:null};
+const SL_SOUL=0x8af0d0;
+function slExecAdd(m){let a=0;if(m.slInevT>tAll)a+=m.slInevA||0;if(m.slDoomT>tAll&&pas('sldoom'))a+=(m.slDoomN||0)*SK.sldoom.per;return a;}
+/* 처형하면 영혼이 빠져나와 낫 쪽으로 빨려 든다 */
+function slSoulFx(m){const c=mCenter(m),q=player.position;VFX.burst(c,SL_SOUL,26,3.5,.7,{up:.8,mix:0xffffff,grav:-2});VFX.shock(c.clone().setY(m.mesh.position.y+.05),SL_SOUL,1.6+m.r,.45);
+  for(let i=0;i<14;i++){const dx=q.x-c.x,dy=q.y+1.2-c.y,dz=q.z-c.z;VFX.emit(i%3?0:1,c.x+(Math.random()-.5)*.5,c.y+Math.random()*.6,c.z+(Math.random()-.5)*.5,dx*1.4+(Math.random()-.5),dy*1.4+1.5,dz*1.4+(Math.random()-.5),i%2?SL_SOUL:0xe8fff8,.6+Math.random()*.3,0,1.6);}
+  sfx('whoosh',c,.6,.6);sfx('mg_zap',c,.35,.55);}
+/* 다가오는 죽음: 기본 공격에 맞은 적의 처형 가능 HP를 올린다 */
+function slDoomHit(m){if(!pas('sldoom')||!m||m.dying!==null||m.dummy)return;const D=SK.sldoom;m.slDoomN=m.slDoomT>tAll?Math.min(D.maxN,(m.slDoomN||0)+1):1;m.slDoomT=tAll+D.dur;
+  const c=mCenter(m);VFX.burst(c,0x6a5a8a,6,1.6,.5,{up:.4,glow:false});}
+/* 기본 공격: 낫으로 번갈아 비스듬히 베어 넘긴다 (앞쪽 넓게) */
+function slBasic(B){const sw=swingN;myMoId=swingN%2?'kb2':'kb1';myMo=motionFor('dagger',myMoId);
+  setTimeout(()=>{if(mode!=='world'||!P||swingN!==sw)return;const q=player.position,f=flatFwd(),doom=pas('sldoom'),mul=B.mult*(JOBS[P.job].bmul||1)*(doom?SK.sldoom.bmul:1);let n=0;
+    shared(()=>{for(const m of alive()){const dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz);if(d>B.range+.7+m.r)continue;if(d>1.2&&(dx*f.x+dz*f.z)/d<.2)continue;
+      damageMonster(m,mul,{color:0xffffff});if(doom)slDoomHit(m);n++;}});
+    const p=q.clone();p.y+=1.15;p.x-=Math.sin(cam.yaw)*.25;p.z-=Math.cos(cam.yaw)*.25;const a=sw%2===1;
+    VFX.slash(p,cam.yaw,doom?0xb0a0d8:0xe0e8e0,{r:2.4,arc:2.3,tilt:a?1.0:-1.0,dur:.2,dir:a?-1:1});if(n){shakeT=Math.max(shakeT,.06);sfx('heavy',q,.5);}},270);}
+/* 영혼 수확: 앞쪽 부채꼴을 크게 휩쓴다 */
+function slHarvest(S,pw,opt){const sn=swingN;
+  setTimeout(()=>{if(mode!=='world'||!P||P.hp<=0)return;const q=player.position,f=flatFwd();let n=0;
+    shared(()=>{for(const m of alive()){const dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz);if(d>S.range+m.r)continue;if(d>1.2&&(dx*f.x+dz*f.z)/d<S.cos)continue;
+      damageMonster(m,S.mult*pw,{...opt,sk:'sharvest'});n++;}});
+    const p=q.clone();p.y+=1.05;VFX.slash(p,cam.yaw,S.color,{r:S.range*.8,arc:2.7,tilt:.06,dur:.26,dir:1});VFX.slash(p,cam.yaw,0x2a3a34,{r:S.range*.62,arc:2.5,tilt:.06,dur:.3,dir:1});VFX.slash(p.clone().setY(p.y+.15),cam.yaw,0xffffff,{r:S.range*.86,arc:2.2,tilt:.06,dur:.18,dir:1});
+    for(let i=0;i<22;i++){const a=cam.yaw+(Math.random()-.5)*2.5,r=1.2+Math.random()*(S.range-1.2);VFX.emit(i%3?0:1,q.x-Math.sin(a)*r,q.y+.6+Math.random()*.9,q.z-Math.cos(a)*r,-Math.sin(a)*1.5,.8+Math.random(),-Math.cos(a)*1.5,SL_SOUL,.5+Math.random()*.3,-1,1.2);}
+    sfx('w_swing',q,1,.8);sfx('whoosh',q,.9,.7);if(n){shakeT=Math.max(shakeT,.14);sfx('blood2',q,.8);}},260);
+  const f=flatFwd();return player.position.clone().add(new THREE.Vector3(f.x*1.8,1.1,f.z*1.8));}
+/* 불가피함: 노린 적에게 짧게 돌진해 처형 가능 HP를 올린다 (피해 없음) */
+function slInevTarget(S){return aimTarget(S.range,.95)||frontTarget(S.range,.6);}
+function slInev(S,lvl){const m=slInevTarget(S);if(!m)return null;const q=player.position,dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz)||1,f={x:dx/d,z:dz/d},stop=m.r+1.1,dist=Math.max(0,d-stop),dd=Math.max(.08,dist/42);
+  const mark=()=>{if(m.dying!==null)return;const add=S.ex+S.exPer*(lvl-1);m.slInevT=tAll+S.dur;m.slInevA=add;const c=mCenter(m),g=m.mesh.position.clone();g.y=heightAt(g.x,g.z)+.05;
+    VFX.shock(g,S.color,1.8+m.r,.5);VFX.shock(g,0x2a1a3a,1.1+m.r,.4);VFX.burst(c,S.color,22,3,.55,{mix:0xffffff,up:.3});spawnFx(0x5a3a8a,c,1+m.r*.4,.3);
+    const s=screenOf(c.clone().add(new THREE.Vector3(0,.8,0)));if(s.ok)floatText(`처형 +${Math.round(add*100)}%`,s.x,s.y,'');sfx('heavy',c,.6,.7);sfx('mg_zap',c,.4,.6);};
+  if(dist<.2){mark();return mCenter(m);}
+  P.dash={t:dd,dur:dd,dist,mult:0,opt:{},hit:new Set(),f,nohit:true,tgt:m,stop,onDone:mark};P.dashFx=S.color;invuln=Math.max(invuln,dd+.05);sfx('dash');
+  return player.position.clone().add(new THREE.Vector3(0,1,0));}
+/* 무형화: 3초 동안 빠르게, 적의 몸과 공격을 통과한다 */
+function slIntang(S,lvl){P.slSpd=S.spd+S.spdPer*(lvl-1);P.buffs.intang={v:1,t:S.dur,max:S.dur};const q=player.position.clone();
+  VFX.aura(q,S.color,36,.9,2);VFX.shock(q,S.color,2.6,.45);VFX.burst(q.clone().setY(q.y+1.1),0xe8fbff,30,3,.6,{mix:0xffffff,up:.5});flash('#b8e8ff',.22);sfx('whoosh',null,1,.55);sfx('smoke',null,.6,1.3);updateHud();
+  return null;}
+function slIntangOn(){return !!(P&&P.buffs&&P.buffs.intang);}
+function slPassFx(mon){if(!mon||!mon.mesh)return;const t=tAll;if(t-(SL.passT||0)<.4)return;SL.passT=t;const c=player.position.clone();c.y+=1.1;VFX.burst(c,0xb8e8ff,10,2,.35,{mix:0xffffff});}
+/* 살아있는 허수아비: 선 자리에 세운다. 다시 쓰거나 부서지면 그 자리로 돌아오며 둘레에 가진 골드의 5% 피해 */
+function slScMesh(){const g=new THREE.Group();let body=null;
+  try{body=new THREE.Mesh(FOODK.geo('Sdummy:0'),FOODK.mat());}catch(e){body=null;}
+  if(body){body.castShadow=true;g.add(body);}else{const m=new THREE.MeshStandardMaterial({color:0xc8a868,roughness:.9});const p=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,2.2,6),new THREE.MeshStandardMaterial({color:0x6a4a2a}));p.position.y=1.1;g.add(p);const b=new THREE.Mesh(new THREE.CylinderGeometry(.3,.25,.8,8),m);b.position.y=1.3;g.add(b);const h=new THREE.Mesh(new THREE.SphereGeometry(.22,10,8),m);h.position.y=1.92;g.add(h);}
+  const eyeM=new THREE.MeshBasicMaterial({color:SL_SOUL});for(const s of [-1,1]){const e=new THREE.Mesh(new THREE.SphereGeometry(.035,8,6),eyeM);e.position.set(s*.07,1.95,.2);g.add(e);}   /* 영혼이 깃든 눈 */
+  return g;}
+function slScBar(){const c=document.createElement('canvas');c.width=64;c.height=8;const t=new THREE.CanvasTexture(c);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false,transparent:true}));s.scale.set(1.1,.14,1);s.renderOrder=999;s.userData={c,t,k:-1};return s;}
+function slScBarSet(s,k){if(Math.abs(s.userData.k-k)<.005)return;s.userData.k=k;const x=s.userData.c.getContext('2d');x.clearRect(0,0,64,8);x.fillStyle='rgba(10,10,10,.75)';x.fillRect(0,0,64,8);x.fillStyle='#d8b060';x.fillRect(1,1,Math.max(0,62*k),6);s.userData.t.needsUpdate=true;}
+function slScUp(S,lvl){const q=player.position,y=heightAt(q.x,q.z),hp=P.maxhp*(S.hp+S.hpPer*(lvl-1)),g=slScMesh();g.position.set(q.x,y,q.z);g.rotation.y=cam.yaw;scene.add(g);
+  const bar=slScBar();bar.position.set(0,2.55,0);g.add(bar);slScBarSet(bar,1);
+  SL.sc={x:q.x,z:q.z,y,until:tAll+S.dur,hp,dmg:0,S,lvl,mesh:g,bar,t0:tAll};cds.scarecrow=0;
+  VFX.burst(new THREE.Vector3(q.x,y+1,q.z),0xd8b060,24,3,.6,{up:.6,grav:5,glow:false});VFX.shock(new THREE.Vector3(q.x,y+.05,q.z),SL_SOUL,2.4,.45);if(typeof dustPuffs==='function')dustPuffs(new THREE.Vector3(q.x,y,q.z),.9,8);
+  sfx('step',null,1,.7);sfx('heavy',null,.6,.9);log('허수아비를 세웠다','sys');updateHud();return null;}
+function slScClear(cd){const C=SL.sc;if(!C)return;SL.sc=null;if(C.mesh){scene.remove(C.mesh);if(C.bar){C.bar.material.map.dispose();C.bar.material.dispose();}}if(cd&&C.S)cds.scarecrow=Math.max(cds.scarecrow||0,skCd(C.S));updateHud();}
+/* 허수아비 자리로 돌아오며 터뜨린다 */
+function slScBack(){const C=SL.sc;if(!C)return;const S=C.S,q=player.position;
+  if(mode!=='world'||!P||P.hp<=0||Math.hypot(q.x-C.x,q.z-C.z)>90){slScClear(true);return;}   /* 다른 곳(맵)으로 가 버렸으면 그냥 거둔다 */
+  const from=q.clone();from.y+=1;VFX.burst(from,SL_SOUL,20,3,.4,{mix:0xffffff});
+  player.position.set(C.x,C.y+.05,C.z);pvel.x=0;pvel.z=0;vy=0;if(P.dash)P.dash=null;
+  const R=S.radius+S.radiusPer*(C.lvl-1),flat=Math.max(1,Math.round(P.gold*S.pct)),c=new THREE.Vector3(C.x,C.y,C.z);
+  slScClear(true);
+  shared(()=>{for(const m of alive()){if(Math.hypot(m.mesh.position.x-c.x,m.mesh.position.z-c.z)>R+m.r)continue;damageMonster(m,0,{flat,sk:'scarecrow',noKnock:true});}});
+  VFX.shock(c.clone().setY(c.y+.05),0xd8b060,R,.5);VFX.shock(c.clone().setY(c.y+.05),SL_SOUL,R*.6,.35);VFX.burst(c.clone().setY(c.y+1),0xffd040,40,6,.6,{mix:0xffffff,up:.5});VFX.burst(c.clone().setY(c.y+1.2),0xc8a868,30,5,.7,{grav:7,glow:false});
+  for(let i=0;i<18;i++){const a=i/18*6.283;VFX.emit(1,c.x,c.y+.8,c.z,Math.cos(a)*R*1.4,2+Math.random()*2,Math.sin(a)*R*1.4,0xffd040,.5,6,1.4);}
+  flash('#ffe8a0',.18);shakeT=Math.max(shakeT,.25);sfx('coin',c,1);sfx('heavy',c,1,.8);sfx('slam',c,.8,1.1);}
+function slScHit(msg){const C=SL.sc;if(!C)return;const m=netMonsterById(msg.i),d=Math.max(1,Number(msg.atk)||10)*(m?gapTaken(m.lv):1);C.dmg+=d;
+  const at=new THREE.Vector3(C.x,C.y+1.3,C.z);VFX.burst(at,0xc8a868,8,2.5,.4,{grav:6,glow:false});sfx('block',at,.5,1.3);
+  const s=screenOf(at.clone().setY(at.y+.6));if(s.ok)floatText(Math.round(d),s.x+rnd(-14,14),s.y,'');
+  if(m&&m.mesh){m.lunge=.3;}
+  if(C.dmg>=C.hp)slScBack();}
+function slSkill(S,id,pw,opt,lvl){opt={...opt,sk:id};
+  if(id==='sharvest')return slHarvest(S,pw,opt);
+  if(id==='inevit')return slInev(S,lvl);
+  if(id==='intang')return slIntang(S,lvl);
+  if(id==='scarecrow'){if(SL.sc){slScBack();return null;}return slScUp(S,lvl);}
+  return null;}
+function slPres(){const C=SL.sc;return C?[+C.x.toFixed(2),+C.z.toFixed(2)]:null;}
+/* 매 프레임: 허수아비 시간·체력 줄, 불가피함 표식, 무형화 잔상 */
+function slTick(dt){const C=SL.sc;
+  if(C){if(mode!=='world'||!P||P.hp<=0||P.job!=='sidelooter'){slScClear(mode==='world');}
+    else{if(tAll>C.until){const at=new THREE.Vector3(C.x,C.y+1,C.z);VFX.burst(at,0xc8a868,18,2.5,.6,{grav:5,glow:false});slScClear(true);}
+      else{slScBarSet(C.bar,1-C.dmg/C.hp);const g=C.mesh;g.rotation.z=Math.sin(tAll*2.2)*.025;if(Math.random()<dt*6)VFX.emit(0,C.x+(Math.random()-.5)*.4,C.y+1.9,C.z+(Math.random()-.5)*.4,0,.5,0,SL_SOUL,.6,-.5,.8);}}}
+  if(!P||mode!=='world')return;
+  if(P.buffs.intang&&Math.random()<dt*40){const q=player.position;VFX.emit(0,q.x+(Math.random()-.5)*.7,q.y+.2+Math.random()*1.6,q.z+(Math.random()-.5)*.7,0,.3,0,0xb8e8ff,.45,0,1.3);}
+  if(P.job==='sidelooter'&&Math.random()<dt*8)for(const m of alive()){if(!(m.slInevT>tAll))continue;const c=m.mesh.position;VFX.emit(0,c.x+(Math.random()-.5)*m.r*2,heightAt(c.x,c.z)+.1,c.z+(Math.random()-.5)*m.r*2,0,1.2,0,0x9a7ad8,.6,-.5,1);}}
+/* 다른 사이드루터의 허수아비 */
+function slRemote(o,pr){const sc=o.job==='sidelooter'&&Array.isArray(pr.sc)&&pr.sc.length>=2?pr.sc:null;
+  if(sc){if(!o.slSc){o.slSc=slScMesh();scene.add(o.slSc);}const x=num(sc[0]),z=num(sc[1]);o.slSc.position.set(x,heightAt(x,z),z);}
+  else if(o.slSc){scene.remove(o.slSc);o.slSc=null;}}
 /* ---------- 약탈자 · 암살자 ---------- */
 /* 수리검: 네 갈래 날. 날 사이는 안쪽으로 휘어 들어가고, 가운데 구멍 둘레에 검은 쇠 테. 날 가장자리는 밝게 갈려 있다 */
 let _shkG=null;function shurikenMesh(){if(!_shkG){const R=.17,r=.045,sh=new THREE.Shape();
@@ -31025,6 +31204,7 @@ function setupNetMonsters(r){
     if(d<m.r+(msg.f?4.6:3.2)&&jumpY<1.4)hurtByMonster(num(msg.atk,m.st.atk),m.lv,m.D.name,m);   /* 첫 평타(f)는 달려 지나가도 맞게 조금 더 넓게 */
   });
   r.on('dch',msg=>shdDecoyHit(msg));
+  r.on('sch',msg=>slScHit(msg));
   r.on('bslam',msg=>{const m=netMonsterById(msg.i);if(!m)return;bossSlamStart(m,num(msg.x),num(msg.z),clamp(num(msg.r,5),1,10),clamp(num(msg.d,1.2),.3,3));});
   r.on('bland',msg=>{const m=netMonsterById(msg.i);if(m)bossLand(m,num(msg.x),num(msg.z),clamp(num(msg.r,5),1,10));});
   r.on('bhit',msg=>{
@@ -31058,7 +31238,7 @@ function makeLocalMonsterNet(){
     start(){
       sim=createSim({cols:colliders.filter(c=>!c.mentor&&!c.bld&&!c.box).map(c=>[c.x,c.z,c.r])});
       sim.join('me',dispatch);
-      setInterval(()=>{sim.presence('me',P&&player&&mode!=='title'?{x:player.position.x,z:player.position.z,on:1,al:P.hp>0?1:0,hd:(P.hideT>tAll||(typeof ninHidden==='function'&&ninHidden()))?1:0,sd:pas('deepaura')?1:0,dc:shdPres().dc,lu:trpLure()}:{on:0});sim.tick();},100);
+      setInterval(()=>{sim.presence('me',P&&player&&mode!=='title'?{x:player.position.x,z:player.position.z,on:1,al:P.hp>0?1:0,hd:(P.hideT>tAll||(typeof ninHidden==='function'&&ninHidden()))?1:0,sd:pas('deepaura')?1:0,dc:shdPres().dc,sc:slPres(),lu:trpLure()}:{on:0});sim.tick();},100);
     },
   };
 }
