@@ -10455,11 +10455,12 @@ function optSave(){try{localStorage.setItem('orlando3d.opt',JSON.stringify(OPT))
 /* 마이크·스피커 고르기 (설정 → 장치). 스피커는 브라우저가 받쳐 줄 때만 (setSinkId) */
 const DEV={sinkOk:typeof HTMLMediaElement!=='undefined'&&'setSinkId' in HTMLMediaElement.prototype};
 function sinkEl(el){if(!el||!DEV.sinkOk||!el.setSinkId)return;const id=OPT.spk||'';if((el.sinkId||'')===id)return;el.setSinkId(id).catch(()=>{});}
+/* 로딩 중(아래쪽 코드가 아직 안 읽힌 때)에 눌러도 멈추지 않게 하나씩 따로 감싼다: 아직 안 만든 const는 typeof로 물어봐도 오류가 난다 */
 function sinkAll(){const id=OPT.spk||'';
-  if(typeof SFX!=='undefined'&&SFX.ctx&&SFX.ctx.setSinkId&&(typeof SFX.ctx.sinkId==='string'?SFX.ctx.sinkId:'')!==id)SFX.ctx.setSinkId(id).catch(()=>{});
-  if(typeof BGM!=='undefined')for(const k in BGM.els)sinkEl(BGM.els[k]);
-  if(typeof FIRE_AMB!=='undefined')sinkEl(FIRE_AMB.el);
-  if(typeof PVOICE!=='undefined')for(const v of PVOICE.pcs.values())sinkEl(v.audio);}
+  try{if(typeof SFX!=='undefined'&&SFX.ctx&&SFX.ctx.setSinkId&&(typeof SFX.ctx.sinkId==='string'?SFX.ctx.sinkId:'')!==id)SFX.ctx.setSinkId(id).catch(()=>{});}catch(e){}
+  try{for(const k in BGM.els)sinkEl(BGM.els[k]);}catch(e){}
+  try{sinkEl(FIRE_AMB.el);}catch(e){}
+  try{for(const v of PVOICE.pcs.values())sinkEl(v.audio);}catch(e){}}
 function micWant(){const c={echoCancellation:true,noiseSuppression:true,autoGainControl:true};if(OPT.mic)c.deviceId={exact:OPT.mic};return c;}
 async function devFill(ask){const md=navigator.mediaDevices,mi=document.getElementById('opMic'),sp=document.getElementById('opSpk');if(!mi||!sp)return;
   if(!md||!md.enumerateDevices){mi.disabled=sp.disabled=true;return;}
@@ -10481,10 +10482,11 @@ function sfxInit(){
   if(SFX.ctx){if(SFX.ctx.state==='suspended')SFX.ctx.resume().catch(()=>{});return;}
   const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
   try{SFX.ctx=new AC();}catch(e){return;}
-  const c=SFX.ctx;sinkAll();SFX.master=c.createGain();SFX.master.gain.value=SFX.vol*.56;
+  const c=SFX.ctx;SFX.master=c.createGain();SFX.master.gain.value=SFX.vol*.56;
   const comp=c.createDynamicsCompressor();comp.threshold.value=-14;comp.ratio.value=6;
   SFX.master.connect(comp);comp.connect(c.destination);
   SFX.voice=c.createGain();SFX.voice.gain.value=OPT.voice*VOICE_GAIN*.56;SFX.voice.connect(comp);
+  sinkAll();   /* 예전에는 master를 만들기 전에 불렀다: 로딩 중에 누르면 여기서 멈춰 master가 비고, 그 뒤 모든 효과음이 '화면 갱신 중 오류'(AudioNode connect)를 냈다 */
   _sampLoad();
   const len=c.sampleRate*1.5,b=c.createBuffer(1,len,c.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;SFX.noise=b;
 }
@@ -10591,7 +10593,7 @@ const SFX_DEF={
 // name: 소리 이름, at: 위치(없으면 내 귀), vol, pitch
 function sfx(name,at,vol=1,pitch=1){
   if(typeof mode!=='undefined'&&mode==='title'&&name!=='ui')return; // 캐릭터 고르는 화면에서는 바깥 소리를 끈다
-  if(!SFX.ctx||SFX.vol<=0||!SFX_DEF[name])return;
+  if(!SFX.ctx||!SFX.master||SFX.vol<=0||!SFX_DEF[name])return;
   const now=SFX.ctx.currentTime,k=name+(at?Math.round(at.x)+','+Math.round(at.z):'');
   if(SFX.last[k]&&now-SFX.last[k]<.045)return;SFX.last[k]=now;
   const out=_out(at,vol);if(!out)return;
