@@ -3434,6 +3434,10 @@ const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMapping=THREE.LinearToneMapping;renderer.toneMappingExposure=.64;   /* 전체 밝기를 낮춘다 (색은 그대로) */
+/* 화면 색 다듬기 (2026-11-09): 모든 재질의 맨 끝(안개 뒤, 화면 색)에서 채도와 대비를 조금 올린다.
+   뒤에 따로 그리는 단계가 없어 렉이 늘지 않는다. 하늘·주민 그림처럼 직접 짠 셰이더는 ORL_GRADE를 끝에 붙인다 */
+const ORL_GRADE='\n{vec3 g_=clamp(gl_FragColor.rgb,0.,1.);float l_=dot(g_,vec3(.2126,.7152,.0722));g_=clamp(l_+(g_-l_)*1.22,0.,1.);g_+=(g_*g_*(3.-2.*g_)-g_)*.4;gl_FragColor.rgb=g_;}\n';
+THREE.ShaderChunk.fog_fragment+=ORL_GRADE;
 const scene=new THREE.Scene();
 const skyCol=new THREE.Color(ZONES.village.sky);
 scene.background=skyCol.clone();scene.fog=new THREE.Fog(skyCol.clone(),38,140);
@@ -3466,8 +3470,25 @@ void main(){vec3 d=normalize(vD);float h=d.y;
   col*=.86;
   gl_FragColor=vec4(col,1.);
   #include <encodings_fragment>
-}`,side:THREE.BackSide,depthWrite:false,depthTest:false,fog:false}));
+`+ORL_GRADE+`}`,side:THREE.BackSide,depthWrite:false,depthTest:false,fog:false}));
 skyDome.renderOrder=-1000;skyDome.frustumCulled=false;scene.add(skyDome);
+/* 금속 반사 (2026-11-09): 하늘·땅빛을 미리 구운 작은 반사 그림(PMREM) 한 장을 금속 재질(metalness .3 이상)에만 붙인다.
+   예전에는 비칠 것이 없어 갑옷·무기·금장식 같은 금속이 거무죽죽했다. 반사 세기 ENV.k는 하늘빛(hemi) 세기를 따라 실내·밤에는 약해진다.
+   재질을 만들 때 envMap을 직접 주면 그것을 쓰고, userData.noEnv면 붙이지 않는다 */
+const ENV={tex:null,k:1};
+try{const pm=new THREE.PMREMGenerator(renderer),es=new THREE.Scene();
+  es.add(new THREE.Mesh(new THREE.SphereGeometry(10,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,
+    vertexShader:'varying vec3 vD;void main(){vD=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader:`varying vec3 vD;void main(){vec3 d=normalize(vD);float h=d.y;
+      vec3 c=h>0.?mix(vec3(.95,.93,.88),vec3(.32,.5,.85),pow(h,.6)):mix(vec3(.62,.56,.46),vec3(.2,.17,.13),pow(-h,.5));
+      c+=vec3(1.,.9,.72)*pow(max(dot(d,normalize(vec3(30.,60.,20.))),0.),24.)*5.;gl_FragColor=vec4(c,1.);
+#include <encodings_fragment>
+}`})));
+  ENV.tex=pm.fromScene(es,0,.1,50).texture;pm.dispose();}catch(e){ENV.tex=null;}
+{const MSP=THREE.MeshStandardMaterial.prototype,cp=MSP.copy;
+  Object.defineProperty(MSP,'envMap',{configurable:true,get(){const v=this._envM;return v!=null?v:(ENV.tex&&this.metalness>=.3&&!(this.userData&&this.userData.noEnv)?ENV.tex:null);},set(v){this._envM=v;}});
+  Object.defineProperty(MSP,'envMapIntensity',{configurable:true,get(){return (this._envI==null?1:this._envI)*ENV.k;},set(v){this._envI=v;}});
+  MSP.copy=function(src){cp.call(this,src);this._envM=src._envM;this._envI=src._envI;return this;};}
 
 const mat=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.85,flatShading:true},o)),_mat=mat;
 /* ---------- 음식 모양 (FOODK): 맛있어 보이게 새로 빚은 음식들.
@@ -4650,10 +4671,13 @@ function setFarHidden(obj,far){if(obj.userData._far===far)return;obj.userData._f
    - 그래도 낮으면 그림자를 2~3프레임에 한 번만 다시 그린다 (그림자 그리기가 한 장면의 절반 가까이를 차지한다) */
 /* 그래픽 단계 (ESC 설정): 낮음 = 그림자 끄기 + 해상도 낮게 + 시야 짧게, 높음 = 해상도 조금 높게 */
 function gfxLv(){return typeof OPT!=='undefined'&&OPT.gfx!=null?OPT.gfx:1;}
-function applyGfx(){const L=gfxLv();try{const on=L>0;if(sun.castShadow!==on){sun.castShadow=on;scene.traverse(o=>{if(o.material){for(const m of Array.isArray(o.material)?o.material:[o.material])m.needsUpdate=true;}});}}catch(e){}
+/* 그림자 그림 크기 (2026-11-09): 컴퓨터(보통·높음)는 2048로 그림자 가장자리를 또렷하게. 휴대폰·낮음, 또는 프레임이 계속 낮으면 1024 */
+function shadowRes(){const mob=typeof coarse==='function'&&coarse();return !mob&&gfxLv()>=1&&!Perf.shLow?2048:1024;}
+function applyShadowRes(){const n=shadowRes();if(sun.shadow.mapSize.x===n)return;sun.shadow.mapSize.set(n,n);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null;}renderer.shadowMap.needsUpdate=true;}
+function applyGfx(){const L=gfxLv();try{applyShadowRes();}catch(e){}try{const on=L>0;if(sun.castShadow!==on){sun.castShadow=on;scene.traverse(o=>{if(o.material){for(const m of Array.isArray(o.material)?o.material:[o.material])m.needsUpdate=true;}});}}catch(e){}
   Perf.dpr=Math.min(Perf.dpr,Perf.maxDpr());if(L===2)Perf.dpr=Perf.maxDpr();renderer.setPixelRatio(Perf.dpr);}
-const Perf={acc:0,frames:0,t:0,dpr:1,minDpr:.6,shSkip:1,fc:0,low:0,
-  init(){if(gfxLv()===0){this.minDpr=.5;try{sun.castShadow=false;}catch(e){}}this.dpr=this.maxDpr();renderer.setPixelRatio(this.dpr);renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;
+const Perf={acc:0,frames:0,t:0,dpr:1,minDpr:.6,shSkip:1,fc:0,low:0,shLow:false,
+  init(){try{applyShadowRes();}catch(e){}if(gfxLv()===0){this.minDpr=.5;try{sun.castShadow=false;}catch(e){}}this.dpr=this.maxDpr();renderer.setPixelRatio(this.dpr);renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;
     addEventListener('resize',()=>{const m=this.maxDpr();if(this.dpr>m+.01){this.dpr=m;renderer.setPixelRatio(m);}});},
   tick(){
     const now=performance.now(),dt=this.last?Math.min(1,(now-this.last)/1000):0;this.last=now;
@@ -4662,7 +4686,7 @@ const Perf={acc:0,frames:0,t:0,dpr:1,minDpr:.6,shSkip:1,fc:0,low:0,
     this.acc+=dt;this.frames++;
     if(this.acc>=2){const fps=this.frames/this.acc;this.acc=0;this.frames=0;
       if(fps<40){if(this.dpr>this.minDpr+.01){this.dpr=Math.max(this.minDpr,this.dpr-.12);renderer.setPixelRatio(this.dpr);}
-        this.low++;if(this.low>=2&&this.shSkip<3)this.shSkip++;}
+        this.low++;if(this.low>=2&&this.shSkip<3)this.shSkip++;else if(this.low>=4&&!this.shLow){this.shLow=true;applyShadowRes();}}
       else{this.low=0;if(fps>57){if(this.shSkip>1)this.shSkip--;else if(this.dpr<this.maxDpr()-.01){this.dpr=Math.min(this.maxDpr(),this.dpr+.08);renderer.setPixelRatio(this.dpr);}}}}
   },
   maxDpr(){const mob=typeof coarse==='function'&&coarse(),L=gfxLv(),base=Math.min(devicePixelRatio||1,mob?1.25:L===2?2:1.5)*(L===0?.75:1),px=Math.max(1,innerWidth*innerHeight);
@@ -13868,7 +13892,7 @@ diffuseColor.a=max(mix(mix(.42,.95,smoothstep(0.,2.6,sDep)),1.,smoothstep(60.,20
  totalEmissiveRadiance+=sCol*(.16+.22*(1.-smoothstep(0.,4.,sDep)))*nf*min(uSunI,1.)*(1.-fr);   /* 물속에서 퍼져 나오는 빛: 얕을수록 밝은 옥빛 */
  float sd=max(dot(R,normalize(uSun)),0.);totalEmissiveRadiance+=vec3(1.,.95,.84)*(pow(sd,260.)*5.+pow(sd,1800.)*22.*sN3)*uSunI*nf;}`)
     .replace('#include <dithering_fragment>',`#include <dithering_fragment>
-{vec3 dV=normalize(vSW-cameraPosition);float f=smoothstep(uFogN,min(uFogF*1.6,385.),sDist);gl_FragColor.rgb=mix(gl_FragColor.rgb,linearToOutputTexel(vec4(seaSky(dV),1.)).rgb,f);gl_FragColor.a=mix(gl_FragColor.a,1.,f);}`);};
+{vec3 dV=normalize(vSW-cameraPosition);float f=smoothstep(uFogN,min(uFogF*1.6,385.),sDist);vec4 kp_=gl_FragColor;gl_FragColor.rgb=linearToOutputTexel(vec4(seaSky(dV),1.)).rgb;${ORL_GRADE}vec3 skG_=gl_FragColor.rgb;gl_FragColor=kp_;gl_FragColor.rgb=mix(gl_FragColor.rgb,skG_,f);gl_FragColor.a=mix(gl_FragColor.a,1.,f);}`);};   /* 먼 바다는 하늘과 같은 색 다듬기를 거친 하늘빛으로 */
   m.customProgramCacheKey=()=>'seaw3';return m;}
 /* 물 깊이 그림: 땅 높이 hFn을 재어 물높이 wl 아래 깊이를 담는다. 먼저 성긴 칸(4칸마다)을 재고, 물가가 지나는 칸만 촘촘히 잰다.
    inFn(x,z)이 false인 곳은 재지 않는다(바다 판이 없는 곳). 여러 장면에 나눠 잰다 (step이 true를 돌려주면 끝) */
@@ -15806,7 +15830,7 @@ void main(){vec3 toCam=cameraPosition-aPos;float cy=atan(toCam.x,toCam.z);float 
  vec3 right=normalize(vec3(toCam.z,0.,-toCam.x));vec3 wp=aPos+right*position.x*aInf.z+vec3(0.,position.y*aInf.z,0.);
  vec4 mv=viewMatrix*vec4(wp,1.);gl_Position=projectionMatrix*mv;vFog=-mv.z;}`,
     fragmentShader:`uniform sampler2D map;uniform vec3 uTint,fogColor;uniform float fogNear,fogFar;varying vec2 vUv;varying float vFog;
-void main(){vec4 c=texture2D(map,vUv);if(c.a<.5)discard;c.rgb*=uTint;float f=smoothstep(fogNear,fogFar,vFog);gl_FragColor=vec4(mix(c.rgb,fogColor,f),1.);}`,
+void main(){vec4 c=texture2D(map,vUv);if(c.a<.5)discard;c.rgb*=uTint;float f=smoothstep(fogNear,fogFar,vFog);gl_FragColor=vec4(mix(c.rgb,fogColor,f),1.);${ORL_GRADE}}`,
     transparent:false,side:THREE.DoubleSide});
   const mesh=new THREE.Mesh(g,m);mesh.frustumCulled=false;mesh.castShadow=false;mesh.visible=false;scene.add(mesh);g.instanceCount=0;
   CROWD.mesh=mesh;CROWD.aPos=aPos;CROWD.aInf=aInf;CROWD.aF=aF;
@@ -22683,7 +22707,7 @@ await BOOT.y();(function buildEdgeFog(){
     'float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}'+
     'void main(){float t=vU.y;vec2 q=vec2(vU.x*70.+uT*.04,t*2.2-uT*.015);float m=n(q)*.5+n(q*2.1+vec2(7.,uT*.03))*.3+n(q*4.7-3.)*.2;'+
     'float a=uA*(1.-smoothstep(.2+.35*m,.95,t))*smoothstep(.15,.75,m+.25*(1.-t));float dc=distance(cameraPosition,vW);a*=smoothstep(2.,14.,dc)*(1.-.88*vSk);'+
-    'gl_FragColor=linearToOutputTexel(vec4(mix(uC,vec3(1.),.06),clamp(a,0.,1.)));}'   /* 다른 물체의 안개와 같은 색이 되게 출력 색 공간으로 바꾼다 */;
+    'gl_FragColor=linearToOutputTexel(vec4(mix(uC,vec3(1.),.06),clamp(a,0.,1.)));'+ORL_GRADE+'}'   /* 다른 물체의 안개와 같은 색이 되게 출력 색 공간으로 바꾼다 */;
   for(const k of ['silva','arbus','kaolis','subcus','marcus','milgol','castle']){const I=OR.ISLES[k];if(!I)continue;const set=[];   /* 사냥터는 안개 벽 대신 산비탈로 둘러싸인다 */
     for(const [off,H,A] of [[5,28,.55],[18,50,.78],[38,90,.97]]){
       const N=k==='marcus'?160:96,geo=new THREE.CylinderGeometry(1,1,1,N,1,true),P=geo.attributes.position,sk=new Float32Array(P.count);
@@ -30118,6 +30142,7 @@ function updateWorld(dt){
     if(k>0){scene.fog.near+=(4-scene.fog.near)*k*.9;scene.fog.far+=(48-scene.fog.far)*k*.8;}}
   {const gIn=(z==='guildhall'&&typeof ghInside==='function'&&ghInside())||(z==='khq'&&typeof khqInside==='function'&&khqInside())||z==='hlodge';   /* 길드홀 안: 바깥 햇빛 대신 은은한 실내빛 (밤에도 아주 어둡지 않게, 등불이 돋보이게) */
     const inH=(z==='hall'||z==='thouse'||z==='myhome'||z==='ghouse'||z==='bakery'||z==='mshop'||z==='library')||inCave,inD=z==='dungeon'||inH,inT=z==='town',kk=Math.min(1,dt*3);const inM=inRealm||inMh;const dd=DEEP_DES[z],dh=inD?1:dd?Math.max(DL.hemi,.55):DL.hemi,ds=inD?1:dd?Math.max(DL.sun,.32):DL.sun;   /* 깊은 사막은 밤에도 달빛·모래빛으로 덜 어둡다 */hemi.intensity+=((gIn?(.24+.13*DL.hemi)/Math.max(dh,.01):z==='library'?.66:inHc?.6:z==='hcave'?.2:inH?.36:inD?.28:inHa?.44:inMil?.54:inM?(z==='marcus'?.5:inMh?.52:.6):.54)*dh-hemi.intensity)*kk;sun.intensity+=((gIn?(.04+.12*DL.sun)/Math.max(ds,.01):z==='library'?.3:inHc?1.02:z==='hcave'?.04:inD?.13:inHa?(hi<0?.82:.84-.01*hi):inMil?.9:inM?(z==='marcus'?1.2:inMh?1.1:.94):.8)*ds-sun.intensity)*kk;   /* 사막(하레나)은 모래가 되비쳐 더 밝아 보이므로 더 낮춘다 */
+    ENV.k=Math.max(.15,Math.min(1.15,hemi.intensity/.55));
     /* 밀골: 맑은 하늘빛(위)과 풀빛 되비침(아래), 햇빛은 따뜻하되 주황으로 치우치지 않게 */
     /* 하레나(사막): 따뜻한 햇빛과 파란 하늘빛, 아래에서는 모래가 되비치는 주황빛. 길 끝으로 갈수록 해가 붉어진다 */
     if(inHa){_sunC.set(0xffe8c4).lerp(_hc2.set(0xffa070),Math.max(0,hi)/7*.8).multiply(DL.tint);sun.color.lerp(_sunC,kk);hemi.color.lerp(_hemC.set(0xcadcff).lerp(_hc2.set(0xd8b49a),Math.max(0,hi)/7),kk);hemi.groundColor.lerp(_hemG.set(0xc0905a).lerp(_hc2.set(0x5a3a2a),Math.max(0,hi)/7*.8),kk);}
@@ -30128,7 +30153,7 @@ function updateWorld(dt){
     SKY.cloud.value+=((inT?.18:/^w/.test(z)||z==='marcus'||inMh||z==='forest'||z==='plains'||z==='swamp'||z==='ruins'?.3:.5)-SKY.cloud.value)*kk*.5;SKY.glow.value+=((inT?1.8:1)-SKY.glow.value)*kk;}
   {const q=player.position,ty=Math.min(q.y,heightAt(q.x,q.z)+6);   /* 높이 날아도 그림자 상자는 땅 위에 */
     /* 그림자 상자를 그림자 그림의 한 칸 단위로만 옮긴다: 걸을 때 땅에 그림자 줄무늬가 흐르듯 움직이지 않게 */
-    const B=_sunBasis,T=72/1024,px=q.x*B.x.x+ty*B.x.y+q.z*B.x.z,py=q.x*B.y.x+ty*B.y.y+q.z*B.y.z,dx=Math.round(px/T)*T-px,dy=Math.round(py/T)*T-py;
+    const B=_sunBasis,T=72/sun.shadow.mapSize.x,px=q.x*B.x.x+ty*B.x.y+q.z*B.x.z,py=q.x*B.y.x+ty*B.y.y+q.z*B.y.z,dx=Math.round(px/T)*T-px,dy=Math.round(py/T)*T-py;
     const tx=q.x+B.x.x*dx+B.y.x*dy,tyy=ty+B.x.y*dx+B.y.y*dy,tz=q.z+B.x.z*dx+B.y.z*dy;
     sun.position.set(tx+30,tyy+60,tz+20);sun.target.position.set(tx,tyy,tz);}
   publishPresence(false);
