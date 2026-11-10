@@ -11007,10 +11007,10 @@ const BGM={vol:.38,cur:null,want:null,els:{},fade:1.6,
 for(const k of OR.MHUNT)BGM.zone[k]='exiz';   /* 하레나 둘레 사냥터(길 여덟 구역)도 하레나 테마 */
 function bgmEl(k){let a=BGM.els[k];if(!a){const src=BGM.files[k],c=typeof cdnURL==='function'?cdnURL(src):src;a=BGM.els[k]=new Audio(c);if(c!==src)a.addEventListener('error',()=>{if(!a._fb){a._fb=1;a.src=src;}});a.loop=true;a.preload='auto';a.volume=0;a._v=0;sinkEl(a);}return a;}
 function bgmZone(z){BGM.want=z&&BGM.zone[z]||null;if(BGM.want)bgmEl(BGM.want);}
-function bgmTick(dt){const step=dt/BGM.fade,hid=document.hidden;
+function bgmTick(dt){const step=dt/(BGM.mute?.3:BGM.fade),hid=document.hidden;
   /* NPC와 이야기하는 동안은 음악을 낮춰 목소리가 들리게 */
   const dk=document.body.classList.contains('talking')?.4:1;BGM.duck=BGM.duck==null?dk:BGM.duck+(dk-BGM.duck)*Math.min(1,dt*3);
-  for(const k in BGM.els){const a=BGM.els[k],on=k===BGM.want&&!hid;
+  for(const k in BGM.els){const a=BGM.els[k],on=k===BGM.want&&!hid&&!BGM.mute;
     a._v=Math.max(0,Math.min(1,a._v+(on?step:-step)));const v=Math.min(1,a._v*a._v*BGM.vol*OPT.bgm*BGM.duck*(BGM.gain[k]||1));if(Math.abs(a.volume-v)>.002)a.volume=v;
     if(on&&a.paused&&!a._try){a._try=1;a.play().then(()=>{a._try=0;}).catch(()=>{a._try=0;a._blocked=1;});}
     if(!on&&a._v<=0&&!a.paused){a.pause();}}}
@@ -27751,7 +27751,7 @@ function toTitle(){standUp=null;if(CCAR.ride){CCAR.ride=null;sitting=false;}docu
   for(const o of others.values())o.tag.hidden=true;
   for(const k in cds)delete cds[k];
   if(trade){dm(trade.with,{k:'tcancel'});closeTrade(false);}leaveParty();$('#pmenu').hidden=true;$('#prompt').hidden=true;
-  $('#inv').hidden=true;$('#shop').hidden=true;document.body.classList.remove('inv-open');P=null;mode='title';bgmZone(null);interactTarget=null;$('#interact').hidden=true;curZone=null;jumpY=0;vy=0;
+  $('#inv').hidden=true;$('#shop').hidden=true;document.body.classList.remove('inv-open');P=null;mode='title';bgmZone(null);try{slGraySet(false);}catch(e){}interactTarget=null;$('#interact').hidden=true;curZone=null;jumpY=0;vy=0;
   if(room)room.presence({on:0}).catch(()=>{});lastPresKey='';
   $('#hud').hidden=true;$('#start').hidden=false;startStep(0);logEl.innerHTML='';$('#questBox').hidden=true;$('#questHud').textContent='';
   scene.background.set(ZONES.village.sky);scene.fog.color.copy(scene.background);
@@ -30941,7 +30941,10 @@ function slSkill(S,id,pw,opt,lvl){opt={...opt,sk:id};
 function slPres(){const C=SL.sc;return C?[+C.x.toFixed(2),+C.z.toFixed(2)]:null;}
 /* 매 프레임: 허수아비 시간·체력 줄, 불가피함 표식, 무형화 잔상 */
 /* 무형화: 그동안 내 화면은 흑백 (캔버스에 CSS 필터 하나만, 켜고 끌 때 0.25초에 걸쳐) */
-let slGray=false;function slGraySet(on){if(on===slGray)return;slGray=on;const c=renderer&&renderer.domElement;if(!c)return;c.style.transition='filter .25s';c.style.filter=on?'grayscale(1)':'';}
+/* 무형화 동안: 화면 전체(게임 화면·UI 모두)를 흑백으로 덮고 배경 음악을 끈다 */
+let slGray=false,slGrayEl=null;function slGraySet(on){if(on===slGray)return;slGray=on;BGM.mute=on;
+  if(!slGrayEl){if(!on)return;slGrayEl=document.createElement('div');slGrayEl.id='slGray';slGrayEl.style.cssText='position:fixed;inset:0;z-index:2147483647;pointer-events:none;backdrop-filter:grayscale(1);-webkit-backdrop-filter:grayscale(1);opacity:0;transition:opacity .25s';document.body.appendChild(slGrayEl);void slGrayEl.offsetWidth;}
+  slGrayEl.style.opacity=on?'1':'0';}
 function slTick(dt){slGraySet(!!(P&&mode==='world'&&P.buffs&&P.buffs.intang));const C=SL.sc;
   if(C){if(mode!=='world'||!P||P.hp<=0||P.job!=='sidelooter'){slScClear(mode==='world');}
     else{if(tAll>C.until){const at=new THREE.Vector3(C.x,C.y+1,C.z);VFX.burst(at,0xc8a868,18,2.5,.6,{grav:5,glow:false});slScClear(true);}
