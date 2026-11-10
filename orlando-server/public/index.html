@@ -487,6 +487,24 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 /* 새 캐릭터 만들기 */
 .newwrap{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px}
 .newpick{display:grid;gap:10px;align-content:start}
+#stepNew .sx-off{display:none!important}
+#stepNew #apBox .apgrp>h4{display:none}
+#stepNew .newside{grid-template-rows:minmax(460px,1fr)}
+.sx-title{font-family:var(--f-display);font-size:30px;color:#f0d79a;margin:2px 0 8px;letter-spacing:.05em}
+.nsBar{display:flex;align-items:center;margin:0 0 20px}
+.nsBar .st{display:flex;align-items:center;gap:8px;padding:0;background:none;border:0;color:#8d7b5c;font-size:14px;white-space:nowrap;cursor:pointer}
+.nsBar .st i{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;border:1.5px solid #6e5530;font-style:normal;font-size:13px}
+.nsBar .st b{font-weight:400}
+.nsBar .st:hover{color:#d9c08a}
+.nsBar .st.done{color:#d9c08a}.nsBar .st.done i{background:#6a4c22;border-color:#c9a45a;color:#ffeab0}
+.nsBar .st.on{color:#ffeab0}.nsBar .st.on b{font-weight:700}.nsBar .st.on i{background:linear-gradient(180deg,#e9c46a,#b8862e);border-color:#f0d79a;color:#2a1a08}
+.nsBar .ln{flex:1;height:1.5px;background:#5a4426;margin:0 10px;min-width:14px}.nsBar .ln.done{background:#c9a45a}
+.nsNav{display:flex;gap:10px;margin-top:14px}
+.nsNav button{flex:1;padding:13px 0;font-size:16px}
+.nsNav button[hidden]{display:none}
+#nsPrev{background:linear-gradient(180deg,#3c2c1a,#1a120a);color:#f2e6c8;border:1px solid #8a6a30;border-radius:2px;cursor:pointer}
+#nsNext{background:linear-gradient(180deg,#e9c46a,#b8862e);color:#2a1a08;border:1px solid #f0d79a;border-radius:2px;font-weight:700;cursor:pointer}
+@media(max-width:720px){.nsBar .st:not(.on) b{display:none}#stepNew .newside{grid-template-rows:300px}.sx-title{font-size:26px}}
 .newside{display:grid;grid-template-rows:minmax(380px,1fr) auto auto;gap:8px}
 #start .stage{position:relative;border:1px solid #6e5530;border-radius:4px;overflow:hidden;background:radial-gradient(ellipse 60% 45% at 50% 45%,rgba(240,190,90,.2),transparent 70%),linear-gradient(180deg,#30261b,#17110b)}
 #start .stage canvas{position:absolute;inset:0;width:100%;height:100%}
@@ -1658,18 +1676,17 @@ setInterval(tick,400);
       </form>
     </div>
     <div class="card panel" id="stepNew" hidden>
-      <h2 class="newh">새 캐릭터 만들기</h2>
+      <div class="nsBar"><button type="button" class="st"><i>1</i><b>이름</b></button><span class="ln"></span><button type="button" class="st"><i>2</i><b>머리</b></button><span class="ln"></span><button type="button" class="st"><i>3</i><b>얼굴</b></button><span class="ln"></span><button type="button" class="st"><i>4</i><b>몸</b></button><span class="ln"></span><button type="button" class="st"><i>5</i><b>옷</b></button></div>
       <div class="newwrap">
-        <div class="newpick">
+        <div class="newpick"><div class="sx-title" id="nsTitle">이름</div>
           <label class="f" for="nick">모험가 이름
             <input id="nick" maxlength="10" autocomplete="off" placeholder="이름을 입력하세요">
           </label>
-          <div id="apBox"></div>
+          <div id="apBox"></div><div class="nsNav"><button type="button" id="nsPrev">뒤로</button><button type="button" id="nsNext">다음</button><button class="cta" id="go" disabled hidden>모험 시작</button></div>
         </div>
         <div class="newside">
           <div class="stage"><canvas id="apPrev"></canvas><span id="apWait">불러오는 중…</span><b class="nm" id="nickShow"></b></div>
-          <button class="cta" id="go" disabled>모험 시작</button>
-          <button class="ghost" id="backList">뒤로</button>
+          <button class="ghost" id="backList" hidden>뒤로</button>
         </div>
       </div>
     </div>
@@ -11257,9 +11274,23 @@ function apThumbStep(){const w=APTH.q.shift();
     const top=new THREE.Box3().setFromObject(m).max.y,y=top-.2,c=APTH.cam;c.position.set(0,y+.02,1.25);c.lookAt(0,y,0);
     pvDraw(m,c,w.cv,192,192,true);}catch(e){}}
   if(APTH.q.length)requestAnimationFrame(apThumbStep);else APTH.run=false;}
+/* 새 캐릭터 만들기는 한 단계씩: 이름 → 머리 → 얼굴 → 몸 → 옷 (외모 바꾸기 창은 예전처럼 한 번에) */
+const AP_STEPS=[['이름',['성별']],['머리',['머리','머리색']],['얼굴',['피부','눈','눈색','눈썹','얼굴','수염']],['몸',['키','체형','가슴']],['옷',['윗옷','윗옷 색','아래','아래 색','신발']]];
+const AP_STEP_OF={};AP_STEPS.forEach(([,ls],i)=>ls.forEach(l=>AP_STEP_OF[l]=i));
+let newStep=0;
+function newStepShow(n){n=Math.max(0,Math.min(AP_STEPS.length-1,n|0));newStep=n;const card=$('#stepNew');if(!card)return;const last=n===AP_STEPS.length-1;
+  card.querySelectorAll('[data-step]').forEach(e=>e.classList.toggle('sx-off',+e.dataset.step!==n));
+  card.querySelector('.newpick label.f').classList.toggle('sx-off',n!==0);
+  card.querySelectorAll('#apBox .apgrp').forEach(g=>g.classList.toggle('sx-off',![...g.querySelectorAll('.aprow')].some(r=>!r.classList.contains('sx-off'))));
+  card.querySelectorAll('.nsBar .st').forEach((e,i)=>{e.className='st'+(i<n?' done':i===n?' on':'');e.querySelector('i').textContent=i<n?'✓':i+1;});
+  card.querySelectorAll('.nsBar .ln').forEach((e,i)=>e.classList.toggle('done',i<n));
+  $('#nsTitle').textContent=AP_STEPS[n][0];$('#nsPrev').textContent=n?'이전':'뒤로';
+  $('#nsNext').hidden=last;$('#go').hidden=!last;if(!last)$('#nsNext').textContent='다음 · '+AP_STEPS[n+1][0];
+  const near=n===1||n===2;$('#nickShow').classList.toggle('sx-off',near);if(apPrev&&near!==!!card.dataset.near){card.dataset.near=near?'1':'';apPrev.zoomTo(near?.58:1);}}
+function newStepGo(n){if(n>0&&newStep===0&&!($('#nick').value||'').trim()){$('#nick').focus();return;}newStepShow(n);}
 function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
   const grp=t=>{const g=document.createElement('div');g.className='apgrp';const h=document.createElement('h4');h.textContent=t;g.appendChild(h);box.appendChild(g);cur=g;};
-  const row=(label,cls)=>{const w=document.createElement('div');w.className='aprow '+cls;const l=document.createElement('span');l.textContent=label;w.appendChild(l);cur.appendChild(w);return w;};
+  const row=(label,cls)=>{const w=document.createElement('div');w.className='aprow '+cls;if(AP_STEP_OF[label]!=null)w.dataset.step=AP_STEP_OF[label];const l=document.createElement('span');l.textContent=label;w.appendChild(l);cur.appendChild(w);return w;};
   grp('얼굴·머리');
   const gr=row('성별','g');for(const [g,nm] of [['m','남자'],['f','여자']]){const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',ap.g===g);
     b.onclick=()=>{if(ap.g!==g){ap.g=g;ap.s=0;ap.d=0;delete ap.sv;buildApControls(box,ap,onChange);}onChange();};gr.appendChild(b);}
@@ -11275,7 +11306,7 @@ function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
     const go=d=>{ap[key]=(((ap[key]??def)|0)+d+list.length)%list.length;show();onChange();};
     mid.setAttribute('aria-expanded',false);
     mid.onclick=()=>{const open=grid.hidden;box.querySelectorAll('.apgrid').forEach(g=>g.hidden=true);box.querySelectorAll('.apn').forEach(m=>m.setAttribute('aria-expanded',false));grid.hidden=!open;mid.setAttribute('aria-expanded',open);if(open)apThumbs(grid,ap,key);};
-    L.onclick=()=>go(-1);R.onclick=()=>go(1);mid.append(nm,n);bx.append(L,mid,R);w.appendChild(bx);w.after(grid);show();};
+    L.onclick=()=>go(-1);R.onclick=()=>go(1);mid.append(nm,n);bx.append(L,mid,R);w.appendChild(bx);w.after(grid);if(w.dataset.step)grid.dataset.step=w.dataset.step;show();};
   arrow('머리',HAIR_STYLES[ap.g],'s');
   const sw=(label,list,key)=>{const w=row(label,'c');for(const c of list){const b=document.createElement('button');b.type='button';b.className='swc';b.style.background='#'+c.toString(16).padStart(6,'0');b.setAttribute('aria-pressed',ap[key]===c);b.setAttribute('aria-label',label);
     b.onclick=()=>{ap[key]=c;w.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));onChange();};w.appendChild(b);}};
@@ -11348,10 +11379,11 @@ function apPreviewInput(el,st){const P=new Map();let pd=0;el.style.touchAction='
   el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
   el.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(e.deltaY*.0012));},{passive:false});}
 // 작은 미리보기 화면 하나 (캔버스마다)
-function makeApPreview(cv,dist=4.9,ly=1.0){let st=null;return{dirty:true,tick(dt,job,ap,gear,alive){if(!alive)return;
+function makeApPreview(cv,dist=4.9,ly=1.0){let st=null,zt=null;return{dirty:true,zoomTo(z){zt=z;if(st){st.yaw=.4;st.idle=0;}},tick(dt,job,ap,gear,alive){if(!alive)return;
   if(!st){const c2=new THREE.PerspectiveCamera(30,1,.1,20);st={cam:c2,m:null,yaw:.4,zoom:1,idle:99,held:false,touched:false,zk:-1};if(cv.parentElement)apPreviewInput(cv.parentElement,st);}
   const w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;const pr=Math.min(2,devicePixelRatio||1),W=Math.round(w*pr),H=Math.round(h*pr);
   if(st.w!==w||st.h!==h){st.w=w;st.h=h;st.cam.aspect=w/h;st.cam.updateProjectionMatrix();}
+  if(zt!=null){st.zoom+=(zt-st.zoom)*Math.min(1,dt*7);if(Math.abs(zt-st.zoom)<.003){st.zoom=zt;zt=null;}}
   if(st.zk!==st.zoom){st.zk=st.zoom;const t=Math.max(0,Math.min(1,(1-st.zoom)/.5)),y=ly+(1.68-ly)*t;st.cam.position.set(0,y+.2*st.zoom,dist*st.zoom);st.cam.lookAt(0,y,0);}
   if(this.dirty&&(OLD_LOOK||PM.data[ap.g])){st.m=makePlayerMesh(job,gear,{...ap});this.dirty=false;if(st.idle>=4)st.yaw=.4;}
   if(st.m){if(st.held||st.idle<4)st.idle+=st.held?0:dt;else st.yaw+=dt*.5;st.m.rotation.y=st.yaw;apRelaxPose(st.m,dt);pvDraw(st.m,st.cam,cv,W,H);}}};}
@@ -11359,7 +11391,7 @@ let selId=null;
 const charAp=c=>apParse(c.ap)||(c.ap&&c.ap.g?c.ap:null)||apDefault();
 const PORTRAITS=new Map(),portraitWant=[];let charPicR=null;
 const newAp={...apDefault(),c:SHIRT_COLORS[0]};let apPrev=null;
-(function(){const box=$('#apBox');if(!box)return;buildApControls(box,newAp,()=>{if(apPrev)apPrev.dirty=true;});if(!OLD_LOOK){pmLoad('m').catch(()=>{});pmLoad('f').catch(()=>{});}})();
+(function(){const box=$('#apBox');if(!box)return;buildApControls(box,newAp,()=>{if(apPrev)apPrev.dirty=true;newStepShow(newStep);});if(!OLD_LOOK){pmLoad('m').catch(()=>{});pmLoad('f').catch(()=>{});}})();
 // 미리보기: 새 캐릭터 화면이 열려 있을 때만 돈다
 function apPreviewTick(dt){
   if(BOOT.q)return;   /* 로딩 화면이 덮고 있으면 미리보기는 쉰다 (그만큼 빨리 짓는다) */
@@ -11371,7 +11403,7 @@ function apPreviewTick(dt){
   portraitStep();}
 let _lcT=0,_lc=[];function loadCharsCached(){const t=performance.now();if(t-_lcT>500){_lc=loadChars();_lcT=t;}return _lc;}
 function startStep(n){if(n===0)n=-1;   /* 예전 '캐릭터 선택창'(0)은 이제 홈 화면이다 */
-  $('#stepHome').hidden=n!==-1;$('#stepAuth').hidden=n!==2;$('#start').classList.toggle('home',n===-1);$('#stepNew').hidden=n!==1;if(n===1){if(apPrev)apPrev.dirty=true;setTimeout(()=>{try{$('#nick').focus();$('#nick').select();}catch(e){}},30);}if(n===-1)renderChars();}
+  $('#stepHome').hidden=n!==-1;$('#stepAuth').hidden=n!==2;$('#start').classList.toggle('home',n===-1);$('#stepNew').hidden=n!==1;if(n===1){if(apPrev)apPrev.dirty=true;newStepShow(0);setTimeout(()=>{try{$('#nick').focus();$('#nick').select();}catch(e){}},30);}if(n===-1)renderChars();}
 $('#backList').onclick=()=>startStep(-1);
 $('#toHome').onclick=()=>startStep(-1);
 /* 홈 화면 단추: 로그인이 필요하면 '게임 시작'(로그인 뒤 홈으로), 캐릭터가 없으면 '게임 시작'(만들기로), 있으면 고른 캐릭터로 '모험 시작' */
@@ -11448,7 +11480,9 @@ function homeSelect(id){selId=id;for(const e of $('#homeChars').children)e.class
   $('#nick').addEventListener('input',()=>{nickOk();$('#nickShow').textContent=$('#nick').value.trim();});nickOk();
   $('#go').onclick=()=>{if(!nickOk()){$('#nick').focus();return;}if(BOOT.on||BOOT.q){BOOT.wait(()=>$('#go').onclick());return;}const name=$('#nick').value.trim(),T=OR.THOUSE;
     startGame({id:'c'+Date.now().toString(36)+Math.floor(Math.random()*1e4),name,job:chosen,needBook:true,lv:1,exp:0,sp:0,skills:{},slots:Array(NSK).fill(null),x:T.x-2.9,z:T.z-2.5,y:0,ap:apCode(newAp)});};
-  $('#nick').addEventListener('keydown',e=>{if(e.key==='Enter')$('#go').click();});
+  $('#nick').addEventListener('keydown',e=>{if(e.key==='Enter'){if(newStep<AP_STEPS.length-1)newStepGo(newStep+1);else $('#go').click();}});
+  $('#nsPrev').onclick=()=>{if(newStep)newStepShow(newStep-1);else $('#backList').click();};$('#nsNext').onclick=()=>newStepGo(newStep+1);
+  document.querySelectorAll('#stepNew .nsBar .st').forEach((e,i)=>e.onclick=()=>newStepGo(i));newStepShow(0);
 })();
 
 function loadChars(){
