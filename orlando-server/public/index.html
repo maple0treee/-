@@ -9188,16 +9188,103 @@ function lkBody(m,ap){const S=m.userData.stick;if(!S||apQDef(ap))return;const X=
   for(const L of [S.L,S.R]){L.hip.position.x*=X.hp;if(X.ll!==1){L.hip.scale.y=X.ll;L.foot.scale.y=1/X.ll;}
     if(X.lt!==1){for(const o of kids(L.hip))lkWarp(o,v=>{const k=v.y>-.4?X.lt:v.y<-.5?calf:X.lt+(calf-X.lt)*(-.4-v.y)/.1;v.x*=k;v.z*=k;});for(const o of kids(L.knee))lkWarp(o,v=>{v.x*=calf;v.z*=calf;});}}
   S.lkLift=(X.ll-1)*.91*hs;S.body.position.y+=S.lkLift;}
+/* ---------- NPC 몸을 플레이어처럼 천 옷으로 (얼굴·머리·모자는 그대로): stickLook(G.npc)가 부르는 덧붙임 ----------
+   깃·높은 깃·띠·끈 허리띠·목걸이·휘장·목도리·두건 수건·어깨 수건·별 장식·앞치마·망토·웃옷 자락·어깨 갑옷.
+   모두 몸판 겉면(SP)을 따라 붙인다 (예전처럼 원통 몸에 맞춘 도형을 띄워 붙이지 않는다) */
+function npcLookExtras(c){const {S,T,N,f,bodyPr,bustF,bellyD,BY,waist,seed,add,M,mm,mTrim,sph}=c;
+  const bp=latheUp(bodyPr),rAt=y=>{if(y<=bp[0][1])return bp[0][0];for(let i=1;i<bp.length;i++)if(bp[i][1]>=y){const a=bp[i-1],b=bp[i],k=(y-a[1])/Math.max(1e-6,b[1]-a[1]);return a[0]+(b[0]-a[0])*k;}return bp[bp.length-1][0];};
+  const R=(az,y)=>rAt(y)+bustF(az,y)[0]+bellyD(az,y);
+  const SP=(az,y,o=0)=>{const r=R(az,y)+o;return [Math.sin(az)*r,y,Math.cos(az)*r*.76];};
+  const CL=(col,k='weave',x)=>{const m=lkCloth(col,k,x);mm.push(m);return m;};
+  const dk=(col,k)=>new THREE.Color(col).multiplyScalar(k).getHex();
+  /* 몸판 겉면을 따라 붙는 천 조각: y0(위)→y1(아래), ha(y)=[왼 각, 오른 각], off(y,az)=겉면에서 띄울 거리, sh(az,y)=그늘 */
+  const panel=(y0,y1,ha,off,ny=24,nx=18,sh)=>{const pos=[],uv=[],col=[],idx=[];let len=0,py=null;
+    for(let j=0;j<=ny;j++){const y=y0+(y1-y0)*j/ny,[a0,a1]=ha(y),rr=R((a0+a1)/2,y);if(py!=null)len+=Math.abs(py-y);py=y;
+      for(let i=0;i<=nx;i++){const az=a0+(a1-a0)*i/nx,p=SP(az,y,off(y,az));pos.push(...p);uv.push(az*rr/LK_TILE,len/LK_TILE);const s=sh?Math.max(.4,1-sh(az,y,i/nx,j/ny)):1;col.push(s,s,s);
+        if(i&&j){const a=(j-1)*(nx+1)+i-1,b=a+1,cc=a+nx+1,d=cc+1;idx.push(a,cc,b,b,cc,d);}}}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();return g;};
+  /* 띠 (길 따라 놓인 납작한 천): pts=[[x,y,z]..], w=너비 */
+  const ribbon=(pts,w,closed=false,th=.004)=>{const pos=[],uv=[],col=[],idx=[],n=pts.length,V=a=>new THREE.Vector3(a[0],a[1],a[2]);let L=0;
+    for(let i=0;i<n;i++){const p=V(pts[i]),a=V(pts[closed?(i-1+n)%n:Math.max(0,i-1)]),b=V(pts[closed?(i+1)%n:Math.min(n-1,i+1)]),t=b.sub(a).normalize(),o=new THREE.Vector3(p.x,0,p.z/.76);if(o.lengthSq()<1e-8)o.set(0,0,1);o.normalize();
+      const sd=new THREE.Vector3().crossVectors(t,o).normalize().multiplyScalar(w/2);if(i)L+=p.distanceTo(V(pts[i-1]));
+      for(const [s,d] of [[-1,0],[1,0],[1,th],[-1,th]]){pos.push(p.x+sd.x*s+o.x*d,p.y+sd.y*s+o.y*d,p.z+sd.z*s+o.z*d);uv.push((s+1)/2*w/LK_TILE,L/LK_TILE);col.push(d?1:.8,d?1:.8,d?1:.8);}
+      if(i||closed){const A=((i-1+n)%n)*4,B=i*4;for(let k=0;k<4;k++){const k2=(k+1)%4;idx.push(A+k,B+k,A+k2,A+k2,B+k,B+k2);}}}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();return g;};
+  const ring=(y,o,n=64,tilt=0)=>{const p=[];for(let i=0;i<n;i++){const az=-Math.PI+i/n*Math.PI*2,yy=y+tilt*Math.sin(az);p.push(SP(az,yy,o));}return p;};
+  const neckRing=(y,r,o=0)=>{const p=[];for(let i=0;i<48;i++){const a=i/48*Math.PI*2;p.push([Math.sin(a)*(r+o),y-.012*Math.cos(a),Math.cos(a)*(r+o)*.9]);}return p;};
+  const onSurf=(geo,m,az,y,o,rz=0)=>{const p=SP(az,y,o),q=add(T,geo,m,p[0],p[1],p[2]);q.rotation.set(0,Math.atan2(Math.sin(az),Math.cos(az)*.76),rz);q.rotation.order='YXZ';q.rotation.x=-.06;return q;};
+  const metal=(col,r=.32)=>M(col,{metalness:.65,roughness:r});
+  /* 깃 (셔츠가 아닌 옷): 목둘레에서 접혀 내려온 뾰족한 두 장 */
+  if(N.collar!=null&&!c.shirt){const mc=CL(N.collar);for(const s of [-1,1]){const sh=new THREE.Shape();sh.moveTo(0,0);sh.lineTo(s*.075,-.004);sh.quadraticCurveTo(s*.08,-.035,s*.052,-.085);sh.lineTo(s*.012,-.022);sh.lineTo(0,0);
+      const cg=new THREE.ExtrudeGeometry(sh,{depth:.005,bevelEnabled:true,bevelThickness:.002,bevelSize:.002,bevelSegments:1,curveSegments:8});cg.setAttribute('color',new THREE.Float32BufferAttribute(new Array(cg.attributes.position.count*3).fill(.92),3));
+      add(T,cg,mc,s*.01,.6,.1,[-.6,0,s*-.06]);}}
+  /* 높은 깃: 목을 감싸 세운 깃, 위 끝이 살짝 벌어진다 */
+  if(N.high!=null){add(T,lkGarment([[.118,.548],[.114,.6],[.104,.655],[.108,.69],[.112,.7],[.094,.7]],48,{z:.9,fold:(az,y)=>lkSeam(az,0,.11,.003)}),CL(N.high,'wool'));
+    add(T,lkBand(.112,.108,.69,.705,48,{z:.9}),CL(dk(N.high,.6),'trim'));}
+  /* 어깨띠: 한쪽 어깨에서 반대쪽 허리로 비스듬히 두른 천 */
+  if(N.sash!=null){const pts=[];for(let i=0;i<72;i++){const az=-Math.PI+i/72*Math.PI*2,y=.3+.2*Math.sin(az+.25);pts.push(SP(az,y,.006+.004*Math.max(0,Math.cos(az))));}
+    add(T,ribbon(pts,.06,true,.006),CL(N.sash,'weave',{side:THREE.DoubleSide}));
+    add(T,lkLock([SP(-.35,.16,.012),SP(-.4,.08,.022),SP(-.38,-.02,.03)],.02,.012,8,12,.35,1),CL(N.sash));}   /* 매듭 아래로 늘어진 끝 */
+  /* 끈 허리띠: 꼬인 끈 + 늘어진 두 가닥과 술 */
+  if(N.rope!=null){const mr=CL(N.rope,'weave');add(T,lkTube(ring(BY,.008,64),.011,true,7),mr);
+    for(const [az,ln] of [[.22,.3],[.36,.24]]){const a=SP(az,BY-.01,.014),b=SP(az+.02,BY-ln*.5,.022),e=SP(az+.01,BY-ln,.026);add(T,lkTube([a,b,e],.008,false,6),mr);add(T,sph(.016,10,8),mr,e[0],e[1]-.01,e[2],null,[1,1.5,1]);}}
+  /* 목걸이: 목 옆에서 가슴으로 늘어진 사슬 + 빛나는 보석 */
+  if(N.pendant!=null){const ch=metal(N.chain??0xc8a050,.3),pts=[];for(let i=0;i<=24;i++){const t=i/24*2-1,az=t*.95,y=.44+.15*t*t;pts.push(SP(az,y,.006));}
+    pts.unshift([-.1,.6,-.02]);pts.push([.1,.6,-.02]);add(T,lkTube(pts,.0035,false,5),ch);
+    const gp=SP(0,.415,.016);add(T,new THREE.OctahedronGeometry(.026,0),M(N.pendant,{emissive:N.pendant,emissiveIntensity:.35,roughness:.25,metalness:.3}),gp[0],gp[1],gp[2],null,[1,1.25,.6]);
+    add(T,new THREE.TorusGeometry(.03,.004,6,20),ch,gp[0],gp[1],gp[2]-.004);}
+  /* 휘장: 왼 가슴의 둥근 쇠 휘장 (가운데 빛깔) */
+  if(N.badge!=null){const az=-.5,y=.43;onSurf(new THREE.CylinderGeometry(.034,.036,.008,24).rotateX(Math.PI/2),metal(N.badge,.3),az,y,.004);
+    onSurf(new THREE.TorusGeometry(.031,.004,6,24),metal(dk(N.badge,.8),.3),az,y,.009);if(N.badgeIn!=null)onSurf(new THREE.CylinderGeometry(.017,.017,.008,6).rotateX(Math.PI/2),M(N.badgeIn,{roughness:.3}),az,y,.009);}
+  /* 목도리: 목을 두툼하게 감고 한쪽 끝이 가슴으로 늘어진다 */
+  if(N.scarf!=null){const ms=CL(N.scarf,'wool',{side:THREE.DoubleSide});add(T,lkTube(neckRing(.6,.1),.034,true,10),ms);
+    const tail=[];for(let i=0;i<=10;i++){const y=.58-i*.022;tail.push(SP(.32-i*.01,y,.012+.003*i));}add(T,ribbon(tail,.07,false,.008),ms);
+    add(T,lkBand(.036,.036,0,.012,16),ms,tail[10][0],tail[10][1]-.012,tail[10][2]);}
+  /* 목 수건: 목에 감은 얇은 천 + 앞으로 늘어진 세모 */
+  if(N.kerchief!=null){const mk=CL(N.kerchief,'weave',{side:THREE.DoubleSide});add(T,lkTube(neckRing(.612,.096),.02,true,8),mk);
+    add(T,panel(.6,.47,y=>{const h=.36*Math.max(.04,(y-.47)/.13);return [-h,h];},(y,az)=>.008+.004*Math.cos(az*8),10,12,(az,y,u,v)=>.18*v),mk);
+    add(T,sph(.022,12,10),mk,0,.6,SP(0,.6,0)[2]+.012,null,[1.2,1,.8]);}   /* 앞 매듭 */
+  /* 어깨에 걸친 수건 (오른 어깨) */
+  if(N.towel!=null){const mt=CL(N.towel,'wool',{side:THREE.DoubleSide});const az0=.95;
+    add(T,panel(.6,.3,y=>[az0-.22,az0+.22],(y,az)=>.012+.004*Math.sin(az*30),14,10),mt);
+    add(T,panel(.6,.36,y=>[Math.PI-az0-.22,Math.PI-az0+.22],(y,az)=>.012+.004*Math.sin(az*30),14,10),mt);
+    const top=[];for(let i=0;i<=8;i++){const t=i/8,a=az0+(Math.PI-2*az0)*t;top.push(SP(a,.6+.03*Math.sin(t*Math.PI),.016));}add(T,ribbon(top,.12,false,.008),mt);}
+  /* 별 장식 */
+  if(N.stars){const sm=M(0xf0d878,{emissive:0xf0c050,emissiveIntensity:.5,metalness:.4,roughness:.3});for(const [az,y] of [[.55,.4],[-.35,.25],[.3,.15],[-.6,.45],[.1,-.02]]){const p=SP(az,y,.006);add(T,new THREE.OctahedronGeometry(.016,0),sm,p[0],p[1],p[2],null,[1,1,.5]);}}
+  /* 앞치마: 가슴받이 + 허리 아래로 늘어진 자락 (바지 입은 사람), 목끈·허리끈·주머니 */
+  if(N.apron!=null){const ma=CL(N.apron,'weave',{side:THREE.DoubleSide}),dr=(az,y)=>lkDrape(az,y,BY-.02,-.6,.008,7,seed+5)[0];
+    add(T,panel(.47,BY+.01,y=>{const h=.42+.25*_lkSS(.47,BY,y);return [-h,h];},(y,az)=>.008,16,16),ma);
+    if(!N.short){add(T,panel(BY+.01,-.6,y=>{const h=.72+.1*_lkSS(BY,-.6,y);return [-h,h];},(y,az)=>.01+Math.max(0,BY-y)*.09+dr(az,y),26,22,(az,y)=>.6*Math.max(0,-lkDrape(az,y,BY-.02,-.6,1,7,seed+5)[0])),ma);
+      if(N.apronP)for(const s of [-1,1]){const y=-.16;add(T,panel(y+.05,y-.05,()=>[s*.18-.15,s*.18+.15],(yy,az)=>.012+Math.max(0,BY-yy)*.09+dr(az,yy)+.006,4,6,(az,yy,u,v)=>v>.9?.2:0),CL(dk(N.apron,.88),'weave',{side:THREE.DoubleSide}));}}
+    const mS=CL(dk(N.apron,.85));add(T,lkTube(ring(BY,.016,64),.01,true,6),mS);   /* 허리끈 */
+    for(const s of [-1,1]){const a=SP(s*.42,.47,.008);add(T,lkTube([a,[s*.1,.6,.05],[s*.09,.63,-.04],[0,.6,-.1]],.007,false,5),mS);}   /* 목끈 */
+    const k=SP(Math.PI,BY,.02);add(T,sph(.02,10,8),mS,k[0],k[1],k[2]);for(const s of [-1,1])add(T,lkLock([k,[k[0]+s*.03,k[1]-.06,k[2]-.01],[k[0]+s*.025,k[1]-.14,k[2]-.012]],.009,.006,6,8,.4,1),mS);}   /* 등 뒤 매듭 */
+  /* 망토: 어깨에서 등 뒤로 늘어진 천, 세로 주름, 앞에는 쇠 고리 */
+  if(N.cape!=null){const mc=CL(N.cape,'wool',{side:THREE.DoubleSide});
+    add(T,panel(.6,-.72,y=>{const h=1.05+.35*_lkSS(.6,.3,y);return [Math.PI-h,Math.PI+h];},(y,az)=>.018+Math.max(0,.5-y)*.07+lkDrape(az,y,.45,-.72,.016,9,seed+7)[0]*Math.min(1,(.6-y)*3),36,40,(az,y)=>.7*Math.max(0,-lkDrape(az,y,.45,-.72,1,9,seed+7)[0])),mc);
+    const mt=metal(N.capeTrim??0xd4af37,.3);for(const s of [-1,1]){const p=SP(s*.8,.55,.02);add(T,new THREE.CylinderGeometry(.022,.022,.008,18).rotateX(Math.PI/2),mt,p[0],p[1],p[2],[0,s*.6,0]);}
+    add(T,lkTube([SP(-.8,.55,.024),SP(0,.5,.02),SP(.8,.55,.024)],.0035,false,5),mt);}
+  /* 웃옷 자락: 허리 아래로 퍼지는 다른 색 천 (사냥꾼·마부) */
+  if(N.tunic!=null){const mtu=CL(N.tunic,'wool');add(T,lkGarment([[waist+.012,BY+.012],[waist+.03,BY-.02],[waist+.05,-.06],[.215,-.16],[.232,-.24]],72,{z:.8,fold:(az,y)=>{let r=[bellyD(az,y),0];r=lkAdd(r,lkDrape(az,y,BY-.01,-.24,.012,9,seed+2));return r;}}),mtu);
+    add(T,lkBand(.236,.232,-.25,-.225,72,{z:.8,fold:(az,y)=>lkDrape(az,-.24,BY-.01,-.24,.012,9,seed+2)}),CL(dk(N.tunic,.65),'trim'));}
+  /* 어깨 갑옷: 겹친 쇠판 두 장 + 테 */
+  if(N.pauldron!=null){const mp=M(N.pauldron,{metalness:.65,roughness:.33,side:THREE.DoubleSide}),me=metal(dk(N.pauldron,.7),.4);for(const A of [S.AL,S.AR]){const B=c.bin(A.sh);
+      add(B,lkLathe([[0,.085],[.045,.08],[.08,.055],[.1,.02],[.108,-.02],[.104,-.03]],32),mp,0,0,0,null,[1.05,1,1.05]);
+      add(B,lkLathe([[.098,-.02],[.11,-.045],[.112,-.07],[.106,-.075]],32),mp,0,0,0,null,[1.05,1,1.05]);
+      add(B,new THREE.TorusGeometry(.107,.006,6,32).rotateX(Math.PI/2),me,0,-.03,0,null,[1.05,1,1.05]);
+      add(B,new THREE.TorusGeometry(.109,.006,6,32).rotateX(Math.PI/2),me,0,-.074,0,null,[1.05,1,1.05]);}}
+}
 function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{};
+  const N=G.npc||null,hs0=S.body.scale.x;   /* N: NPC 몸만 새로 짓는다 (얼굴·머리·모자는 NPC 것 그대로, 살빛·키도 그대로) */
   const H=S.head,f=ap.g==='f',X=apX(ap),XA=apXA(ap);
   const base=new Set(u.mats.slice(0,4)),[limb,skin,body,trim]=u.mats;
-  skin.color.setHex(0xf1e6d2).multiply(new THREE.Color(SKIN_TONES[ap.k|0]??0xffffff));
+  if(!N)skin.color.setHex(0xf1e6d2).multiply(new THREE.Color(SKIN_TONES[ap.k|0]??0xffffff));
   if(ap.c){body.color.setHex(ap.c);trim.color.setHex(new THREE.Color(ap.c).multiplyScalar(.55).getHex());}
   const skC=skin.color.getHex(),shirtC=body.color.getHex(),pantsC=ap.p??PANTS_COLORS[0],hairC=ap.h??HAIR_COLORS[1];
   const mm=[];const M=(c,x)=>{const m=mat(c,Object.assign({flatShading:false,roughness:.72},x||{}));mm.push(m);return m;};
   const dk=(c,k)=>new THREE.Color(c).multiplyScalar(k).getHex();
   const mSkin=M(skC,{roughness:.6}),mSkinD=M(dk(skC,.84),{roughness:.6}),mShirt=M(shirtC,{roughness:.82}),mShirtD=M(dk(shirtC,.7),{roughness:.82});
-  const vest=X.u===2,underC=vest?0xe6dcc6:shirtC,mUnder=vest?M(underC,{roughness:.85}):mShirt,mUnderD=vest?M(dk(underC,.78),{roughness:.85}):mShirtD;
+  const vest=X.u===2,underC=vest?(N&&N.under!=null?N.under:0xe6dcc6):shirtC,mUnder=vest?M(underC,{roughness:.85}):mShirt,mUnderD=vest?M(dk(underC,.78),{roughness:.85}):mShirtD;
   const mPants=M(pantsC,{roughness:.85}),mBoot=M(X.o===2?0x2e2420:0x4a3020,{roughness:.55}),mBootD=M(0x2a1c14,{roughness:.6}),mBelt=M(0x3a2618,{roughness:.5}),mGold=M(0xc9a24a,{roughness:.35,metalness:.6});
   const mHair=M(hairC,{roughness:.6}),mHairD=M(dk(hairC,.72),{roughness:.6});
   /* 막대 조각 숨기기 (장비 조각은 그대로) */
@@ -9211,7 +9298,7 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
   const skinQ=[],skinAdd=(par,geo,m,bones,wf)=>{skinQ.push({par,geo,m,bones,wf});};
   /* 천으로 싼 관절 공: uv를 실제 길이로 잡아 천 결 굵기가 소매·바지와 같게 */
   const clothBall=r=>{const g=sph(r,28,18),uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*Math.PI*2*r/LK_TILE,uv.getY(i)*Math.PI*r/LK_TILE);g.setAttribute('color',new THREE.Float32BufferAttribute(new Array(uv.count*3).fill(.86),3));return g;};
-  const bw=apBody(ap).bw*(f?.93:1),armor=(G.armor??-1)>=1,bootsG=(G.boots??-1)>=0&&S.L.foot.userData.boot;
+  const bw=(N?N.bw:apBody(ap).bw)*(f?.93:1),armor=(G.armor??-1)>=1,bootsG=(G.boots??-1)>=0&&S.L.foot.userData.boot;
 
   /* --- 몸통: 윗옷 --- */
   hideBase(S.upper);
@@ -9237,6 +9324,8 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       /* 몸에서 떠 내려오는 천 밑은 그늘 */
       if(dy<0)sh+=.16*t2*Math.min(1,A)*_lkSS(by-.02,by-.09,y)*(1-_lkSS(BY+.05,BY+.02,y)*.5);}
     return [d,sh];};
+  /* 배 (NPC): 앞 아래쪽이 둥글게 나온다. 몸판·조끼·허리띠·앞치마가 같이 따른다 */
+  const bellyK=N&&N.belly?N.belly:0,bellyD=(az,y)=>bellyK?.085*bellyK*Math.pow(Math.max(0,Math.cos(az)),1.5)*Math.exp(-Math.pow((y-.15)/.17,2)):0;
   /* 가슴 위에서는 천이 팽팽해서 다른 주름이 펴진다 (0이면 그대로, 1이면 다 펴짐) */
   const bFlat=(az,y)=>{if(bTen<=0)return 0;let A=0;for(const c of [-bC,bC])A=Math.max(A,Math.exp(-Math.pow((az-c)/(bW*1.3),2)));return bTen*A*Math.exp(-Math.pow((y-bY)/(bUp*1.6),2));};
   /* 갑옷도 가슴 모양을 따라 앞으로 부풀린다 (큰 가슴이 갑옷을 뚫지 않게) */
@@ -9249,11 +9338,11 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       if(Math.max(y0,y1)>.2&&Math.min(y0,y1)<.5){const n=Math.ceil(Math.abs(y1-y0)/(bTen>0?.007:.012));for(let k=1;k<n;k++){const t=k/n;o.push([pr[i][0]+(q[0]-pr[i][0])*t,y0+(y1-y0)*t]);}}}return o;};
   const robe=X.u===3,shirt=X.u===1,tunic=X.u===0;
   /* 몸판: 허리띠 위로 천이 살짝 부풀어 늘어지고(블라우징), 아래 자락은 퍼지며 세로 주름, 옆·뒤 솔기, 가슴 아래 당긴 주름 */
-  const short_=shirt||vest,hemTo=robe?-.64:short_?-.085:-.2,hemR=robe?.29:short_?waist+.03:.212;
+  const short_=shirt||vest||!!(N&&N.short),tuck=!!(N&&N.short),hemTo=robe?-.64:tuck?BY-.05:short_?-.085:-.2,hemR=robe?.29:tuck?waist+.004:short_?waist+.03:.212;   /* tuck: 치마·긴 옷 속으로 넣어 입은 웃옷 */
   const bodyPr=[];
   {const n=robe?9:short_?3:6;for(let k=n;k>=1;k--){const t=k/n;bodyPr.push([waist+.03+(hemR-waist-.03)*Math.pow(t,1.25),hemTo*t]);}}
   bodyPr.push([waist+.022,BY-.03],[waist+.004,BY-.008],[waist+.002,BY+.012],[waist+.02,BY+.04],[waist+.022,BY+.07],[waist+.008,.12],[chest*.93,.24],[chest*.99,.33],[chest,.41],[chest*.96,.48],[chest*.88,.53],[.15,.565],[.115,.59],[.09,.605],[0,.61]);
-  const bodyFold=(az,y)=>{let r=[0,0];
+  const bodyFold=(az,y)=>{let r=[bellyD(az,y),0];
     r=lkAdd(r,bustF(az,y,true));const fl=1-bFlat(az,y)*.85,sc=q=>[q[0]*fl,(q[1]||0)*fl];
     if(y<BY-.02)r=lkAdd(r,lkDrape(az,y,BY-.01,hemTo,robe?.016:.011,robe?11:8,seed));
     r=lkAdd(r,sc(lkBunch(az,y,BY+.045,.028,.006,120,seed)));   /* 허리띠 위로 모인 천 */
@@ -9271,7 +9360,7 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
   const trimC=dk(shirtC,.62),mTrim=lkCloth(trimC,'trim',{vertexColors:false});mTrim.map=lkTex('trim').map;mm.push(mTrim);
   const mThread=M(dk(shirtC,.45),{roughness:.8});
   /* 아래 단: 수놓은 띠 + 말아 꿰맨 끝 */
-  if(!armor||robe){const hy=hemTo,hr=hemR;
+  if((!armor||robe)&&!tuck){const hy=hemTo,hr=hemR;
     add(T,lkBand(hr+.002,hr-.006,hy,hy+(short_?.022:.04),72,{z:.76*1.0,fold:(az,y)=>lkDrape(az,hemTo-.001,BY-.01,hemTo,robe?.016:.011,robe?11:8,seed)}),short_?bodyM:mTrim);
     const rg=new THREE.TorusGeometry(hr+.001,.0045,6,90);rg.rotateX(Math.PI/2);{const p=rg.attributes.position,v=new THREE.Vector3();for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i);const az=Math.atan2(v.x,v.z),d=lkDrape(az,hemTo,BY-.01,hemTo,robe?.016:.011,robe?11:8,seed)[0],r=Math.hypot(v.x,v.z),k=(r+d)/r;p.setXYZ(i,v.x*k,v.y,v.z*k*.76);}rg.computeVertexNormals();}
     add(T,rg,bodyM,0,hy,0);}
@@ -9288,25 +9377,25 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     for(const s of [-1,1])add(T,lkTube([[s*.014,.555,zf(.555)+.003],[s*.02,.53,zf(.53)+.008],[s*.018,.49,zf(.49)+.01],[s*.024,.46,zf(.46)+.008]],.002),mCord);}
   /* 셔츠: 단추 띠 + 단추 + 뾰족 깃 + 가슴 주머니 */
   if(shirt){const zf=y=>(y>.5?chest*.92:y>.3?chest*.99:waist+.02)*.76;
-    const mBtn=M(0xe8e0cc,{roughness:.35});
-    if(!f){add(T,roundBoxGeo(.026,.62,.007,.002),bodyM,0,.25,(chest*.99)*.76+.003,[-.03,0,0]);
-      for(let i=0;i<6;i++){const y=.53-i*.1;add(T,new THREE.CylinderGeometry(.0075,.0075,.004,14),mBtn,0,y,zf(y)+.01,[Math.PI/2,0,0]);}}
+    const mBtn=M(N&&N.buttons?(N.buttons.c??0xd8c8a0):0xe8e0cc,{roughness:.35,metalness:N&&N.buttons?.55:0}),nBtn=N&&N.buttons?(N.buttons.n??4)+1:6,bStep=.5/(nBtn-1);
+    if(!f){add(T,roundBoxGeo(.026,.62,.007,.002),N&&N.placket!=null?M(N.placket,{roughness:.8}):bodyM,0,.25,(chest*.99)*.76+.003,[-.03,0,0]);
+      for(let i=0;i<nBtn;i++){const y=.53-i*bStep;add(T,new THREE.CylinderGeometry(.0075,.0075,.004,14),mBtn,0,y,zf(y)+.01,[Math.PI/2,0,0]);}}
     else{/* 여자 셔츠: 단추 띠와 단추가 가슴 앞면을 따라간다 */
       const bp=latheUp(bodyPr),rAt=y=>{for(let i=1;i<bp.length;i++)if(bp[i][1]>=y){const a=bp[i-1],b=bp[i],k=(y-a[1])/Math.max(1e-6,b[1]-a[1]);return a[0]+(b[0]-a[0])*k;}return bp[bp.length-1][0];};
       const fz=y=>(rAt(y)+bustF(0,y)[0])*.76;
       {const pos=[],uv=[],col=[],idx=[],n=62;for(let i=0;i<=n;i++){const y=-.06+.61*i/n,z=fz(y)+.005;for(const x of [-.014,-.013,.013,.014]){pos.push(x,y,Math.abs(x)>.0135?z-.004:z);uv.push((x+.014)/LK_TILE,(y+.06)/LK_TILE);col.push(.86,.86,.86);}
           if(i)for(let j=0;j<3;j++){const a=(i-1)*4+j,b=a+1,c=a+4,d=a+5;idx.push(a,b,d,a,d,c);}}
         const pg=new THREE.BufferGeometry();pg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));pg.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));pg.setAttribute('color',new THREE.Float32BufferAttribute(col,3));pg.setIndex(idx);pg.computeVertexNormals();add(T,pg,bodyM);}
-      for(let i=0;i<6;i++){const y=.53-i*.1;add(T,new THREE.CylinderGeometry(.0075,.0075,.004,14),mBtn,0,y,fz(y)+.01,[Math.PI/2,0,0]);}}
+      for(let i=0;i<nBtn;i++){const y=.53-i*bStep;add(T,new THREE.CylinderGeometry(.0075,.0075,.004,14),mBtn,0,y,fz(y)+.01,[Math.PI/2,0,0]);}}
     for(const s of [-1,1]){const sh=new THREE.Shape();sh.moveTo(0,0);sh.lineTo(s*.07,-.005);sh.quadraticCurveTo(s*.075,-.03,s*.05,-.075);sh.lineTo(s*.012,-.02);sh.lineTo(0,0);
-      const cg=new THREE.ExtrudeGeometry(sh,{depth:.004,bevelEnabled:true,bevelThickness:.002,bevelSize:.002,bevelSegments:1,curveSegments:6});add(T,cg,bodyM,s*.008,.605,.095,[-.55,0,s*-.05]);}
-    if(!f){   /* 가슴 주머니는 남자 셔츠만 */
+      const cg=new THREE.ExtrudeGeometry(sh,{depth:.004,bevelEnabled:true,bevelThickness:.002,bevelSize:.002,bevelSegments:1,curveSegments:6});add(T,cg,N&&N.collar!=null?lkCloth(N.collar,'weave'):bodyM,s*.008,.605,.095,[-.55,0,s*-.05]);}
+    if(!f&&!N){   /* 가슴 주머니는 남자 셔츠만 */
     add(T,new THREE.BoxGeometry(.06,.065,.008),bodyM,.085,.36,chest*.99*.76-.004,[-.08,.32,0]);add(T,new THREE.BoxGeometry(.062,.022,.01),mThread,.085,.395,chest*.99*.76-.002,[-.08,.32,0]);
     add(T,new THREE.CylinderGeometry(.006,.006,.004,10),mBtn,.085,.39,chest*.99*.76+.004,[Math.PI/2-.08,0,0]);}}
   /* 조끼: 앞이 V로 트인 덧옷, 앞 끝이 뾰족하게 내려오고, 가장자리 바느질 테두리, 단추 넷, 주머니 둘 */
   if(vest){const vg=y=>.16+.55*_lkSS(.12,.56,y)+.16*bTen*Math.exp(-Math.pow((y-bY)/.1,2)),vy0=-.11,mVest=lkCloth(shirtC,'wool');mm.push(mVest);
     const vpr=[[waist+.036,vy0],[waist+.036,BY-.02],[waist+.036,BY+.03],[waist+.034,.1],[chest*.97+.012,.26],[chest+.014,.4],[chest*.96+.012,.48],[chest*.88+.01,.53],[.152,.565],[.13,.575]];
-    const vfold=(az,y)=>{const fl=1-bFlat(az,y)*.85,bq=lkBunch(az,y,BY+.06,.03,.004,90,seed+3);let r=[bq[0]*fl,(bq[1]||0)*fl];r=lkAdd(r,bustF(az,y,true));for(const s of [-1,1])r=lkAdd(r,lkSeam(az,s*Math.PI/2,.2));return r;};
+    const vfold=(az,y)=>{const fl=1-bFlat(az,y)*.85,bq=lkBunch(az,y,BY+.06,.03,.004,90,seed+3);let r=[bq[0]*fl+bellyD(az,y),(bq[1]||0)*fl];r=lkAdd(r,bustF(az,y,true));for(const s of [-1,1])r=lkAdd(r,lkSeam(az,s*Math.PI/2,.2));return r;};
     const geo=lkGarment(bustDense(vpr),f&&bTen>0?120:64,{fold:vfold,z:.76,gap:vg});
     /* 앞 끝이 아래로 뾰족 */{const p=geo.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i);if(y<0&&z>0){const fr=Math.max(0,z/(waist*.76+.03));p.setY(i,y-.06*Math.pow(fr,3)*(1-Math.min(1,Math.abs(x)/.09)*.4));}}geo.computeVertexNormals();}
     add(T,geo,mVest);
@@ -9329,9 +9418,9 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     const pf=(az,y)=>{const t=_lkSS(BY,-.42,y),u=(az/(Math.PI*2)*n%1+1)%1,tri=Math.abs(u-.5)*2;return [(tri-.5)*.02*t+lkDrape(az,y,BY,-.42,.006,5,seed)[0],(1-tri)*.45*t];};
     const mSkirt=lkCloth(pantsC,'weave');mm.push(mSkirt);add(T,lkGarment(sk,n*8,{fold:pf,z:.8}),mSkirt);add(T,lkBand(.279,.268,-.425,-.39,n*8,{z:.8,fold:(az,y)=>pf(az,-.42)}),mTrim);}
   /* 허리띠: 가죽 결, 쇠 버클(고리+혀), 늘어진 끝과 구멍, 고리, 바느질 주머니(덮개+단추) */
-  if(!armor&&!robe){const mLeather=lkCloth(0x4a2e1c,'leather',{vertexColors:false});mm.push(mLeather);
-    const zR=(waist+.006)*.78,bg=lkGarment([[waist+.006,BY-.018],[waist+.012,BY-.014],[waist+.012,BY+.014],[waist+.006,BY+.018]],64,{z:.78});add(T,bg,mLeather);
-    const bz=zR+.016,mMetal=M(0xb0a080,{roughness:.3,metalness:.75});
+  if(!armor&&!robe&&(!N||N.belt!=null)){const mLeather=lkCloth(N?N.belt:0x4a2e1c,'leather',{vertexColors:false});mm.push(mLeather);
+    const zR=(waist+.006)*.78,bg=lkGarment([[waist+.006,BY-.018],[waist+.012,BY-.014],[waist+.012,BY+.014],[waist+.006,BY+.018]],64,{z:.78,fold:(az,y)=>[bellyD(az,y),0]});add(T,bg,mLeather);
+    const bz=zR+.016+bellyD(0,BY)*.78,mMetal=M(0xb0a080,{roughness:.3,metalness:.75});
     const fr=new THREE.Shape();fr.moveTo(-.024,-.02);fr.lineTo(.024,-.02);fr.quadraticCurveTo(.03,-.02,.03,-.014);fr.lineTo(.03,.014);fr.quadraticCurveTo(.03,.02,.024,.02);fr.lineTo(-.024,.02);fr.quadraticCurveTo(-.03,.02,-.03,.014);fr.lineTo(-.03,-.014);fr.quadraticCurveTo(-.03,-.02,-.024,-.02);
     const ho=new THREE.Path();ho.moveTo(-.02,-.013);ho.lineTo(.02,-.013);ho.lineTo(.02,.013);ho.lineTo(-.02,.013);ho.lineTo(-.02,-.013);fr.holes.push(ho);
     add(T,new THREE.ExtrudeGeometry(fr,{depth:.004,bevelEnabled:true,bevelThickness:.0015,bevelSize:.0015,bevelSegments:2,curveSegments:4}),mMetal,0,BY,bz-.004);
@@ -9340,12 +9429,21 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     const tail=[[.04,BY,bz],[.06,BY-.004,bz-.002],[.066,BY-.03,bz+.002],[.064,BY-.07,bz+.004]];const tg=lkTube(tail,.012,false,4);tg.scale(1,1,1);add(T,tg,mLeather);
     for(let i=0;i<3;i++)add(T,new THREE.CylinderGeometry(.0024,.0024,.004,8),M(0x1a120c),.066,BY-.035-i*.012,bz+.009,[Math.PI/2,0,0]);
     add(T,new THREE.BoxGeometry(.012,.04,.012),mLeather,.064,BY,bz+.002);
-    /* 주머니 */const px=.14*bw>0?.13:.13,pz=(waist+.01)*.78;
+    /* 주머니 */if(!N||N.pouch!=null){const px=.14*bw>0?.13:.13,pz=(waist+.01)*.78;
     const pouch=lkGarment([[0,-.06],[.026,-.058],[.036,-.035],[.036,-.005],[.032,.012],[0,.014]],18,{z:.6,fold:(az,y)=>lkBunch(az,y,-.05,.01,.002,200,seed)});
     add(T,pouch,mLeather,px,BY-.025,pz*.9,[0,.95,0]);const flap=lkGarment([[.0,-.02],[.03,-.024],[.039,-.012],[.039,.004],[.034,.016],[0,.018]],18,{z:.65});add(T,flap,mLeather,px+.006,BY-.006,pz*.9+.006,[0,.95,0]);
-    add(T,sph(.006,8,6),mMetal,px+.022,BY-.03,pz*.9+.028);}
+    add(T,sph(.006,8,6),mMetal,px+.022,BY-.03,pz*.9+.028);}}
 
   /* --- 팔: 소매 --- */
+  const mGlove=N&&N.gloves!=null?lkCloth(N.gloves,'leather'):null;if(mGlove)mm.push(mGlove);
+  /* NPC 반소매·맨팔: 어깨~손목 맨살 한 장(팔꿈치에서 휜다) + 윗팔만 덮는 짧은 소매와 접은 단 */
+  const npcArm=(A,sd,SH,EL,shIn,elW,EY,upPr,sl,sk,lt)=>{
+    skinAdd(A.sh,shIn(lkLathe([[0,.035],[.04,.03],[.054*lt,.0],[.058*lt,-.06],[.056*lt,-.17],[.05*lt,-.28],[.046*lt,EY],[.045*lt,EY-.05],[.041*lt,EY-.15],[.034*lt,EY-.25],[.031,EY-.27],[0,EY-.27]],24)),mSkin,[A.sh,A.el],elW);
+    if(N.sleeve==='short'){const k=Math.max(1,lt*.98),pr=upPr.slice(0,7).map(p=>[p[0]*k,p[1]]),yb=-.2;
+      add(SH,shIn(lkGarment(pr.concat([[.063*k,yb+.02],[.064*k,yb],[0,yb]]),36,{fold:(az,y)=>{let r=lkBunch(az,y,yb+.03,.025,.003,140,sk);r=lkAdd(r,lkSeam(az,sd*-Math.PI/2,.062*k));return r;}})),sl);
+      const mR=N.rolled!=null?lkCloth(N.rolled,'weave'):sl;if(mR!==sl)mm.push(mR);
+      add(SH,lkGarment([[.064*k,yb-.012],[.071*k,yb-.008],[.073*k,yb+.012],[.07*k,yb+.03],[.064*k,yb+.032]],36,{fold:(az,y)=>lkDrape(az,y,yb+.03,yb-.01,.003,6,sk)}),mR);}
+    else add(SH,sph(.057*lt,22,14),mSkin,0,0,0);};
   const bell=robe;
   for(const A of [S.AL,S.AR]){const sd=Math.sign(A.sh.position.x);A.sh.position.x*=bw;
     hideBase(A.sh);hideBase(A.el);hideBase(A.hand);
@@ -9354,17 +9452,20 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     /* 소매: 어깨에서 손목까지 한 장. 팔꿈치 둘레는 위팔·아래팔에 나눠 붙어 굽히면 천이 꺾이지 않고 휜다 (예전엔 두 토막 사이에 공을 끼워 소시지처럼 보였다) */
     /* 어깨: 소매 위를 둥근 소매산으로 닫아 몸통 어깨선에 바로 잇는다 (예전엔 몸통에 붙인 납작한 덩어리와 공이 따로 놀아 어깨가 불룩 튀어나와 보였다) */
     const EY=-.36,elW=y=>_lkSS(EY+.07,EY-.07,y);
-    add(EL,clothBall(.047),sl);   /* 팔꿈치 속 공: 곧을 땐 소매 안에 숨고, 굽히면 바깥 모서리를 둥글게 채운다 */
+    const nArm=N&&N.sleeve!=='long',lt=N&&N.limb||1;
+    if(!nArm)add(EL,clothBall(.047),sl);   /* 팔꿈치 속 공: 곧을 땐 소매 안에 숨고, 굽히면 바깥 모서리를 둥글게 채운다 */
     const upPr=[[0,.052],[.03,.047],[.048,.034],[.059,.014],[.064,-.015],[.065,-.05],[.063,-.15],[.058,-.26],[.055,-.33],[.053,EY]];
     const upFold=(az,y)=>{let r=lkBunch(az,y,-.3,.035,.003,140,sk);r=lkAdd(r,lkDrape(az,-y,.05,.25,.004*(1-elW(y)),4,sk));return r;};
     /* 소매산 안쪽(몸통 쪽)을 몸통 속으로 넓혀, 팔이 몸통 옆에 따로 선 기둥처럼 보이지 않고 어깨선으로 이어진다 */
-    add(T,clothBall(.06),sl,A.sh.position.x/bw,A.sh.position.y-.008,0,null,[1/bw,1,1/bw]);   /* 어깨 속 공(몸통에 붙음): 팔을 내리면 소매산 안에 숨고, 팔을 들면 몸통과 팔 사이를 둥글게 메운다 */
+    add(T,clothBall(.06),N&&N.sleeve==='none'?mSkin:sl,A.sh.position.x/bw,A.sh.position.y-.008,0,null,[1/bw,1,1/bw]);   /* 어깨 속 공(몸통에 붙음): 팔을 내리면 소매산 안에 숨고, 팔을 들면 몸통과 팔 사이를 둥글게 메운다 */
     const shIn=geo=>{const P=geo.attributes.position;for(let i=0;i<P.count;i++){const x=P.getX(i),y=P.getY(i);if(x*sd<0)P.setX(i,x*(1+1.1*_lkSS(-.16,.0,y)));}geo.computeVertexNormals();return geo;};
-    if(bell)skinAdd(A.sh,shIn(lkGarment(upPr.concat([[.055,EY-.09],[.074,EY-.2],[.086,EY-.27],[.08,EY-.276],[.05,EY-.2],[0,EY-.2]]),40,
+    if(nArm){npcArm(A,sd,SH,EL,shIn,elW,EY,upPr,sl,sk,lt);}
+    else if(bell)skinAdd(A.sh,shIn(lkGarment(upPr.concat([[.055,EY-.09],[.074,EY-.2],[.086,EY-.27],[.08,EY-.276],[.05,EY-.2],[0,EY-.2]]),40,
         {fold:(az,y)=>{let r=upFold(az,y);if(y>EY)r=lkAdd(r,lkSeam(az,sd*-Math.PI/2,.06));else r=lkAdd(r,lkDrape(az,y,EY-.05,EY-.27,.009,7,sk));return r;}})),sl,[A.sh,A.el],elW);
     else skinAdd(A.sh,shIn(lkGarment(upPr.concat([[.051,EY-.05],[.046,EY-.14],[.044,EY-.2],[.047,EY-.235],[.046,EY-.255],[0,EY-.255]]),36,
         {fold:(az,y)=>{let r=upFold(az,y);r=lkAdd(r,lkBunch(az,y,EY-.07,.03,.003,170,sk+2));r=lkAdd(r,lkBunch(az,y,EY-.215,.03,.005,150,sk+4));r=lkAdd(r,lkSeam(az,sd*-Math.PI/2,y>EY?.06:.047));return r;}})),sl,[A.sh,A.el],elW);
-    if(bell)add(EL,lkBand(.088,.084,-.29,-.25,40),mTrim);
+    if(nArm){}
+    else if(bell)add(EL,lkBand(.088,.084,-.29,-.25,40),mTrim);
     else{
       /* 소매 끝: 셔츠는 단추 커프스, 튜닉·조끼는 수놓은 띠 */
       add(EL,lkBand(.049,.047,-.285,-.25,32),shirt?bodyM:mTrim);
@@ -9372,11 +9473,12 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       if(shirt)for(const dy of [-.262,-.275])add(EL,new THREE.CylinderGeometry(.0045,.0045,.003,8),M(0xe8e0cc,{roughness:.35}),sd*-.045,dy+.004,.012,[0,0,Math.PI/2]);}
     add(EL,lkLathe([[0,-.27],[.031,-.27],[.03,-.31],[.034,-.35],[0,-.36]],14),mSkin);
     /* 손 */
-    add(HD,sph(.042,24,16),mSkin,-sd*.002,-.018,0,null,[.76,1.32,.96]);}   /* 손가락은 따로 빚지 않고 살짝 오므린 둥근 손 하나로 */
+    add(HD,sph(.042,24,16),mGlove||mSkin,-sd*.002,-.018,0,null,[.76,1.32,.96]);
+    if(mGlove)add(EL,lkGarment([[.044,-.33],[.05,-.32],[.056,-.27],[.058,-.255],[.05,-.25]],28,{fold:(az,y)=>lkBunch(az,y,-.3,.02,.003,150,sk)}),mGlove);}   /* 손가락은 따로 빚지 않고 살짝 오므린 둥근 손 하나로 */
 
   /* --- 다리: 바지·장화 --- */
   const shorts=X.l===2,mPantsC=lkCloth(pantsC,'weave');mm.push(mPantsC);
-  const mLea=lkCloth(X.o===2?0x2e2420:0x553522,'leather',{vertexColors:true});mm.push(mLea);
+  const mLea=lkCloth(N&&N.shoeC!=null?N.shoeC:X.o===2?0x2e2420:0x553522,'leather',{vertexColors:true});mm.push(mLea);
   for(const Lg of [S.L,S.R]){const sd=Math.sign(Lg.hip.position.x)||1;Lg.hip.position.x*=1+(bw-1)*.6;hideBase(Lg.hip);hideBase(Lg.knee);
     const HP=bin(Lg.hip),KN=bin(Lg.knee),lw=bw*.95+.05,sk=seed+sd*3.1;
     const thighFold=(az,y)=>{let r=lkDrape(az,-y,.0,.4,.005,5,sk);r=lkAdd(r,lkBunch(az,y,-.42,.035,.003,120,sk,Math.PI));r=lkAdd(r,lkSeam(az,sd*Math.PI/2,.08));r=lkAdd(r,lkSeam(az,-sd*Math.PI/2,.08,.0015));return r;};
@@ -9384,7 +9486,7 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       add(HP,lkBand(.096,.094,-.285,-.25,36),mTrim,0,0,0,null,[lw,1,1]);}
     /* 다리: 엉덩이에서 발목까지 한 장 (반바지면 맨살 다리, 아니면 바지). 무릎 둘레는 허벅지·정강이에 나눠 붙어 굽히면 휜다 */
     const KY=-.45,knW=y=>_lkSS(KY+.07,KY-.07,y),bootTop=bootsG?-.45:X.o===0?-.17:X.o===1?-.3:-.42;
-    const thick=geo=>{const P=geo.attributes.position;for(let i=0;i<P.count;i++)P.setX(i,P.getX(i)*(lw+(1-lw)*knW(P.getY(i))));geo.computeVertexNormals();return geo;};   /* 허벅지만 체형 따라 굵게 */
+    const thick=geo=>{const P=geo.attributes.position;for(let i=0;i<P.count;i++){const y=P.getY(i),k=N&&N.short?1-.2*_lkSS(-.3,-.05,y):1;P.setX(i,P.getX(i)*(lw+(1-lw)*knW(y))*k);P.setZ(i,P.getZ(i)*k);}geo.computeVertexNormals();return geo;};   /* 허벅지만 체형 따라 굵게 */
     add(KN,shorts?sph(.055,20,14):clothBall(.056),shorts?mSkin:mPantsC);   /* 무릎 속 공: 굽히면 무릎 앞을 둥글게 */
     if(shorts)skinAdd(Lg.hip,thick(lkLathe([[0,-.2],[.066,-.2],[.06,-.4],[.058,KY],[.056,KY-.1],[.05,KY-.25],[.045,KY-.4],[.042,KY-.45],[0,KY-.45]],24)),mSkin,[Lg.hip,Lg.knee],knW);
     else skinAdd(Lg.hip,thick(lkGarment([[0,.06],[.08,.06],[.09,-.02],[.084,-.2],[.072,-.36],[.064,-.42],[.06,KY],[.058,KY-.05],[.054,KY-.18],[.05,KY-.3],[.048,KY-.42],[.046,KY-.45],[0,KY-.45]],36,
@@ -9401,11 +9503,13 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     /* 발: 앞코가 둥근 신발 + 바닥창·굽 + 앞코 솔기 */
     const ft=Lg.foot,fg=lkGarment([[0,-.05],[.05,-.05],[.056,-.04],[.056,-.01],[.05,.018],[.04,.032],[0,.036]],40,{fold:(az,y)=>lkSeam(az,0,.05,.0012)});fg.scale(1.05,X.o===2?.85:1,2.15);fg.translate(0,X.o===2?-.007:0,.012);
     {const pos=fg.attributes.position;for(let i=0;i<pos.count;i++){const z=pos.getZ(i),y=pos.getY(i);if(z<-.03)pos.setY(i,y+(z+.03)*.25*Math.max(0,y+.02)*10);}fg.computeVertexNormals();}
-    ft.geometry=fg;ft.material=mLea;ft.userData.lookFoot=1;
+    ft.geometry=fg;ft.material=mLea;ft.userData.lookFoot=1;ft.visible=true;
     const so=new THREE.Mesh(lkLathe([[0,-.007],[.059,-.007],[.059,.006],[0,.006]],28),mLeaD);so.geometry.scale(1.08,1,2.2);so.position.set(0,-.05,.012);ft.add(so);
     const he=new THREE.Mesh(roundBoxGeo(.085,.022,.06,.006),mLeaD);he.position.set(0,-.058,-.07);ft.add(he);
     if(X.o===2){const st=new THREE.Mesh(new THREE.TorusGeometry(.05,.005,5,24,Math.PI),mLeaD);st.position.set(0,-.005,.01);st.scale.set(1.05,1,1.4);st.rotation.x=-.3;ft.add(st);}}
+  if(N)npcLookExtras({g,S,T,N,f,bodyPr,bustF,bellyD,BY,waist,chest,seed,shirt,vest,add,M,mm,lkCloth,bin,sph,mTrim,bw});
   /* --- 머리·얼굴 --- */
+  if(!N){
   hideBase(H);H.geometry=new THREE.SphereGeometry(.22,40,28);
   for(const o of H.children)if(o.isMesh&&!o.userData.gear&&o.material.color&&o.material.color.getHex()===0x14110e)o.visible=false;   /* 막대 인형의 각진 옛 눈알(8각 공)은 숨긴다: 새 눈과 겹쳐 울퉁불퉁한 회색 덩어리로 보였다 */
   const HB=bin(H),R=.22;
@@ -9549,10 +9653,11 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       'f:일자 단발':()=>ani('f_bob',{side:-.17,back:-.15,vol:.02,hang:.6,tipB:.012,C:28,tipL:.04,bg:{n:13,y:.07,blunt:1,v:.004,edgeUp:0}})};
     (HS[ap.g+':'+nm]||HS['m:짧은 머리'])();
   }
+  }
   /* 모아 둔 조각을 마디마다 재질별로 합친다 */
   for(const [par,b] of bins){lkMerge(b,par);}
   for(const o of [S.L.foot,S.R.foot])o.traverse(q=>{if(q.isMesh)q.castShadow=true;});
-  S.body.scale.setScalar(apBody(ap).hs);
+  S.body.scale.setScalar(N?hs0:apBody(ap).hs);
   /* 관절을 넘는 소매·바지: 지금(곧게 선) 자세를 기준으로 두 마디에 묶는다 */
   if(skinQ.length){g.updateMatrixWorld(true);const skM=new Map();   /* 스키닝 재질은 따로 (같은 재질을 막대 조각과 같이 쓰면 셰이더가 엉킨다) */
     for(const q of skinQ){const P=q.geo.attributes.position,n=P.count,si=new Uint16Array(n*4),sw=new Float32Array(n*4);
@@ -12539,11 +12644,44 @@ function makeNpcStick(o){const G0=o.gear,g=makeStickPlayer('warrior',G0?{helm:G0
   if(o.ruff){const rm=hm(o.ruff),U=u.stick&&u.stick.upper;if(U)for(let k=0;k<14;k++){const a=k/14*Math.PI*2,f=new THREE.Mesh(new THREE.SphereGeometry(.05,6,5),rm);f.scale.set(1,.55,1);f.position.set(Math.sin(a)*.13,.7,Math.cos(a)*.11);U.add(f);}}   /* 목에 두른 흰 주름 깃 */
   if(o.small)g.scale.setScalar(.7);
   const mk=new THREE.Mesh(new THREE.OctahedronGeometry(.16,0),mat(0xf0c95f,{emissive:0xb08a20,emissiveIntensity:.8}));mk.position.y=(o.small?2.2:2.6)/(o.small?.7:1);mk.userData.marker=true;g.add(mk);u.marker=mk;
-  if(o.cloth||(typeof NPC_CLOTHES!=='undefined'&&NPC_CLOTHES))npcClothes(g,o);
+  const hq=NPC_HQ&&!!o.fine&&!o.lhelm&&!o.cit;   /* 주민(cit)은 미리 구운 모양을 쓰므로 아직 예전 몸 */
+  if(o.cloth||(typeof NPC_CLOTHES!=='undefined'&&NPC_CLOTHES))npcClothes(g,o,hq);
   if(o.gear)npcGearOn(g,o);
-  if(o.fine){npcFine(g,o);npcRoundBoxes(g);if(!o.lhelm)npcSculptMerge(g,o);npcFineMerge(g);}
+  if(o.fine){npcFine(g,o,hq);if(hq)npcBodyHQ(g,o);npcRoundBoxes(g);if(!o.lhelm)npcSculptMerge(g,o);npcFineMerge(g);}
   if(o.lhelm)lDress(g,o);
   g.traverse(m=>{if(m.isMesh)m.castShadow=true;});u.ph=Math.random()*6;return g;}
+/* 이름 있는 NPC 몸을 천 옷으로 새로 짓는다 (얼굴·머리카락·모자·소품은 그대로). 끄면 예전 막대+도형 몸 */
+const NPC_HQ=true;
+/* 바지·신발·소매 색: npcClothes와 같은 고르기 (o.cloth가 없으면 예전에도 치마·긴 옷이 없었다) */
+function npcClothInfo(o){const C=o.cloth||{},on=!!(o.cloth||(typeof NPC_CLOTHES!=='undefined'&&NPC_CLOTHES));
+  const h=(()=>{let v=0;const k=String(o.robe)+String(o.hatC)+String(o.robe2);for(let i=0;i<k.length;i++)v=(v*31+k.charCodeAt(i))>>>0;return v;})(),pick=(a,s)=>a[(h>>>s)%a.length];
+  const long=on&&(C.long??(!!o.staff||o.hat==='hood'&&!o.long)),skirt=on&&(C.skirt??(!long&&!!o.long));
+  return {on,long,skirt,pantsC:C.pants??pick([0x3a3a44,0x4a3a2a,0x5a4a32,0x2a3a4a,0x6a5a40,0x3e3428],3),shoeC:C.shoes??pick([0x3a2618,0x2a1e14,0x5a3a22],7),sl:on?(C.sleeve??pick(['long','long','long','short'],11)):'long'};}
+function npcBodyHQ(g,o){const S=g.userData.stick;if(!S)return;const F=o.fine||{},B=F.body||{},CL=F.cl||{},C=o.cloth||{},I=npcClothInfo(o);
+  const f=!!B.bust,vest=I.on&&C.vest!=null;
+  let sleeve=I.sl==='none'?'none':I.sl==='short'?'short':'long';if(CL.rolled!=null&&sleeve==='long')sleeve='short';
+  const ap={g:f?'f':'m',c:vest?C.vest:o.robe,p:I.skirt?(C.stock??0xe8e0d0):I.pantsC,u:vest?2:(CL.buttons||CL.placket||(CL.collar!=null&&CL.tunic==null))?1:0,l:0,o:CL.boots!=null?0:2,h:0};
+  const N={bw:B.w||1,belly:B.belly||0,short:I.skirt||I.long,sleeve,limb:B.limb||1,belt:CL.belt??(CL.rope!=null?null:null),pouch:CL.pouch??null,shoeC:CL.boots??I.shoeC,gloves:CL.gloves??null,rolled:CL.rolled??null,
+    under:vest?o.robe:null,buttons:CL.buttons||null,collar:CL.collar??null,placket:CL.placket??null,high:CL.high??null,sash:CL.sash??null,rope:CL.rope??null,pendant:CL.pendant??null,chain:CL.chain,
+    badge:CL.badge??null,badgeIn:CL.badgeIn??null,scarf:CL.scarf??null,kerchief:CL.kerchief??null,towel:CL.towel??null,stars:!!CL.stars,pauldron:CL.pauldron??null,tunic:CL.tunic??null,
+    apron:I.on?(C.apron??null):null,apronP:!!CL.apronPockets,cape:I.on?(C.cape??null):null,capeTrim:C.capeTrim};
+  const old=new Set();g.traverse(q=>old.add(q));
+  const G0=o.gear||{};stickLook(g,ap,{npc:N,armor:G0.armor??-1,boots:G0.boots??-1,helm:G0.helm??-1});
+  g.traverse(q=>{if(q.isMesh&&!old.has(q))q.userData.noSculpt=1;});S.L.foot.traverse(q=>{if(q.isMesh)q.userData.noSculpt=1;});S.R.foot.traverse(q=>{if(q.isMesh)q.userData.noSculpt=1;});   /* 새로 지은 천 옷은 빚기(npcSculptMerge)에서 뺀다 */
+  g.userData.hq=1;}
+/* 치마·긴 옷 (천 결·세로 주름 그늘이 있는 판): clothBell과 같은 모양·자리 */
+function npcBellGeo(rt,rb,len,n,fold,t0,t1,dr,seg,ph0=0,phL=Math.PI*2){const key=[rt,rb,len,n,fold,t0,t1,dr,seg,ph0,phL].join(',');const C=npcBellGeo.c||(npcBellGeo.c={});if(C[key])return C[key];
+  const R=t=>rt+(rb-rt)*(.22*t+.78*t*t*(3-2*t)),pts=[],NN=24;
+  for(let i=0;i<=NN;i++){const t=t0+(Math.min(t1,1)-t0)*i/NN;pts.push([R(t)+dr,-len*t]);}
+  if(t1>1)pts.push([rb+dr+.004,-len-.012],[rb+dr-.03,-len-.014]);
+  const np=pts.length,arc=[0];for(let j=1;j<np;j++)arc.push(arc[j-1]+Math.hypot(pts[j][0]-pts[j-1][0],pts[j][1]-pts[j-1][1]));
+  const pos=[],uv=[],col=[],idx=[],sd=n*1.37;
+  for(let i=0;i<=seg;i++){const a=ph0+phL*i/seg;for(let j=0;j<np;j++){const [r,y]=pts[j],tt=Math.max(0,Math.min(1,-y/len)),w=Math.sin(a*n)+.35*Math.sin(a*(2*n+3)+1)+.18*Math.sin(a*(3*n+1)+sd+tt*3),k=1+fold*Math.pow(tt,1.4)*w;
+      pos.push(Math.sin(a)*r*k,y,Math.cos(a)*r*k*(1-.06*tt));uv.push(a*rt*1.6/LK_TILE,arc[j]/LK_TILE);const s=Math.max(.45,1-Math.max(0,-w)*.32*Math.min(1,tt*2.2)-(j>=np-3&&t1>1?.12:0));col.push(s,s,s);
+      if(i&&j){const A=(i-1)*np+j-1,B=A+1,Cc=A+np,D=Cc+1;idx.push(A,B,Cc,B,D,Cc);}}}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();
+  if(phL>=Math.PI*2-1e-6){const nn=g.attributes.normal;for(let j=0;j<np;j++){const a=j,b=seg*np+j;const x=(nn.getX(a)+nn.getX(b))/2,y=(nn.getY(a)+nn.getY(b))/2,z=(nn.getZ(a)+nn.getZ(b))/2;nn.setXYZ(a,x,y,z);nn.setXYZ(b,x,y,z);}}
+  return C[key]=g;}
 /* ---------- NPC 옷: 바지·치마·긴 옷·소매·앞치마·망토·신발 (사진으로 먼저 보여 드리는 중: NPC_CLOTHES) ----------
    o.cloth로 정할 수 있고, 없으면 생김새로 고른다: 긴 머리 → 치마, 지팡이·두건 → 긴 옷, 그 밖 → 바지 */
 var NPC_CLOTHES=false;
@@ -12630,7 +12768,7 @@ function npcProp(S,k,m){const R=S.AR.hand,L=S.AL.hand,W=0x7a5232,DW=0x4a3020,ME=
     case 'doll':P(L,sph(.04),0xf0e0d0,0,.02,.06);P(L,new THREE.ConeGeometry(.05,.11,8),0xc84a6a,0,-.06,.06);break;
     case 'fan':P(L,new THREE.CircleGeometry(.14,12,0,Math.PI),m(0xf0d0e0,{side:THREE.DoubleSide}),0,.02,.06,{rz:Math.PI*.1});break;
   }}
-function npcClothes(g,o){const S=g.userData.stick;if(!S)return;const C=o.cloth||{};
+function npcClothes(g,o,hq){const S=g.userData.stick;if(!S)return;const C=o.cloth||{};
   const h=(()=>{let v=0;const k=String(o.robe)+String(o.hatC)+String(o.robe2);for(let i=0;i<k.length;i++)v=(v*31+k.charCodeAt(i))>>>0;return v;})();
   const pick=(a,s)=>a[(h>>>s)%a.length];
   const long=C.long??(!!o.staff||o.hat==='hood'&&!o.long),skirt=C.skirt??(!long&&!!o.long);
@@ -12639,16 +12777,16 @@ function npcClothes(g,o){const S=g.userData.stick;if(!S)return;const C=o.cloth||
   const sl=C.sleeve??(pick(['long','long','long','short'],11)),slC=C.sleeveC??robe;
   const m=(c,x)=>mat(c,Object.assign({flatShading:false,roughness:.8},x||{}));
   const tube=(r0,r1,len,mt,y)=>{const t=new THREE.Mesh(new THREE.CylinderGeometry(r0,r1,len,10),mt);t.position.y=y;return t;};
-  const shoe=m(shoeC);for(const L of [S.L,S.R]){if(L.foot.userData.boot)continue;L.foot.material=shoe;L.foot.scale.set(1.25,1.4,1.1);}   /* 장화를 신었으면 그대로 */
+  const shoe=m(shoeC);if(!hq)for(const L of [S.L,S.R]){if(L.foot.userData.boot)continue;L.foot.material=shoe;L.foot.scale.set(1.25,1.4,1.1);}   /* 장화를 신었으면 그대로 */
   /* 다리: 바지 (치마·긴 옷 아래에도 짧게 보이는 바지) */
-  if(!skirt&&!long){const pm=m(pantsC);for(const L of [S.L,S.R]){L.hip.add(tube(.078,.068,.47,pm,-.225));L.knee.add(new THREE.Mesh(new THREE.SphereGeometry(.07,10,8),pm),tube(.066,.058,.36,pm,-.18));
+  if(!skirt&&!long){if(hq){}else{const pm=m(pantsC);for(const L of [S.L,S.R]){L.hip.add(tube(.078,.068,.47,pm,-.225));L.knee.add(new THREE.Mesh(new THREE.SphereGeometry(.07,10,8),pm),tube(.066,.058,.36,pm,-.18));
       const cuff=tube(.062,.062,.05,m(shade2(pantsC,.75)),-.36);L.knee.add(cuff);}
-    const band=new THREE.Mesh(new THREE.CylinderGeometry(.172,.172,.12,14),m(pantsC));band.position.y=.93;S.body.add(band);}
+    const band=new THREE.Mesh(new THREE.CylinderGeometry(.172,.172,.12,14),m(pantsC));band.position.y=.93;S.body.add(band);}}
   else{const sm=m(skirt?(C.skirtC??pick([robe,robe2,0x6a3a4a,0x3a4a6a,0x7a6a4a],5)):(C.longC??robe),{side:THREE.DoubleSide});
     /* 치마·긴 옷: 허리에 붙어 종처럼 퍼지고, 아래로 갈수록 세로 주름이 깊어지는 천. 허리를 축으로 걸음·자세에 따라 흔들린다 */
     const len=skirt?.55:.89,bot=skirt?.36:.4,top=.155;const skG=new THREE.Group();skG.position.y=1.0;   /* 허리띠 안쪽에서 시작해 몸통과 같은 굵기로 이어진다 */S.body.add(skG);
-    const sk=new THREE.Mesh(clothBell(top,bot,len,skirt?9:8,skirt?.075:.06,0,1,0,40),sm);skG.add(sk);
-    const hem=new THREE.Mesh(clothBell(top,bot,len,skirt?9:8,skirt?.075:.06,.93,1.02,.006,40),m(skirt?shade2(sm.color.getHex(),.72):robe2,{side:THREE.DoubleSide}));skG.add(hem);
+    const sk=new THREE.Mesh(hq?npcBellGeo(top,bot,len,skirt?9:8,skirt?.075:.06,0,1,0,96):clothBell(top,bot,len,skirt?9:8,skirt?.075:.06,0,1,0,40),hq?lkCloth(sm.color.getHex(),skirt?'weave':'wool',{side:THREE.DoubleSide}):sm);skG.add(sk);
+    const hem=new THREE.Mesh(hq?npcBellGeo(top,bot,len,skirt?9:8,skirt?.075:.06,.93,1.02,.006,96):clothBell(top,bot,len,skirt?9:8,skirt?.075:.06,.93,1.02,.006,40),hq?lkCloth(skirt?shade2(sm.color.getHex(),.72):robe2,'trim',{side:THREE.DoubleSide}):m(skirt?shade2(sm.color.getHex(),.72):robe2,{side:THREE.DoubleSide}));skG.add(hem);
     /* 허리 밴드: 허리띠 바로 아래에서 몸통 끝과 치마 윗단을 감싸 이음새가 보이지 않게 (치마가 흔들려도 제자리) */
     const wb=new THREE.Mesh(new THREE.LatheGeometry([[.15,.975],[.163,.972],[.169,.966],[.1715,.952],[.169,.938],[.162,.932],[.15,.93]].map(([r,y])=>new THREE.Vector2(r,y)),40),m(shade2(sm.color.getHex(),.86)));wb.userData.noSculpt=1;S.body.add(wb);
     /* 앉으면 치마 대신 허벅지를 덮고 무릎에서 흘러내리는 천 (다리가 치마를 뚫지 않게) */
@@ -12657,25 +12795,26 @@ function npcClothes(g,o){const S=g.userData.stick;if(!S)return;const C=o.cloth||
       const f=new THREE.Mesh(new THREE.CylinderGeometry(.205,.25,dh,24,1,true,-Math.PI/2,Math.PI),sm);f.scale.set(1,1,.55);f.position.set(0,1.02-dh/2,.5);
       const kn=new THREE.Mesh(new THREE.SphereGeometry(.205,24,12,0,Math.PI*2,0,Math.PI/2),sm);kn.rotation.x=Math.PI/2;kn.scale.set(1,.55,.48);kn.position.set(0,.93,.47);
       const r=new THREE.Mesh(new THREE.CylinderGeometry(.172,.22,.2,20),sm);r.position.y=.9;lap.add(a,f,kn,r);}
-    lap.children.forEach(c=>c.userData.noSculpt=1);sk.userData.noSculpt=hem.userData.noSculpt=1;
+    lap.children.forEach(c=>c.userData.noSculpt=1);
+    if(hq){const lm=lkCloth(sm.color.getHex(),'weave',{side:THREE.DoubleSide});lap.children.forEach(c=>{const G=c.geometry,n=G.attributes.position.count,uv=G.attributes.uv;G.setAttribute('color',new THREE.Float32BufferAttribute(new Array(n*3).fill(.9),3));for(let i=0;i<n;i++)uv.setXY(i,uv.getX(i)*36,uv.getY(i)*14);c.material=lm;});}   /* 앉았을 때 무릎 덮개도 같은 천 */sk.userData.noSculpt=hem.userData.noSculpt=1;
     g.userData.cloth={skG,lap,len,bot,dh};
-    if(skirt){const lm=m(C.stock??0xe8e0d0);for(const L of [S.L,S.R])L.knee.add(tube(.05,.045,.38,lm,-.19));}}
+    if(skirt&&!hq){const lm=m(C.stock??0xe8e0d0);for(const L of [S.L,S.R])L.knee.add(tube(.05,.045,.38,lm,-.19));}}
   /* 소매 */
-  if(sl!=='none'){const am=m(slC);for(const A of [S.AL,S.AR]){A.sh.add(new THREE.Mesh(new THREE.SphereGeometry(.072,10,8),am),tube(.066,.058,sl==='short'?.2:.36,am,sl==='short'?-.1:-.18));
+  if(sl!=='none'&&!hq){const am=m(slC);for(const A of [S.AL,S.AR]){A.sh.add(new THREE.Mesh(new THREE.SphereGeometry(.072,10,8),am),tube(.066,.058,sl==='short'?.2:.36,am,sl==='short'?-.1:-.18));
       if(sl==='long'){A.el.add(new THREE.Mesh(new THREE.SphereGeometry(.058,10,8),am),tube(.058,.064,.3,am,-.15));A.el.add(tube(.07,.07,.05,m(robe2),-.3));}
       else A.sh.add(tube(.07,.07,.04,m(robe2),-.2));}}
   /* 앞치마 */
   if(C.apron){const am=m(C.apron,{side:THREE.DoubleSide}),cl=g.userData.cloth;
-    if(cl){const ap=new THREE.Mesh(clothBell(.155,cl.bot,cl.len,skirt?9:8,skirt?.075:.06,.02,skirt?.86:.7,.012,12,-.5,1),am);ap.userData.noSculpt=1;cl.skG.add(ap);
+    if(cl){const ap=new THREE.Mesh(hq?npcBellGeo(.155,cl.bot,cl.len,skirt?9:8,skirt?.075:.06,.02,skirt?.86:.7,.012,24,-.5,1):clothBell(.155,cl.bot,cl.len,skirt?9:8,skirt?.075:.06,.02,skirt?.86:.7,.012,12,-.5,1),hq?lkCloth(C.apron,'weave',{side:THREE.DoubleSide}):am);ap.userData.noSculpt=1;cl.skG.add(ap);
       const lh=cl.dh*.8,la=new THREE.Mesh(new THREE.CylinderGeometry(.215,.25,lh,10,1,true,-.55,1.1),am);la.scale.set(1,1,.56);la.position.set(0,1.02-lh/2,.5);la.userData.noSculpt=1;cl.lap.add(la);}   /* 앉았을 때 무릎 위 앞치마 */   /* 치마 위에 그대로 얹힌 앞치마 */
-    else{const ap=new THREE.Mesh(new THREE.BoxGeometry(.3,.62,.02),am);ap.position.set(0,.66,.2);ap.rotation.x=-.12;S.body.add(ap);}
-    const tp=new THREE.Mesh(new THREE.CylinderGeometry(.19,.179,.24,10,1,true,-.62,1.24),am);tp.position.set(0,.32,0);tp.userData.noSculpt=1;S.upper.add(tp);}   /* 가슴받이: 몸통을 감싼다 */
+    else if(!hq){const ap=new THREE.Mesh(new THREE.BoxGeometry(.3,.62,.02),am);ap.position.set(0,.66,.2);ap.rotation.x=-.12;S.body.add(ap);}
+    if(!hq){const tp=new THREE.Mesh(new THREE.CylinderGeometry(.19,.179,.24,10,1,true,-.62,1.24),am);tp.position.set(0,.32,0);tp.userData.noSculpt=1;S.upper.add(tp);}}   /* 가슴받이: 몸통을 감싼다 */
   /* 망토 */
-  if(C.cape){const cp=new THREE.Mesh(new THREE.BoxGeometry(.48,1.0,.03),m(C.cape,{side:THREE.DoubleSide}));cp.position.set(0,-.02,-.2);cp.rotation.x=.08;S.upper.add(cp);
+  if(C.cape&&!hq){const cp=new THREE.Mesh(new THREE.BoxGeometry(.48,1.0,.03),m(C.cape,{side:THREE.DoubleSide}));cp.position.set(0,-.02,-.2);cp.rotation.x=.08;S.upper.add(cp);
     const cl=new THREE.Mesh(new THREE.TorusGeometry(.16,.025,6,14,Math.PI),m(C.capeTrim??0xd4af37));cl.position.set(0,.58,-.02);cl.rotation.set(Math.PI/2,0,0);S.upper.add(cl);}
   if(C.prop)npcProp(S,C.prop,m);
   /* 조끼 */
-  if(C.vest){const v=new THREE.Mesh(new THREE.CylinderGeometry(.2,.175,.5,14,1,true,Math.PI*1.12,Math.PI*1.76),m(C.vest,{side:THREE.DoubleSide}));v.position.y=.32;S.upper.add(v);}}
+  if(C.vest&&!hq){const v=new THREE.Mesh(new THREE.CylinderGeometry(.2,.175,.5,14,1,true,Math.PI*1.12,Math.PI*1.76),m(C.vest,{side:THREE.DoubleSide}));v.position.y=.32;S.upper.add(v);}}
 
 /* ---------- 이름 있는 NPC를 정교하게: 얼굴(눈썹·코·입·귀·주름)·머리 모양·수염·몸집·옷 마감 (look.fine, 사람마다 NPC_FINE) ----------
    막대 인형 위에 덧붙이기만 한다. 주민(이름 없는 사람)은 그대로 */
@@ -12687,7 +12826,7 @@ function npcRBox(w,h,d){const k=[w,h,d].map(v=>v.toFixed(4)).join(',');let g=_rb
   g.computeVertexNormals();_rbox.set(k,g);return g;}
 /* 정교한 NPC 몸에 남은 네모 상자(신발·앞치마·책 같은)를 모두 둥근 모서리 상자로 바꾼다 */
 function npcRoundBoxes(g){g.traverse(o=>{if(o.isMesh&&o.geometry&&o.geometry.type==='BoxGeometry'){const p=o.geometry.parameters;o.geometry=npcRBox(p.width,p.height,p.depth);}});}
-function npcFine(g,o){const S=g.userData.stick,F=o.fine;if(!S||!F)return;const u=g.userData,H=S.head,R0=.22;
+function npcFine(g,o,hq){const S=g.userData.stick,F=o.fine;if(!S||!F)return;const u=g.userData,H=S.head,R0=.22;
   const m=(c,x)=>mat(c,Object.assign({flatShading:false,roughness:.75},x||{}));
   const P=(par,geo,c,x,y,z,r,s)=>{const q=new THREE.Mesh(geo,c&&c.isMaterial?c:m(c));q.position.set(x,y,z);if(r){q.rotation.order='YXZ';q.rotation.set(r[0],r[1],r[2]||0);}if(s)q.scale.set(s[0],s[1],s[2]);par.add(q);return q;};
   const sph=(r,a=12,b=8)=>new THREE.SphereGeometry(r,a,b),box=(a,b,c)=>npcRBox(a,b,c),cyl=(r0,r1,h,n=10)=>new THREE.CylinderGeometry(r0,r1,h,n);
@@ -12778,18 +12917,18 @@ function npcFine(g,o){const S=g.userData.stick,F=o.fine;if(!S||!F)return;const u
     P(H,new THREE.CylinderGeometry(.25,.36,.3,16,1,true,Math.PI*.55,Math.PI*.9),dm,0,-.2,-.04);}   /* 어깨로 드리운 깃 */
   /* 몸집: 어깨 너비·배·키·팔다리 굵기 (굽은 허리는 animNpc에서 자세 뒤에 덧붙인다) */
   const B=F.body||{};const bw=B.w||1;
-  if(bw!==1){for(const c of S.upper.children){if(c===H||(c.isMesh&&c.material===u.mats[0]))continue;c.position.x*=bw;c.position.z*=1+(bw-1)*.7;if(c.isMesh){c.scale.x*=bw;c.scale.z*=1+(bw-1)*.7;}}
+  if(bw!==1&&!hq){for(const c of S.upper.children){if(c===H||(c.isMesh&&c.material===u.mats[0]))continue;c.position.x*=bw;c.position.z*=1+(bw-1)*.7;if(c.isMesh){c.scale.x*=bw;c.scale.z*=1+(bw-1)*.7;}}
     for(const c of S.body.children){if(c===S.upper||c===S.L.hip||c===S.R.hip)continue;c.scale.x*=1+(bw-1)*.8;c.scale.z*=1+(bw-1)*.6;}
     for(const l of [S.L,S.R])l.hip.position.x*=1+(bw-1)*.6;}
-  if(B.belly){const tm=B.bellyC!=null?m(B.bellyC):S.torso.material;P(S.upper,sph(.2,16,12),tm,0,.17,.03,null,[bw*.92,.82,B.belly*.85]);if(F.cl&&F.cl.apronBelly)P(S.upper,box(.3*bw,.32,.02),F.cl.apronBelly,0,.1,.03+.2*B.belly*.85,[-.25,0,0]);}
-  if(B.bust){const k=B.bust,pts=[[.16,-.31],[.152,-.2],[.158,-.06],[.178+.012*k,.06],[.19+.014*k,.13],[.186+.008*k,.21],[.19,.31]].map(([r,y])=>new THREE.Vector2(r,y));   /* 어른 여자: 몸통 윤곽을 허리는 들어가고 가슴께는 부드럽게 도톰한 웃옷 모양으로 (따로 덩어리를 붙이지 않는다) */
+  if(B.belly&&!hq){const tm=B.bellyC!=null?m(B.bellyC):S.torso.material;P(S.upper,sph(.2,16,12),tm,0,.17,.03,null,[bw*.92,.82,B.belly*.85]);if(F.cl&&F.cl.apronBelly)P(S.upper,box(.3*bw,.32,.02),F.cl.apronBelly,0,.1,.03+.2*B.belly*.85,[-.25,0,0]);}
+  if(B.bust&&!hq){const k=B.bust,pts=[[.16,-.31],[.152,-.2],[.158,-.06],[.178+.012*k,.06],[.19+.014*k,.13],[.186+.008*k,.21],[.19,.31]].map(([r,y])=>new THREE.Vector2(r,y));   /* 어른 여자: 몸통 윤곽을 허리는 들어가고 가슴께는 부드럽게 도톰한 웃옷 모양으로 (따로 덩어리를 붙이지 않는다) */
     const lg=new THREE.LatheGeometry(pts,20);lg.translate(0,0,0);const T0=S.torso;T0.geometry=lg;T0.scale.z*=1+.06*k;T0.position.z+=.008*k;}
-  if(B.limb){for(const A of [S.AL,S.AR])A.sh.traverse(c=>{if(c.isMesh&&c.geometry.type==='CylinderGeometry'){c.scale.x*=B.limb;c.scale.z*=B.limb;}});}
+  if(B.limb&&!hq){for(const A of [S.AL,S.AR])A.sh.traverse(c=>{if(c.isMesh&&c.geometry.type==='CylinderGeometry'){c.scale.x*=B.limb;c.scale.z*=B.limb;}});}
   if(B.hs)H.scale.multiplyScalar(B.hs);
   if(B.h)S.body.scale.setScalar(B.h);
   u.hunch=B.hunch||0;
-  /* 옷 마감 */
-  const C=F.cl||{},T=S.upper;
+  /* 옷 마감 (천 옷으로 지을 땐 npcBodyHQ가 겉면을 따라 새로 붙인다) */
+  const C=hq?{mask:(F.cl||{}).mask}:F.cl||{},T=S.upper;
   if(C.tunic){const tg=new THREE.Mesh(cyl(.172,.235,.24,16),m(C.tunic));tg.position.y=.86;S.body.add(tg);const th=new THREE.Mesh(cyl(.237,.24,.035,16),m(shade2(C.tunic,.7)));th.position.y=.75;S.body.add(th);}   /* 허리 아래로 퍼지는 웃옷 자락 */
   if(C.buttons){const n=C.buttons.n??4;for(let k=0;k<n;k++){const y=.5-k*(.42/n),r=.16+.03*((y+.03)/.62);P(T,sph(.016,6,4),m(C.buttons.c??0xd8c8a0,{metalness:.5,roughness:.4}),0,y,r*(C.vestOpen?1.08:1)+.012+(B.bust&&y>.3?.012:0));}}
   if(C.placket)P(T,box(.03,.5,.01),C.placket,0,.3,.178,[-.05,0,0]);
@@ -12817,7 +12956,7 @@ function npcFine(g,o){const S=g.userData.stick,F=o.fine;if(!S||!F)return;const u
 function npcFineMerge(g){const S=g.userData.stick;if(!S)return;const keep=new Set([g.userData.marker]);for(const v of Object.values(S))if(v&&v.isObject3D)keep.add(v);
   const key=m=>[m.color.getHex(),m.emissive?m.emissive.getHex():0,m.emissiveIntensity,m.metalness,m.roughness,m.transparent,m.opacity,m.side,m.flatShading].join(',');
   const groups=[];g.traverse(o=>{if(o.children&&o.children.length>1)groups.push(o);});
-  for(const G of groups){const by=new Map();for(const c of G.children){if(!c.isMesh||c.children.length||keep.has(c)||!c.visible||!c.material||c.material.map||Array.isArray(c.material))continue;const k=key(c.material);(by.get(k)||by.set(k,[]).get(k)).push(c);}
+  for(const G of groups){const by=new Map();for(const c of G.children){if(!c.isMesh||c.isSkinnedMesh||c.userData.gear||c.children.length||keep.has(c)||!c.visible||!c.material||c.material.map||Array.isArray(c.material))continue;const k=key(c.material);(by.get(k)||by.set(k,[]).get(k)).push(c);}
     for(const list of by.values()){if(list.length<2)continue;const pos=[],nor=[];
       for(const c of list){c.updateMatrix();const gi=c.geometry.index?c.geometry.toNonIndexed():c.geometry.clone();gi.applyMatrix4(c.matrix);const P=gi.attributes.position.array,N=gi.attributes.normal.array;for(let i=0;i<P.length;i++){pos.push(P[i]);nor.push(N[i]);}G.remove(c);}
       const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));geo.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));geo.computeBoundingSphere();
@@ -16641,7 +16780,7 @@ function stickSlim(g){
   g.traverse(o=>{if(!o.isMesh||o.geometry.type!=='SphereGeometry')return;const p=o.geometry.parameters;if(p.widthSegments<=8)return;
     const k=[p.radius,p.phiStart,p.phiLength,p.thetaStart,p.thetaLength].join(',');let q=_slimG.get(k);if(!q){q=new THREE.SphereGeometry(p.radius,8,6,p.phiStart,p.phiLength,p.thetaStart,p.thetaLength);_slimG.set(k,q);}o.geometry=q;});
   const groups=[];g.traverse(o=>{if(o.children&&o.children.length>1)groups.push(o);});
-  for(const G of groups){const by=new Map();for(const c of G.children){if(!c.isMesh||c.children.length||c.userData.marker||!c.visible||c.isSkinnedMesh)continue;const k=c.material.uuid;(by.get(k)||by.set(k,[]).get(k)).push(c);}
+  for(const G of groups){const by=new Map();for(const c of G.children){if(!c.isMesh||c.children.length||c.userData.marker||!c.visible||c.isSkinnedMesh||c.userData.gear||c.material.map)continue;const k=c.material.uuid;(by.get(k)||by.set(k,[]).get(k)).push(c);}
     for(const list of by.values()){if(list.length<2)continue;const pos=[],nor=[];
       for(const c of list){c.updateMatrix();const gi=c.geometry.index?c.geometry.toNonIndexed():c.geometry.clone();gi.applyMatrix4(c.matrix);const P=gi.attributes.position.array,N=gi.attributes.normal.array;for(let i=0;i<P.length;i++){pos.push(P[i]);nor.push(N[i]);}G.remove(c);}
       const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));geo.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));geo.computeBoundingSphere();
