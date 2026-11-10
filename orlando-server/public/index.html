@@ -429,6 +429,9 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 .hc .pl span{font-size:12px;opacity:.9;white-space:nowrap}
 .hc .pl i{font-style:normal;font-size:12px;opacity:.85;white-space:nowrap}
 .hc .pl b{flex:0 1 auto}.hc .pl i{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.hc.drag{z-index:5;transition:none;pointer-events:none;box-shadow:0 0 0 3px rgba(255,214,120,.9),0 18px 40px rgba(0,0,0,.4)}
+#homeChars.dragging .hc:not(.drag){transition:background .2s,box-shadow .2s}
+#homeChars{position:relative;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .hc.on{background:rgba(255,255,255,.3);border-color:rgba(255,255,255,.95);box-shadow:0 0 0 3px rgba(255,214,120,.9),0 10px 26px rgba(0,0,0,.25)}
 .hc.new{display:grid;place-items:center;background:rgba(255,255,255,.08);border:1.5px dashed rgba(255,255,255,.7);box-shadow:none}
 .hc.new svg{width:34%;height:auto;opacity:.75}
@@ -11331,7 +11334,8 @@ const HC_NEW='<svg viewBox="0 0 60 100" aria-hidden="true"><circle cx="30" cy="1
 function renderChars(){
   const box=$('#homeChars'),btn=$('#toList'),d=$('#selDel'),hero=$('#stepHome .hero'),pn=$('#homePanel'),bar=hero.querySelector('.hmbar');if(!box)return;box.innerHTML='';d.classList.remove('arm');d.textContent='삭제';
   const locked=homeLocked(),list=locked?[]:loadChars();list.sort((a,b)=>(b.t||0)-(a.t||0));
-  if(!list.some(c=>c.id===selId))selId=list.length?list[0].id:null;
+  if(!list.some(c=>c.id===selId))selId=list.length?list[0].id:null;   /* 처음엔 가장 최근에 한 캐릭터를 고른다 */
+  {const ord=homeOrder(),at=id=>{const i=ord.indexOf(id);return i<0?-1:i;};list.sort((a,b)=>at(a.id)-at(b.id));}   /* 끌어서 바꾼 순서대로 (순서에 없는 새 캐릭터는 앞에) */
   const has=list.length>0;box.hidden=!has;   /* 캐릭터가 없으면 '게임 시작'만 (누르면 만들기로) */hero.classList.toggle('chars',has);pn.hidden=!has;
   if(has)pn.querySelector('.hpBtns').appendChild(bar);else hero.appendChild(bar);
   for(const c of list){
@@ -11340,10 +11344,30 @@ function renderChars(){
     const k=portraitKey(c);if(PORTRAITS.has(k))im.src=PORTRAITS.get(k);else portraitWant.push([k,c,im,'chest']);
     const pl=document.createElement('div');pl.className='pl';const n=document.createElement('b');n.textContent=c.name;const m=document.createElement('span');m.textContent=c.lv;const j=document.createElement('i');j.textContent=c.needBook?'모험가':(JOBS[c.job]||{name:''}).name;pl.append(n,j,m);
     el.append(im,pl);let last=0;
-    el.onclick=()=>{const t=performance.now();if(selId===c.id&&t-last<400){startGame(c);return;}last=t;homeSelect(c.id);};
+    el.onclick=()=>{if(homeDrag.moved)return;const t=performance.now();if(selId===c.id&&t-last<400){startGame(c);return;}last=t;homeSelect(c.id);};
     box.appendChild(el);}
   if(!locked){const el=document.createElement('button');el.type='button';el.className='hc new';el.title='새 캐릭터';el.innerHTML=`${HC_NEW}<div class="pl"><b>새 캐릭터</b></div>`;el.onclick=()=>startStep(1);box.appendChild(el);}
   btn.textContent=selId?'모험 시작':'게임 시작';d.hidden=!selId;homePanel();}
+/* 칸 순서: 꾹 눌러(마우스는 그냥) 끌어서 바꾼다. 순서는 이 기기에 남긴다 */
+function homeOrder(){try{const a=JSON.parse(localStorage.getItem('orlando3d.homeOrder')||'[]');return Array.isArray(a)?a:[];}catch(e){return [];}}
+const homeDrag={el:null,moved:false};
+(function(){const box=$('#homeChars');if(!box)return;let D=null,hold=0;
+  const end=()=>{clearTimeout(hold);if(!D)return;const d=D;D=null;if(d.on){d.el.classList.remove('drag');d.el.style.transform='';box.classList.remove('dragging');
+      try{localStorage.setItem('orlando3d.homeOrder',JSON.stringify([...box.querySelectorAll('.hc:not(.new)')].map(e=>e.dataset.id)));}catch(e){}
+      setTimeout(()=>{homeDrag.moved=false;},0);}};
+  const start=()=>{if(!D||D.on)return;D.on=true;homeDrag.moved=true;D.el.classList.add('drag');box.classList.add('dragging');try{navigator.vibrate&&navigator.vibrate(12);}catch(e){}};
+  box.addEventListener('pointerdown',e=>{const el=e.target.closest('.hc');if(!el||el.classList.contains('new')||e.button>0)return;
+    D={el,id:e.pointerId,x:e.clientX,y:e.clientY,ox:el.offsetLeft,oy:el.offsetTop,touch:e.pointerType!=='mouse',on:false};homeDrag.moved=false;
+    if(D.touch)hold=setTimeout(start,320);});   /* 손가락은 꾹 눌러야 끌기 (그냥 밀면 칸 줄이 넘어간다) */
+  addEventListener('pointermove',e=>{if(!D||e.pointerId!==D.id)return;const dx=e.clientX-D.x,dy=e.clientY-D.y;
+    if(!D.on){if(Math.hypot(dx,dy)<7)return;if(D.touch){clearTimeout(hold);D=null;return;}start();}
+    const el=D.el;el.style.transform=`translate(${dx-(el.offsetLeft-D.ox)}px,${dy-(el.offsetTop-D.oy)}px) scale(1.06)`;
+    const t=document.elementFromPoint(e.clientX,e.clientY),o=t&&t.closest&&t.closest('#homeChars .hc');
+    if(o&&o!==el&&!o.classList.contains('new')){const kids=[...box.children],a=kids.indexOf(el),b=kids.indexOf(o);box.insertBefore(el,a<b?o.nextSibling:o);
+      el.style.transform=`translate(${dx-(el.offsetLeft-D.ox)}px,${dy-(el.offsetTop-D.oy)}px) scale(1.06)`;}});
+  addEventListener('pointerup',end);addEventListener('pointercancel',end);
+  box.addEventListener('touchmove',e=>{if(D&&D.on)e.preventDefault();},{passive:false});   /* 끄는 동안엔 화면이 밀리지 않게 */
+  box.addEventListener('contextmenu',e=>{if(D)e.preventDefault();});})();
 /* 왼쪽 큰 판: 고른 캐릭터의 전신과 직업·이름·레벨·경험치, 마지막 장소·접속·골드 */
 function homeAgo(t){if(!t)return '';const m=Math.max(0,(Date.now()-t)/6e4);return m<2?'방금':m<60?`${Math.floor(m)}분 전`:m<1440?`${Math.floor(m/60)}시간 전`:`${Math.floor(m/1440)}일 전`;}
 function homePanel(){const pn=$('#homePanel'),c=selId&&loadChars().find(x=>x.id===selId);if(!pn||!c)return;
