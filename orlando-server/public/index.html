@@ -1759,7 +1759,7 @@ setInterval(tick,400);
       <section class="opts keys" aria-label="조작키">
         <h3>조작키</h3>
         <dl class="keylist"><dt>W A S D</dt><dd>이동</dd><dt>Shift</dt><dd>달리기</dd><dt>Space</dt><dd>점프</dd><dt>Ctrl</dt><dd>앉기</dd>
-          <dt>왼쪽 클릭</dt><dd>기본 공격</dd><dt>오른쪽 클릭</dt><dd>스킬 1</dd><dt>휠 ↑ / 휠 ↓</dt><dd>스킬 2 / 스킬 3</dd><dt>E · R · T</dt><dd>스킬 5 · 6 · 7</dd>
+          <dt>왼쪽 클릭</dt><dd>기본 공격</dd><dt>오른쪽 클릭</dt><dd>스킬 1</dd><dt>휠 ↑ / 휠 ↓</dt><dd>스킬 2 / 스킬 3</dd><dt>E · R · T</dt><dd>스킬 4 · 5 · 6</dd>
           <dt>1 · 2 · 3</dt><dd>아이템</dd><dt>F</dt><dd>말 걸기 · 줍기 · 문</dd><dt>G</dt><dd>탈것 타기·내리기</dd>
           <dt>I</dt><dd>소지품</dd><dt>K</dt><dd>스킬창</dd><dt>Q</dt><dd>퀘스트</dd><dt>M</dt><dd>지도</dd><dt>B</dt><dd>파티 마이크</dd><dt>Enter</dt><dd>채팅</dd><dt>Esc</dt><dd>메뉴</dd></dl>
       </section>
@@ -3496,8 +3496,9 @@ const hasSpc=id=>!!(P&&P.spc&&P.spc[id]);
 const pOff=id=>!!(P&&P.poff&&P.poff[id]);
 const pas=id=>P&&!pOff(id)?(P.skills[id]||0):0;
 const BUFF_NAME={intang:'무형',nchain:'사슬낫',nsmoke:'연막',mshield:'보호막',scripture:'경전',atk:'공격↑',def:'방어↑',speed:'속도↑',crit:'치명타',regen:'재생',fam:'익숙한 감각',rage:'분노',hide:'은신',draw:'속사',roll:'구르기',dup:'복제',agile:'능동적인 감각',pull:'시위 당기기',vet:'노련한 감각',xamp:'증폭',hot:'치유 중',lz:'빛의 지형'};
-const SLOT_KEYS=['우클릭','휠↑','휠↓','키 없음','E','R','T'];   /* 4번째 칸은 휠클릭을 뗐다 (2026-11-10): 키는 없고 칸 누르기·휴대폰 단추로만 */
-const SLOT_NOKEY=3;
+const SLOT_KEYS=['우클릭','휠↑','휠↓','E','R','T'];   /* 2026-11-10 휠클릭 칸을 없애고 E·R·T가 바로 4·5·6번째 칸. 옛 저장(7칸)은 slotsLoad가 옮김 */
+/* 옛 7칸 저장(우클릭·휠↑·휠↓·휠클릭·E·R·T)에서 휠클릭 칸을 빼고, 거기 있던 스킬은 빈 칸으로 옮긴다 */
+const slotsLoad=a=>{a=(a||[]).slice();if(a.length===7){const w=a.splice(3,1)[0];if(w&&!a.includes(w)){const e=a.indexOf(null);if(e>=0)a[e]=w;}}a=a.slice(0,SLOT_KEYS.length);while(a.length<SLOT_KEYS.length)a.push(null);return a;};
 const NSK=SLOT_KEYS.length; // 스킬 칸 수
 const BASIC={
   fist:{kind:'melee',range:2.2,cd:.42,mult:.45},
@@ -26059,10 +26060,10 @@ const DUEL_MUL=.26,DUEL_SEC=120,DUEL_FAR=60,DUEL_COUNT=6,DUEL_POT=2;   /* 투기
 /* 결투 피해 (2026-11-11): 사냥 피해는 그대로 두고 결투에서만 따로 맞춘다.
    - 방어는 맞는 사람 레벨의 보통 방어력(DUEL_DEF)을 기준으로 비율로 줄인다 → 그 레벨 보통 방어면 절반
    - 같은 레벨 보통 장비끼리 평타 한 대 ≈ 상대 최대 HP의 2.5% (레벨이 달라도 비슷하게)
-   - 한 대가 최대 HP의 8%를 넘으면 넘는 만큼은 40%만, 한 대에 20%를 넘지 못한다 (큰 스킬·연계 한 방에 끝나지 않게) */
-const DUEL_DEF=[[1,7],[5,18],[10,40],[20,70],[30,112],[45,145],[60,195],[80,250],[100,315],[130,360],[165,410],[200,460]],DUEL_SOFT=.08,DUEL_CAP=.2;
+   - 한 대가 최대 HP의 12%를 넘으면 넘는 만큼은 60%만, 한 대에 35%를 넘지 못한다 (센 스킬은 세게, 그래도 한 방에 끝나지 않게) */
+const DUEL_DEF=[[1,7],[5,18],[10,40],[20,70],[30,112],[45,145],[60,195],[80,250],[100,315],[130,360],[165,410],[200,460]],DUEL_SOFT=.12,DUEL_CAP=.35;
 function duelDefK(L){const T=DUEL_DEF;if(L<=T[0][0])return T[0][1];for(let i=1;i<T.length;i++)if(L<=T[i][0]){const [a,va]=T[i-1],[b,vb]=T[i];return va+(vb-va)*(L-a)/(b-a);}return T[T.length-1][1];}
-function duelTaken(v){const df=P.def*buffV('def'),K=duelDefK(P.lv);let f=v*K/(K+df)/P.maxhp;if(f>DUEL_SOFT)f=DUEL_SOFT+(f-DUEL_SOFT)*.4;return Math.max(1,Math.round(Math.min(DUEL_CAP,f)*P.maxhp));}
+function duelTaken(v){const df=P.def*buffV('def'),K=duelDefK(P.lv);let f=v*K/(K+df)/P.maxhp;if(f>DUEL_SOFT)f=DUEL_SOFT+(f-DUEL_SOFT)*.6;return Math.max(1,Math.round(Math.min(DUEL_CAP,f)*P.maxhp));}
 let DUEL=null;
 function duelRequest(peer){const o=others.get(peer);if(!o)return;if(DUEL&&DUEL.state!=='ask'){toast('이미 결투 중이다');return;}
   DUEL={peer,name:o.name,state:'ask',t:tAll};dm(peer,{k:'xreq'});log(`${o.name}님에게 결투를 신청했다`,'sys');}
@@ -27780,7 +27781,7 @@ const hotEls=[];
     if(i===NSK){const sep=document.createElement('span');sep.className='hsep';hb.appendChild(sep);}
     const s=document.createElement('button');s.type='button';s.className='slot';
     if(i>=NSK)s.dataset.quick=i-NSK;else s.classList.add('sk');
-    const nm=document.createElement('span');const k=document.createElement('span');k.className='k';k.textContent=i<NSK?(i===SLOT_NOKEY?'—':SLOT_KEYS[i]):String(i-NSK+1);
+    const nm=document.createElement('span');const k=document.createElement('span');k.className='k';k.textContent=i<NSK?SLOT_KEYS[i]:String(i-NSK+1);
     const cd=document.createElement('div');cd.className='cd';const cdn=document.createElement('div');cdn.className='cdn';
     const cnt=document.createElement('span');cnt.className='cnt';
     s.append(nm,cd,cdn,cnt,k);hb.appendChild(s);
@@ -27808,21 +27809,21 @@ function updateHotbar(){
     if(h.last!==key){h.last=key;h.nm.textContent=name;h.s.className=cls;h.cnt.textContent=count;h.cdn.textContent=win>0?Math.ceil(win):left>0&&i<NSK?Math.ceil(left):'';}
     // 휴대폰: 공격 버튼 둘레의 스킬 버튼
     if(i<NSK&&mskEls[i]){const m=mskEls[i],id=P.slots[i];m.b.hidden=!id;
-      if(id){const mc=(i>=4?'msk o':'msk')+(cls.includes('ready')?' ready':'')+(cls.includes('follow')?' follow':'')+(cls.includes('again')?' again':'')+(cls.includes('nomp')?' nomp':'');if(m.c!==mc){m.c=mc;m.b.className=mc;}
+      if(id){const mc=(i>=3?'msk o':'msk')+(cls.includes('ready')?' ready':'')+(cls.includes('follow')?' follow':'')+(cls.includes('again')?' again':'')+(cls.includes('nomp')?' nomp':'');if(m.c!==mc){m.c=mc;m.b.className=mc;}
         if(m.n!==name){m.n=name;m.t.textContent=name;}const cd=(Math.round(frac*100))+'%';if(m.cd!==cd){m.cd=cd;m.b.style.setProperty('--cd',cd);}
         const cs=win>0?String(Math.ceil(win)):left>0?String(Math.ceil(left)):'';if(m.cs!==cs){m.cs=cs;m.e.textContent=cs;}}}
   }
 }
-// 휴대폰 스킬 버튼: 안쪽 고리 4개, 바깥 고리 3개 (공격 버튼 중심 기준, 각도는 화면 위쪽이 90°)
+// 휴대폰 스킬 버튼: 안쪽 고리 3개, 바깥 고리 3개 (공격 버튼 중심 기준, 각도는 화면 위쪽이 90°)
 const mskEls=[];let mskLayout=()=>{};
 (function(){
-  const box=$('#mbtns');const pos=[[100,176],[100,142],[100,108],[100,74],[160,178],[160,154],[160,130]];
+  const box=$('#mbtns');const pos=[[100,176],[100,142],[100,108],[160,178],[160,154],[160,130]];
   const place=(el,r,a)=>{const t=a*Math.PI/180;el.style.left=(r*Math.cos(t)).toFixed(1)+'px';el.style.top=(-r*Math.sin(t)).toFixed(1)+'px';};
   // 화면이 낮으면(가로 휴대폰) 부채꼴을 줄여서 오른쪽 위 미니맵과 겹치지 않게 한다
   // 거리만 줄이면 버튼끼리 겹치니, 버튼 크기도 같은 비율(--mk)로 함께 줄인다
   const layout=()=>{const bb=box.getBoundingClientRect(),w=$('#where').getBoundingClientRect();
     const top=(w.height?w.bottom:0)+8,room=bb.top-top;let k=1;
-    for(let i=0;i<NSK;i++){const h=pos[i][0]*Math.sin(pos[i][1]*Math.PI/180)+(i>=4?24:27);if(h>room)k=Math.min(k,room/h);}
+    for(let i=0;i<NSK;i++){const h=pos[i][0]*Math.sin(pos[i][1]*Math.PI/180)+(i>=3?24:27);if(h>room)k=Math.min(k,room/h);}
     k=Math.max(.62,Math.min(1,k));box.style.setProperty('--mk',k.toFixed(3));mskEls.forEach((m,i)=>place(m.b,pos[i][0]*k,pos[i][1]));place($('#mJump'),96*Math.max(.8,k),212);};
   addEventListener('resize',()=>setTimeout(layout,50));setTimeout(layout,0);mskLayout=layout;
   for(let i=0;i<NSK;i++){const b=document.createElement('button');b.type='button';b.className='msk';b.hidden=true;
@@ -28754,8 +28755,8 @@ function startGameNow(data){if(JOB_ALIAS[data.job])data={...data,job:JOB_ALIAS[d
   P.bag=Array.isArray(data.bag)?data.bag.filter(e=>e&&ITEMS[e.id]).map(e=>({id:e.id,n:Math.max(1,e.n|0),...(e.enh>0?{enh:Math.min(10,e.enh|0)}:{}),...(e.id==='wbook'&&typeof e.b==='string'?{b:e.b}:{})})):null;
   if(!P.bag){P.bag=[];addItem('hp_s',data.potions??3,true);addItem('mp_s',2,true);if(!data.equip)P.equip.weapon='w2';}
   wbLoad();
-  delete P.potions;P.skills={...(data.skills||{})};P.faith=Math.max(0,Math.min(10,data.faith|0));P.slots=(data.slots||[]).slice(0,NSK);
-  while(P.slots.length<NSK)P.slots.push(null);P.sp=data.sp??P.lv;
+  delete P.potions;P.skills={...(data.skills||{})};P.faith=Math.max(0,Math.min(10,data.faith|0));P.slots=slotsLoad(data.slots);
+  P.sp=data.sp??P.lv;
   // 바뀐 스킬: 지금 직업에 없는 스킬은 SP를 돌려주고 칸에서 뺀다
   if(data.skv!==SKILL_VER){fixSkills('스킬이 새로 바뀌어');}P.skv=SKILL_VER;grantTraits();
   {let back=0;for(const id in P.skills){const mx=skMax(SK[id]);if(P.skills[id]>mx){back+=P.skills[id]-mx;P.skills[id]=mx;}}if(back){setTimeout(()=>log(`최대 단계가 바뀐 스킬이 있어 SP ${back}을(를) 돌려받았다.`,'sys'),500);}}
@@ -28876,7 +28877,7 @@ function pasSwitch(id){const row=document.createElement('div');row.className='bi
 function learn(id){
   const S=SK[id];const lvl=P.skills[id]||0;if(isTrait(S)||spOf(skTier(id))<1||lvl>=skMax(S)||P.lv<skReq(S))return;
   P.skills[id]=lvl+1;
-  if(lvl===0){const e=S.type==='passive'?-1:P.slots.findIndex((v,j)=>v==null&&j!==SLOT_NOKEY);if(e>=0)P.slots[e]=id;log(`${S.name}을(를) 배웠다${e>=0?` · ${SLOT_KEYS[e]}에 등록`:''}`,'sys');}
+  if(lvl===0){const e=S.type==='passive'?-1:P.slots.indexOf(null);if(e>=0)P.slots[e]=id;log(`${S.name}을(를) 배웠다${e>=0?` · ${SLOT_KEYS[e]}에 등록`:''}`,'sys');}
   else log(`${S.name} ${lvl+1}단계로 강화`,'sys');
   renderSkills();updateHud();save();
 }
@@ -31258,9 +31259,9 @@ addEventListener('keydown',e=>{
   if(code==='KeyF'&&!$('#interact').hidden&&!e.repeat)doInteract();
   if(code==='KeyV'&&!e.repeat)vCut();
   if((code==='Digit1'||code==='Digit2'||code==='Digit3')){if(mode==='world'&&!e.repeat)useQuick(+code[5]-1);return;}
-  const map={KeyE:4,KeyR:5,KeyT:6};if(code in map){skHeld[map[code]]=true;if(!e.repeat)useSkill(map[code]);}
+  const map={KeyE:3,KeyR:4,KeyT:5};if(code in map){skHeld[map[code]]=true;if(!e.repeat)useSkill(map[code]);}
 });
-addEventListener('keyup',e=>{keys[codeOf(e)]=false;keys[e.code]=false;const map={KeyE:4,KeyR:5,KeyT:6},c=codeOf(e);if(c in map)skHeld[map[c]]=false;});
+addEventListener('keyup',e=>{keys[codeOf(e)]=false;keys[e.code]=false;const map={KeyE:3,KeyR:4,KeyT:5},c=codeOf(e);if(c in map)skHeld[map[c]]=false;});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;attackHeld=false;skHeld.length=0;});
 $('#interact').onclick=()=>doInteract();
 const SENS=.0022;
