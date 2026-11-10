@@ -5250,6 +5250,18 @@ function buildSeaGod(o){
   return g;
 }
 
+/* ---------- 빚어 구운 석상: tools/statuebake.js 가 거리 함수로 한 덩어리로 빚어 statue/<이름>.json 에 구워 둔다.
+   가까이 볼 모양과 멀리서 볼 모양(면이 적은)을 같이 담아 거리에 따라 바꾼다. 받지 못하면 fallback() 조각을 합쳐 세운다 ---------- */
+function statueBake(name,N,fallback){
+  const fb=()=>{N.add(fallback());flattenStatic(N,null,true);};
+  fetch('statue/'+name+'.json?v=1').then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).then(r=>{
+    const lod=new THREE.LOD(),mats={};
+    r.lod.forEach((L,i)=>{const gr=new THREE.Group();for(const p of L){const mo=r.mats[p.g]||{};
+      const m=new THREE.Mesh(monBakeGeo(p),mats[p.g]=mats[p.g]||new THREE.MeshStandardMaterial({vertexColors:true,roughness:mo.r??.8,metalness:mo.m||0,flatShading:false}));
+      m.geometry.boundingSphere.radius/=1.5;m.castShadow=true;m.receiveShadow=true;gr.add(m);}
+      lod.addLevel(gr,i?45:0);});
+    N.add(lod);}).catch(e=>{console.warn('statue',name,e);fb();});}
+
 /* ---------- 엑시즈 중앙 광장 큰 분수: 두 단 팔각 계단 위 넓은 팔각 못, 모서리 기둥(돌 공·청동 등), 못 안 청동 돌고래 넷,
    사자 머리 넷이 물을 뿜는 받침, 가리비 테두리의 큰 잔과 작은 잔(물이 장막처럼 넘쳐 흐른다), 맨 위에 삼지창을 든 흰 대리석 바다의 신 ---------- */
 function buildPlazaFountain(cx,y0,cz){
@@ -5339,7 +5351,10 @@ function buildPlazaFountain(cx,y0,cz){
   for(let k=0;k<3;k++){const a=k/3*PI*2+PI/6,ux=Math.cos(a),uz=Math.sin(a),at=(r,y)=>new THREE.Vector3(ux*r,y,uz*r);
     const nose=SK.dolphin(new THREE.CatmullRomCurve3([at(.82,5.14),at(1.12,5.36),at(1.0,5.62),at(.62,5.6)]),.11,marble,at(1,0).add(new THREE.Vector3(0,.4,0)).normalize());
     const b0=at(1.55,4.95);const st=arcStream(nose,b0,.12,.03,fm);g.add(st);streams.push(st);hitsTop.push([b0.x,b0.z]);}
-  const N=buildSeaGod({marble,drape:marbleW,gold,rock:mat(0xd8d0c0,{roughness:.8})});N.position.set(0,6.02,0);N.rotation.y=0;N.scale.setScalar(1.3);g.add(N);   /* 정면(남쪽, 시장에서 광장으로 들어오는 쪽)을 똑바로 본다. 궁과 같은 축이라 궁을 등지고 선다 */
+  /* 석상은 미리 빚어 구운 한 덩어리 모양(statue/seagod.json, tools/statuebake.js)을 받아 세운다. 못 받으면 예전 조각(buildSeaGod)을 세운다.
+     정면(남쪽, 시장에서 광장으로 들어오는 쪽)을 똑바로 본다. 궁과 같은 축이라 궁을 등지고 선다 */
+  {const N=new THREE.Group();N.position.set(cx,y0+6.02,cz);N.scale.setScalar(1.3);scene.add(N);
+    statueBake('seagod',N,()=>buildSeaGod({marble,drape:marbleW,gold,rock:mat(0xd8d0c0,{roughness:.8})}));}
   const rip=rippleSet(g,hits,.96,.9).concat(rippleSet(g,[[2.6,0],[-2.6,0],[0,2.6],[0,-2.6]],2.98,.5),rippleSet(g,hitsTop,4.95,.35));
   scene.add(g);packAnim(g,lanterns);
   /* 움직임: 물줄기·물 장막 흐름, 물결, 물보라, 등불 깜빡임 */
@@ -6081,13 +6096,13 @@ function makeBipedMonster(D){
    가까이 볼 모양과 멀리서 볼 모양(면이 적은)을 같이 담아 거리에 따라 바꾼다. */
 const MONB={ver:'1',dir:'monbake/',types:new Set(['redgiant','cliffgiant','frostgiant','hillgiant','peakgiant','firegiant','valleyogre','rockogre','fieldogre','gorgeogre','flameogre','woodtroll','pinetroll','hilltroll','oldtroll','cavetroll','lavatroll','treant','yeti','snowyeti','bandit','salamander']),data:{},req:{}};
 function monBakeGeo(p){const ab=s=>{const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u.buffer;};
-  const n=p.n,qP=new Uint16Array(ab(p.P)),qN=new Int8Array(ab(p.N)),qC=new Uint8Array(ab(p.C)),qS=new Uint8Array(ab(p.S)),qW=new Uint8Array(ab(p.W)),I=p.i32?new Uint32Array(ab(p.I)):new Uint16Array(ab(p.I));
+  const n=p.n,qP=new Uint16Array(ab(p.P)),qN=new Int8Array(ab(p.N)),qC=new Uint8Array(ab(p.C)),qS=p.S?new Uint8Array(ab(p.S)):null,qW=p.W?new Uint8Array(ab(p.W)):null,I=p.i32?new Uint32Array(ab(p.I)):new Uint16Array(ab(p.I));
   const P=new Float32Array(n*3),N=new Float32Array(n*3),C=new Float32Array(n*3),SI=new Uint16Array(n*4),SW=new Float32Array(n*4),lin=new Float32Array(256);
   for(let i=0;i<256;i++){const s=i/255;lin[i]=s<=.04045?s/12.92:Math.pow((s+.055)/1.055,2.4);}
   for(let i=0;i<n;i++){for(let a=0;a<3;a++){const k=i*3+a;P[k]=p.lo[a]+qP[k]/65535*(p.hi[a]-p.lo[a]);N[k]=qN[k]/127;C[k]=lin[qC[k]];}
-    const w=qW[i]/255;SI[i*4]=qS[i*2];SI[i*4+1]=qS[i*2+1];SW[i*4]=w;SW[i*4+1]=1-w;}
+    if(qS){const w=qW[i]/255;SI[i*4]=qS[i*2];SI[i*4+1]=qS[i*2+1];SW[i*4]=w;SW[i*4+1]=1-w;}}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(P,3));g.setAttribute('normal',new THREE.BufferAttribute(N,3));g.setAttribute('color',new THREE.BufferAttribute(C,3));
-  g.setAttribute('skinIndex',new THREE.BufferAttribute(SI,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(SW,4));g.setIndex(new THREE.BufferAttribute(I,1));
+  if(qS){g.setAttribute('skinIndex',new THREE.BufferAttribute(SI,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(SW,4));}g.setIndex(new THREE.BufferAttribute(I,1));
   g.computeBoundingSphere();g.boundingSphere.radius*=1.5;return g;}
 function monBakeDecode(r){return {h:r.h*(r.size||1),size:r.size||1,anim:r.anim||{},bones:r.bones,mats:r.mats||{},lod:r.lod.map(l=>l.map(p=>({g:p.g,geo:monBakeGeo(p)})))};}
 function monBakeMat(o){if(o.glow)return new THREE.MeshBasicMaterial({vertexColors:true,skinning:true});
@@ -16281,7 +16296,7 @@ function citSculptDecode(r){const ab=s=>{const b=atob(s),u=new Uint8Array(b.leng
   for(let i=0;i<256;i++){const s=i/255;lin[i]=s<=.04045?s/12.92:Math.pow((s+.055)/1.055,2.4);}   /* 색은 sRGB로 담아 왔다 */
   for(let i=0;i<n;i++){for(let a=0;a<3;a++){const k=i*3+a;P[k]=r.lo[a]+qP[k]/65535*(r.hi[a]-r.lo[a]);N[k]=qN[k]/127;C[k]=lin[qC[k]];}SI[i*4]=qB[i];SW[i*4]=1;}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(P,3));g.setAttribute('normal',new THREE.BufferAttribute(N,3));g.setAttribute('color',new THREE.BufferAttribute(C,3));
-  g.setAttribute('skinIndex',new THREE.BufferAttribute(SI,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(SW,4));g.setIndex(new THREE.BufferAttribute(I,1));g.computeBoundingSphere();g.boundingSphere.radius+=1.2;return g;}
+  if(qS){g.setAttribute('skinIndex',new THREE.BufferAttribute(SI,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(SW,4));}g.setIndex(new THREE.BufferAttribute(I,1));g.computeBoundingSphere();g.boundingSphere.radius+=1.2;return g;}
 /* 하나씩 차례로 받는다 (첫 로딩과 겹치지 않게, 엑시즈에 들어온 뒤에) */
 function citSculptLoad(id,first){if(!CIT_FINE[id]||CITS.geo[id])return;if(CITS.req[id]){const i=CITS.q.indexOf(id);if(first&&i>0){CITS.q.splice(i,1);CITS.q.unshift(id);}return;}   /* 눈앞에 나올 사람 것부터 */
   CITS.req[id]=1;if(first)CITS.q.unshift(id);else CITS.q.push(id);citSculptPump();}
