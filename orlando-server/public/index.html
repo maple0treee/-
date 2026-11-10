@@ -9540,7 +9540,7 @@ function scyPlaceFP(H,k,sc){const cf=Math.cos(k[4]);_scfD.set(Math.sin(k[3])*cf,
   _scfW.crossVectors(_scfD,_scfP);_scfB.copy(_scfP).multiplyScalar(Math.cos(k[5])).addScaledVector(_scfW,Math.sin(k[5]));_scfZ.crossVectors(_scfB,_scfD);
   _scfM.makeBasis(_scfB,_scfD,_scfZ);H.quaternion.setFromRotationMatrix(_scfM);
   H.position.set(k[0],k[1],k[2]).addScaledVector(_scfD,-SCY_G0*sc);H.scale.setScalar(sc);H.updateMatrix();}
-let SCY_FHR=[0,0,0],SCY_FHL=[0,0,0];
+let SCY_FHR=[0,0,0],SCY_FHL=[0,0,0];const _scyKm=[0,0,0,0,0,0];
 let SCY_PR=new THREE.Vector3(.8,-.5,-.3),SCY_PL=new THREE.Vector3(-.8,-.5,-.3);
 function scyLerp(keys,idle,p,out){let a=[0,idle],b=[1,idle];
   for(let i=-1;i<keys.length;i++){const A=i<0?[0,idle]:keys[i],B=i+1<keys.length?keys[i+1]:[1,idle];if(p>=A[0]&&p<=B[0]){a=A;b=B;break;}}
@@ -11262,10 +11262,17 @@ function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
 /* 석궁은 원래 윗몸 앞에 놓이고 두 손이 찾아가 쥔다(animStick). 미리보기에서는 팔을 편히 내리고(쥔 자세는 팔이 몸에 박혔다)
    석궁은 오른손으로 손잡이를 쥐고 앞(활 쪽)이 앞아래를, 개머리가 팔 뒤 위를 향하게 든다 (예전엔 활이 위로 가 거꾸로 든 것처럼 보였다) */
 const _apXV=new THREE.Vector3(),AP_XB=[.05,-.02,0,1.2,.25,-.1];
+/* 사이드루터 큰 낫: 미리보기에서는 내린 오른손으로 자루를 쥐고 낫을 옆에 세워 자루 끝을 땅에 댄다 (게임 쉬는 자세를 그대로 두면 팔만 내려가 낫이 몸 앞에 떠 있었다) [돌림 a, 기울기 p, 날 돌림 r, 크기] */
+let AP_SCY=[1.57,.08,1.3,.6];const _apSG=new THREE.Vector3(),_apSB=new THREE.Box3();   /* [3] 크기: 그대로면 판 위로 날이 잘려 안 보인다 */
 function apRelaxPose(m,dt){const u=m.userData,xb=!!(u.stick&&u.stick.xb);u.relax=1;animStick(m,0,tAll,1,false,false,null);const S=u.stick;
   if(S){S.AR.sh.rotation.set(-.04,0,.1);S.AR.el.rotation.x=-.2;S.AL.sh.rotation.set(-.04,0,-.1);S.AL.el.rotation.x=-.2;S.AR.hand.rotation.x=0;S.AL.hand.rotation.x=0;S.upper.rotation.set(0,0,0);
     /* 활: animStick이 서 있는 팔 각도로 맞춰 둔 것을 내린 팔에 다시 맞춘다 (안 하면 활이 비스듬히 누워 아래 끝이 뒤로 빠졌다) */
     if(S.style==='bow'&&!xb&&S.w)S.w.rotation.set(-(S.AL.sh.rotation.x+S.AL.el.rotation.x),0,-S.AL.sh.rotation.z);}
+  if(S&&S.scy&&S.w){m.updateMatrixWorld(true);S.AR.hand.getWorldPosition(_apXV);_apSG.set(_apXV.x,m.position.y+.03,_apXV.z);S.upper.worldToLocal(_apXV);S.upper.worldToLocal(_apSG);
+    const h=_apXV.distanceTo(_apSG),H=S.w;H.quaternion.setFromAxisAngle(_scyAy,AP_SCY[0]).multiply(_scyQa.setFromAxisAngle(_scyAx,AP_SCY[1]));H.quaternion.multiply(_scyQa.setFromAxisAngle(_scyAy,AP_SCY[2]));
+    H.scale.setScalar(AP_SCY[3]);_scyT.set(0,h,0).applyQuaternion(H.quaternion);H.position.copy(_apXV).sub(_scyT);H.updateMatrix();
+    m.updateMatrixWorld(true);_apSB.setFromObject(H);const dy=m.position.y+.02-_apSB.min.y;   /* 자루 끝을 땅에 맞춘다 (손은 세운 자루를 따라 그대로 쥔다) */
+    S.upper.worldToLocal(_apSG.set(0,0,0));S.upper.worldToLocal(_scyT.set(0,dy,0));H.position.add(_scyT.sub(_apSG));H.updateMatrix();S.AR.hand.rotation.set(0,0,0);}
   if(S&&xb&&S.w){m.updateMatrixWorld(true);S.AR.hand.getWorldPosition(_apXV);S.upper.worldToLocal(_apXV);
     S.w.position.set(_apXV.x+AP_XB[0],_apXV.y+AP_XB[1],_apXV.z+AP_XB[2]);S.w.rotation.set(AP_XB[3],AP_XB[4],AP_XB[5]);S.w.updateMatrix();if(S.xbH)S.xbH.visible=false;}
   if(!u.anime&&u.ap&&PM.data[u.ap.g])pmAttach(m,u.job,u.gear,u.ap);
@@ -26656,8 +26663,10 @@ function updateViewModel(dt,moving){
   if(u.xbow){const xl=xlMine(),st=xbState(myMo,swingT,xl),c=xbPose(XBF,st),w=u.xbow;
     w.position.set(c[0]+sx,c[1]+sy-jumpY*.02,c[2]);w.rotation.set(c[3],Math.PI+c[4],c[5]);w.updateMatrix();xbSet(w,st.draw,st.rail);xbShowBolt(u.xbH,st.hand);
     xbRightHand(XBF,st,w.matrix,u.R.position);u.R.rotation.set(.2,0,0);u.L.position.copy(XB_FORE).applyMatrix4(w.matrix);u.L.rotation.set(.3,0,.5);u.R.visible=u.L.visible=true;}
-  if(u.scy){const H=u.scy,fi=SCYF.idle,k=myMo&&swingT<1&&myMo.scf?scyLerp(myMo.scf,fi,swingT,_scyK):fi;scyPlaceFP(H,k,SCYF.sc);
-    if(moving){H.matrix.elements[12]+=sx;H.matrix.elements[13]+=sy;}   /* 가만히 있을 땐 낫이 숨쉬듯 흔들리지 않게 */H.matrixWorldNeedsUpdate=true;
+  if(u.scy){const H=u.scy,fi=SCYF.idle,k=myMo&&swingT<1&&myMo.scf?scyLerp(myMo.scf,fi,swingT,_scyK):fi;
+    /* 걸을 때 흔들림은 자세 값에 더해 놓는다. 행렬에 바로 더하면 자리가 그대로인 프레임에 행렬을 다시 만들지 않아(updateMatrix 건너뛰기) 흔들림이 쌓여 팔이 점점 올라갔다.
+       가만히 있을 땐 숨쉬듯 흔들리지 않게 더하지 않는다 */
+    const kk=moving?_scyKm:k;if(moving){for(let i=0;i<6;i++)kk[i]=k[i];kk[0]+=sx;kk[1]+=sy;}scyPlaceFP(H,kk,SCYF.sc);H.matrixWorldNeedsUpdate=true;
     u.R.position.set(0,SCY_G0,0).applyMatrix4(H.matrix);u.L.position.set(0,SCY_G0+SCY_GRIP,0).applyMatrix4(H.matrix);
     u.R.quaternion.copy(H.quaternion);u.R.rotateX(SCY_FHR[0]);u.R.rotateY(SCY_FHR[1]);u.R.rotateZ(SCY_FHR[2]);
     u.L.quaternion.copy(H.quaternion);u.L.rotateX(SCY_FHL[0]);u.L.rotateY(SCY_FHL[1]);u.L.rotateZ(SCY_FHL[2]);u.R.visible=u.L.visible=true;}   /* 큰 낫: 두 손을 자루에 */
