@@ -10,15 +10,16 @@
   const C2 = { x: 360, z: 0 }, R2 = 160;            // 하레나와 둘레 (바깥 산줄기 안쪽)
   const ROAD = { x0: 95, x1: 226, half: 4.5 };      // 두 지역을 잇는 길 (z≈0)
   const TOWN_R = 40;                                // 도시 안전 지대 반지름
-  const INNER = 82;                                 // 하레나 둘레 안쪽 고리(Lv1~15)와 바깥 고리(Lv16~60)의 경계
+  const INNER = 82;                                 // 하레나 둘레 안쪽 고리(Lv1~11)와 바깥 고리(Lv12~30)의 경계
   const TOWN_BLD = { x: 18, z: -21, w: 16, d: 12 }; // 도시 기록관 (3층, 들어갈 수 있다) - 도시 중심 기준
   // ---------- 하레나 둘레: 서문에서 성을 두 바퀴 감아 나가는 길 하나 ----------
   // t: 길을 따라 간 정도 (0 = 서문 앞, 2π = 한 바퀴, 4π = 끝). 각도 = π + t (서 → 북 → 동 → 남, 북쪽 = -z)
-  // 구역 8개: 한 구역 = 4분의 1 바퀴, 사이는 좁은 협곡 문
-  const SP = { R0: 62, PITCH: 38, HW: 15, T: 4 * PI, Q: PI / 2,
-    ZONES: ['forest', 'plains', 'swamp', 'ruins', 'wwest', 'wnorth', 'wsouth', 'weast'] };
+  // 구역 6개: 한 구역 = 4분의 1 바퀴, 사이는 좁은 협곡 문
+  // (2026-11-10 원호: 하레나 사냥터를 잘라 Lv 30까지만. 예전 깊은 사막4·5(wsouth·weast)는 없애고 길은 한 바퀴 반에서 끝난다)
+  const SP = { R0: 62, PITCH: 38, HW: 15, T: 3 * PI, Q: PI / 2,
+    ZONES: ['forest', 'plains', 'swamp', 'ruins', 'wwest', 'wnorth'] };
   const spR = (t) => SP.R0 + SP.PITCH * t / (2 * PI);
-  const spHW = (t) => { const k = Math.round(t / SP.Q), d = Math.abs(t - k * SP.Q); return (k > 0 && k < 8 && d < 0.07) ? SP.HW - 9.5 * Math.pow(1 - d / 0.07, 0.6) : SP.HW; };
+  const spHW = (t) => { const k = Math.round(t / SP.Q), d = Math.abs(t - k * SP.Q); return (k > 0 && k < SP.ZONES.length && d < 0.07) ? SP.HW - 9.5 * Math.pow(1 - d / 0.07, 0.6) : SP.HW; };
   const spPos = (t, off = 0) => { const a = PI + t, r = spR(t) + off; return { x: C2.x + Math.cos(a) * r, z: C2.z + Math.sin(a) * r }; };
   // 가장 가까운 길 자리: t, off(길 가운데에서 바깥쪽 +), e(길 가장자리 밖으로 나간 거리, 음수면 길 안)
   function spNear(x, z) {
@@ -87,7 +88,7 @@
     { n: 1, off: true, gate: '남문', zones: [['mfield', 'beach', 'c'], ['mhill', 'field', 'c']] },
     // 2026-11-06 원호: 서문 → 숲 가는 길(60–70) → 엑시즈 숲(70–80) → 깊은 숲(80–90) → 추운 계곡(90–100) → 허칠 산장.
     //   sep: 땅마다 따로 된 맵 (목으로 잇지 않고, 땅 끝 문을 지나면 다음 땅으로 넘어간다). ks: 말굽 위 자리(한 칸씩 띄워 산으로 멀리 떨어뜨린다). names: 네 번째 칸이 온 이름. lv: 땅마다 적정레벨
-    { n: 2, gate: '서문', sep: true, names: true, ks: [5, 7, 9, 11], lv: [[60, 70], [70, 80], [80, 90], [90, 100]],
+    { n: 2, gate: '서문', sep: true, names: true, ks: [5, 7, 9, 11], lv: [[30, 38], [38, 45], [45, 53], [53, 60]],   /* 2026-11-10 원호: 숲 가는 길~추운 계곡은 Lv 30–60 */
       zones: [['m2a', 'trail', 0, '숲 가는 길'], ['m2b', 'wood', 0, '엑시즈 숲'], ['m2c', 'deep', 0, '깊은 숲'], ['m2d', 'cold', 0, '추운 계곡']] },
     { n: 3, off: true, gate: '북문', zones: [['m3a', 'wood'], ['m3b', 'river']] },
     { n: 4, off: true, gate: '동문', zones: [['m4a', 'pass'], ['m4b', 'cliff', 'c']] },
@@ -142,26 +143,26 @@
     { const ax = H.FORK.x - H.HUT.x, az = H.FORK.z - H.HUT.z, L = Math.hypot(ax, az); H.AX = { ux: ax / L, uz: az / L, L }; }
     H.HUTT = 0.22; H.HUTB = H.HUTT + (1 - H.HUTT) / 2;
     H.vt = (lx, lz) => ((lx - H.HUT.x) * H.AX.ux + (lz - H.HUT.z) * H.AX.uz) / H.AX.L;
-    /* 적정레벨: 봉우리 벼랑 안은 130→150 (꼭대기로 갈수록), 그 밖 골짜기는 산장→갈림길 100→110, 동굴은 굴 길이 따라 110→130 */
-    H.lvOut = (lx, lz) => { const d = Math.hypot(lx - H.TOP.x, lz - H.TOP.z), r = H.rb(Math.atan2(lz - H.TOP.z, lx - H.TOP.x)); if (d < r) return Math.round(130 + 20 * Math.pow(Math.max(0, Math.min(1, (r - d) / (r - 14))), 0.75));
-      return Math.round(100 + 10 * Math.max(0, Math.min(1, (H.vt(lx, lz) - H.HUTT) / (1 - H.HUTT)))); };
+    /* 적정레벨 (2026-11-10 원호: 허칠은 Lv 60부터): 봉우리 벼랑 안은 90→110 (꼭대기로 갈수록), 그 밖 골짜기는 산장→갈림길 60→70, 동굴은 굴 길이 따라 70→90 */
+    H.lvOut = (lx, lz) => { const d = Math.hypot(lx - H.TOP.x, lz - H.TOP.z), r = H.rb(Math.atan2(lz - H.TOP.z, lx - H.TOP.x)); if (d < r) return Math.round(90 + 20 * Math.pow(Math.max(0, Math.min(1, (r - d) / (r - 14))), 0.75));
+      return Math.round(60 + 10 * Math.max(0, Math.min(1, (H.vt(lx, lz) - H.HUTT) / (1 - H.HUTT)))); };
     /* 사냥터 (2026-11-06 원호: 레벨별로 나눠서 여러 곳): 골짜기 둘, 동굴 넷(방마다 하나, 좁은 굴목에서 나뉨), 봉우리 넷(벼랑 안 둘레 띠) */
     H.AREAS = [
-      { id: 'wood', name: '산장 숲길', lv: [100, 105] }, { id: 'lake', name: '호숫가 골짜기', lv: [105, 110] },
-      { id: 'bat', name: '박쥐 굴', lv: [110, 115], cave: 1, s: [0, 170] }, { id: 'crys', name: '수정 굴', lv: [115, 120], cave: 1, s: [170, 315] },
-      { id: 'fall', name: '얼음 폭포 굴', lv: [120, 125], cave: 1, s: [315, 470] }, { id: 'den', name: '곰 굴', lv: [125, 130], cave: 1, s: [470, H.TL - 16] },
-      { id: 'slope', name: '눈 비탈', lv: [130, 135] }, { id: 'scree', name: '서리 바위밭', lv: [135, 140] }, { id: 'ridge', name: '바람 능선', lv: [140, 145] }, { id: 'top', name: '꼭대기', lv: [145, 150] }];
+      { id: 'wood', name: '산장 숲길', lv: [60, 65] }, { id: 'lake', name: '호숫가 골짜기', lv: [65, 70] },
+      { id: 'bat', name: '박쥐 굴', lv: [70, 75], cave: 1, s: [0, 170] }, { id: 'crys', name: '수정 굴', lv: [75, 80], cave: 1, s: [170, 315] },
+      { id: 'fall', name: '얼음 폭포 굴', lv: [80, 85], cave: 1, s: [315, 470] }, { id: 'den', name: '곰 굴', lv: [85, 90], cave: 1, s: [470, H.TL - 16] },
+      { id: 'slope', name: '눈 비탈', lv: [90, 95] }, { id: 'scree', name: '서리 바위밭', lv: [95, 100] }, { id: 'ridge', name: '바람 능선', lv: [100, 105] }, { id: 'top', name: '꼭대기', lv: [105, 110] }];
     H.areaOfLv = (lv, cave) => { const L = H.AREAS.filter((A) => !!A.cave === !!cave); for (const A of L) if (lv < A.lv[1] || (lv === A.lv[1] && A.id === 'lake')) return A; return L[L.length - 1]; };
     H.caveArea = (s) => { let A = null; for (const B of H.AREAS) if (B.cave) { A = B; if (s < B.s[1]) break; } return A; };
     /* 동굴 적정레벨: 사냥터마다 굴 길이 따라 5씩 */
     H.lvCave = (lx, lz) => { const s = H.near(H.T, lx, lz).s, A = H.caveArea(s); return Math.min(A.lv[1], Math.floor(A.lv[0] + 5 * Math.max(0, Math.min(1, (s - A.s[0]) / (A.s[1] - A.s[0]))))); };
     H.HUTA = { id: 'hut', name: '산장', lv: [0, 0], zone: 'hechil' };
     /* 봉우리 벼랑 안 레벨 (반올림 없이): 벼랑 밖이면 -1 */
-    H.pkLv = (lx, lz) => { const d = Math.hypot(lx - H.TOP.x, lz - H.TOP.z), r = H.rb(Math.atan2(lz - H.TOP.z, lx - H.TOP.x)); return d < r ? 130 + 20 * Math.pow(Math.max(0, Math.min(1, (r - d) / (r - 14))), 0.75) : -1; };
+    H.pkLv = (lx, lz) => { const d = Math.hypot(lx - H.TOP.x, lz - H.TOP.z), r = H.rb(Math.atan2(lz - H.TOP.z, lx - H.TOP.x)); return d < r ? 90 + 20 * Math.pow(Math.max(0, Math.min(1, (r - d) / (r - 14))), 0.75) : -1; };
     H.areaAt = (lx, lz, cave) => { if (cave) return H.caveArea(H.near(H.T, lx, lz).s); const k = H.pkLv(lx, lz), A = H.AREAS;
-      if (k >= 0) return k < 135 ? A[6] : k < 140 ? A[7] : k < 145 ? A[8] : A[9]; const t = H.vt(lx, lz); return t < H.HUTT ? H.HUTA : t < H.HUTB ? A[0] : A[1]; };
+      if (k >= 0) return k < 95 ? A[6] : k < 100 ? A[7] : k < 105 ? A[8] : A[9]; const t = H.vt(lx, lz); return t < H.HUTT ? H.HUTA : t < H.HUTB ? A[0] : A[1]; };
     /* 봉우리 띠 경계: 벼랑 안에서 적정레벨 lv가 되는 꼭대기까지 거리 (각도 a) */
-    H.ringR = (a, lv) => { const r = H.rb(a); return r - Math.pow((lv - 130) / 20, 1 / 0.75) * (r - 14); };
+    H.ringR = (a, lv) => { const r = H.rb(a); return r - Math.pow((lv - 90) / 20, 1 / 0.75) * (r - 14); };
     /* 봉우리 벼랑: 틈이 아니면 벽 두께 안에 들어온 것을 가까운 쪽으로 밀어낸다 */
     H.wall = (p, rad, I) => { const dx = p.x - I.x - H.TOP.x, dz = p.z - I.z - H.TOP.z, d = Math.hypot(dx, dz) || 1, w = H.WT + rad, a = Math.atan2(dz, dx), r0 = H.rb(a); if (Math.abs(d - r0) >= w) return;
       let da = a - H.aG; da = Math.atan2(Math.sin(da), Math.cos(da)); if (Math.abs(da) * r0 < H.GW - rad) return;
@@ -313,7 +314,7 @@
     if (z < -300) return x > 100 ? 'wlair' : 'hall';
     // 하레나와 둘레 길 (옛 첫 지역은 없앴다: 하레나에서 시작해 60레벨까지 키운다)
     if (Math.hypot(x - C2.x, z - C2.z) < TOWN_R) return 'town';
-    const n = spNear(x, z); const i = n ? clampN(Math.floor(n.t / SP.Q), 0, 7) : 0;
+    const n = spNear(x, z); const i = n ? clampN(Math.floor(n.t / SP.Q), 0, SP.ZONES.length - 1) : 0;
     return SP.ZONES[i];
   }
   const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, myhome: 1, ghouse: 1, bakery: 1, mshop: 1, marcus: 1, milgol: 1, coachway: 1, castle: 1, guildhall: 1, exmarket: 1, arena: 1, library: 1, khq: 1, hlodge: 1, hechil: 1 };
@@ -373,22 +374,22 @@
   const MON = {
     slime:    { name: '슬라임', lv: 1, hpM: 0.8, atkM: 0.8, build: 'slime', color: 0x7fd067 },
     wolf:     { name: '회색 늑대', lv: 3, hpM: 0.9, atkM: 1.05, build: 'quad', color: 0x8d8f92 },
-    boar:     { name: '사막멧돼지', lv: 4, hpM: 1.15, atkM: 1, build: 'quad', color: 0x6e4b31, tusk: true },
-    goblin:   { name: '사막고블린', lv: 6, hpM: 0.95, atkM: 1.1, build: 'biped', color: 0x6f9440, scale: 0.8, ears: true },
-    toad:     { name: '독두꺼비', lv: 8, hpM: 1.25, atkM: 0.95, build: 'slime', color: 0x6a7a2c, toad: true, scale: 1.2 },
-    lizard:   { name: '모래도마뱀', lv: 10, hpM: 1.1, atkM: 1.05, build: 'biped', color: 0x3f7d60, tail: true },
-    skeleton: { name: '사막방울뱀', lv: 12, hpM: 0.95, atkM: 1.15, build: 'snake', color: 0xc4a46e, scale: 1.6 },
-    ogre:     { name: '낙타', lv: 15, hpM: 1.5, atkM: 1.05, build: 'biped', color: 0xc8a068, scale: 1.15 },
+    boar:     { name: '사막멧돼지', lv: 3, hpM: 1.15, atkM: 1, build: 'quad', color: 0x6e4b31, tusk: true },
+    goblin:   { name: '사막고블린', lv: 5, hpM: 0.95, atkM: 1.1, build: 'biped', color: 0x6f9440, scale: 0.8, ears: true },
+    toad:     { name: '독두꺼비', lv: 6, hpM: 1.25, atkM: 0.95, build: 'slime', color: 0x6a7a2c, toad: true, scale: 1.2 },
+    lizard:   { name: '모래도마뱀', lv: 8, hpM: 1.1, atkM: 1.05, build: 'biped', color: 0x3f7d60, tail: true },
+    skeleton: { name: '사막방울뱀', lv: 9, hpM: 0.95, atkM: 1.15, build: 'snake', color: 0xc4a46e, scale: 1.6 },
+    ogre:     { name: '낙타', lv: 11, hpM: 1.5, atkM: 1.05, build: 'biped', color: 0xc8a068, scale: 1.15 },
     // 길
-    dog:      { name: '들개', lv: 12, build: 'quad', color: 0x7a5a3a, hpM: 0.8, atkM: 1 },
-    bandit:   { name: '산적', lv: 16, build: 'biped', color: 0x6b4a2e, hpM: 1, atkM: 1.05, sword: true },
-    // 서쪽 황야 (Lv 20–30)
-    jackal:   { name: '자칼', lv: 22, build: 'quad', color: 0xa88a5a, hpM: 0.85, atkM: 1 },
-    sandslime:{ name: '모래 슬라임', lv: 27, build: 'slime', color: 0xc9a46a, hpM: 1.2, atkM: 0.9, scale: 1.3 },
-    // 북쪽 황야 (Lv 28–40)
-    hyena:    { name: '하이에나', lv: 31, build: 'quad', color: 0x8a7a5a, hpM: 0.95, atkM: 1.1, scale: 1.05 },
-    rockslime:{ name: '바위 슬라임', lv: 35, build: 'slime', color: 0x8a8478, hpM: 1.4, atkM: 0.95, scale: 1.4 },
-    nomad:    { name: '사막 거북', lv: 39, build: 'quad', color: 0x8a6a44, hpM: 1.05, atkM: 1.15, scale: 1.3 },   // 등딱지에 돌이 박힌 큰 사막 거북
+    dog:      { name: '들개', lv: 9, build: 'quad', color: 0x7a5a3a, hpM: 0.8, atkM: 1 },
+    bandit:   { name: '산적', lv: 12, build: 'biped', color: 0x6b4a2e, hpM: 1, atkM: 1.05, sword: true },
+    // 깊은 사막2 (Lv 12–20)
+    jackal:   { name: '자칼', lv: 16, build: 'quad', color: 0xa88a5a, hpM: 0.85, atkM: 1 },
+    sandslime:{ name: '모래 슬라임', lv: 20, build: 'slime', color: 0xc9a46a, hpM: 1.2, atkM: 0.9, scale: 1.3 },
+    // 깊은 사막3 (Lv 23–29)
+    hyena:    { name: '하이에나', lv: 23, build: 'quad', color: 0x8a7a5a, hpM: 0.95, atkM: 1.1, scale: 1.05 },
+    rockslime:{ name: '바위 슬라임', lv: 26, build: 'slime', color: 0x8a8478, hpM: 1.4, atkM: 0.95, scale: 1.4 },
+    nomad:    { name: '사막 거북', lv: 29, build: 'quad', color: 0x8a6a44, hpM: 1.05, atkM: 1.15, scale: 1.3 },   // 등딱지에 돌이 박힌 큰 사막 거북
     // 남쪽 황야 (Lv 38–50)
     scorpion: { name: '전갈', lv: 42, build: 'quad', color: 0xb07a3a, hpM: 1.1, atkM: 1.1, tail: true, scale: 1.1 },
     salamander:{ name: '불도마뱀', lv: 45, build: 'biped', color: 0xb8402a, hpM: 1.1, atkM: 1.2, tail: true },
@@ -398,10 +399,10 @@
     emberslime:{ name: '불씨 슬라임', lv: 56, build: 'slime', color: 0xd8702a, hpM: 1.1, atkM: 1.2, scale: 1.4, glow: 0xff5a10 },
     redgiant: { name: '붉은 바위 거인', lv: 59, build: 'biped', color: 0x7a3a2a, hpM: 1.8, atkM: 1.25, scale: 2.1, club: true },
     // 석굴
-    kingslime:{ name: '킹 슬라임', lv: 20, fixed: { hp: 16000, atk: 70, def: 14, exp: 4500 }, gold: 1500, build: 'slime', color: 0x56c860, scale: 4.2, boss: true },
-    slimelet: { name: '킹 슬라임 조각', lv: 18, build: 'slime', color: 0x7fe07a, hpM: 0.5, atkM: 0.8, scale: 1.1 },
+    kingslime:{ name: '킹 슬라임', lv: 15, fixed: { hp: 11100, atk: 56, def: 11, exp: 3400 }, gold: 1100, build: 'slime', color: 0x56c860, scale: 4.2, boss: true },
+    slimelet: { name: '킹 슬라임 조각', lv: 14, build: 'slime', color: 0x7fe07a, hpM: 0.5, atkM: 0.8, scale: 1.1 },
     // 심연 끝
-    wyvern:{ name: '와이번', lv: 62, fixed: { hp: 45000, atk: 330, def: 40, exp: 20000 }, gold: 6000, build: 'dragon', wyvern: true, color: 0x2f5a46, scale: 1.3, dragon: true, arena: 'WLAIR' },
+    wyvern:{ name: '와이번', lv: 30, fixed: { hp: 16800, atk: 184, def: 19, exp: 10900 }, gold: 3000, build: 'dragon', wyvern: true, color: 0x2f5a46, scale: 1.3, dragon: true, arena: 'WLAIR' },
     // 실바 (Lv 60–70)
     silvawolf:{ name: '은빛 늑대', lv: 63, build: 'quad', color: 0xc8ccd4, hpM: 1.0, atkM: 1.15, scale: 1.1 },
     mossslime:{ name: '이끼 슬라임', lv: 66, build: 'slime', color: 0x5a8a3a, hpM: 1.3, atkM: 1.0, scale: 1.4, glow: 0x3aa050 },
@@ -483,19 +484,19 @@
     firewolf: { name: '불꽃 늑대', lv: 230, build: 'quad', color: 0xb04a1e, hpM: 1.7, atkM: 2.0, scale: 1.5 },
     smokeslime:{ name: '연기 슬라임', lv: 233, build: 'slime', color: 0x6a6662, hpM: 2.2, atkM: 1.75, scale: 1.85, glow: 0xffb070 },
     firegiant:{ name: '불의 거인', lv: 235, build: 'biped', color: 0x6a2a1e, hpM: 3.2, atkM: 2.0, scale: 2.9, club: true },
-    // 허칠산 (설산, Lv 100–150): 산장~갈림길 골짜기 100–110, 동굴 110–130, 봉우리 130–150
-    frostfox: { name: '서리 여우', lv: 102, build: 'quad', color: 0xeef2f6, hpM: 1.15, atkM: 1.3 },
-    snowgoat: { name: '눈 산양', lv: 108, build: 'quad', color: 0xe8e4da, hpM: 1.5, atkM: 1.35 },
-    snowyeti: { name: '설인', lv: 132, build: 'biped', color: 0xe9edf0, hpM: 2.2, atkM: 1.6 },
-    icewisp:  { name: '얼음 정령', lv: 136, build: 'wisp', color: 0xcfeaf8, hpM: 1.25, atkM: 1.5 },
-    avagolem: { name: '눈사태 골렘', lv: 141, build: 'biped', color: 0xe6ecf2, hpM: 2.7, atkM: 1.65, defM: 1.3 },
-    snowowl:  { name: '눈부엉이', lv: 144, build: 'bird', color: 0xf4f6f8, hpM: 1.45, atkM: 1.75 },
-    frostmammoth:{ name: '얼음 매머드', lv: 148, build: 'quad', color: 0x8a7a6a, hpM: 3.0, atkM: 1.8 },
-    // 허칠산 동굴 (Lv 110–130): 설산 굴에 사는 짐승 — 박쥐 떼, 굴을 보금자리 삼는 눈표범, 겨울잠 자는 동굴곰
-    cavebat:  { name: '서리 박쥐', lv: 112, build: 'bird', color: 0x4a4650, hpM: 1.0, atkM: 1.45 },
-    snowleopard:{ name: '눈표범', lv: 118, build: 'quad', color: 0xd8d4c8, hpM: 1.5, atkM: 1.6 },
-    cavebear: { name: '동굴곰', lv: 124, build: 'quad', color: 0x5a4636, hpM: 2.4, atkM: 1.6 },
-    elderbear:{ name: '늙은 동굴곰', lv: 129, build: 'quad', color: 0x3e3430, hpM: 3.2, atkM: 1.75, defM: 1.2 },
+    // 허칠산 (설산, Lv 60–110): 산장~갈림길 골짜기 60–70, 동굴 70–90, 봉우리 90–110
+    frostfox: { name: '서리 여우', lv: 62, build: 'quad', color: 0xeef2f6, hpM: 1.15, atkM: 1.3 },
+    snowgoat: { name: '눈 산양', lv: 68, build: 'quad', color: 0xe8e4da, hpM: 1.5, atkM: 1.35 },
+    snowyeti: { name: '설인', lv: 92, build: 'biped', color: 0xe9edf0, hpM: 2.2, atkM: 1.6 },
+    icewisp:  { name: '얼음 정령', lv: 96, build: 'wisp', color: 0xcfeaf8, hpM: 1.25, atkM: 1.5 },
+    avagolem: { name: '눈사태 골렘', lv: 101, build: 'biped', color: 0xe6ecf2, hpM: 2.7, atkM: 1.65, defM: 1.3 },
+    snowowl:  { name: '눈부엉이', lv: 104, build: 'bird', color: 0xf4f6f8, hpM: 1.45, atkM: 1.75 },
+    frostmammoth:{ name: '얼음 매머드', lv: 108, build: 'quad', color: 0x8a7a6a, hpM: 3.0, atkM: 1.8 },
+    // 허칠산 동굴 (Lv 70–90): 설산 굴에 사는 짐승 — 박쥐 떼, 굴을 보금자리 삼는 눈표범, 겨울잠 자는 동굴곰
+    cavebat:  { name: '서리 박쥐', lv: 72, build: 'bird', color: 0x4a4650, hpM: 1.0, atkM: 1.45 },
+    snowleopard:{ name: '눈표범', lv: 78, build: 'quad', color: 0xd8d4c8, hpM: 1.5, atkM: 1.6 },
+    cavebear: { name: '동굴곰', lv: 84, build: 'quad', color: 0x5a4636, hpM: 2.4, atkM: 1.6 },
+    elderbear:{ name: '늙은 동굴곰', lv: 89, build: 'quad', color: 0x3e3430, hpM: 3.2, atkM: 1.75, defM: 1.2 },
     reddragon:{ name: '붉은 용 이그니스', lv: 100, fixed: { hp: 450000, atk: 900, def: 60, exp: 80000 }, gold: 80000, build: 'dragon', color: 0xa8231a, scale: 1, dragon: true },
   };
   /* ---------- 몬스터 능력치 (밸런스) ----------
@@ -529,7 +530,7 @@
   }
   const ZONE_MON = {
     forest: ['slime', 'slime', 'wolf'], plains: ['boar', 'goblin'], swamp: ['toad', 'lizard'], ruins: ['skeleton', 'skeleton', 'ogre'],
-    wwest: ['jackal', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
+    wwest: ['jackal', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'],
     silva: ['silvawolf', 'mossslime'], arbus: ['snowwolf', 'frostslime'], kaolis: ['mackerel', 'tideslime', 'octopus'], subcus: ['darkhound', 'crystalslime'],
     // 엑시즈 사냥터: 첫 땅 = 예전 그 줄 1·2번째 땅 몬스터, 두 번째 땅 = 3·4·5번째 땅 몬스터
     // 2026-11-06 서문 길 네 땅: 예전 여덟 땅의 몬스터 48종을 땅 생김새에 맞게 나눴다 (레벨은 아래 SEP_LV로 그 땅 적정레벨 안에 고르게)
@@ -542,14 +543,14 @@
     hpeak: ['snowyeti'], hscree: ['icewisp'], hridge: ['avagolem', 'snowowl'], htop: ['frostmammoth'],
     m5a: ['cinderhound', 'cinderhound', 'cinderslime'], m5b: ['scorchboar', 'magmaviper'], m5c: ['ashbear', 'lavaslime', 'lavatroll'], m5d: ['flamehound', 'flameogre'], m5e: ['firewolf', 'smokeslime', 'firegiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, m2a: 60, m2b: 60, m2c: 60, m2d: 60, hwood: 30, hlake: 30, hcave: 22, hcrys: 22, hfall: 22, hden: 22, hpeak: 28, hscree: 26, hridge: 24, htop: 14,   /* 2026-11-07 허칠 맵을 작게 떼면서 줄임 */   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, silva: 30, arbus: 30, kaolis: 30, subcus: 30, m2a: 60, m2b: 60, m2c: 60, m2d: 60, hwood: 30, hlake: 30, hcave: 22, hcrys: 22, hfall: 22, hden: 22, hpeak: 28, hscree: 26, hridge: 24, htop: 14,   /* 2026-11-07 허칠 맵을 작게 떼면서 줄임 */   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
   for (const L of MLINES_ALL) if (L.off) for (const [id] of L.zones) { delete ZONE_COUNT[id]; delete ZONE_MON[id]; }   // 꺼 둔 땅에는 몬스터가 나오지 않는다
   /* ---------- 사냥터 넓이만큼 몬스터 (2026-11-07 원호: "사냥터 크기에 비례해서 몬스터가 더 많았으면") ----------
      사냥터마다 실제로 걸을 수 있는 넓이(m², 벽·벼랑·굴 벽 안)를 재서 HUNT.M2 넓이마다 한 마리를 둔다 (허칠 숲·호숫가·봉우리 맵과 같은 빽빽함).
      위 ZONE_COUNT 숫자는 가장 적은 수로 남는다: 굴처럼 좁고 긴 맵은 넓이로 재면 너무 적어서 손으로 정한 수를 그대로 쓴다.
      맵을 새로 나누거나 크기를 바꿔도 ZONE_COUNT·ZONE_MON 에 그 땅(ISLES)만 있으면 수가 저절로 맞는다.
      하레나 둘레 길은 좁은 길이라 이미 빽빽해서 그대로, 옛 땅 넷(실바·아르부스·카올리스·수브쿠스)은 가는 길이 없어서 그대로 */
-  const HUNT = { M2: 300, MAX: 300, N: 2000, FIXED: { forest: 1, plains: 1, swamp: 1, ruins: 1, wwest: 1, wnorth: 1, wsouth: 1, weast: 1, silva: 1, arbus: 1, kaolis: 1, subcus: 1 } };
+  const HUNT = { M2: 300, MAX: 300, N: 2000, FIXED: { forest: 1, plains: 1, swamp: 1, ruins: 1, wwest: 1, wnorth: 1, silva: 1, arbus: 1, kaolis: 1, subcus: 1 } };
   /* 걸을 수 있는 넓이: 땅 둘레 네모 안에 고르게 흩은 점(할턴 수열, 늘 같은 점) 가운데 그 땅이면서 붙잡기(worldClamp)가 밀어내지 않는 점의 비율 */
   function zoneArea(z, N = HUNT.N) {
     const I = ISLES[z]; if (!I) return 0;
@@ -572,13 +573,13 @@
     if (ISLES[zone] && ISLES[zone].lvAt) return ISLES[zone].lvAt(x, z);   // 허칠산·동굴: 길 따라 정한 레벨
     if (ISLES[zone] && ZONE_LEVELS[zone]) { const I = ISLES[zone], L = ZONE_LEVELS[zone]; const d = Math.hypot(x - I.entry.x, z - I.entry.z); return Math.round(L[0] + (L[1] - L[0]) * clampN((d - 12) / (I.R * 1.7 - 12), 0, 1)); }   // 들어온 자리에서 멀수록 강하다
     switch (zone) {
-      case 'forest': case 'plains': case 'swamp': case 'ruins': case 'wwest': case 'wnorth': case 'wsouth': case 'weast': {   // 길을 따라 갈수록 강하다
+      case 'forest': case 'plains': case 'swamp': case 'ruins': case 'wwest': case 'wnorth': {   // 길을 따라 갈수록 강하다
         const n = spNear(x, z), L = ZONE_LEVELS[zone], i = SP.ZONES.indexOf(zone), fr = n ? clampN((n.t - i * SP.Q) / SP.Q, 0, 1) : 0;
         return Math.round(L[0] + (L[1] - L[0]) * fr); }
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hlodge: [0, 0], hechil: [0, 0], ...Object.fromEntries(HCH.AREAS.map((A) => [A.zone, A.lv])) };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [3, 5], swamp: [6, 8], ruins: [9, 11], dungeon: [13, 16], town: [0, 0], hall: [30, 30], wlair: [30, 30], wwest: [12, 20], wnorth: [23, 29], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hlodge: [0, 0], hechil: [0, 0], ...Object.fromEntries(HCH.AREAS.map((A) => [A.zone, A.lv])) };
   MLINES.forEach((L) => { if (L.lv) { L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = L.lv[i].slice(); }); return; }
     if (L.branch) { L.zones.forEach(([id], i) => { const a = 60 + (L.n - 1) * 35 + i * 7; ZONE_LEVELS[id] = [a, a + 7]; }); return; }
     const a = 60 + (L.n - 1) * 10, w = 10 / L.zones.length; L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = [Math.round(a + i * w), Math.round(a + (i + 1) * w)]; }); });   /* 엑시즈 사냥터: 60레벨부터 문 하나에 10레벨, 그 문의 땅들이 나눠 맡는다 (2026-11-06 원호: 60–100. 100–150은 허칠산) */
@@ -590,7 +591,7 @@
   // {m}: 몬스터 이름, {z}: 지역 이름
   const G = (n, r, why) => ({ n, r, why });
   const BOARDS = {
-    kyle: { title: '사냥꾼 길드 게시판', cap: 12, zones: ['forest', 'plains', 'swamp', 'ruins', 'wwest', 'wnorth', 'wsouth', 'weast'], givers: [   /* 마르타의 게시판을 합쳤다 */
+    kyle: { title: '사냥꾼 길드 게시판', cap: 12, zones: ['forest', 'plains', 'swamp', 'ruins', 'wwest', 'wnorth'], givers: [   /* 마르타의 게시판을 합쳤다 */
 
       G('하레나 주민', '주민', ['나무꾼들이 {z}에 들어가질 못하고 있어요. {m} 때문에 겨울 땔감이 모자랄 지경이에요.', '아이들이 {z} 쪽 들판으로 놀러 갔다가 {m}에게 쫓겨 왔어요. 다시는 그런 일이 없게 해 주세요.']),
       G('엘리스', '순간이동 술사', ['별빛 길을 여는 수정을 {z}에 두고 왔는데, {m}이(가) 그 주변에 진을 쳤어요. 길을 터 주면 수정을 찾으러 갈게요.']),
@@ -607,8 +608,8 @@
   };
   /* 엑시즈 모험가 길드의 큰 게시판: 등급(레벨대)별로 칸이 나뉘어 있고, 칸마다 의뢰가 고르게 붙는다 */
   BOARDS.guild = { title: '모험가 길드 의뢰 게시판', cap: 50, zones: [],
-    /* 엑시즈 길드는 60레벨 이상 의뢰만: 스물여덟 레벨씩 칸을 나눈다 (사냥터의 시작 레벨로 가른다). 그 아래는 하레나 게시판 */
-    tiers: [...[[60, 70], [70, 80], [80, 90], [90, 100], [100, 125], [125, 150]].map(([lo, hi], i) => ({ id: 'a' + i, name: ['1급', '2급', '3급', '4급', '5급', '6급'][i], lv: [lo, hi], zones: [...MHUNT, ...HCH.HZ].filter((z) => ZONE_MON[z] && ZONE_LEVELS[z] && ZONE_LEVELS[z][0] >= lo && ZONE_LEVELS[z][0] < hi) }))].filter((t) => t.zones.length),
+    /* 엑시즈 길드는 30레벨 이상 의뢰만 (2026-11-10: 서문 길 Lv 30–60, 허칠 60–110): 스물여덟 레벨씩 칸을 나눈다 (사냥터의 시작 레벨로 가른다). 그 아래는 하레나 게시판 */
+    tiers: [...[[30, 38], [38, 45], [45, 53], [53, 60], [60, 85], [85, 110]].map(([lo, hi], i) => ({ id: 'a' + i, name: ['1급', '2급', '3급', '4급', '5급', '6급'][i], lv: [lo, hi], zones: [...MHUNT, ...HCH.HZ].filter((z) => ZONE_MON[z] && ZONE_LEVELS[z] && ZONE_LEVELS[z][0] >= lo && ZONE_LEVELS[z][0] < hi) }))].filter((t) => t.zones.length),
     givers: [
       G('엑시즈 상인', '상인', ['{z}를 지나는 상단이 {m}에게 번번이 털립니다. 길이 안전해지면 왕도 물가도 내려갈 거예요.', '{z}에서 들여오는 물건이 {m} 때문에 끊겼어요. 가게 선반이 비어 갑니다.']),
       G('길드 접수원', '모험가 길드', ['{z}에 나간 모험가들이 {m} 때문에 돌아오지 못하고 있어요. 수를 줄여 길을 열어 주세요.', '{z}의 {m}에 대한 신고가 길드에 쌓였어요. 처리해 주실 분을 찾습니다.']),
