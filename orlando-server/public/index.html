@@ -25547,13 +25547,13 @@ function trpTrapAdd(x,z,yaw,S,pw,opt,fly){const y=trpY(x,z),g=trpTrapMesh();g.po
   let live=TRP.traps.filter(q=>!q.sprung);while(live.length>TRP_TRAPS){const o=live.shift();trpGone(o.g,TRP.traps,o);live=TRP.traps.filter(q=>!q.sprung);}return T;}
 function trpMineAdd(x,z,S,pw,opt,fly){const y=trpY(x,z),g=trpMineMesh();g.position.set(x,y,z);g.rotation.y=Math.random()*6.3;scene.add(g);
   const M={g,x,y,z,S,pw,opt,t:S.life,arm:.6};TRP.mines.push(M);
-  if(fly)trpToss(g,fly);else{const p=new THREE.Vector3(x,y+.15,z);VFX.burst(p,0x5a4630,12,2,.4,{up:.4,glow:false,plain:true});if(typeof dustPuffs==='function')dustPuffs(new THREE.Vector3(x,y,z),.5,4);sfx('step',p,.8,.7);setTimeout(()=>{if(mode==='world')sfx('xb_click',p,.6,.85);},300);}
+  if(fly)trpToss(g,fly);else{const p=new THREE.Vector3(x,y+.15,z);VFX.burst(p,0x5a4630,12,2,.4,{up:.4,glow:false,plain:true});pfxMine(x,y,z,false);if(typeof dustPuffs==='function')dustPuffs(new THREE.Vector3(x,y,z),.5,4);sfx('step',p,.8,.7);setTimeout(()=>{if(mode==='world')sfx('xb_click',p,.6,.85);},300);}
   while(TRP.mines.length>TRP_MINES){const o=TRP.mines.shift();trpGone(o.g);}return M;}
 function trpGone(g,list,o){if(list){const i=list.indexOf(o);if(i>=0)list.splice(i,1);}const p=g.position.clone();p.y+=.1;VFX.burst(p,0x6a5640,8,1.4,.3,{glow:false,plain:true});scene.remove(g);}
 /* 손에서 포물선으로 날아가 떨어진다: 떨어지는 동안은 닫힌 채 돌고, 땅에 닿으면 흙이 튀고 덫은 턱을 벌린다 */
 function trpToss(g,dur){const to=g.position.clone(),f=flatFwd(),q=player.position,from=new THREE.Vector3(q.x+f.x*.35+f.z*.2,q.y+1.25,q.z+f.z*.35-f.x*.2),yaw=g.rotation.y,spin=(Math.random()-.5)*14;
   g.position.copy(from);TRP.fly.push({g,from,to,dur,t:0,yaw,spin});}
-function trpLand(T,x,y,z){const p=new THREE.Vector3(x,y+.1,z);VFX.burst(p,0x5a4630,8,1.6,.35,{up:.5,glow:false,plain:true});sfx('step',p,.7,.8);
+function trpLand(T,x,y,z){const p=new THREE.Vector3(x,y+.1,z);VFX.burst(p,0x5a4630,8,1.6,.35,{up:.5,glow:false,plain:true});pfxBearTrap(T.g,x,y,z,TRP.fly.length>2);sfx('step',p,.7,.8);
   setTimeout(()=>{if(mode==='world')sfx('xb_slide',p,.45,1.3);},120);setTimeout(()=>{if(mode==='world')sfx('xb_click',p,.6,1.25);},360);T.opening=tAll+.1;}
 function trpPrey(m){if(!pas('thend')||m.dying!==null)return;m.preyT=tAll+TRP_PREY;if(TRP.marks.has(m))return;
   const K=trpKit(),s=new THREE.Sprite(new THREE.SpriteMaterial({map:K.prey,transparent:true,depthWrite:false,depthTest:false,opacity:0}));s.renderOrder=5;s.scale.setScalar(.62);scene.add(s);TRP.marks.set(m,{s,t:0});
@@ -25603,7 +25603,7 @@ function trpClear(){for(const L of [TRP.traps,TRP.mines])for(const o of L)scene.
 function trpTick(dt){if(mode==='title'){if(TRP.traps.length||TRP.mines.length||TRP.clouds.length||TRP.marks.size)trpClear();return;}
   /* 날아가는 덫·지뢰 */
   for(let i=TRP.fly.length-1;i>=0;i--){const F=TRP.fly[i];F.t+=dt;const u=Math.min(1,F.t/F.dur);F.g.position.lerpVectors(F.from,F.to,u);F.g.position.y+=Math.sin(u*Math.PI)*(.8+F.from.distanceTo(F.to)*.18);F.g.rotation.set((1-u)*F.spin*.5,F.yaw+(1-u)*F.spin,0);
-    if(u>=1){F.g.position.copy(F.to);F.g.rotation.set(0,F.yaw,0);TRP.fly.splice(i,1);const T=TRP.traps.find(q=>q.g===F.g);if(T)trpLand(T,T.x,T.y,T.z);else{const p=F.to.clone().setY(F.to.y+.12);VFX.burst(p,0x5a4630,8,1.6,.35,{up:.5,glow:false,plain:true});sfx('step',p,.7,.65);}}}
+    if(u>=1){F.g.position.copy(F.to);F.g.rotation.set(0,F.yaw,0);TRP.fly.splice(i,1);const T=TRP.traps.find(q=>q.g===F.g);if(T)trpLand(T,T.x,T.y,T.z);else{const p=F.to.clone().setY(F.to.y+.12);VFX.burst(p,0x5a4630,8,1.6,.35,{up:.5,glow:false,plain:true});pfxMine(F.to.x,F.to.y,F.to.z,true);sfx('step',p,.7,.65);}}}
   const mons=alive();
   /* 곰 덫 */
   for(let i=TRP.traps.length-1;i>=0;i--){const T=TRP.traps[i];T.t-=dt;
@@ -28713,6 +28713,56 @@ function xloadFire(opt){const L=P.xload,S=L.S,pw=L.pw,o={...L.opt,...opt};P.xloa
   basicCd=B.cd*(JOBS[P.job].aspd||1);swingT=0;swingN++;myMoId='bshot';myMo=motionFor('bow','bshot');sfx('bw_fire');xbRecockSfx();updateHud();}
 // 석궁: 쏜 뒤 시위를 다시 걸쇠에 거는 소리 (xbState의 'shot'에서 시위가 다 돌아오는 때)
 function xbRecockSfx(){if(!XB_JOB[P.job])return;const sn=swingN;setTimeout(()=>{if(mode==='world'&&swingN===sn)sfx('xb_click',null,.35,1.15);},MOTION_OF.bshot.dur*.8*1000);}
+/* ---------- 설치 이펙트: 허수아비·덫·지뢰를 놓을 때 스킬마다 다른 은은한 연출 ----------
+   입자는 VFX 것을 그대로 쓰고(그래픽 단계·프레임 따라 자동으로 줄어듦), 고리 모양은 한 번 만든 것을 돌려 쓴다.
+   잠깐 이어지는 연출(독 김, 허수아비 솟기, 늦게 반짝이기)은 PFX 목록에서 매 프레임 조금씩 */
+const PFX=[];
+let _pfxRing=null;const pfxRingG=()=>{if(!_pfxRing){_pfxRing=new THREE.RingGeometry(.92,1,40);_pfxRing.rotateX(-Math.PI/2);_pfxRing.userData.keep=1;}return _pfxRing;};
+const pfxFar=(x,y,z,d=45)=>{const c=camera.position;return (x-c.x)**2+(y-c.y)**2+(z-c.z)**2>d*d;};
+/* 땅에 퍼지는 가는 고리 (r까지 천천히, 옅게). 밝은 모래·눈 위에서 하얗게 타지 않게 더하기 섞기 대신 보통 섞기 */
+const pfxMat=(color,op)=>new THREE.MeshBasicMaterial({color,transparent:true,opacity:op,depthWrite:false,side:THREE.DoubleSide});
+let _pfxDisc=null;const pfxDiscG=()=>{if(!_pfxDisc){_pfxDisc=new THREE.CircleGeometry(1,28);_pfxDisc.rotateX(-Math.PI/2);_pfxDisc.userData.keep=1;}return _pfxDisc;};
+let _pfxSoft=null;const pfxSoft=()=>{if(!_pfxSoft){const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d'),g=x.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.5,'rgba(255,255,255,.5)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,64,64);_pfxSoft=new THREE.CanvasTexture(c);}return _pfxSoft;};
+/* 땅에 번졌다 사라지는 옅은 빛 얼룩 */
+function pfxStain(x,y,z,color,r,dur,op){const mt=pfxMat(color,0);mt.map=pfxSoft();const m=new THREE.Mesh(pfxDiscG(),mt);m.position.set(x,y+.03,z);m.scale.setScalar(r*.6);m.renderOrder=4;
+  VFX.anim(m,dur,k=>{m.scale.setScalar(r*(.6+.4*(1-Math.pow(1-k,2))));m.material.opacity=op*(k<.15?k/.15:(1-k)/.85);});}
+function pfxRing(x,y,z,color,r,dur,op){const m=new THREE.Mesh(pfxRingG(),pfxMat(color,op));m.position.set(x,y+.04,z);m.scale.setScalar(.01);m.renderOrder=5;
+  VFX.anim(m,dur,k=>{const e=1-Math.pow(1-k,3);m.scale.setScalar(Math.max(.01,r*e));m.material.opacity=op*(1-k)*(k<.1?k/.1:1);});}
+function pfxTick(dt){if(!PFX.length)return;if(mode!=='world'){PFX.length=0;return;}
+  for(let i=PFX.length-1;i>=0;i--){const J=PFX[i];J.t+=dt;if(J.t<0)continue;if(J.fn(J.t,dt,J)===false||J.t>=J.dur)PFX.splice(i,1);}}
+/* 살아있는 허수아비: 땅에서 쑥 솟고, 영혼 빛이 발밑에서 감겨 올라가 머리로 스며든 뒤 두 눈에 불이 켜진다. 지푸라기 몇 올이 날린다 */
+function pfxScarecrow(g){const x=g.position.x,y=g.position.y,z=g.position.z,q=VFX.q(),lite=q<.55||pfxFar(x,y,z);
+  const eyes=[];g.traverse(o=>{if(o.isMesh&&o.material&&o.material.isMeshBasicMaterial&&o.material.color.getHex()===SL_SOUL&&o.geometry.type==='SphereGeometry')eyes.push(o);});
+  const eyeM=eyes.length?eyes[0].material:null;if(eyeM){eyeM.transparent=true;eyeM.opacity=0;}   /* 눈 재질은 허수아비마다 따로 만든 것 */
+  g.scale.set(1,.12,1);
+  pfxStain(x,y,z,0x2a6a58,1.4,1.3,.35);pfxRing(x,y,z,0x3aa888,1.6,.9,.4);
+  const ph=Math.random()*6.283;
+  PFX.push({t:0,dur:1.1,fn:(t,dt,J)=>{
+    const k=Math.min(1,t/.38),s=k<1?1+2.4*Math.pow(k-1,3)+1.4*Math.pow(k-1,2):1;g.scale.set(1,Math.max(.12,s),1);   /* 살짝 넘쳤다가 제 키로 */
+    if(!lite&&t<.6){const n=Math.random()<dt*(18*q)?1:0;for(let i=0;i<n+((dt*18*q)|0);i++){const a=ph+t*9+i*2.1,r=.75-t*.9;
+      VFX.emit(0,x+Math.cos(a)*r,y+.1+t*2.6,z+Math.sin(a)*r,-Math.sin(a)*1.3,2.4,Math.cos(a)*1.3,i%3?SL_SOUL:0xffffff,.55,-.2,1.2);}}   /* 감겨 오르는 영혼 빛 */
+    if(!J.eye&&t>=.5){J.eye=1;const ep=new THREE.Vector3(0,1.95,.21).applyMatrix4(g.matrixWorld);if(!lite){VFX.flare(ep,SL_SOUL,.7,.3);VFX.glint(ep,SL_SOUL,3,.8,.5);}}
+    if(eyeM)eyeM.opacity=Math.min(1,Math.max(0,(t-.45)/.2));
+    if(t>=J.dur){g.scale.set(1,1,1);if(eyeM)eyeM.opacity=1;}}});
+  const n=lite?3:Math.round(7*Math.min(1.2,q));for(let i=0;i<n;i++){const a=Math.random()*6.283,s=.6+Math.random()*.9;VFX.emit(0,x+Math.cos(a)*.15,y+1.3+Math.random()*.4,z+Math.sin(a)*.15,Math.cos(a)*s,.8+Math.random()*.8,Math.sin(a)*s,0xd8b060,.9+Math.random()*.4,2.2,2.5);}}   /* 지푸라기 */
+/* 찰코(곰 덫): 떨어지면 흙이 낮게 둥글게 깔리고, 턱이 다 벌어지는 순간 톱니 끝에서 쇠빛이 번쩍 */
+function pfxBearTrap(g,x,y,z,light){const q=VFX.q(),lite=q<.55||pfxFar(x,y,z);
+  const n=light?4:7;for(let i=0;i<n;i++){const a=i/n*6.283+Math.random()*.4;VFX.emit(0,x+Math.cos(a)*.2,y+.05,z+Math.sin(a)*.2,Math.cos(a)*1.6,.25,Math.sin(a)*1.6,0x6a5640,.35,1,4);}
+  if(lite)return;
+  PFX.push({t:-.38,dur:1,fn:()=>{if(!g.parent)return false;g.updateMatrixWorld(true);const p=new THREE.Vector3();   /* 벌어진 두 턱의 톱니 끝 (턱은 덫의 앞뒤로 눕는다) */
+    for(const s of [-1,1])for(const a of light?[Math.PI/2]:[.7,Math.PI/2,Math.PI-.7]){g.localToWorld(p.set(Math.cos(a)*.3,.06,s*Math.sin(a)*.3));VFX.emit(2,p.x,p.y,p.z,0,.3,0,a===Math.PI/2?0xffffff:0xc8d0dc,.3,0,2);}
+    if(!light)VFX.flare(p.set(x,y+.12,z),0xdfe6f0,.6,.15);return false;}});}
+/* 독 지뢰: 묻고 나면 독버섯 둘레에서 초록 김이 가늘게 몇 줄기 피어오르고, 땅에 독빛이 옅게 번졌다 사라진다 */
+function pfxMine(x,y,z,light){const q=VFX.q(),lite=q<.55||pfxFar(x,y,z);const at=new THREE.Vector3(x,y,z);
+  pfxStain(x,y,z,0x4a6a18,light?.7:.9,1.4,light?.3:.42);if(lite)return;
+  const rate=(light?5:9)*Math.min(1.2,q);
+  PFX.push({t:.12,dur:1.3,fn:(t,dt)=>{let n=rate*dt;while(n>0){if(n<1&&Math.random()>n)break;n--;const a=Math.random()*6.283,r=.08+Math.random()*.14;
+      VFX.emit(0,x+Math.cos(a)*r,y+.18,z+Math.sin(a)*r,Math.cos(a)*.12,.45+Math.random()*.35,Math.sin(a)*.12,Math.random()<.25?0xd8f080:0x8ab830,.9+Math.random()*.4,-.15,.6);}}});
+  PFX.push({t:-.62,dur:1,fn:()=>{pfxRing(x,y,z,0x6a9a20,.7,.45,.45);return false;}});}   /* 다 묻혀 밟히면 터질 수 있게 된 때 작은 독빛 고리 */
+/* 덫 설치하기 (석궁병): 걸리는 범위만큼 금빛 가는 고리가 퍼지고 쇠가 반짝 */
+function pfxXtrap(x,y,z,R){const lite=VFX.q()<.55||pfxFar(x,y,z);pfxRing(x,y,z,0x8a6420,R,.7,.45);
+  for(let i=0;i<5;i++){const a=i/5*6.283;VFX.emit(0,x+Math.cos(a)*.35,y+.08,z+Math.sin(a)*.35,Math.cos(a)*1.2,.2,Math.sin(a)*1.2,0x8a7050,.35,1,4);}
+  if(!lite)VFX.glint(new THREE.Vector3(x,y+.12,z),0xc9a46a,2,.6,.35);}
 const XTRAPS=[];
 function xtrapPlace(S,pw,opt){const q=player.position,y=heightAt(q.x,q.z),g=new THREE.Group();g.position.set(q.x,y+.02,q.z);
   const iron=new THREE.MeshStandardMaterial({color:0x5a5650,metalness:.6,roughness:.45}),dark=new THREE.MeshStandardMaterial({color:0x3a2a1a,roughness:.9});
@@ -28720,7 +28770,7 @@ function xtrapPlace(S,pw,opt){const q=player.position,y=heightAt(q.x,q.z),g=new 
   for(const s of [-1,1]){const jaw=new THREE.Group();jaw.position.x=s*.02;for(let k=0;k<7;k++){const t=new THREE.Mesh(new THREE.ConeGeometry(.035,.12,4),iron);const a=-1.2+k*.4;t.position.set(Math.cos(a)*.4*s,.06,Math.sin(a)*.4);jaw.add(t);}g.add(jaw);}
   const pan=new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,.03,12),dark);pan.position.y=.02;g.add(pan);
   scene.add(g);XTRAPS.push({g,x:q.x,z:q.z,S,pw,opt,t:S.life});while(XTRAPS.length>3){const o=XTRAPS.shift();scene.remove(o.g);}
-  VFX.burst(new THREE.Vector3(q.x,y+.3,q.z),0xc9a46a,10,2,.3,{up:.2});sfx('block',null,.7,1.3);}
+  pfxXtrap(q.x,y,q.z,S.radius);sfx('block',null,.7,1.3);}
 function xtrapTick(dt){for(let i=XTRAPS.length-1;i>=0;i--){const T=XTRAPS[i];T.t-=dt;if(T.t<=0||mode==='title'){scene.remove(T.g);XTRAPS.splice(i,1);continue;}
     for(const m of alive()){if(m.dummy&&false)continue;const d=Math.hypot(m.mesh.position.x-T.x,m.mesh.position.z-T.z);if(d>T.S.radius+m.r*.5)continue;
       const S=T.S;m.trapMk=tAll+S.hold;m.trapV=S.vuln;shared(()=>damageMonster(m,S.mult*T.pw,{...T.opt,stun:S.hold,noKnock:true}));trapMark(m,S.hold);
@@ -30675,7 +30725,7 @@ function updateWorld(dt){
   invuln=Math.max(0,invuln-dt);
   updateNetMonsters(dt);
   if(mode!=='world')return;
-  updateProjs(dt);xtrapTick(dt);trpTick(dt);xhTick(dt);slTick(dt);updateZones(dt);
+  updateProjs(dt);xtrapTick(dt);trpTick(dt);pfxTick(dt);xhTick(dt);slTick(dt);updateZones(dt);
   // 스승과 상인
   let it=null;
   if(mentor){
@@ -30863,7 +30913,7 @@ function slScBarSet(s,k){if(Math.abs(s.userData.k-k)<.005)return;s.userData.k=k;
 function slScUp(S,lvl){const q=player.position,y=heightAt(q.x,q.z),hp=P.maxhp*(S.hp+S.hpPer*(lvl-1)),g=slScMesh();g.position.set(q.x,y,q.z);g.rotation.y=cam.yaw;scene.add(g);
   const bar=slScBar();bar.position.set(0,2.55,0);g.add(bar);slScBarSet(bar,1);
   SL.sc={x:q.x,z:q.z,y,until:tAll+S.dur,hp,dmg:0,S,lvl,mesh:g,bar,t0:tAll};cds.scarecrow=0;
-  VFX.burst(new THREE.Vector3(q.x,y+1,q.z),0xd8b060,24,3,.6,{up:.6,grav:5,glow:false});VFX.shock(new THREE.Vector3(q.x,y+.05,q.z),SL_SOUL,2.4,.45);if(typeof dustPuffs==='function')dustPuffs(new THREE.Vector3(q.x,y,q.z),.9,8);
+  g.updateMatrixWorld(true);pfxScarecrow(g);if(typeof dustPuffs==='function')dustPuffs(new THREE.Vector3(q.x,y,q.z),.7,5);
   sfx('step',null,1,.7);sfx('heavy',null,.6,.9);log('허수아비를 세웠다','sys');updateHud();return null;}
 function slScClear(cd){const C=SL.sc;if(!C)return;SL.sc=null;if(C.mesh){scene.remove(C.mesh);if(C.bar){C.bar.material.map.dispose();C.bar.material.dispose();}}if(cd&&C.S)cds.scarecrow=Math.max(cds.scarecrow||0,skCd(C.S));updateHud();}
 /* 허수아비 자리로 돌아오며 터뜨린다 */
@@ -30901,7 +30951,7 @@ function slTick(dt){slGraySet(!!(P&&mode==='world'&&P.buffs&&P.buffs.intang));co
   if(P.job==='sidelooter'&&Math.random()<dt*8)for(const m of alive()){if(!(m.slInevT>tAll))continue;const c=m.mesh.position;VFX.emit(0,c.x+(Math.random()-.5)*m.r*2,heightAt(c.x,c.z)+.1,c.z+(Math.random()-.5)*m.r*2,0,1.2,0,0x9a7ad8,.6,-.5,1);}}
 /* 다른 사이드루터의 허수아비 */
 function slRemote(o,pr){const sc=o.job==='sidelooter'&&Array.isArray(pr.sc)&&pr.sc.length>=2?pr.sc:null;
-  if(sc){if(!o.slSc){o.slSc=slScMesh();scene.add(o.slSc);}const x=num(sc[0]),z=num(sc[1]);o.slSc.position.set(x,heightAt(x,z),z);}
+  if(sc){let nw=0;if(!o.slSc){o.slSc=slScMesh();scene.add(o.slSc);nw=1;}const x=num(sc[0]),z=num(sc[1]);o.slSc.position.set(x,heightAt(x,z),z);if(nw){o.slSc.updateMatrixWorld(true);pfxScarecrow(o.slSc);}}
   else if(o.slSc){scene.remove(o.slSc);o.slSc=null;}}
 /* ---------- 약탈자 · 암살자 ---------- */
 /* 수리검: 네 갈래 날. 날 사이는 안쪽으로 휘어 들어가고, 가운데 구멍 둘레에 검은 쇠 테. 날 가장자리는 밝게 갈려 있다 */
