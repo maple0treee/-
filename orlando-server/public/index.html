@@ -1855,15 +1855,16 @@ setInterval(tick,400);
   const C2 = { x: 360, z: 0 }, R2 = 160;            // 하레나와 둘레 (바깥 산줄기 안쪽)
   const ROAD = { x0: 95, x1: 226, half: 4.5 };      // 두 지역을 잇는 길 (z≈0)
   const TOWN_R = 40;                                // 도시 안전 지대 반지름
-  const INNER = 82;                                 // 하레나 둘레 안쪽 고리(Lv1~15)와 바깥 고리(Lv16~60)의 경계
+  const INNER = 82;                                 // 하레나 둘레 안쪽 고리(Lv1~11)와 바깥 고리(Lv12~30)의 경계
   const TOWN_BLD = { x: 18, z: -21, w: 16, d: 12 }; // 도시 기록관 (3층, 들어갈 수 있다) - 도시 중심 기준
   // ---------- 하레나 둘레: 서문에서 성을 두 바퀴 감아 나가는 길 하나 ----------
   // t: 길을 따라 간 정도 (0 = 서문 앞, 2π = 한 바퀴, 4π = 끝). 각도 = π + t (서 → 북 → 동 → 남, 북쪽 = -z)
-  // 구역 8개: 한 구역 = 4분의 1 바퀴, 사이는 좁은 협곡 문
-  const SP = { R0: 62, PITCH: 38, HW: 15, T: 4 * PI, Q: PI / 2,
-    ZONES: ['forest', 'plains', 'swamp', 'ruins', 'wwest', 'wnorth', 'wsouth', 'weast'] };
+  // 구역 6개: 한 구역 = 4분의 1 바퀴, 사이는 좁은 협곡 문
+  // (2026-11-10 원호: 하레나 사냥터를 잘라 Lv 30까지만. 예전 깊은 사막4·5(wsouth·weast)는 없애고 길은 한 바퀴 반에서 끝난다)
+  const SP = { R0: 62, PITCH: 38, HW: 15, T: 3 * PI, Q: PI / 2,
+    ZONES: ['forest', 'plains', 'swamp', 'ruins', 'wwest', 'wnorth'] };
   const spR = (t) => SP.R0 + SP.PITCH * t / (2 * PI);
-  const spHW = (t) => { const k = Math.round(t / SP.Q), d = Math.abs(t - k * SP.Q); return (k > 0 && k < 8 && d < 0.07) ? SP.HW - 9.5 * Math.pow(1 - d / 0.07, 0.6) : SP.HW; };
+  const spHW = (t) => { const k = Math.round(t / SP.Q), d = Math.abs(t - k * SP.Q); return (k > 0 && k < SP.ZONES.length && d < 0.07) ? SP.HW - 9.5 * Math.pow(1 - d / 0.07, 0.6) : SP.HW; };
   const spPos = (t, off = 0) => { const a = PI + t, r = spR(t) + off; return { x: C2.x + Math.cos(a) * r, z: C2.z + Math.sin(a) * r }; };
   // 가장 가까운 길 자리: t, off(길 가운데에서 바깥쪽 +), e(길 가장자리 밖으로 나간 거리, 음수면 길 안)
   function spNear(x, z) {
@@ -1932,7 +1933,7 @@ setInterval(tick,400);
     { n: 1, off: true, gate: '남문', zones: [['mfield', 'beach', 'c'], ['mhill', 'field', 'c']] },
     // 2026-11-06 원호: 서문 → 숲 가는 길(60–70) → 엑시즈 숲(70–80) → 깊은 숲(80–90) → 추운 계곡(90–100) → 허칠 산장.
     //   sep: 땅마다 따로 된 맵 (목으로 잇지 않고, 땅 끝 문을 지나면 다음 땅으로 넘어간다). ks: 말굽 위 자리(한 칸씩 띄워 산으로 멀리 떨어뜨린다). names: 네 번째 칸이 온 이름. lv: 땅마다 적정레벨
-    { n: 2, gate: '서문', sep: true, names: true, ks: [5, 7, 9, 11], lv: [[60, 70], [70, 80], [80, 90], [90, 100]],
+    { n: 2, gate: '서문', sep: true, names: true, ks: [5, 7, 9, 11], lv: [[30, 38], [38, 45], [45, 53], [53, 60]],   /* 2026-11-10 원호: 숲 가는 길~추운 계곡은 Lv 30–60 */
       zones: [['m2a', 'trail', 0, '숲 가는 길'], ['m2b', 'wood', 0, '엑시즈 숲'], ['m2c', 'deep', 0, '깊은 숲'], ['m2d', 'cold', 0, '추운 계곡']] },
     { n: 3, off: true, gate: '북문', zones: [['m3a', 'wood'], ['m3b', 'river']] },
     { n: 4, off: true, gate: '동문', zones: [['m4a', 'pass'], ['m4b', 'cliff', 'c']] },
@@ -1987,26 +1988,26 @@ setInterval(tick,400);
     { const ax = H.FORK.x - H.HUT.x, az = H.FORK.z - H.HUT.z, L = Math.hypot(ax, az); H.AX = { ux: ax / L, uz: az / L, L }; }
     H.HUTT = 0.22; H.HUTB = H.HUTT + (1 - H.HUTT) / 2;
     H.vt = (lx, lz) => ((lx - H.HUT.x) * H.AX.ux + (lz - H.HUT.z) * H.AX.uz) / H.AX.L;
-    /* 적정레벨: 봉우리 벼랑 안은 130→150 (꼭대기로 갈수록), 그 밖 골짜기는 산장→갈림길 100→110, 동굴은 굴 길이 따라 110→130 */
-    H.lvOut = (lx, lz) => { const d = Math.hypot(lx - H.TOP.x, lz - H.TOP.z), r = H.rb(Math.atan2(lz - H.TOP.z, lx - H.TOP.x)); if (d < r) return Math.round(130 + 20 * Math.pow(Math.max(0, Math.min(1, (r - d) / (r - 14))), 0.75));
-      return Math.round(100 + 10 * Math.max(0, Math.min(1, (H.vt(lx, lz) - H.HUTT) / (1 - H.HUTT)))); };
+    /* 적정레벨 (2026-11-10 원호: 허칠은 Lv 60부터): 봉우리 벼랑 안은 90→110 (꼭대기로 갈수록), 그 밖 골짜기는 산장→갈림길 60→70, 동굴은 굴 길이 따라 70→90 */
+    H.lvOut = (lx, lz) => { const d = Math.hypot(lx - H.TOP.x, lz - H.TOP.z), r = H.rb(Math.atan2(lz - H.TOP.z, lx - H.TOP.x)); if (d < r) return Math.round(90 + 20 * Math.pow(Math.max(0, Math.min(1, (r - d) / (r - 14))), 0.75));
+      return Math.round(60 + 10 * Math.max(0, Math.min(1, (H.vt(lx, lz) - H.HUTT) / (1 - H.HUTT)))); };
     /* 사냥터 (2026-11-06 원호: 레벨별로 나눠서 여러 곳): 골짜기 둘, 동굴 넷(방마다 하나, 좁은 굴목에서 나뉨), 봉우리 넷(벼랑 안 둘레 띠) */
     H.AREAS = [
-      { id: 'wood', name: '산장 숲길', lv: [100, 105] }, { id: 'lake', name: '호숫가 골짜기', lv: [105, 110] },
-      { id: 'bat', name: '박쥐 굴', lv: [110, 115], cave: 1, s: [0, 170] }, { id: 'crys', name: '수정 굴', lv: [115, 120], cave: 1, s: [170, 315] },
-      { id: 'fall', name: '얼음 폭포 굴', lv: [120, 125], cave: 1, s: [315, 470] }, { id: 'den', name: '곰 굴', lv: [125, 130], cave: 1, s: [470, H.TL - 16] },
-      { id: 'slope', name: '눈 비탈', lv: [130, 135] }, { id: 'scree', name: '서리 바위밭', lv: [135, 140] }, { id: 'ridge', name: '바람 능선', lv: [140, 145] }, { id: 'top', name: '꼭대기', lv: [145, 150] }];
+      { id: 'wood', name: '산장 숲길', lv: [60, 65] }, { id: 'lake', name: '호숫가 골짜기', lv: [65, 70] },
+      { id: 'bat', name: '박쥐 굴', lv: [70, 75], cave: 1, s: [0, 170] }, { id: 'crys', name: '수정 굴', lv: [75, 80], cave: 1, s: [170, 315] },
+      { id: 'fall', name: '얼음 폭포 굴', lv: [80, 85], cave: 1, s: [315, 470] }, { id: 'den', name: '곰 굴', lv: [85, 90], cave: 1, s: [470, H.TL - 16] },
+      { id: 'slope', name: '눈 비탈', lv: [90, 95] }, { id: 'scree', name: '서리 바위밭', lv: [95, 100] }, { id: 'ridge', name: '바람 능선', lv: [100, 105] }, { id: 'top', name: '꼭대기', lv: [105, 110] }];
     H.areaOfLv = (lv, cave) => { const L = H.AREAS.filter((A) => !!A.cave === !!cave); for (const A of L) if (lv < A.lv[1] || (lv === A.lv[1] && A.id === 'lake')) return A; return L[L.length - 1]; };
     H.caveArea = (s) => { let A = null; for (const B of H.AREAS) if (B.cave) { A = B; if (s < B.s[1]) break; } return A; };
     /* 동굴 적정레벨: 사냥터마다 굴 길이 따라 5씩 */
     H.lvCave = (lx, lz) => { const s = H.near(H.T, lx, lz).s, A = H.caveArea(s); return Math.min(A.lv[1], Math.floor(A.lv[0] + 5 * Math.max(0, Math.min(1, (s - A.s[0]) / (A.s[1] - A.s[0]))))); };
     H.HUTA = { id: 'hut', name: '산장', lv: [0, 0], zone: 'hechil' };
     /* 봉우리 벼랑 안 레벨 (반올림 없이): 벼랑 밖이면 -1 */
-    H.pkLv = (lx, lz) => { const d = Math.hypot(lx - H.TOP.x, lz - H.TOP.z), r = H.rb(Math.atan2(lz - H.TOP.z, lx - H.TOP.x)); return d < r ? 130 + 20 * Math.pow(Math.max(0, Math.min(1, (r - d) / (r - 14))), 0.75) : -1; };
+    H.pkLv = (lx, lz) => { const d = Math.hypot(lx - H.TOP.x, lz - H.TOP.z), r = H.rb(Math.atan2(lz - H.TOP.z, lx - H.TOP.x)); return d < r ? 90 + 20 * Math.pow(Math.max(0, Math.min(1, (r - d) / (r - 14))), 0.75) : -1; };
     H.areaAt = (lx, lz, cave) => { if (cave) return H.caveArea(H.near(H.T, lx, lz).s); const k = H.pkLv(lx, lz), A = H.AREAS;
-      if (k >= 0) return k < 135 ? A[6] : k < 140 ? A[7] : k < 145 ? A[8] : A[9]; const t = H.vt(lx, lz); return t < H.HUTT ? H.HUTA : t < H.HUTB ? A[0] : A[1]; };
+      if (k >= 0) return k < 95 ? A[6] : k < 100 ? A[7] : k < 105 ? A[8] : A[9]; const t = H.vt(lx, lz); return t < H.HUTT ? H.HUTA : t < H.HUTB ? A[0] : A[1]; };
     /* 봉우리 띠 경계: 벼랑 안에서 적정레벨 lv가 되는 꼭대기까지 거리 (각도 a) */
-    H.ringR = (a, lv) => { const r = H.rb(a); return r - Math.pow((lv - 130) / 20, 1 / 0.75) * (r - 14); };
+    H.ringR = (a, lv) => { const r = H.rb(a); return r - Math.pow((lv - 90) / 20, 1 / 0.75) * (r - 14); };
     /* 봉우리 벼랑: 틈이 아니면 벽 두께 안에 들어온 것을 가까운 쪽으로 밀어낸다 */
     H.wall = (p, rad, I) => { const dx = p.x - I.x - H.TOP.x, dz = p.z - I.z - H.TOP.z, d = Math.hypot(dx, dz) || 1, w = H.WT + rad, a = Math.atan2(dz, dx), r0 = H.rb(a); if (Math.abs(d - r0) >= w) return;
       let da = a - H.aG; da = Math.atan2(Math.sin(da), Math.cos(da)); if (Math.abs(da) * r0 < H.GW - rad) return;
@@ -2158,7 +2159,7 @@ setInterval(tick,400);
     if (z < -300) return x > 100 ? 'wlair' : 'hall';
     // 하레나와 둘레 길 (옛 첫 지역은 없앴다: 하레나에서 시작해 60레벨까지 키운다)
     if (Math.hypot(x - C2.x, z - C2.z) < TOWN_R) return 'town';
-    const n = spNear(x, z); const i = n ? clampN(Math.floor(n.t / SP.Q), 0, 7) : 0;
+    const n = spNear(x, z); const i = n ? clampN(Math.floor(n.t / SP.Q), 0, SP.ZONES.length - 1) : 0;
     return SP.ZONES[i];
   }
   const SAFE = { village: 1, town: 1, hall: 1, thouse: 1, myhome: 1, ghouse: 1, bakery: 1, mshop: 1, marcus: 1, milgol: 1, coachway: 1, castle: 1, guildhall: 1, exmarket: 1, arena: 1, library: 1, khq: 1, hlodge: 1, hechil: 1 };
@@ -2218,22 +2219,22 @@ setInterval(tick,400);
   const MON = {
     slime:    { name: '슬라임', lv: 1, hpM: 0.8, atkM: 0.8, build: 'slime', color: 0x7fd067 },
     wolf:     { name: '회색 늑대', lv: 3, hpM: 0.9, atkM: 1.05, build: 'quad', color: 0x8d8f92 },
-    boar:     { name: '사막멧돼지', lv: 4, hpM: 1.15, atkM: 1, build: 'quad', color: 0x6e4b31, tusk: true },
-    goblin:   { name: '사막고블린', lv: 6, hpM: 0.95, atkM: 1.1, build: 'biped', color: 0x6f9440, scale: 0.8, ears: true },
-    toad:     { name: '독두꺼비', lv: 8, hpM: 1.25, atkM: 0.95, build: 'slime', color: 0x6a7a2c, toad: true, scale: 1.2 },
-    lizard:   { name: '모래도마뱀', lv: 10, hpM: 1.1, atkM: 1.05, build: 'biped', color: 0x3f7d60, tail: true },
-    skeleton: { name: '사막방울뱀', lv: 12, hpM: 0.95, atkM: 1.15, build: 'snake', color: 0xc4a46e, scale: 1.6 },
-    ogre:     { name: '낙타', lv: 15, hpM: 1.5, atkM: 1.05, build: 'biped', color: 0xc8a068, scale: 1.15 },
+    boar:     { name: '사막멧돼지', lv: 3, hpM: 1.15, atkM: 1, build: 'quad', color: 0x6e4b31, tusk: true },
+    goblin:   { name: '사막고블린', lv: 5, hpM: 0.95, atkM: 1.1, build: 'biped', color: 0x6f9440, scale: 0.8, ears: true },
+    toad:     { name: '독두꺼비', lv: 6, hpM: 1.25, atkM: 0.95, build: 'slime', color: 0x6a7a2c, toad: true, scale: 1.2 },
+    lizard:   { name: '모래도마뱀', lv: 8, hpM: 1.1, atkM: 1.05, build: 'biped', color: 0x3f7d60, tail: true },
+    skeleton: { name: '사막방울뱀', lv: 9, hpM: 0.95, atkM: 1.15, build: 'snake', color: 0xc4a46e, scale: 1.6 },
+    ogre:     { name: '낙타', lv: 11, hpM: 1.5, atkM: 1.05, build: 'biped', color: 0xc8a068, scale: 1.15 },
     // 길
-    dog:      { name: '들개', lv: 12, build: 'quad', color: 0x7a5a3a, hpM: 0.8, atkM: 1 },
-    bandit:   { name: '산적', lv: 16, build: 'biped', color: 0x6b4a2e, hpM: 1, atkM: 1.05, sword: true },
-    // 서쪽 황야 (Lv 20–30)
-    jackal:   { name: '자칼', lv: 22, build: 'quad', color: 0xa88a5a, hpM: 0.85, atkM: 1 },
-    sandslime:{ name: '모래 슬라임', lv: 27, build: 'slime', color: 0xc9a46a, hpM: 1.2, atkM: 0.9, scale: 1.3 },
-    // 북쪽 황야 (Lv 28–40)
-    hyena:    { name: '하이에나', lv: 31, build: 'quad', color: 0x8a7a5a, hpM: 0.95, atkM: 1.1, scale: 1.05 },
-    rockslime:{ name: '바위 슬라임', lv: 35, build: 'slime', color: 0x8a8478, hpM: 1.4, atkM: 0.95, scale: 1.4 },
-    nomad:    { name: '사막 거북', lv: 39, build: 'quad', color: 0x8a6a44, hpM: 1.05, atkM: 1.15, scale: 1.3 },   // 등딱지에 돌이 박힌 큰 사막 거북
+    dog:      { name: '들개', lv: 9, build: 'quad', color: 0x7a5a3a, hpM: 0.8, atkM: 1 },
+    bandit:   { name: '산적', lv: 12, build: 'biped', color: 0x6b4a2e, hpM: 1, atkM: 1.05, sword: true },
+    // 깊은 사막2 (Lv 12–20)
+    jackal:   { name: '자칼', lv: 16, build: 'quad', color: 0xa88a5a, hpM: 0.85, atkM: 1 },
+    sandslime:{ name: '모래 슬라임', lv: 20, build: 'slime', color: 0xc9a46a, hpM: 1.2, atkM: 0.9, scale: 1.3 },
+    // 깊은 사막3 (Lv 23–29)
+    hyena:    { name: '하이에나', lv: 23, build: 'quad', color: 0x8a7a5a, hpM: 0.95, atkM: 1.1, scale: 1.05 },
+    rockslime:{ name: '바위 슬라임', lv: 26, build: 'slime', color: 0x8a8478, hpM: 1.4, atkM: 0.95, scale: 1.4 },
+    nomad:    { name: '사막 거북', lv: 29, build: 'quad', color: 0x8a6a44, hpM: 1.05, atkM: 1.15, scale: 1.3 },   // 등딱지에 돌이 박힌 큰 사막 거북
     // 남쪽 황야 (Lv 38–50)
     scorpion: { name: '전갈', lv: 42, build: 'quad', color: 0xb07a3a, hpM: 1.1, atkM: 1.1, tail: true, scale: 1.1 },
     salamander:{ name: '불도마뱀', lv: 45, build: 'biped', color: 0xb8402a, hpM: 1.1, atkM: 1.2, tail: true },
@@ -2243,10 +2244,10 @@ setInterval(tick,400);
     emberslime:{ name: '불씨 슬라임', lv: 56, build: 'slime', color: 0xd8702a, hpM: 1.1, atkM: 1.2, scale: 1.4, glow: 0xff5a10 },
     redgiant: { name: '붉은 바위 거인', lv: 59, build: 'biped', color: 0x7a3a2a, hpM: 1.8, atkM: 1.25, scale: 2.1, club: true },
     // 석굴
-    kingslime:{ name: '킹 슬라임', lv: 20, fixed: { hp: 16000, atk: 70, def: 14, exp: 4500 }, gold: 1500, build: 'slime', color: 0x56c860, scale: 4.2, boss: true },
-    slimelet: { name: '킹 슬라임 조각', lv: 18, build: 'slime', color: 0x7fe07a, hpM: 0.5, atkM: 0.8, scale: 1.1 },
+    kingslime:{ name: '킹 슬라임', lv: 15, fixed: { hp: 11100, atk: 56, def: 11, exp: 3400 }, gold: 1100, build: 'slime', color: 0x56c860, scale: 4.2, boss: true },
+    slimelet: { name: '킹 슬라임 조각', lv: 14, build: 'slime', color: 0x7fe07a, hpM: 0.5, atkM: 0.8, scale: 1.1 },
     // 심연 끝
-    wyvern:{ name: '와이번', lv: 62, fixed: { hp: 45000, atk: 330, def: 40, exp: 20000 }, gold: 6000, build: 'dragon', wyvern: true, color: 0x2f5a46, scale: 1.3, dragon: true, arena: 'WLAIR' },
+    wyvern:{ name: '와이번', lv: 30, fixed: { hp: 16800, atk: 184, def: 19, exp: 10900 }, gold: 3000, build: 'dragon', wyvern: true, color: 0x2f5a46, scale: 1.3, dragon: true, arena: 'WLAIR' },
     // 실바 (Lv 60–70)
     silvawolf:{ name: '은빛 늑대', lv: 63, build: 'quad', color: 0xc8ccd4, hpM: 1.0, atkM: 1.15, scale: 1.1 },
     mossslime:{ name: '이끼 슬라임', lv: 66, build: 'slime', color: 0x5a8a3a, hpM: 1.3, atkM: 1.0, scale: 1.4, glow: 0x3aa050 },
@@ -2328,19 +2329,19 @@ setInterval(tick,400);
     firewolf: { name: '불꽃 늑대', lv: 230, build: 'quad', color: 0xb04a1e, hpM: 1.7, atkM: 2.0, scale: 1.5 },
     smokeslime:{ name: '연기 슬라임', lv: 233, build: 'slime', color: 0x6a6662, hpM: 2.2, atkM: 1.75, scale: 1.85, glow: 0xffb070 },
     firegiant:{ name: '불의 거인', lv: 235, build: 'biped', color: 0x6a2a1e, hpM: 3.2, atkM: 2.0, scale: 2.9, club: true },
-    // 허칠산 (설산, Lv 100–150): 산장~갈림길 골짜기 100–110, 동굴 110–130, 봉우리 130–150
-    frostfox: { name: '서리 여우', lv: 102, build: 'quad', color: 0xeef2f6, hpM: 1.15, atkM: 1.3 },
-    snowgoat: { name: '눈 산양', lv: 108, build: 'quad', color: 0xe8e4da, hpM: 1.5, atkM: 1.35 },
-    snowyeti: { name: '설인', lv: 132, build: 'biped', color: 0xe9edf0, hpM: 2.2, atkM: 1.6 },
-    icewisp:  { name: '얼음 정령', lv: 136, build: 'wisp', color: 0xcfeaf8, hpM: 1.25, atkM: 1.5 },
-    avagolem: { name: '눈사태 골렘', lv: 141, build: 'biped', color: 0xe6ecf2, hpM: 2.7, atkM: 1.65, defM: 1.3 },
-    snowowl:  { name: '눈부엉이', lv: 144, build: 'bird', color: 0xf4f6f8, hpM: 1.45, atkM: 1.75 },
-    frostmammoth:{ name: '얼음 매머드', lv: 148, build: 'quad', color: 0x8a7a6a, hpM: 3.0, atkM: 1.8 },
-    // 허칠산 동굴 (Lv 110–130): 설산 굴에 사는 짐승 — 박쥐 떼, 굴을 보금자리 삼는 눈표범, 겨울잠 자는 동굴곰
-    cavebat:  { name: '서리 박쥐', lv: 112, build: 'bird', color: 0x4a4650, hpM: 1.0, atkM: 1.45 },
-    snowleopard:{ name: '눈표범', lv: 118, build: 'quad', color: 0xd8d4c8, hpM: 1.5, atkM: 1.6 },
-    cavebear: { name: '동굴곰', lv: 124, build: 'quad', color: 0x5a4636, hpM: 2.4, atkM: 1.6 },
-    elderbear:{ name: '늙은 동굴곰', lv: 129, build: 'quad', color: 0x3e3430, hpM: 3.2, atkM: 1.75, defM: 1.2 },
+    // 허칠산 (설산, Lv 60–110): 산장~갈림길 골짜기 60–70, 동굴 70–90, 봉우리 90–110
+    frostfox: { name: '서리 여우', lv: 62, build: 'quad', color: 0xeef2f6, hpM: 1.15, atkM: 1.3 },
+    snowgoat: { name: '눈 산양', lv: 68, build: 'quad', color: 0xe8e4da, hpM: 1.5, atkM: 1.35 },
+    snowyeti: { name: '설인', lv: 92, build: 'biped', color: 0xe9edf0, hpM: 2.2, atkM: 1.6 },
+    icewisp:  { name: '얼음 정령', lv: 96, build: 'wisp', color: 0xcfeaf8, hpM: 1.25, atkM: 1.5 },
+    avagolem: { name: '눈사태 골렘', lv: 101, build: 'biped', color: 0xe6ecf2, hpM: 2.7, atkM: 1.65, defM: 1.3 },
+    snowowl:  { name: '눈부엉이', lv: 104, build: 'bird', color: 0xf4f6f8, hpM: 1.45, atkM: 1.75 },
+    frostmammoth:{ name: '얼음 매머드', lv: 108, build: 'quad', color: 0x8a7a6a, hpM: 3.0, atkM: 1.8 },
+    // 허칠산 동굴 (Lv 70–90): 설산 굴에 사는 짐승 — 박쥐 떼, 굴을 보금자리 삼는 눈표범, 겨울잠 자는 동굴곰
+    cavebat:  { name: '서리 박쥐', lv: 72, build: 'bird', color: 0x4a4650, hpM: 1.0, atkM: 1.45 },
+    snowleopard:{ name: '눈표범', lv: 78, build: 'quad', color: 0xd8d4c8, hpM: 1.5, atkM: 1.6 },
+    cavebear: { name: '동굴곰', lv: 84, build: 'quad', color: 0x5a4636, hpM: 2.4, atkM: 1.6 },
+    elderbear:{ name: '늙은 동굴곰', lv: 89, build: 'quad', color: 0x3e3430, hpM: 3.2, atkM: 1.75, defM: 1.2 },
     reddragon:{ name: '붉은 용 이그니스', lv: 100, fixed: { hp: 450000, atk: 900, def: 60, exp: 80000 }, gold: 80000, build: 'dragon', color: 0xa8231a, scale: 1, dragon: true },
   };
   /* ---------- 몬스터 능력치 (밸런스) ----------
@@ -2374,7 +2375,7 @@ setInterval(tick,400);
   }
   const ZONE_MON = {
     forest: ['slime', 'slime', 'wolf'], plains: ['boar', 'goblin'], swamp: ['toad', 'lizard'], ruins: ['skeleton', 'skeleton', 'ogre'],
-    wwest: ['jackal', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'], wsouth: ['scorpion', 'duneogre'], weast: ['redlizard', 'emberslime', 'redgiant'],
+    wwest: ['jackal', 'sandslime'], wnorth: ['hyena', 'rockslime', 'nomad'],
     silva: ['silvawolf', 'mossslime'], arbus: ['snowwolf', 'frostslime'], kaolis: ['mackerel', 'tideslime', 'octopus'], subcus: ['darkhound', 'crystalslime'],
     // 엑시즈 사냥터: 첫 땅 = 예전 그 줄 1·2번째 땅 몬스터, 두 번째 땅 = 3·4·5번째 땅 몬스터
     // 2026-11-06 서문 길 네 땅: 예전 여덟 땅의 몬스터 48종을 땅 생김새에 맞게 나눴다 (레벨은 아래 SEP_LV로 그 땅 적정레벨 안에 고르게)
@@ -2387,14 +2388,14 @@ setInterval(tick,400);
     hpeak: ['snowyeti'], hscree: ['icewisp'], hridge: ['avagolem', 'snowowl'], htop: ['frostmammoth'],
     m5a: ['cinderhound', 'cinderhound', 'cinderslime'], m5b: ['scorchboar', 'magmaviper'], m5c: ['ashbear', 'lavaslime', 'lavatroll'], m5d: ['flamehound', 'flameogre'], m5e: ['firewolf', 'smokeslime', 'firegiant'],
   };
-  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, wsouth: 32, weast: 34, silva: 30, arbus: 30, kaolis: 30, subcus: 30, m2a: 60, m2b: 60, m2c: 60, m2d: 60, hwood: 30, hlake: 30, hcave: 22, hcrys: 22, hfall: 22, hden: 22, hpeak: 28, hscree: 26, hridge: 24, htop: 14,   /* 2026-11-07 허칠 맵을 작게 떼면서 줄임 */   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
+  const ZONE_COUNT = { forest: 14, plains: 15, swamp: 16, ruins: 17, wwest: 28, wnorth: 30, silva: 30, arbus: 30, kaolis: 30, subcus: 30, m2a: 60, m2b: 60, m2c: 60, m2d: 60, hwood: 30, hlake: 30, hcave: 22, hcrys: 22, hfall: 22, hden: 22, hpeak: 28, hscree: 26, hridge: 24, htop: 14,   /* 2026-11-07 허칠 맵을 작게 떼면서 줄임 */   /* 2026-11-06 원호: 몬스터가 너무 적다 → 땅마다 60 */ m5a: 32, m5b: 32, m5c: 32, m5d: 32, m5e: 32 };
   for (const L of MLINES_ALL) if (L.off) for (const [id] of L.zones) { delete ZONE_COUNT[id]; delete ZONE_MON[id]; }   // 꺼 둔 땅에는 몬스터가 나오지 않는다
   /* ---------- 사냥터 넓이만큼 몬스터 (2026-11-07 원호: "사냥터 크기에 비례해서 몬스터가 더 많았으면") ----------
      사냥터마다 실제로 걸을 수 있는 넓이(m², 벽·벼랑·굴 벽 안)를 재서 HUNT.M2 넓이마다 한 마리를 둔다 (허칠 숲·호숫가·봉우리 맵과 같은 빽빽함).
      위 ZONE_COUNT 숫자는 가장 적은 수로 남는다: 굴처럼 좁고 긴 맵은 넓이로 재면 너무 적어서 손으로 정한 수를 그대로 쓴다.
      맵을 새로 나누거나 크기를 바꿔도 ZONE_COUNT·ZONE_MON 에 그 땅(ISLES)만 있으면 수가 저절로 맞는다.
      하레나 둘레 길은 좁은 길이라 이미 빽빽해서 그대로, 옛 땅 넷(실바·아르부스·카올리스·수브쿠스)은 가는 길이 없어서 그대로 */
-  const HUNT = { M2: 300, MAX: 300, N: 2000, FIXED: { forest: 1, plains: 1, swamp: 1, ruins: 1, wwest: 1, wnorth: 1, wsouth: 1, weast: 1, silva: 1, arbus: 1, kaolis: 1, subcus: 1 } };
+  const HUNT = { M2: 300, MAX: 300, N: 2000, FIXED: { forest: 1, plains: 1, swamp: 1, ruins: 1, wwest: 1, wnorth: 1, silva: 1, arbus: 1, kaolis: 1, subcus: 1 } };
   /* 걸을 수 있는 넓이: 땅 둘레 네모 안에 고르게 흩은 점(할턴 수열, 늘 같은 점) 가운데 그 땅이면서 붙잡기(worldClamp)가 밀어내지 않는 점의 비율 */
   function zoneArea(z, N = HUNT.N) {
     const I = ISLES[z]; if (!I) return 0;
@@ -2417,13 +2418,13 @@ setInterval(tick,400);
     if (ISLES[zone] && ISLES[zone].lvAt) return ISLES[zone].lvAt(x, z);   // 허칠산·동굴: 길 따라 정한 레벨
     if (ISLES[zone] && ZONE_LEVELS[zone]) { const I = ISLES[zone], L = ZONE_LEVELS[zone]; const d = Math.hypot(x - I.entry.x, z - I.entry.z); return Math.round(L[0] + (L[1] - L[0]) * clampN((d - 12) / (I.R * 1.7 - 12), 0, 1)); }   // 들어온 자리에서 멀수록 강하다
     switch (zone) {
-      case 'forest': case 'plains': case 'swamp': case 'ruins': case 'wwest': case 'wnorth': case 'wsouth': case 'weast': {   // 길을 따라 갈수록 강하다
+      case 'forest': case 'plains': case 'swamp': case 'ruins': case 'wwest': case 'wnorth': {   // 길을 따라 갈수록 강하다
         const n = spNear(x, z), L = ZONE_LEVELS[zone], i = SP.ZONES.indexOf(zone), fr = n ? clampN((n.t - i * SP.Q) / SP.Q, 0, 1) : 0;
         return Math.round(L[0] + (L[1] - L[0]) * fr); }
       default: return 1;
     }
   }
-  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [4, 6], swamp: [8, 10], ruins: [12, 15], dungeon: [18, 22], town: [0, 0], hall: [60, 60], wlair: [62, 62], wwest: [16, 27], wnorth: [31, 39], wsouth: [42, 49], weast: [52, 59], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hlodge: [0, 0], hechil: [0, 0], ...Object.fromEntries(HCH.AREAS.map((A) => [A.zone, A.lv])) };
+  const ZONE_LEVELS = { village: [0, 0], forest: [1, 3], plains: [3, 5], swamp: [6, 8], ruins: [9, 11], dungeon: [13, 16], town: [0, 0], hall: [30, 30], wlair: [30, 30], wwest: [12, 20], wnorth: [23, 29], silva: [60, 70], arbus: [70, 80], kaolis: [80, 90], subcus: [90, 100], marcus: [0, 0], milgol: [0, 0], coachway: [0, 0], castle: [0, 0], guildhall: [0, 0], exmarket: [0, 0], arena: [0, 0], library: [0, 0], khq: [0, 0], hlodge: [0, 0], hechil: [0, 0], ...Object.fromEntries(HCH.AREAS.map((A) => [A.zone, A.lv])) };
   MLINES.forEach((L) => { if (L.lv) { L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = L.lv[i].slice(); }); return; }
     if (L.branch) { L.zones.forEach(([id], i) => { const a = 60 + (L.n - 1) * 35 + i * 7; ZONE_LEVELS[id] = [a, a + 7]; }); return; }
     const a = 60 + (L.n - 1) * 10, w = 10 / L.zones.length; L.zones.forEach(([id], i) => { ZONE_LEVELS[id] = [Math.round(a + i * w), Math.round(a + (i + 1) * w)]; }); });   /* 엑시즈 사냥터: 60레벨부터 문 하나에 10레벨, 그 문의 땅들이 나눠 맡는다 (2026-11-06 원호: 60–100. 100–150은 허칠산) */
@@ -2435,7 +2436,7 @@ setInterval(tick,400);
   // {m}: 몬스터 이름, {z}: 지역 이름
   const G = (n, r, why) => ({ n, r, why });
   const BOARDS = {
-    kyle: { title: '사냥꾼 길드 게시판', cap: 12, zones: ['forest', 'plains', 'swamp', 'ruins', 'wwest', 'wnorth', 'wsouth', 'weast'], givers: [   /* 마르타의 게시판을 합쳤다 */
+    kyle: { title: '사냥꾼 길드 게시판', cap: 12, zones: ['forest', 'plains', 'swamp', 'ruins', 'wwest', 'wnorth'], givers: [   /* 마르타의 게시판을 합쳤다 */
 
       G('하레나 주민', '주민', ['나무꾼들이 {z}에 들어가질 못하고 있어요. {m} 때문에 겨울 땔감이 모자랄 지경이에요.', '아이들이 {z} 쪽 들판으로 놀러 갔다가 {m}에게 쫓겨 왔어요. 다시는 그런 일이 없게 해 주세요.']),
       G('엘리스', '순간이동 술사', ['별빛 길을 여는 수정을 {z}에 두고 왔는데, {m}이(가) 그 주변에 진을 쳤어요. 길을 터 주면 수정을 찾으러 갈게요.']),
@@ -2452,8 +2453,8 @@ setInterval(tick,400);
   };
   /* 엑시즈 모험가 길드의 큰 게시판: 등급(레벨대)별로 칸이 나뉘어 있고, 칸마다 의뢰가 고르게 붙는다 */
   BOARDS.guild = { title: '모험가 길드 의뢰 게시판', cap: 50, zones: [],
-    /* 엑시즈 길드는 60레벨 이상 의뢰만: 스물여덟 레벨씩 칸을 나눈다 (사냥터의 시작 레벨로 가른다). 그 아래는 하레나 게시판 */
-    tiers: [...[[60, 70], [70, 80], [80, 90], [90, 100], [100, 125], [125, 150]].map(([lo, hi], i) => ({ id: 'a' + i, name: ['1급', '2급', '3급', '4급', '5급', '6급'][i], lv: [lo, hi], zones: [...MHUNT, ...HCH.HZ].filter((z) => ZONE_MON[z] && ZONE_LEVELS[z] && ZONE_LEVELS[z][0] >= lo && ZONE_LEVELS[z][0] < hi) }))].filter((t) => t.zones.length),
+    /* 엑시즈 길드는 30레벨 이상 의뢰만 (2026-11-10: 서문 길 Lv 30–60, 허칠 60–110): 스물여덟 레벨씩 칸을 나눈다 (사냥터의 시작 레벨로 가른다). 그 아래는 하레나 게시판 */
+    tiers: [...[[30, 38], [38, 45], [45, 53], [53, 60], [60, 85], [85, 110]].map(([lo, hi], i) => ({ id: 'a' + i, name: ['1급', '2급', '3급', '4급', '5급', '6급'][i], lv: [lo, hi], zones: [...MHUNT, ...HCH.HZ].filter((z) => ZONE_MON[z] && ZONE_LEVELS[z] && ZONE_LEVELS[z][0] >= lo && ZONE_LEVELS[z][0] < hi) }))].filter((t) => t.zones.length),
     givers: [
       G('엑시즈 상인', '상인', ['{z}를 지나는 상단이 {m}에게 번번이 털립니다. 길이 안전해지면 왕도 물가도 내려갈 거예요.', '{z}에서 들여오는 물건이 {m} 때문에 끊겼어요. 가게 선반이 비어 갑니다.']),
       G('길드 접수원', '모험가 길드', ['{z}에 나간 모험가들이 {m} 때문에 돌아오지 못하고 있어요. 수를 줄여 길을 열어 주세요.', '{z}의 {m}에 대한 신고가 길드에 쌓였어요. 처리해 주실 분을 찾습니다.']),
@@ -3210,11 +3211,10 @@ const ZONES={
   plains:{name:'위험한 사막1',diff:2,sky:0xd8ceb0,mm:'#dcc28a'},
   swamp:{name:'위험한 사막2',diff:3,sky:0xd6d4c8,mm:'#d6d0bc'},
   ruins:{name:'깊은 사막1',diff:4,sky:0xd6c09c,mm:'#d8a870'},
-  dungeon:{name:'석굴',diff:5,rec:'Lv 18',sky:0x17130f,mm:'#2a241c'},
+  dungeon:{name:'석굴',diff:5,rec:'Lv 13',sky:0x17130f,mm:'#2a241c'},
   town:{name:'하레나',diff:0,rec:'',sky:0xd6e2ea,mm:'#d2b88a'},
   wwest:{name:'깊은 사막2',diff:5,sky:0xd2b48a,mm:'#c89a5e'},
   wnorth:{name:'깊은 사막3',diff:5,sky:0xc8957a,mm:'#b46a46'},
-  wsouth:{name:'깊은 사막4',diff:5,sky:0xa88670,mm:'#8a5e44'},
   thouse:{name:'튀르팽의 집',diff:0,rec:'',sky:0x1c150f,mm:'#5a4632'},
   ghouse:{name:'가늘롱 저택',diff:0,rec:'',sky:0x1a1712,mm:'#4a4a50'},
   bakery:{name:'바르톨 제빵소',diff:0,rec:'',sky:0x1c150f,mm:'#6a5236'},
@@ -3222,7 +3222,6 @@ const ZONES={
   myhome:{get name(){return P&&P.name?`${P.name}의 집`:'내 집';},diff:0,rec:'',sky:0x1c150f,mm:'#5a4632'},
   hall:{name:'길드홀 지하실',diff:0,rec:'',sky:0x16110c,mm:'#4a3e34'},
   wlair:{name:'와이번 둥지',diff:5,rec:'',sky:0xb9c6cc,mm:'#6a6258'},
-  weast:{name:'깊은 사막5',diff:5,sky:0x7a6c68,mm:'#5a4a44'},
   silva:{name:'실바',diff:6,sky:0xa8c8a0,mm:'#3f6a38'},
   arbus:{name:'아르부스',diff:6,sky:0xdce6ee,mm:'#dde6ec'},
   kaolis:{name:'카올리스',diff:6,sky:0x9fd0e8,mm:'#3f8ab0'},
@@ -3659,7 +3658,7 @@ function height2Raw(x,z){
   const SP=OR.SP,d2=Math.hypot(x-C2.x,z-C2.z);
   let h=Math.sin(x*.04)*Math.cos(z*.045)*1.0+Math.sin(x*.11+z*.08)*.45+Math.cos(z*.13-x*.07)*.3;
   if(d2<OR.TOWN_R+3)return h*smooth(38,50,d2);
-  const n=OR.spNear(x,z),t=n?n.t:0,i=Math.max(0,Math.min(7,Math.floor(t/SP.Q))),fr=t/SP.T;
+  const n=OR.spNear(x,z),t=n?n.t:0,i=Math.max(0,Math.min(7,Math.floor(t/SP.Q))),fr=t/(4*Math.PI);   /* 능선 높이는 예전 두 바퀴 길이 기준 그대로 (2026-11-10 길을 한 바퀴 반으로 잘랐다) */
   /* 길 바닥: 구역마다 다른 기복 (구역 경계에서 부드럽게 섞는다) */
   const j=Math.min(7,i+1),w=smooth(SP.Q*(i+1)-.25,SP.Q*(i+1),t),amp=_SPF[i]*(1-w)+_SPF[j]*w;
   h=h*amp*1.6+Math.sin(t*14+(n?n.off:0)*.35)*amp*.9;
@@ -5766,7 +5765,7 @@ function _bakedModel(d,key){const dim=NPC_DIM[key]||1;
     if(g.face==='b'&&g.alpha==='opaque'){const ol=new THREE.Mesh(geo,animeOutline());G.add(ol);outlines.push(ol);}}
   return {G,open,closed,outlines,height:d.height,ready};}
 // NPC 메시(그룹) 하나를 구운 모델로 바꾼다. 머리 위 표시는 남긴다.
-const NPC_TALL={messenger:1.12,knight:1.14,bron:1.05,kyle:1.12,rowen:1.14,lian:1.1,bern:1.1,stranger:1.12,merchant:1.08,elis:1.05,marta:1.04,hanna:1.03,mina:1.04,sera:1.04,turpin:1.04,orwen:1.04,mentor:1.04};
+const NPC_TALL={khq_cmd:1.14,messenger:1.12,knight:1.14,bron:1.05,kyle:1.12,rowen:1.14,lian:1.1,bern:1.1,stranger:1.12,merchant:1.08,elis:1.05,marta:1.04,hanna:1.03,mina:1.04,sera:1.04,turpin:1.04,orwen:1.04,mentor:1.04};
 /* 서 있는 사람의 숨·무게 옮김·고개 돌림: 뼈가 없는 구운 모델이라 꼭짓점을 높이에 따라 살짝 움직인다 (얼굴·외곽선 모두 같이) */
 const NPC_IDLE_GLSL=`
 float ih=transformed.y/uIdle.w;
@@ -10948,7 +10947,7 @@ function sfxSkill(S,id){
    한글이면 모음(ㅏ·ㅔ·ㅓ·ㅗ·ㅜ·ㅡ·ㅣ)에 맞춘 두 공명(포먼트)으로 거른 소리를 낸다. 사람마다 높이·빠르기·거친 정도가 다르다 */
 /* vol: 목소리마다 들리는 크기를 튀르팽에 맞춘 값 (거친 숨소리가 없는 목소리는 더 작게 들려서 키운다) */
 const VOICE={zibben:{p:96,rasp:.28,sp:56,fs:.92,vol:1.15},kyle:{p:128,sp:46,vol:1.75},sera:{p:104,rasp:.35,sp:58,fs:.95,vol:1.06},turpin:{p:104,rasp:.35,sp:58,fs:.95},bron:{p:98,rasp:.3,sp:52,vol:1.13},torgan:{p:84,rasp:.22,sp:50,fs:.9,vol:1.23},
-  rowen:{p:112,sp:46,vol:1.72},messenger:{p:132,sp:50,fs:1.02,vol:1.62},mina:{p:236,sp:42,fs:1.16,vol:1.31},hanna:{p:208,sp:45,fs:1.12,vol:1.51},elis:{p:252,sp:46,fs:1.18,air:.25},knight:{p:214,sp:46,fs:1.12,vol:1.48},
+  rowen:{p:112,sp:46,vol:1.72},khq_cmd:{p:104,sp:44,vol:1.7},messenger:{p:132,sp:50,fs:1.02,vol:1.62},mina:{p:236,sp:42,fs:1.16,vol:1.31},hanna:{p:208,sp:45,fs:1.12,vol:1.51},elis:{p:252,sp:46,fs:1.18,air:.25},knight:{p:214,sp:46,fs:1.12,vol:1.48},
   timo:{p:320,sp:40,fs:1.32,vol:1.5},mentor:{p:118,sp:50,vol:1.72},
   lman:{p:86,sp:64,fs:.84,rasp:.16,vol:1.7,helm:1}};   /* S: 낮고 느리게, 투구 속에서 울리는 쇳소리 */
 const VW_F={a:[800,1200],e:[520,1850],eo:[600,1000],o:[460,820],u:[360,760],eu:[420,1450],i:[310,2250]};
@@ -11572,7 +11571,7 @@ await BOOT.y();(function buildRegion2(){
 
   // 놓을 자리: 구역 k 안에서 (길 가운데 자국·석굴·포탈·상인 자리는 비운다)
   const tooClose=(x,z,r)=>colliders.some(c=>Math.abs(c.x-x)<c.r+r&&Math.abs(c.z-z)<c.r+r&&Math.hypot(c.x-x,c.z-z)<c.r+r);
-  const spot=(k,minR,edge=0)=>{for(let n=0;n<60;n++){const t=k*Q+sr(.1,Q-.1),hw=SP.HW-1.5,off=edge?(srand()<.5?-1:1)*sr(hw-edge,hw):sr(-hw,hw);
+  const spot=(k,minR,edge=0)=>{if(k>=OR.SP.ZONES.length)return null;for(let n=0;n<60;n++){const t=k*Q+sr(.1,Q-.1),hw=SP.HW-1.5,off=edge?(srand()<.5?-1:1)*sr(hw-edge,hw):sr(-hw,hw);
       if(Math.abs(off)<3)continue;const p=OR.spPos(t,off);
       if(Math.hypot(p.x-PIT.x,p.z-PIT.z)<PIT.r+4||Math.hypot(p.x-OR.EPORTAL.x,p.z-OR.EPORTAL.z)<10||Math.hypot(p.x-C2.x+48,p.z-C2.z)<8)continue;
       if(Math.abs(p.z-C2.z)<13&&p.x>OR.ENTRY.x0-18&&p.x<OR.ENTRY.x1+2)continue;   /* 하레나 서문에서 모래밭으로 나가는 목은 비운다 */
@@ -11632,9 +11631,9 @@ await BOOT.y();(function buildRegion2(){
   const tint=[null,null,0xf0e8dc,null,0xe8c8a0,0xd07a58,0x9a7060,0x544440];
   for(let k=0;k<5;k++)for(const p of many(k,k===4?10:8,2,0)){const e=put(pickA(k===4?ROCKB:ROCKM),p.x,p.z,p.s*.55,p.s*.45,p.s*.55,srand()*6.28,tint[k],k,-.12);colliders.push(e.col={x:p.x,z:p.z,r:p.s*(k===4?1.6:.9),h:2});}
   /* 마른 풀: 앞 구역에 많고 뒤로 갈수록 적다 */
-  for(let k=0;k<7;k++)for(let i=0;i<[36,28,6,18,16,8,6][k];i++){const t=k*Q+sr(.05,Q-.05),off=sr(-SP.HW+1,SP.HW-1);if(Math.abs(off)<2)continue;const p=OR.spPos(t,off),s=sr(.7,1.3);put(srand()<.6?'Grass_Wispy_Short':'Grass_Wispy_Tall',p.x,p.z,s,s*sr(.8,1.2),s,srand()*6.28,k>=5?0xb89a78:null,k,-.05);}
+  for(let k=0;k<Math.min(7,OR.SP.ZONES.length);k++)for(let i=0;i<[36,28,6,18,16,8,6][k];i++){const t=k*Q+sr(.05,Q-.05),off=sr(-SP.HW+1,SP.HW-1);if(Math.abs(off)<2)continue;const p=OR.spPos(t,off),s=sr(.7,1.3);put(srand()<.6?'Grass_Wispy_Short':'Grass_Wispy_Tall',p.x,p.z,s,s*sr(.8,1.2),s,srand()*6.28,k>=5?0xb89a78:null,k,-.05);}
   /* 길 가장자리 큰 바위: 매끈한 능선 밑동을 바위 무더기로 (구역마다 바위 빛이 다르다) */
-  for(let k=0;k<8;k++){const n=Math.round((Q*OR.spR((k+.5)*Q))/11);
+  for(let k=0;k<OR.SP.ZONES.length;k++){const n=Math.round((Q*OR.spR((k+.5)*Q))/11);
     for(let i=0;i<n;i++)for(const sd of [-1,1]){const t=k*Q+(i+srand()*.7)/n*Q,off=sd*(SP.HW+sr(.5,3.5)),p=OR.spPos(t,off),s=sr(1.3,2.6)*(1+k*.08);
       if(Math.hypot(p.x-PIT.x,p.z-PIT.z)<PIT.r+3||Math.hypot(p.x-OR.EPORTAL.x,p.z-OR.EPORTAL.z)<9)continue;
       if(Math.abs(t-Math.round(t/Q)*Q)<.09&&Math.round(t/Q)>0)continue;   /* 협곡 문 자리는 비운다 */
@@ -11643,7 +11642,7 @@ await BOOT.y();(function buildRegion2(){
       colliders.push(e.col={x:p.x,z:p.z,r:s*(big?1.9:1.5),h:Math.max(2.4,s*sy*(big?2.6:1.5))});   /* 바위는 보이는 크기만큼 막는다 (몸이 바위를 뚫고 들어가지 않게) */}}
   /* 협곡 문: 좁은 목 양쪽 돌기둥 + 다음 구역 깃발 */
   {const stone=mat(0xbdb29a),pole=mat(0x3a2818);
-    for(let k=1;k<8;k++){const t=k*Q;
+    for(let k=1;k<OR.SP.ZONES.length;k++){const t=k*Q;
       for(const sx of [-1,1]){const p=OR.spPos(t,sx*7.2),y=heightAt(p.x,p.z),h=4.5+k*.7;
         const m=new THREE.Mesh(new THREE.BoxGeometry(1.6,h,1.6),stone);m.position.set(p.x,y+h/2-.3,p.z);m.rotation.y=-(Math.PI+t);m.castShadow=m.receiveShadow=true;scene.add(m);
         const cap=new THREE.Mesh(new THREE.BoxGeometry(2.1,.5,2.1),stone);cap.position.set(p.x,y+h-.1,p.z);cap.rotation.y=m.rotation.y;cap.castShadow=true;scene.add(cap);
@@ -11711,7 +11710,7 @@ setInterval(()=>{if(!HMOD.ready||!player)return;const px=player.position.x,pz=pl
    문 가까이 가면 안개가 확 짙어져 다음 구역이 보이지 않고, 구역 안에서도 멀리는 흐리게 (먼 구역은 그리지 않아 가볍다) */
 const HFOG={gates:[]};
 (function buildGateFog(){const SP=OR.SP,Q=SP.Q,rnd=(()=>{let s=9137;return()=>(s=(s*16807)%2147483647)/2147483647;})();
-  const list=[[.16,0]];for(let k=1;k<8;k++)list.push([k*Q,k]);
+  const list=[[.16,0]];for(let k=1;k<OR.SP.ZONES.length;k++)list.push([k*Q,k]);
   for(const [t,k] of list){const c=OR.spPos(t,0),a=Math.PI+t,ox=Math.cos(a),oz=Math.sin(a),tx=-Math.sin(a),tz=Math.cos(a);   /* o: 바깥쪽, t: 길 방향 */
     const g=new THREE.Group();g.visible=false;g.userData.noMap=1;scene.add(g);const col=new THREE.Color(HZ[Math.max(0,k-1)].g).lerp(new THREE.Color(HZ[k].g),.5).lerp(new THREE.Color(0xf4ead6),.35);
     const mat=new THREE.SpriteMaterial({map:edgeMistTex(),color:col,transparent:true,opacity:.62,depthWrite:false,fog:false});
@@ -12740,6 +12739,9 @@ const BAKE_LINES={
     '줄무늬 고양이 한 마리가 자꾸 지붕에 올라와요. 빵 냄새가 좋은가 봐요.',
     '안에 들어오시면 앉아서 드실 자리도 있어요. 아빠 반죽하는 것도 구경하시고요.']};
 const NPC_FINE={
+  /* ── 기사단 본부 ── */
+  khq_cmd:{fine:{hair:'short',hairC:0x8a8a90,skin:0xe6c4a2,body:{w:1.18,h:1.05},brow:{c:0x9a9aa0,bushy:1,th:.026,t:.08},nose:'big',mouth:'flat',beard:'short',beardC:0x8a8a90,age:1,scar:'l',eye:'narrow',
+    cl:{belt:0x3a2a1a,gloves:0x4a4e58,boots:0x3a3e48,pauldron:0xb4bac4,sash:0xd4af37,pendant:0xd4af37}}},
   /* ── 바르톨 제빵소 ── */
   bake_bartol:{fine:{hair:'short',hairC:0x6a4a2a,body:{w:1.22,belly:1.35},bareArms:1,skin:0xf0d2b4,brow:{c:0x6a4a2a,th:.022,bushy:1,t:-.04},nose:'big',noseC:0xe8a890,mouth:'smile',beard:'mous',beardC:0x6a4a2a,blush:0xe08a7a,age:1,
     cl:{rolled:0xf4f0e6,towel:0xf0ece0,belt:0x6a4a2a,apronPockets:1}}},
@@ -13753,7 +13755,7 @@ await BOOT.y();(function buildHall(){
       for(let k=0;k<9;k++){const b=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,4.1,6),iron);b.position.set(sx-Wd/2+.2+k*(Wd-.4)/8,2.05,z0+.35);b.castShadow=true;gg.add(b);}
       [1.1,2.6,3.9].forEach(y=>{const h=new THREE.Mesh(new THREE.BoxGeometry(Wd,.09,.09),iron);h.position.set(sx,y,z0+.35);h.castShadow=true;gg.add(h);});
       for(let k=-2;k<=2;k++){const c={x:sx+k*.9,z:z0+.9,r:.7};colliders.push(c);cols.push(c);}
-      window.__hallGate={g:gg,cols,on:true};}   /* Lv 60이 되면 올라간다 (isles.js) */
+      window.__hallGate={g:gg,cols,on:true};}   /* Lv 30·첫 길을 고른 뒤 올라간다 (hallStairsOpen) */
     // 계단 양옆 기사 석상
     [-1,1].forEach(s=>{const g=new THREE.Group(),st=mat(0xb8b0a2,{roughness:.8});
       const bs=new THREE.Mesh(new THREE.BoxGeometry(1.1,.6,1.1),stone2);bs.position.y=.3;
@@ -13796,7 +13798,7 @@ await BOOT.y();(function buildHall(){
 const EP_RY=-(Math.PI+OR.SP.T-.25),EP_BACK=(()=>{const t=OR.SP.T-.25-4.5/OR.spR(OR.SP.T-.25),q=OR.spPos(t),dx=q.x-OR.EPORTAL.x,dz=q.z-OR.EPORTAL.z;return {x:q.x,z:q.z,yaw:Math.atan2(dx,dz)};})();
 /* 포탈 목록: 새 포탈은 여기에 한 줄 */
 const PORTALS=[
-  {id:'east',x:OR.EPORTAL.x,z:OR.EPORTAL.z,ry:EP_RY,minLv:60,label:'포탈로 들어가기',
+  {id:'east',x:OR.EPORTAL.x,z:OR.EPORTAL.z,ry:EP_RY,minLv:30,label:'포탈로 들어가기',
     to:{x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-8.5,yaw:0},msg:null,color:0xffd23a,
     // 와이번을 잡기 전에는 둥지로
     alt:()=>P&&!(P.got&&P.got.wyvern)?{x:OR.WLAIR.x,z:OR.WLAIR.z+OR.WLAIR.r-5,yaw:0,msg:`포탈을 지나자 거센 바람이 몰아친다.`}:null},
@@ -13804,8 +13806,8 @@ const PORTALS=[
     // 와이번을 잡기 전에는 동쪽 황야로 돌아가는 문, 잡은 뒤에는 지하실로 가는 문
     alt:()=>P&&!(P.got&&P.got.wyvern)?{x:EP_BACK.x,z:EP_BACK.z,yaw:EP_BACK.yaw,msg:null}:null,
     to:{x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-8.5,yaw:0},msg:null,color:0xffd23a},
-  {id:'hall_back',x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-4.5,ry:0,minLv:0,label:'깊은 사막5로 돌아가기',
-    to:{x:EP_BACK.x,z:EP_BACK.z,yaw:EP_BACK.yaw},msg:'포탈을 지나 깊은 사막5로 돌아왔다.',color:0xffd23a},
+  {id:'hall_back',x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-4.5,ry:0,minLv:0,label:'깊은 사막3으로 돌아가기',
+    to:{x:EP_BACK.x,z:EP_BACK.z,yaw:EP_BACK.yaw},msg:'포탈을 지나 깊은 사막3으로 돌아왔다.',color:0xffd23a},
 ];
 for(const p of PORTALS)p.fx=makePortal(p.x,p.z,p.ry,{color:p.color});
 function portalNear(){if(!player)return -1;for(let i=0;i<PORTALS.length;i++){const p=PORTALS[i];if(!p.edge&&portalSeen(p)&&Math.hypot(player.position.x-p.x,player.position.z-p.z)<3.2)return i;}return -1;}
@@ -18721,6 +18723,18 @@ function buildKnightsHQ(K){
       const pmesh=new THREE.Mesh(geo2,pm);pmesh.frustumCulled=false;pmesh.renderOrder=3;grp.add(pmesh);}}
   /* 벽난로 불빛은 2층에서만 고른다 */
   {const Hh=typeof HEARTHS!=='undefined'&&HEARTHS[HEARTHS.length-1];if(Hh&&Hh.li&&Math.abs(Hh.g.position.x-cx)<HW)Hh.li.userData.yr=[Y2,YR+1];}
+  /* 기사단장 레오폴드 (2026-11-10 원호: 2차 전직은 기사단 본부에서): 단 위 단장 의자 앞에 서서 회당을 내려다본다 */
+  if(typeof addNpc==='function'){NPC_POSE.khq_cmd='guard';addNpc({id:'khq_cmd',name:'레오폴드',role:'기사단장',x:cx,z:cz-14.2,y:.85,faceX:cx,faceZ:cz,
+    look:{robe:0x9aa0a8,robe2:0x23366e,hat:'hair',hatC:0x8a8a90,beard:0x8a8a90,gear:{helm:-1,armor:9,boots:8,weapon:-1},cloth:{pants:0x5a5e68,vest:0x23366e,cape:0x23366e,sleeve:'long',sleeveC:0x9aa0a8,shoes:0x3a3e48}},
+    lines:['기사단 본부에 온 걸 환영한다. 여긴 왕국의 칼과 방패가 모이는 곳이다.',
+      '원탁에 앉은 자들은 다 제 몫의 싸움을 치르고 돌아온 이들이지. 함부로 말을 섞기 전에 인사부터 해라.',
+      '왕궁 문은 당분간 닫혀 있다. 이유는 묻지 마라. 그게 기사단의 일이다.',
+      '서문 밖 숲길이 요즘 시끄럽다. 길드 모험가들 덕에 그나마 버티고 있지.',
+      '강한 자는 많다. 하지만 등을 맡길 수 있는 자는 드물다. 그런 자가 되어라.'],
+    story:[['기사단이 무얼 하냐고?','성벽 밖에서 왕국으로 오는 것들을 막는다. 몬스터든, 사람이든.','그리고 막을 수 없는 것이 오면, 맨 앞에 선다.'],
+      ['이 회당의 색유리 말이냐.','쓰러진 기사 하나마다 유리 한 조각을 끼웠다. 그래서 해가 들면 회당이 그렇게 밝은 거다.'],
+      ['허칠 산 이야기를 들었나.','눈이 녹지 않는 산이다. 산장 사람들은 꼭대기에 오른 자가 거의 없다고 하더군.','기사단도 아직 그 끝을 다 알지 못한다.']],
+    acts:[['이야기 듣기','story']]});}
   KHQ.ready=true;}
 /* 맵 안에 있을 때만 사람들을 움직이고 보인다. 색유리는 바깥 해에 따라 밝기가 바뀐다 */
 function khqTick(t,dt){if(!player)return;
@@ -23041,9 +23055,9 @@ await BOOT.y();await (async function buildIsles(){
         c.strokeStyle='#5a3a1c';c.lineWidth=8;c.beginPath();c.moveTo(6,10);c.lineTo(512-T,10);c.lineTo(506,80);c.lineTo(512-T,150);c.lineTo(6,150);c.closePath();c.stroke();c.restore();
         const cx=right?(512-T)/2+6:256+T/2-3;c.textAlign='center';c.textBaseline='middle';
         let fs=50;c.font=`700 ${fs}px "KMUSunggokSemiSerif","Gowun Batang",serif`;while(c.measureText(txt).width>400&&fs>30){fs-=2;c.font=`700 ${fs}px "KMUSunggokSemiSerif","Gowun Batang",serif`;}
-        c.fillStyle='#2a1a0c';c.fillText(txt,cx,60);c.font='600 34px "KMUSunggokSemiSerif","Gowun Batang",serif';c.fillStyle='#6a2a12';c.fillText(sub,cx,118);
+        c.fillStyle='#2a1a0c';c.fillText(txt,cx,sub?60:80);c.font='600 34px "KMUSunggokSemiSerif","Gowun Batang",serif';c.fillStyle='#6a2a12';c.fillText(sub,cx,118);
         const t=new THREE.CanvasTexture(cv);t.anisotropy=8;t.encoding=THREE.sRGBEncoding;return t;};
-      const postM=mat(0x4e3622),nm=k=>(ZONES[k]?ZONES[k].name:k).replace(/^(마르쿠스|불타는 협곡) /,''),lv=k=>{const L=OR.ZONE_LEVELS[k];return L?`Lv ${L[0]}–${L[1]}`:'';};
+      const postM=mat(0x4e3622),nm=k=>(ZONES[k]?ZONES[k].name:k).replace(/^(마르쿠스|불타는 협곡) /,''),lv=k=>'';   /* 2026-11-10 원호: 길 위 표지판에는 적정레벨을 적지 않는다 (이름만) */
       const AW=2.4,AH=.75;
       for(const l of OR.MH.links){if(l.k!=='neck')continue;const mx=(l.ax+l.bx)/2,mz=(l.az+l.bz)/2,r=MHR.near(mx,mz),len=Math.hypot(l.bx-l.ax,l.bz-l.az),ux=(l.bx-l.ax)/len,uz=(l.bz-l.az)/len;
         const px=r.x-uz*5.5+ux*(l.k==='neck'?-14:6),pz=r.z+ux*5.5+uz*(l.k==='neck'?-14:6),y=heightAt(px,pz);
@@ -23107,17 +23121,17 @@ await BOOT.y();await (async function buildIsles(){
       edge('mh_to_'+T.to,G.x,G.z,ryOf(G),9,`${ro(Z(T.to))} 가기`,{x:D.x,z:gz-10,yaw:0});
       edge(T.to+'_to_mh',D.x,gz,0,7,`${ro(Z(F.id))} 가기`,arr(G));gateFog(D.x,gz,0,1,7,OR.HCH.OM[T.to]?HMAP.h(OR.HCH.OM[T.to],0,gz-D.z):null);}
     /* 따로 된 맵(서문 길) 땅 끝 문: 다음 땅 / 앞 땅으로 넘어간다 */
-    const lvT=k=>{const L=OR.ZONE_LEVELS[k];return L?`적정레벨 ${L[0]}–${L[1]}`:'';};
+    const lvT=k=>'';   /* 2026-11-10 원호: 문 현판에도 적정레벨을 적지 않는다 */
     for(const id of OR.MHUNT){const I=ISLES[id];
       if(I.ngate){const N=ISLES[I.ngate.to],G=I.ngate;edge('mhs_'+id+'_next',G.x,G.z,ryOf(G),9,`${ro(Z(N.id))} 가기`,arr(N.pgate));mhDoor(G.x,G.z,G.ux,G.uz,Z(N.id),lvT(N.id),0x9ad8ff);}
       if(I.pgate){const B=ISLES[I.pgate.to],G=I.pgate;edge('mhs_'+id+'_prev',G.x,G.z,ryOf(G),9,`${ro(Z(B.id))} 돌아가기`,arr(B.ngate));mhDoor(G.x,G.z,G.ux,G.uz,Z(B.id),lvT(B.id),0xffd8a0);}
       if(I.sep&&I.gate)mhDoor(I.gate.x,I.gate.z,I.gate.ux,I.gate.uz,'엑시즈','서문',0xffd8a0);
-      if(I.sep&&I.tgate)mhDoor(I.tgate.x,I.tgate.z,I.tgate.ux,I.tgate.uz,Z(I.tgate.to),'산장 가는 산길 · '+lvT(I.tgate.to),0xcfe8ff);}
+      if(I.sep&&I.tgate)mhDoor(I.tgate.x,I.tgate.z,I.tgate.ux,I.tgate.uz,Z(I.tgate.to),'산장 가는 산길',0xcfe8ff);}
     /* 엑시즈 서문 밖 길 끝: 첫 땅으로 넘어가는 문 */
     for(const LN of OR.MLINES){if(!LN.gate||!LN.sep)continue;const g=PL.gates.find(q=>q.name===LN.gate),ux=Math.cos(g.out),uz=Math.sin(g.out);let L=0;for(let t=0;t<400;t+=2){const qx=g.x+ux*t,qy=g.y+uz*t;if(Math.hypot(qx,qy)>OR.isleEdge(M,Math.atan2(qy,qx))-14)break;L=t;}
       const F=LN.zones[0][0];mhDoor(M.x+g.x+ux*L,M.z+g.y+uz*L,-ux,-uz,Z(F),lvT(F),0x9ad8ff);}}
 
-  await BOOT.y();/* ===== 지하실 위층의 작은 방 (Lv 60 계단) ===== */
+  await BOOT.y();/* ===== 지하실 위층의 작은 방 (Lv 30 계단) ===== */
   {const H=OR.HALL_ROOM,C={x:OR.HALL.x,z:OR.HALL.z},R=OR.HALL.R,z0=C.z-R+.3,sx=C.x;
     const brick=new THREE.MeshStandardMaterial({map:royalTex('brick',1.2,2.4),roughness:.95}),flag=new THREE.MeshStandardMaterial({map:royalTex('flag',4,4),roughness:.85}),stone2=mat(0x6e6458),iron=mat(0x3a3634,{metalness:.6,roughness:.45}),gold=ROYAL.gold();
     const W=H.hw*2,D=H.z1-H.z0,cz=(H.z0+H.z1)/2,RH=5.2;
@@ -23163,9 +23177,9 @@ await BOOT.y();await (async function buildIsles(){
     /* 지하실에서 네 땅으로 가는 포탈은 지웠다 (지하실에는 하레나 쪽으로 돌아가는 포탈만 남긴다).
        그 땅에서 접속을 끊은 캐릭터가 갇히지 않게, 땅에서 지하실로 돌아오는 포탈은 그대로 둔다 */
     PORTALS.push({id:k+'_back',x:I.entry.x,z:I.entry.z,ry:0,minLv:0,label:'지하실로 돌아가기',to:back,msg:null,color:PCOL[k]});}
-  /* 계단 끝의 문 → 엑시즈 길드홀 (Lv 60). 길드홀의 지하실 문으로 다시 내려온다 */
+  /* 계단 끝의 문 → 엑시즈 길드홀 (Lv 30, 전달자에게서 첫 길을 고른 뒤). 길드홀의 지하실 문으로 다시 내려온다 */
   {const H=OR.HALL_ROOM,C=OR.CELLAR,GD=MARCUS.guildDoor,g=new THREE.Group();g.position.set(C.x,C.y+C.up,C.z0+.75);scene.add(g);
-    if(GD){PORTALS.push({id:'to_guild',x:C.x,z:C.z0+.75,ry:0,minLv:60,label:'길드홀 1층으로 올라가기',to:{x:GD.ax,z:GD.az,yaw:GD.ayaw,y:GD.y},msg:null,color:0xffd23a,door:1,fx:{g,cols:[]}});
+    if(GD){PORTALS.push({id:'to_guild',x:C.x,z:C.z0+.75,ry:0,minLv:30,need:()=>hallStairsOpen(),label:'길드홀 1층으로 올라가기',to:{x:GD.ax,z:GD.az,yaw:GD.ayaw,y:GD.y},msg:null,color:0xffd23a,door:1,fx:{g,cols:[]}});
       const g2=new THREE.Group();g2.position.set(GD.tx,GD.y,GD.tz);scene.add(g2);
       PORTALS.push({id:'guild_down',x:GD.tx,z:GD.tz,ry:GD.ry,minLv:0,label:'지하 창고로 내려가기',to:{x:C.x,z:C.z0+2.1,yaw:Math.PI},msg:null,color:0xffd23a,door:1,fx:{g:g2,cols:[]}});}}
   for(const p of PORTALS)if(!p.fx)p.fx=makePortal(p.x,p.z,p.ry,{color:p.color,y:p.y});
@@ -23259,7 +23273,7 @@ function hchGateModel(root,cx,cz,g,hAt,cave){const C=OR.HCH,A=C.areaOf(g.a),B=C.
   const bm=new THREE.Mesh(new THREE.CylinderGeometry(.2,.2,2*W+1.1,9),wood);bm.rotation.z=Math.PI/2;bm.position.y=beamY;G.add(bm);
   if(!cave){const sc=new THREE.Mesh(new THREE.BoxGeometry(2*W+1.1,.14,.36),snow);sc.position.y=beamY+.22;G.add(sc);}
   /* 이름판: a 쪽(앞, -z)에서 보면 b 이름, b 쪽(+z)에서 보면 a 이름 */
-  const lines=Q=>Q.lv&&Q.lv[1]?[{t:Q.name,s:96,b:1,y:.36},{t:`적정레벨 ${Q.lv[0]}–${Q.lv[1]}`,s:58,b:1,y:.77}]:[{t:Q.name,s:104,b:1,y:.5}];
+  const lines=Q=>[{t:Q.name,s:104,b:1,y:.5}];   /* 2026-11-10 원호: 이름판에 적정레벨은 적지 않는다 */
   const mk=t=>new THREE.MeshStandardMaterial({map:t,roughness:.85,emissive:0xffffff,emissiveMap:t,emissiveIntensity:cave?.4:.14}),wd2=new THREE.MeshStandardMaterial({color:0x5e4026,roughness:.9});
   const bw=Math.min(2*W-.8,3.4),bh=bw*230/512,bd=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,.1),[wd2,wd2,wd2,wd2,mk(HECH.signTex(lines(A),512,230)),mk(HECH.signTex(lines(B),512,230))]);bd.position.y=beamY-.34-bh/2;G.add(bd);
   for(const sx of [-1,1]){const c=new THREE.Mesh(new THREE.CylinderGeometry(.018,.018,.3,4),wood);c.position.set(sx*bw*.38,beamY-.2,0);G.add(c);}
@@ -23684,8 +23698,8 @@ function updateIsles(t,dt){
     let el=ISLE_FX.uwEl;if(!el&&uw){el=ISLE_FX.uwEl=document.createElement('div');el.style.cssText='position:fixed;inset:0;pointer-events:none';renderer.domElement.after(el);}
     if(el){const v=uw||'';if(el._v!==v){el._v=v;el.style.background=v;el.style.display=v?'block':'none';}}}
   if(x>1650&&x<1950)for(const c of ISLE_FX.crystals)c.L.intensity=c.i*(.85+Math.sin(t*1.7+c.ph)*.15);
-  /* 지하실 계단의 쇠창살: Lv 60 아래면 내려와 막고, 60이 되면 천천히 올라간다 (다른 캐릭터로 바꾸면 다시 내려온다) */
-  const G=window.__hallGate;if(G&&P){const open=P.lv>=60;G.h=G.h||0;const want=open?4.3:0;if(G.h!==want){G.h+=Math.sign(want-G.h)*Math.min(Math.abs(want-G.h),dt*1.6);G.g.position.y=G.h;}
+  /* 지하실 계단의 쇠창살: 막혀 있다가 hallStairsOpen()이 되면 천천히 올라간다 (다른 캐릭터로 바꾸면 다시 내려온다) */
+  const G=window.__hallGate;if(G&&P){const open=hallStairsOpen();G.h=G.h||0;const want=open?4.3:0;if(G.h!==want){G.h+=Math.sign(want-G.h)*Math.min(Math.abs(want-G.h),dt*1.6);G.g.position.y=G.h;}
     const shouldBlock=G.h<3.6;if(shouldBlock!==G.on){G.on=shouldBlock;if(shouldBlock){for(const c of G.cols)if(!colliders.includes(c))colliders.push(c);}else{for(const c of G.cols){const i=colliders.indexOf(c);if(i>=0)colliders.splice(i,1);}}}}
 }
 /* ---------- 튀르팽의 집: 하레나 성안 흙집 한 채 (새 모험가가 눈을 뜨는 곳) ----------
@@ -27287,7 +27301,7 @@ function drawHallPlan(c,X,Z,sc,f){const H=OR.HALL,R=H.R;
   c.fillStyle='#6a5a4a';c.beginPath();c.arc(X(H.x),Z(H.z),R*sc,0,7);c.fill();
   c.strokeStyle='#2a221b';c.lineWidth=Math.max(2,1*sc);c.beginPath();c.arc(X(H.x),Z(H.z),(R+.4)*sc,-Math.PI/2+.13,Math.PI*1.5-.13);c.stroke();
   // 쇠창살 (Lv 60이 되면 열리고, 위층 작은 방이 보인다)
-  if(P&&P.lv>=60){const HR=OR.HALL_ROOM;c.fillStyle='#3a3029';c.fillRect(X(HR.x-HR.hw),Z(HR.z0),HR.hw*2*sc,(HR.z1-HR.z0)*sc);c.fillRect(X(HR.x-HR.stHw),Z(HR.z0-HR.stLen-HR.stLand),HR.stHw*2*sc,(HR.stLen+HR.stLand)*sc);const CL=OR.CELLAR;c.fillRect(X(CL.x-CL.hw),Z(CL.z0),CL.hw*2*sc,(CL.z1-CL.z0)*sc);}
+  if(P&&hallStairsOpen()){const HR=OR.HALL_ROOM;c.fillStyle='#3a3029';c.fillRect(X(HR.x-HR.hw),Z(HR.z0),HR.hw*2*sc,(HR.z1-HR.z0)*sc);c.fillRect(X(HR.x-HR.stHw),Z(HR.z0-HR.stLen-HR.stLand),HR.stHw*2*sc,(HR.stLen+HR.stLand)*sc);const CL=OR.CELLAR;c.fillRect(X(CL.x-CL.hw),Z(CL.z0),CL.hw*2*sc,(CL.z1-CL.z0)*sc);}
   else{c.strokeStyle='#1b1712';c.lineWidth=Math.max(2,.3*sc);c.setLineDash([2*f,2*f]);c.beginPath();c.moveTo(X(H.x-1.8),Z(H.z-R+.65));c.lineTo(X(H.x+1.8),Z(H.z-R+.65));c.stroke();c.setLineDash([]);}
   // 기둥
   c.fillStyle='#4a3e34';for(let i=0;i<12;i++){const a=i/12*Math.PI*2+Math.PI/12,x=H.x+Math.cos(a)*(R-.35),z=H.z+Math.sin(a)*(R-.35);c.beginPath();c.arc(X(x),Z(z),.75*sc,0,7);c.fill();}
@@ -27734,7 +27748,8 @@ function startGameNow(data){if(JOB_ALIAS[data.job])data={...data,job:JOB_ALIAS[d
   // 직업에 맞지 않는 장비는 가방으로
   for(const s of ['weapon','sub']){const id=P.equip[s];if(id&&!canWear(id,P.job)){P.bag.push(bagGear(id,P.enh[s]));P.equip[s]=null;P.enh[s]=0;}}
   // 직업 전용 장비 지급 (처음 한 번)
-  P.got={...(data.got||{})};if(!data.needBook)giveJobGear(true);   /* 책을 고르기 전(임시 직업)에는 직업 장비를 주지 않는다 */
+  P.got={...(data.got||{})};if(!data.needBook)giveJobGear(true);
+  if(!data.needBook&&JOBS[P.job]&&!JOBS[P.job].from)P.bag=P.bag.filter(e=>!(e&&['book_jerier','book_ansei','book_jaerang','book_olivier'].includes(e.id)));   /* 책으로 하는 전직을 없앴다 (2026-11-10): 전직 전에 받아 둔 옛 친구의 책은 거둔다 */   /* 책을 고르기 전(임시 직업)에는 직업 장비를 주지 않는다 */
   P.ap=apParse(data.ap)||(typeof data.ap==='object'&&data.ap&&data.ap.g?data.ap:null)||apDefault();
   computeStats(P);
   if(player)scene.remove(player);
@@ -27754,6 +27769,7 @@ function startGameNow(data){if(JOB_ALIAS[data.job])data={...data,job:JOB_ALIAS[d
   if(data.x!=null&&(data.mhv===4||data.mhv===5)&&(data.z||0)>440&&OR.MH.walkD(data.x,data.z)>2){   /* mhv 5 (문마다 두 땅, 2026-11-06까지): 닫은 문의 땅·옮긴 땅에 저장된 자리는 서문 첫 땅(숲 가는 길) 들어오는 자리로 */const MH=OR.MH,TAU=Math.PI*2;let a=Math.atan2(data.z-MH.cz,data.x-MH.cx)-MH.TH0;a=((a%TAU)+TAU+MH.DTH/2)%TAU;const kk=Math.floor(a/MH.DTH),dr=Math.abs(Math.hypot(data.x-MH.cx,data.z-MH.cz)-MH.RR);
     if(kk<20&&dr<400){const L=data.mhv===5?OR.MLINES[0]:OR.MLINES[Math.floor(kk/5)]||OR.MLINES[0];if(L){const I=OR.ISLES[L.zones[0][0]];data.x=I.entry.x;data.z=I.entry.z;data.y=null;}}}
   if(data.x!=null&&Math.hypot(data.x-4150,(data.z||0))<230){const I=OR.ISLES.milgol;data.x=I.x;data.z=I.z+50;data.y=null;}   /* 없앤 통로 요새(2026-11-06)에서 끊겼으면 밀골로 */
+  if(data.x!=null&&data.x<800&&Math.abs(data.z||0)<300&&Math.hypot(data.x-OR.C2.x,(data.z||0)-OR.C2.z)>OR.TOWN_R+3&&Math.hypot(data.x-OR.C2.x,(data.z||0)-OR.C2.z)<260&&!OR.inTHouse(data.x,data.z||0)&&OR.SP.ZONES.includes(OR.zoneAt(data.x,data.z||0))&&!OR.hInside(data.x,data.z||0,0)){data.x=null;data.z=null;data.y=null;}   /* 잘라 낸 깊은 사막4·5(2026-11-10)에서 끊겼으면 하레나로 */
   if(data.x!=null&&data.x>=800){const w=OR.HCH.fixSave(data.x,data.z||0);if(w){data.x=w.x;data.z=w.z;data.y=null;}}   /* 허칠 맵을 작게 따로 떼기(2026-11-07) 전 자리: 그 맵 안 알맞은 자리로 */
   player.position.set(data.x??(OR.C2.x-6),0,data.z??(OR.C2.z+4));
   /* 내 집 안에서 끊겼으면(새로고침·업데이트) 집 바닥·계단을 먼저 지어 둔다. 전엔 바닥이 생기기 전에 높이를 재서 캐릭터가 바닥 아래로 꺼졌다 */
@@ -28035,7 +28051,6 @@ function renderNpc(text,extra){npcEnding=null;
       if(body.querySelector('button')&&!body.querySelector('[data-skip]')&&!body.dataset.noskip){const b=npcBtn(body,'선택하지 않기',()=>{$('#npcChoices').hidden=true;},'wide skip');b.dataset.skip='1';}
       $('#npcChoices').hidden=!body.children.length;}
     if(!n.mqLock)for(const [label,act] of (n.id==='ailey'&&typeof aileyActs==='function'?aileyActs():n.acts)){if(act==='talk'||act==='story')continue;npcBtn(acts,label,()=>npcAct(act),'pri');}
-    if(n.id==='messenger'&&P.mentorReady&&secondAdv())npcBtn(acts,'전직',()=>{closeNpc();openMentor();},'pri');
     if(!n.noTalk&&!n.mqLock)npcBtn(acts,'이야기',()=>npcAct('talk'),'pri');
     npcBtn(acts,'그만두기',closeNpc,'pri');
     placeChoices();
@@ -28097,9 +28112,9 @@ function npcAct(act){
     const here=zoneAt(player.position.x,player.position.z);
     const ME=OR.ISLES.marcus.entry;let EX=[ME.x,ME.z-4,0];   /* 엑시즈: 남문 바로 앞, 성문을 바라보게 */
     try{const I=OR.ISLES.marcus,g=marcusPlan().gates.find(g=>g.name==='남문');if(g){const ux=Math.cos(g.out),uz=Math.sin(g.out);EX=[I.x+g.x+ux*9,I.z+g.y+uz*9,Math.atan2(ux,uz)];}}catch(e){}
-    const portalLv=(PORTALS.find(p=>p.id==='east')||{minLv:60}).minLv;
-    const dests=[['하레나',OR.C2.x-6,OR.C2.z+4,Math.PI/2,50,0],['석굴 입구',DOOR_IN.x+1.2,DOOR_IN.z,-Math.PI/2,80,OR.ZONE_LEVELS.dungeon[0]],['포탈',EP_BACK.x,EP_BACK.z,EP_BACK.yaw,600,portalLv],['엑시즈',EX[0],EX[1],EX[2],2000,60]]
-      .filter(d=>!(d[0]==='하레나'&&here==='town')&&!(d[0]==='엑시즈'&&here==='marcus')&&P.lv>=d[5]);   /* 먼 곳일수록 비싸다. 적정레벨(석굴 Lv 18, 포탈·엑시즈 Lv 60)에 못 미치는 곳은 아예 보이지 않는다 */
+    const portalLv=(PORTALS.find(p=>p.id==='east')||{minLv:30}).minLv;
+    const dests=[['하레나',OR.C2.x-6,OR.C2.z+4,Math.PI/2,50,0],['석굴 입구',DOOR_IN.x+1.2,DOOR_IN.z,-Math.PI/2,80,OR.ZONE_LEVELS.dungeon[0]],['포탈',EP_BACK.x,EP_BACK.z,EP_BACK.yaw,600,portalLv],['엑시즈',EX[0],EX[1],EX[2],2000,30]]
+      .filter(d=>!(d[0]==='하레나'&&here==='town')&&!(d[0]==='엑시즈'&&here==='marcus')&&P.lv>=d[5]&&(d[0]!=='엑시즈'||hallStairsOpen()));   /* 먼 곳일수록 비싸다. 적정레벨(석굴 Lv 13, 포탈·엑시즈 Lv 30, 엑시즈는 전달자를 만난 뒤)에 못 미치는 곳은 아예 보이지 않는다 */
     renderNpc(dests.length?'어디로 갈까요?':'지금은 보내 드릴 곳이 없네요.',box=>{for(const [nm,x,z,yaw,cost] of dests)npcBtn(box,`${nm} (${cost} 골드)`,()=>{
       if(P.gold<cost){renderNpc('골드가 모자라요.');return;}P.gold-=cost;closeNpc();spawnFx(0x9ad7ff,player.position.clone().setY(player.position.y+1),2.5,.6);
       warpTo(x,z,yaw,`${nm}(으)로 순간이동했다.`);save();},'pri wide');});
@@ -28205,10 +28220,10 @@ function renderQuest(msg){
   if(msg){renderNpc(msg,box=>{npcBtn(box,'게시판 보기',()=>openBoard(boardOf(here)),'pri wide');});return;}
   openBoard(boardOf(here));
 }
-// Lv 60이 되면 하레나 게시판에 붙는 특별 의뢰: 동쪽 황야 끝 포탈 조사 (받아야 포탈이 열린다)
-const PORTAL_POSTER={id:'portal_survey',special:'portal',zone:'weast',lv:60,goals:[],exp:30000,gold:5000,rare:1,giver:'하레나 경비대',role:'경비대',
+// Lv 30이 되면 하레나 게시판에 붙는 특별 의뢰: 깊은 사막3 길 끝 포탈 조사 (받아야 포탈이 열린다)
+const PORTAL_POSTER={id:'portal_survey',special:'portal',zone:'wnorth',lv:30,goals:[],exp:30000,gold:5000,rare:1,giver:'하레나 경비대',role:'경비대',
   why:'길 끝에 처음 보는 문이 생겼다. 무엇으로 이어지는지 아무도 모른다. 들어가 보고, 살아서 돌아와 다오.'};
-const portalPosterUp=()=>!!(P&&P.lv>=60&&!(P.got&&(P.got.portalQ||P.got.wyvern))&&!(P.quest&&P.quest.special));
+const portalPosterUp=()=>!!(P&&P.lv>=30&&!(P.mqDone&&P.mqDone.messenger100)&&!(P.got&&(P.got.portalQ||P.got.wyvern))&&!(P.quest&&P.quest.special));
 /* ---------- 의뢰 게시판: 포스터를 눌러 가까이 들여다보고 승낙한다. 서버 게시판은 모두가 함께 쓴다 ---------- */
 let boardId=null,boardList=[],boardGiver=null;
 const localBoards={};
@@ -28360,7 +28375,7 @@ function renderQuestWin(){const body=$('#qwBody');body.innerHTML='';if(!P)return
   /* 게시판 의뢰 */
   const q=P.quest;
   if(q&&!(q.special&&P.mq==='portal60')){const fin=qDone(q),from=q.fromName||'의뢰인';let steps;
-    if(q.special)steps=[{t:'깊은 사막5 길 끝의 포탈로 들어가기',st:(q.stage|0)<1?'now':'done'},{t:'포탈 밖으로 돌아오기',st:(q.stage|0)<1?'':(q.stage|0)<2?'now':'done'}];
+    if(q.special)steps=[{t:'깊은 사막3 길 끝의 포탈로 들어가기',st:(q.stage|0)<1?'now':'done'},{t:'포탈 밖으로 돌아오기',st:(q.stage|0)<1?'':(q.stage|0)<2?'now':'done'}];
     else{steps=qGoals(q).map(g=>{const h=Math.min(g.have,g.need),ok=h>=g.need;return {t:`${MON[g.ty].name} 처치`,n:`${h}/${g.need}`,st:ok?'done':'now',p:h/g.need};});steps.push({t:`${from}에게 보고하기`,st:fin?'now':''});}
     let why='';try{why=q.why?(q.special?q.why:fillWhy(q)):'';}catch(e){}
     const Z=ZONES[q.zone];
@@ -28392,13 +28407,15 @@ addEventListener('keydown',e=>{const c=codeOf(e);if(e.target.tagName==='INPUT'||
   if(c==='KeyQ'&&!e.repeat){if(!$('#qwin').hidden)closeQuestWin();else openQuestWin();}
   else if(c==='Escape'&&!$('#qwin').hidden){closeQuestWin();e.stopImmediatePropagation();}},true);
 
+/* 지하실 계단(엑시즈 길드홀로): Lv 30부터, 전달자에게서 첫 길(1차 전직)을 고른 뒤에 열린다 */
+function hallStairsOpen(){return !!(P&&P.lv>=30&&!P.needBook&&JOBS[P.job]&&(JOBS[P.job].from||(P.mqDone&&P.mqDone.messenger100)));}
 /* ---------- 스승 / 전직 ---------- */
-// 1차 전직(기본 직업)은 하레나의 스승에게서, 2차 전직은 지하실의 전달자에게서
+// 1차 전직(기본 직업 → 1차)은 길드홀 지하실의 전달자에게서, 2차 전직은 엑시즈 기사단 본부의 기사단장에게서
 const MENTOR_AT={x:OR.C2.x-5.5,z:OR.C2.z+4.5};
 const secondAdv=()=>!!(P&&JOBS[P.job].from);
 function summonMentor(quiet){
-  if(!secondAdv()&&typeof mqLevelCheck==='function'){mqLevelCheck(quiet);return;}   /* 1차 전직은 스승 대신 메인 퀘스트(튀르팽의 옛 친구의 책) */
-  if(secondAdv()){if(!quiet)log('누군가가 당신을 찾고 있다.','sys');updateQuestHud();return;}
+  /* 2026-11-10 원호: 1차 전직은 길드홀 지하실의 전달자, 2차 전직은 엑시즈 기사단 본부의 기사단장 (메인 퀘스트가 데려간다). 책으로 하는 전직은 없앴다 */
+  if(!quiet)log('누군가가 당신을 찾고 있다.','sys');updateQuestHud();return;
   if(mentor)return;
   mentor=makeMentorMesh();mentor.position.set(MENTOR_AT.x,heightAt(MENTOR_AT.x,MENTOR_AT.z),MENTOR_AT.z);mentor.lookAt(OR.C2.x,mentor.position.y,OR.C2.z);scene.add(mentor);npcBakeRequest('mentor',mentor);
   colliders.push({x:MENTOR_AT.x,z:MENTOR_AT.z,r:.6,mentor:true});
@@ -28406,8 +28423,9 @@ function summonMentor(quiet){
 }
 const MESSENGER_ADV='여기까지 왔다면 자격은 있어. 둘 중 하나를 골라. 한번 고르면 되돌릴 수 없어.';
 const MESSENGER_ADV1='여기까지 왔다면 자격은 있어. 네 앞에 난 길은 하나야. 한번 들어서면 되돌릴 수 없어.';
+const KHQ_ADV='기사단의 이름을 걸고 묻겠다. 어느 길로 나아가겠나. 한번 정하면 물릴 수 없다.',KHQ_ADV1='기사단의 이름을 걸고 묻겠다. 네 앞의 길은 하나다. 한번 들어서면 물릴 수 없다.';
 function openMentor(){
-  const M=secondAdv()?{name:'전달자',line:JOBS[P.job].adv.length>1?MESSENGER_ADV:MESSENGER_ADV1}:(MENTORS[P.job]||MENTORS[baseOf(P.job)]);mode='dialog';unlockPointer();syncLockTip();
+  const many=JOBS[P.job].adv.length>1,M=secondAdv()?{name:'레오폴드',line:many?KHQ_ADV:KHQ_ADV1}:{name:'전달자',line:many?MESSENGER_ADV:MESSENGER_ADV1};mode='dialog';unlockPointer();syncLockTip();
   $('#mWho').textContent=M.name;$('#mSay').textContent=M.line;
   const box=$('#mchoices');box.innerHTML='';
   JOBS[P.job].adv.forEach(j=>{
@@ -28440,7 +28458,7 @@ function grantTraits(){if(!P)return;if(!P.trMig1){P.trMig1=1;for(const id of ['n
 function grantAdvSp(){if(!P)return;grantTraits();const ent=Math.floor(P.lv/2),have=P.sp+spentSp();
   const need=needSp(),add=Math.min(ent-have,need-have);if(add>0){P.sp+=add;log(`SP ${add}을(를) 받았다.`,'sys');}}
 function advance(j){
-  const from=JOBS[P.job].name;P.job=j;P.mentorReady=false;
+  const from=JOBS[P.job].name;P.job=j;P.mentorReady=false;P._advJust=true;
   if(P.equip.sub&&!canWear(P.equip.sub,j)){P.bag.push(bagGear(P.equip.sub,P.enh.sub));P.equip.sub=null;P.enh.sub=0;}
   giveJobGear();fixSkills('전직하면서 전사 스킬을 내려놓고');
   computeStats(P);P.hp=P.maxhp;P.mp=P.maxmp;
@@ -28449,6 +28467,7 @@ function advance(j){
   log(`${from}에서 ${JOBS[j].name}(으)로 전직했다.`,'sys');updateQuestHud();
   if(mentor){scene.remove(mentor);mentor=null;}const ci=colliders.findIndex(c=>c.mentor);if(ci>=0)colliders.splice(ci,1);
   $('#interact').hidden=true;interactTarget=null;closeMentor();updateHud();renderOnline();save();publishPresence(true);
+  if(typeof mqAfterAdv==='function')mqAfterAdv();
 }
 
 /* ---------- 전투 ---------- */
@@ -30051,7 +30070,7 @@ function updateOthers(dt){
 var roomStatus='연결 중…',presErr='',pageViewers=0;
 function setRoomStatus(t){roomStatus=t;renderOnline();}
 // 자체 서버(WebSocket)용 연결: claude room과 같은 모양으로 감싼다
-const SERVER_VER=39;let srvVer=null,monsGot=0;
+const SERVER_VER=40;let srvVer=null,monsGot=0;
 function makeWsRoom(){
   const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
   let ws=null,myId=null,ok=false,retry=1000;const peers=new Map(),peerFns=[],topicFns={},connFns=[];const mine={};
@@ -31890,36 +31909,62 @@ await BOOT.y(true);EWHOOK=null;EWQ.length=0;BOOT.ready();loop();requestAnimation
 
 /* ---------- 메인 퀘스트 · 옛 친구의 책 ----------
    메인 퀘스트는 퀘스트 창 맨 위 '메인' 칸에 뜬다. 하나가 끝나면 조건에 맞는 다음 것이 뜬다.
-   kyle1: 책을 고른 뒤 → 카일을 찾아가기 / turpin30: 기본 직업 Lv 30 → 튀르팽 찾아가기 (옛 친구의 책을 받는다)
-   책(kind:'book')은 소지품에서 '읽기'로 읽는다. 옛 친구의 책을 끝까지 읽으면 전직한다. */
+   kyle1: 책을 고른 뒤 → 카일을 찾아가기
+   Lv 30 (2026-11-10 원호): 게시판 특별 의뢰 → 깊은 사막3 길 끝 포탈 → 와이번 → 길드홀 지하실의 전달자에게서 1차 전직 → 버키 → 새 집
+   Lv 60 (1차 직업): 엑시즈 기사단 본부의 기사단장 레오폴드에게서 2차 전직 (khq60)
+   예전의 turpin30(튀르팽에게서 옛 친구의 책을 받아 읽으며 전직)은 없앴다. 책(kind:'book')은 소지품에서 '읽기'로 읽기만 한다. */
 const MAINQ={
   kyle1:{title:'카일을 찾아가기',goal:'하레나 광장의 카일에게 말을 건다',npc:'kyle'},
   turpin30:{title:'튀르팽 찾아가기',goal:'튀르팽의 집에 찾아간다',npc:'turpin'},
-  /* Lv 60 (1차 전직 직업): 게시판 특별 의뢰 → 길 끝 포탈 → 전달자. 진행은 의뢰·와이번 상태를 보고 정한다 (mqAdvSync) */
+  /* Lv 30: 게시판 특별 의뢰 → 길 끝 포탈 → 전달자 (기본 직업이면 여기서 1차 전직). 진행은 의뢰·와이번 상태를 보고 정한다 (mqAdvSync) */
   portal60:{title:'길 끝 포탈 조사',
-    get goal(){const q=P&&P.quest;return q&&q.special==='portal'?'깊은 사막5 길 끝의 포탈로 들어간다':'카일의 게시판에서 특별 의뢰를 받는다';},
+    get goal(){const q=P&&P.quest;return q&&q.special==='portal'?'깊은 사막3 길 끝의 포탈로 들어간다':'카일의 게시판에서 특별 의뢰를 받는다';},
     get npc(){const q=P&&P.quest;return q&&q.special==='portal'?null:'kyle';}},
   messenger60:{title:'전달자 만나기',
     get goal(){return P&&P.got&&P.got.wyvern?'길드홀 지하실의 전달자에게 말을 건다':'포탈 너머의 와이번을 쓰러뜨리고 길드홀 지하실로 간다';},npc:'messenger'},
-  /* Lv 60 (2차 전직 뒤): 전달자를 찾아가면 길드홀의 버키를 찾아가라고 한다 */
+  /* (옛 저장용) 2차 전직 뒤 전달자를 찾아가면 길드홀의 버키를 찾아가라고 한다 */
   messenger100:{title:'전달자 찾아가기',goal:'길드홀 지하실의 전달자에게 말을 건다',npc:'messenger'},
   bucky100:{title:'버키 찾아가기',goal:'길드홀 3층 끝 방의 버키에게 말을 건다',npc:'bucky'},
   /* 버키를 만난 뒤: 왕국이 내어 준 엑시즈 시내의 집 (집은 랜덤으로 배정, 지도에 금빛 집 그림) */
   home100:{title:'새 집',goal:'지도에 표시된 엑시즈 시내의 내 집에 들어가 본다',npc:null,
     at:()=>{const r=typeof myHomeRec==='function'&&myHomeRec();return r?{x:r.x+r.nx*.6,y:r.y+3.4,z:r.z+r.nz*.6}:null;}},
+  /* Lv 60 (1차 직업): 기사단 본부의 기사단장에게서 2차 전직 */
+  khq60:{title:'기사단 본부 찾아가기',goal:'엑시즈 기사단 본부의 기사단장에게 말을 건다',npc:'khq_cmd'},
 };
-/* Lv 60 메인 퀘스트를 지금 상태에 맞춘다 (퀘스트 창을 그릴 때마다 부른다) */
-function mqAdvSync(){if(!mqAdvSync.ok||!P||!P.job||!JOBS[P.job])return;
-  const al=advLv(P.job),ok=!!JOBS[P.job].from&&al!=null&&P.lv>=al;
-  if(!ok){if(P.mq==='portal60'||P.mq==='messenger60')mqComplete(P.mq);}
-  else{if(P.mq&&P.mq!=='portal60'&&P.mq!=='messenger60')return;
+/* 전직 메인 퀘스트를 지금 상태에 맞춘다 (퀘스트 창을 그릴 때마다 부른다) */
+const canKhqAdv=()=>!!(P&&JOBS[P.job]&&JOBS[P.job].from&&(JOBS[P.job].adv||[]).length&&advLv(P.job)!=null&&P.lv>=advLv(P.job));
+function mqAdvSync(){if(!mqAdvSync.ok||!P||!P.job||!JOBS[P.job]||P.needBook)return;
+  if(P.mq==='turpin30')P.mq=null;   /* 없앤 퀘스트(옛 친구의 책으로 전직) */
+  const D=P.mqDone||{},met=!!D.messenger100;
+  /* 하레나 → 엑시즈 (Lv 30): 전달자를 만나기 전까지. 이미 전직한 옛 캐릭터도 이 길로 엑시즈에 간다 */
+  if(!met){
+    if(P.lv<30){if(P.mq==='portal60'||P.mq==='messenger60')mqComplete(P.mq);return;}
+    if(P.mq&&P.mq!=='portal60'&&P.mq!=='messenger60')return;
     const q=P.quest,sp=q&&q.special==='portal',g=P.got||{},want=sp||(!g.portalQ&&!g.wyvern)?'portal60':'messenger60';
     if(P.mq===want)return;
     if(P.mq==='portal60')mqComplete('portal60');
     if(P.mq!==want)mqStart(want);return;}
-  if(!P.mq&&P.lv>=60&&(JOBS[P.job].tier|0)>=2&&!(P.mqDone&&P.mqDone.messenger100))mqStart('messenger100');
-  else if(!P.mq&&P.mqDone&&P.mqDone.messenger100&&!P.mqDone.bucky100)mqStart('bucky100');   /* 전달자를 만난 뒤 → 버키 */
-  else if(!P.mq&&P.mqDone&&P.mqDone.bucky100&&!P.mqDone.home100){if(typeof myHomeAssign==='function')myHomeAssign();mqStart('home100');}}   /* 버키를 만난 뒤 → 새 집 */
+  if(P.mq==='portal60'||P.mq==='messenger60'){P.mq=null;}
+  if(P.mq)return;
+  if(!D.bucky100)mqStart('bucky100');   /* 전달자를 만난 뒤 → 버키 */
+  else if(!D.home100){if(typeof myHomeAssign==='function')myHomeAssign();mqStart('home100');}   /* 버키를 만난 뒤 → 새 집 */
+  else if(canKhqAdv()&&!D.khq60)mqStart('khq60');}   /* Lv 60 → 기사단 본부 */
+/* 전직한 뒤: 퀘스트로 전직했으면 그 사람이 마저 말한다 */
+function mqAfterAdv(){if(!P)return;const id=P.mq==='messenger60'?'messenger':P.mq==='khq60'?'khq_cmd':null;if(!id)return;
+  const n=NPCS.find(q=>q.id===id);if(!n)return;setTimeout(()=>{if(P&&mode==='world'&&(P.mq==='messenger60'||P.mq==='khq60'))openNpc(n);},450);}
+/* ---- 전달자 (Lv 30): 와이번을 넘어온 사람. 아직 기본 직업이면 첫 길을 고르게 하고, 계단을 열어 버키에게 보낸다 ---- */
+function mqMessenger30(n){n.mqLock=true;
+  const fin=()=>{n.mqLock=false;P.mqDone={...(P.mqDone||{}),messenger100:1};mqComplete('messenger60');mqStart('bucky100');};
+  if(!JOBS[P.job].from&&(JOBS[P.job].adv||[]).length){
+    showPages(['…왔군.','황야 끝을 넘어온 것만은 인정하지.','하지만 지금 모습 그대로는 위로 올려 보낼 수 없어.','네가 갈 길을 하나 정해.'],0,last=>renderNpc(last,box=>{box.dataset.noskip='1';
+      npcBtn(box,'길을 정한다',()=>{n.mqLock=false;closeNpc();openMentor();},'pri wide');npcBtn(box,'조금 더 생각해 본다',()=>{n.mqLock=false;closeNpc();},'wide');}));return;}
+  showPages([...(P._advJust?['좋아. 이제야 쓸 만해 보이는군.']:['…왔군.','황야 끝을 넘어온 것만은 인정하지.']),'계단은 열려 있어.','올라가서 길드홀의 버키를 찾아가.'],0,last=>{P._advJust=false;fin();npcEndLine(last);});}
+/* ---- 기사단장 레오폴드 (Lv 60): 엑시즈 기사단 본부에서 2차 전직 ---- */
+function mqKhq60(n){n.mqLock=true;
+  if(canKhqAdv()){
+    showPages(['네 이름은 이미 이 회당까지 들려왔다.','숲길과 골짜기를 지나온 자라면 기사단도 모른 척할 수 없지.','이제 네가 걸어갈 길을 하나 더 정할 때다.'],0,last=>renderNpc(last,box=>{box.dataset.noskip='1';
+      npcBtn(box,'길을 정한다',()=>{n.mqLock=false;closeNpc();openMentor();},'pri wide');npcBtn(box,'조금 더 생각해 본다',()=>{n.mqLock=false;closeNpc();},'wide');}));return;}
+  showPages(['훌륭하다. 기사단은 오늘을 기억할 거다.','서문 밖 추운 계곡 너머로 산길이 하나 나 있다. 허칠 산으로 오르는 길이지.','그 산은 지금의 너라면 버틸 수 있을 거다. 몸조심해라.'],0,last=>{n.mqLock=false;P._advJust=false;mqComplete('khq60');npcEndLine(last);});}
 /* 메인 퀘스트의 주요 인물: 머리 위에 큰 금빛 정팔면체가 천천히 돌며 떠 있다. 안개 속에서도 멀리서 보인다 */
 const QMARK={g:null,n:null};
 function qmarkMake(col=0xffd34a,edgeC=0x3a2608){const g=new THREE.Group();g.userData.noMap=1;
@@ -32083,8 +32128,7 @@ function mqStartFx(id,tries=0){const M=MAINQ[id];if(!M||!P||P.mq!==id)return;
   const sec=document.querySelector('#questHud .qsec.main');if(sec){sec.classList.remove('qnew');void sec.offsetWidth;sec.classList.add('qnew');setTimeout(()=>sec.classList.remove('qnew'),4200);}}
 function mqComplete(id){if(!P||P.mq!==id)return;P.mq=null;P.mqDone={...(P.mqDone||{}),[id]:1};log(`메인 퀘스트 완료: ${MAINQ[id].title}`,'sys');updateQuestHud();save();mqLevelCheck();}
 /* 기본 직업 Lv 30: 스승 대신 '튀르팽 찾아가기' */
-function mqLevelCheck(quiet){if(!P||P.needBook||P.mq)return;const al=advLv(P.job);
-  if(al==null||JOBS[P.job].from||P.lv<al)return;if(P.mqDone&&P.mqDone.turpin30)return;mqStart('turpin30',quiet);}
+function mqLevelCheck(quiet){}   /* 2026-11-10: 튀르팽의 옛 친구의 책(turpin30)은 없앴다. 전직 퀘스트는 mqAdvSync가 정한다 */
 /* ---- 카일: 처음 보는 얼굴 ---- */
 function mqKyle(n){n.mqLock=true;
   showPages(['처음 보는 얼굴이구나. 어디서 왔니?'],0,text=>renderNpc(text,box=>{box.dataset.noskip='1';
@@ -32117,7 +32161,7 @@ function openBook(id){const B=BOOKS[id];if(!B||!P)return;if(!$('#inv').hidden)cl
     const pg=dir=>e=>{if(e.target.closest('button'))return;if(bookCur&&bookCur.pop){bookCur.pop=false;bookRender();return;}bookTurn(dir);};
     el.querySelector('.bk-r').onclick=pg(1);el.querySelector('.bk-l').onclick=pg(-1);
     addEventListener('resize',()=>{if(bookCur&&!bookCur.anim){const w=bookWide();if(w!==bookCur.wide){bookCur.wide=w;bookCur.i=w?bookCur.i-bookCur.i%2:bookCur.i;bookRender();}}});}
-  const base=baseOf(P.job),canAdv=base===B.base&&!JOBS[P.job].from&&advLv(P.job)!=null&&P.lv>=advLv(P.job);
+  const canAdv=false;   /* 2026-11-10: 책으로 하는 전직은 없앴다 (옛 친구의 책은 읽기만) */
   bookCur={id,i:0,open:false,anim:false,wide:bookWide(),pick:JOBS[P.job].from&&baseOf(P.job)===B.base?jobChain(P.job)[1]:null,canAdv};
   mode='dialog';attackHeld=false;unlockPointer();syncLockTip();el.hidden=false;el.classList.remove('bk-closing');
   el.querySelector('.bk-ct').textContent=B.title||`${B.owner}의 책`;bookRender();}
@@ -32177,7 +32221,8 @@ addEventListener('keydown',e=>{const el=document.getElementById('bookWin');if(!e
 /* ---- NPC 연결: 카일(메인 퀘스트 대화), 광장의 튀르팽(Lv 30 퀘스트 동안은 집에 있다) ---- */
 (function(){const k=NPCS.find(n=>n.id==='kyle');if(k){const prev=k.onOpen;k.onOpen=()=>{if(P&&P.mq==='kyle1'){mqKyle(k);return true;}return prev?prev():false;};}
   const bk=NPCS.find(n=>n.id==='bucky');if(bk){const prev=bk.onOpen;bk.onOpen=()=>{if(P&&P.mq==='bucky100'){mqBucky100(bk);return true;}return prev?prev():false;};}
-  const ms=NPCS.find(n=>n.id==='messenger');if(ms){const prev=ms.onOpen;ms.onOpen=()=>{if(P&&P.mq==='messenger100'){mqMessenger100(ms);return true;}return prev?prev():false;};}
+  const ms=NPCS.find(n=>n.id==='messenger');if(ms){const prev=ms.onOpen;ms.onOpen=()=>{if(P&&P.mq==='messenger100'){mqMessenger100(ms);return true;}if(P&&P.mq==='messenger60'&&P.got&&P.got.wyvern){mqMessenger30(ms);return true;}return prev?prev():false;};}
+  const kc=NPCS.find(n=>n.id==='khq_cmd');if(kc){const prev=kc.onOpen;kc.onOpen=()=>{if(P&&P.mq==='khq60'){mqKhq60(kc);return true;}return prev?prev():false;};}
   const s=NPCS.find(n=>n.id==='sera');if(s){s.hideIf=()=>!!(P&&P.mq==='turpin30');const c=colliders.find(c=>c.npc&&c.x===s.x&&c.z===s.z);
     setInterval(()=>{if(c)c.r=s.hideIf()?0:.6;},500);}})();
 
@@ -32186,12 +32231,12 @@ addEventListener('keydown',e=>{const el=document.getElementById('bookWin');if(!e
    끝내고 보고하면 그 레벨 한 칸의 절반이 넘는 경험치를 준다. 한 번 끝낸 퀘스트는 다시 받을 수 없다.
    P.gq[id] = {s:단계, h:그 단계에서 한 수}, P.gqDone[id] = {n:끝낸 횟수, t:마지막으로 끝낸 때} */
 const GENQ={
-  farm1:{title:'밭일 돕기',npc:'farmer',minLv:60,maxLv:200,daily:1,where:'엑시즈 북쪽 농장',
+  farm1:{title:'밭일 돕기',npc:'farmer',minLv:30,maxLv:200,daily:1,where:'엑시즈 북쪽 농장',
     steps:[{key:'weed',need:6,goal:'밀밭의 잡초 뽑기',act:'잡초 뽑기',dur:1.5,fx:0x6a8a3a},
            {key:'water',need:4,goal:'마른 고랑에 물 주기',act:'물 주기',dur:1.7,fx:0x9ad7ff}],
     report:'베르타에게 돌아가기',exp:.6,gold:25},
   /* 가늘롱과 차 한잔: 날마다 다른 귀족들의 이야기(마르쿠스 왕국·엑시즈)를 듣고 대답한다. 대화 한 번으로 끝난다 */
-  ganel1:{title:'귀족들의 이야기',npc:'ganel',npcs:['ganel','ganel_walk'],minLv:60,maxLv:200,daily:1,where:'엑시즈 귀족 구역 · 가늘롱 저택',
+  ganel1:{title:'귀족들의 이야기',npc:'ganel',npcs:['ganel','ganel_walk'],minLv:30,maxLv:200,daily:1,where:'엑시즈 귀족 구역 · 가늘롱 저택',
     steps:[{key:'talk',talk:1,need:1,goal:'가늘롱의 이야기 듣기'}],report:'가늘롱에게 대답하기',exp:.4,gold:15,talk:(id,n)=>ganelTalkQ(id,n)},
 };
 const GQ={sp:{},mk:null,work:null,bar:null};
@@ -32394,7 +32439,7 @@ for(const k of ['ganel','ganel_walk','farmer']){const g=NPCS.find(n=>n.id===k);i
    세 번의 시험(사냥 → 벌꿀술을 사서 대장장이에게 → 가늘롱에게서 폭풍의 밤 이야기)을 넘기면 특수 스킬 연쇄번개를 가르쳐 준다.
    단계마다 S에게 돌아가 다음 지시를 받는다. 한 번만 할 수 있다.
    다른 NPC들은 S를 모른다 (그레고르·가늘롱도 S 이야기를 하지 않는다) */
-GENQ.lq={title:'S의 시험',npc:'lman',minLv:80,maxLv:999,where:'엑시즈 장인 지구 · 성벽 옆 골목',veil:1,reward:'특수 스킬 연쇄번개',
+GENQ.lq={title:'S의 시험',npc:'lman',minLv:45,maxLv:999,where:'엑시즈 장인 지구 · 성벽 옆 골목',veil:1,reward:'특수 스킬 연쇄번개',
   steps:[{key:'hunt',talk:1,need:20,goal:'성문 밖 짐승 처치'},{key:'b1',talk:1,need:1,one:1,goal:'S에게 돌아가기'},
     {key:'buy',talk:1,need:1,one:1,goal:'브람의 술집에서 벌꿀술 사기'},{key:'give',talk:1,need:1,one:1,goal:'대장장이 그레고르에게 벌꿀술 건네기'},
     {key:'b2',talk:1,need:1,one:1,goal:'S에게 돌아가기'},{key:'info',talk:1,need:1,one:1,goal:'가늘롱에게 폭풍의 밤 이야기 듣기'}],
@@ -32404,7 +32449,7 @@ const lqStep=()=>{const st=gqStepOf('lq');return st?st.key:(gqOf('lq')?'report':
 function lqNext(msg){const q=gqOf('lq');if(!q)return;q.s++;q.h=0;const st=gqStepOf('lq');
   if(st&&st.key==='buy'&&countOf('f_mead')>0){q.s++;}   /* 벌꿀술을 이미 갖고 있으면 바로 건네러 */
   const nx=gqStepOf('lq');const g=nx?nx.goal:GENQ.lq.report;if(msg!==false){log(`S의 시험 — ${g}`,'sys');toast(g);}updateQuestHud();save();if(!$('#qwin').hidden)renderQuestWin();}
-function lqKill(m){const q=gqOf('lq');if(!q||lqStep()!=='hunt'||!(m.lv>=60))return;q.h=(q.h|0)+1;const need=GENQ.lq.steps[q.s].need;
+function lqKill(m){const q=gqOf('lq');if(!q||lqStep()!=='hunt'||!(m.lv>=30))return;q.h=(q.h|0)+1;const need=GENQ.lq.steps[q.s].need;
   if(q.h>=need)lqNext();else{updateQuestHud();if(q.h%5===0)save();}}
 function lqTick(){if(lqStep()==='buy'&&countOf('f_mead')>0)lqNext();}
 /* S와 이야기: 단계마다 다른 말. 말은 짧고, 이름 말고는 아무것도 밝히지 않는다 */
