@@ -29386,11 +29386,11 @@ function renderQuestWin(){const body=$('#qwBody');body.innerHTML='';if(!P)return
       info:[['찾아갈 사람',np?qwWho(np):''],['곳',np?qwPlace(np.x,np.z):at?qwPlace(at.x,at.z):''],['길잡이',np||at?'지도(M)와 화면에 금빛 팔면체로 표시돼요':''],['지금까지',done?`메인 퀘스트 ${done}개 끝냄`:'']]}));n++;}
   /* 일반 · 일일 퀘스트 */
   if(typeof GENQ!=='undefined'&&P.gq)for(const id in P.gq){const G=GENQ[id];if(!G)continue;const q=P.gq[id],np=qwNpc(G.npc);
-    const steps=G.steps.map((st,i)=>i<q.s?{t:st.goal,n:st.one?'':`${st.need}/${st.need}`,st:'done'}:i===q.s?(st.one?{t:st.goal,st:'now'}:{t:st.goal,n:`${Math.min(q.h|0,st.need)}/${st.need}`,st:'now',p:(q.h|0)/st.need}):G.veil?{t:'???'}:{t:st.goal,n:`0/${st.need}`});
+    const steps=G.steps.map((st,i)=>i<q.s?{t:st.goal,n:st.one?'':`${st.need}/${st.need}`,st:'done'}:i===q.s?(st.one?{t:st.goal,st:'now'}:{t:st.goal,n:`${Math.min(q.h|0,st.need)}/${st.need}`,st:'now',p:(q.h|0)/st.need}):G.veil?{t:'???'}:st.one?{t:st.goal}:{t:st.goal,n:`0/${st.need}`});
     const fin=q.s>=G.steps.length;steps.push({t:G.veil&&!fin?'???':G.report,st:fin?'now':''});
     body.appendChild(qwCard(gqTag(id),'gen',G.title,{ok:fin?'보고만 남았어요':'',steps,
       info:[['맡긴 사람',qwWho(np)],['곳',G.where||(np?qwPlace(np.x,np.z):'')],['적정레벨',G.maxLv>=999?`Lv ${G.minLv}~`:`Lv ${G.minLv}~${G.maxLv}`],
-        ['보상',`${G.reward?G.reward+' · ':''}경험치 ${qwNum(needExp(P.lv)*G.exp)} · ${qwNum(P.lv*G.gold)} 골드`],['다시 하기',G.daily?'하루에 한 번 (자정이 지나면 다시)':'한 번만 할 수 있어요']]}));n++;}
+        ['보상',G.rewardLine?G.rewardLine():`${G.reward?G.reward+' · ':''}경험치 ${qwNum(needExp(P.lv)*G.exp)} · ${qwNum(P.lv*G.gold)} 골드`],['다시 하기',G.daily?'하루에 한 번 (자정이 지나면 다시)':'한 번만 할 수 있어요']]}));n++;}
   /* 게시판 의뢰 */
   const q=P.quest;
   if(q&&!(q.special&&P.mq==='portal60')){const fin=qDone(q),from=q.fromName||'의뢰인';let steps;
@@ -29564,7 +29564,7 @@ function killMonster(m,mine=true,partyN=1){
   if(m.D.dragon){dragonReward(m,partyN);return;}
   const exp=Math.max(1,Math.round(m.st.exp*gapExp(m.lv)));
   log(`${m.D.name} 처치 · EXP +${Math.round(exp*expMul())}${partyN>1?` (함께 ${partyN}명)`:''}`,'good');
-  dropLoot(m);questKill(m);if(typeof lqKill==='function')lqKill(m);
+  dropLoot(m);questKill(m);if(typeof lqKill==='function')lqKill(m);if(typeof hfKill==='function')hfKill(m);
   gainExp(exp);partyShareExp(exp);
 }
 function levelUpFx(lv,n=1){sfx('levelup');
@@ -33564,6 +33564,56 @@ function lqGanel(n){n.mqLock=true;
   {const u=Ln.mesh.userData;u.maxTurn=.4;u.markerY=1.75;if(u.marker)u.marker.position.y=1.75;}})();   /* 앉아 있어 말을 걸어도 몸은 조금만 돌리고, 머리 위 표시도 낮게 */
 for(const [k,f] of [['ex_smith',lqSmith],['ganel',lqGanel],['ganel_walk',lqGanel]]){const g=NPCS.find(n=>n.id===k);if(!g)continue;const prev=g.onOpen,want=k==='ex_smith'?'give':'info';
   g.onOpen=()=>{if(P&&lqStep()===want){f(g);return true;}return prev?prev():false;};}
+
+/* ---------- 한나의 식재료: 하레나 여관 주인 한나가 맡기는 세 단계 사냥 ----------
+   창고가 비어서 사막 짐승을 잡아 식재료를 모아 온다: 낙타(고기) → 모래 슬라임(국물 젤리) → 사막 거북(수프).
+   단계마다 한나에게 돌아가면 그 단계 보수를 주고 다음 재료를 알려 준다. 한 번만 할 수 있다.
+   보수는 같은 사냥터의 하레나 게시판 의뢰와 같은 셈 (경험치 = 몬스터 경험치×마리×1.4, 골드 = 레벨×마리×11) */
+const HFOOD=[{ty:'ogre',zone:'ruins',need:10,lv:10},{ty:'sandslime',zone:'wwest',need:12,lv:16},{ty:'nomad',zone:'wnorth',need:10,lv:26}];
+const hfPay=k=>{const H=HFOOD[k];return {exp:Math.round(OR.monStats(H.ty,H.lv).exp*H.need*1.4),gold:H.lv*H.need*11};};
+GENQ.hfood={title:'한나의 식재료',npc:'hanna',minLv:15,maxLv:999,where:'하레나 광장 · 한나의 여관 앞',
+  steps:[{key:'h0',talk:1,need:HFOOD[0].need,goal:'깊은 사막1의 낙타 잡기'},{key:'b1',talk:1,need:1,one:1,goal:'한나에게 낙타 고기 건네기'},
+    {key:'h1',talk:1,need:HFOOD[1].need,goal:'깊은 사막2의 모래 슬라임 잡기'},{key:'b2',talk:1,need:1,one:1,goal:'한나에게 슬라임 젤리 건네기'},
+    {key:'h2',talk:1,need:HFOOD[2].need,goal:'깊은 사막3의 사막 거북 잡기'}],
+  report:'한나에게 거북 고기 건네기',exp:0,gold:0,talk:(id,n)=>hfTalk(n),
+  rewardLine:()=>{const a=[0,1,2].map(hfPay);return `단계마다 경험치 ${a.map(p=>qwNum(p.exp)).join(' / ')} · 골드 ${a.map(p=>qwNum(p.gold)).join(' / ')} · 마지막에 양고기 스튜 3개`;},
+  markWho:id=>{const st=gqStepOf(id);return st&&(st.key==='b1'||st.key==='b2')?['hanna']:[];}};
+const hfStep=()=>{const st=gqStepOf('hfood');return st?st.key:(gqOf('hfood')?'report':null);};
+function hfNext(){const q=gqOf('hfood');if(!q)return;q.s++;q.h=0;const nx=gqStepOf('hfood'),g=nx?nx.goal:GENQ.hfood.report;
+  log(`한나의 식재료 — ${g}`,'sys');toast(g);updateQuestHud();save();if(!$('#qwin').hidden)renderQuestWin();}
+const HF_GOT=['낙타 고기','슬라임 젤리','거북 고기'];
+function hfKill(m){const st=hfStep();if(!st||st[0]!=='h')return;const k=+st[1],H=HFOOD[k];if(m.t!==H.ty)return;const q=gqOf('hfood');q.h=(q.h|0)+1;
+  log(`${HF_GOT[k]}를 챙겼다 (${Math.min(q.h,H.need)}/${H.need})`,'sys');
+  if(q.h>=H.need)hfNext();else{updateQuestHud();if(q.h%5===0)save();}}
+/* 단계 보수: 경험치·골드 (마지막엔 스튜도) */
+function hfReward(k){const p=hfPay(k);P.gold+=p.gold;const items=[];if(k===2&&addItem('f_stew',3,true))items.push(['f_stew',3]);
+  lootShow(null,p.gold,items);log(`한나의 식재료 ${k+1}단계 보수 · 경험치 ${p.exp.toLocaleString('ko-KR')} · ${p.gold.toLocaleString('ko-KR')} 골드`,'good');sfx('coin');gainExp(p.exp);updateHud();}
+function hfTalk(n){const st=hfStep(),G=GENQ.hfood;n.mqLock=true;const done=()=>{n.mqLock=false;};
+  if(gqClear('hfood')){done();renderNpc('창고가 꽉 차니 마음이 다 든든해요. 그때 정말 고마웠어요!');return;}
+  if(!st){if(P.lv<G.minLv){done();renderNpc('마음은 고마운데, 바깥 사막 짐승들이 만만치 않아요. 조금 더 단단해지면 그때 부탁할게요.');return;}
+    showPages(['아이고, 마침 잘 왔어요. 큰일 났어요…','석굴 쪽으로 가는 손님이 부쩍 늘어서 냄비를 온종일 끓였더니, 창고가 텅 비었지 뭐예요.','식재료 마차는 사막 짐승들 때문에 며칠째 오지도 않고요.'],0,()=>{
+      renderNpc('사막에 나가서 먹을 만한 짐승을 좀 잡아다 줄래요? 보수는 넉넉히 챙겨 드릴게요.',box=>{box.dataset.noskip='1';
+        npcBtn(box,'맡겨 주세요',()=>{(P.gq=P.gq||{}).hfood={s:0,h:0};done();updateQuestHud();save();log(`${gqTag('hfood')} 퀘스트: ${G.title} — ${G.steps[0].goal}`,'sys');
+          npcEndLine('고마워요! 먼저 고기부터요. 깊은 사막1에 낙타가 다녀요. 열 마리면 스튜 냄비를 며칠은 채울 수 있어요.');gqFx('hfood');},'pri wide');
+        npcBtn(box,'다음에요',()=>{done();renderNpc('그래요, 시간 날 때 꼭 들러 줘요.');},'wide');});});return;}
+  if(st[0]==='h'){const k=+st[1],q=gqOf('hfood'),left=HFOOD[k].need-(q.h|0);
+    renderNpc([`낙타 고기가 아직 ${left}마리 몫 모자라요. 깊은 사막1에 가면 낙타가 있어요.`,`모래 슬라임이 ${left}마리 더 필요해요. 깊은 사막2에서 말랑말랑 굴러다녀요.`,`사막 거북이 ${left}마리 남았어요. 깊은 사막3이에요. 등딱지 조심하고요!`][k],box=>{box.dataset.noskip='1';
+      npcBtn(box,'부탁 그만두기',()=>{delete P.gq.hfood;done();updateQuestHud();save();log(`${gqTag('hfood')} 퀘스트를 그만뒀다: ${G.title}`,'sys');renderNpc('괜찮아요, 무리하지 마세요. 냄비는 어떻게든 채워 볼게요.');},'wide');
+      npcBtn(box,'다녀올게요',()=>{done();closeNpc();},'pri wide');});return;}
+  if(st==='b1'){showPages(['어머, 이게 다 낙타 고기예요? 냄비가 웃겠네!','이걸로 스튜는 됐고… 그런데 국물을 걸쭉하게 할 게 없어요.','깊은 사막2의 모래 슬라임 알아요? 껍질 안쪽 젤리를 걸러 끓이면 묵처럼 굳어요. 우리 여관 국물 맛의 비밀이에요.'],0,()=>{
+      hfReward(0);done();hfNext();npcEndLine('이건 고기 값이에요. 슬라임은 열두 마리면 넉넉해요. 모래는 잘 털어 오고요!');});return;}
+  if(st==='b2'){showPages(['말랑말랑하네요! 오늘 밤 국물은 끝내주겠어요.','마지막으로 하나만 더 부탁할게요. 귀한 손님 상에 올릴 거요.','깊은 사막3의 사막 거북이요. 거북 수프는 하레나에서 우리 여관만 끓여요. 대신 등딱지가 돌처럼 단단하니 조심해요.'],0,()=>{
+      hfReward(1);done();hfNext();npcEndLine('이건 젤리 값이에요. 거북은 열 마리요. 힘들다 싶으면 꼭 돌아와요.');});return;}
+  if(st==='report'){showPages(['세상에, 거북을 열 마리나! 이제 창고가 꽉 찼어요.','덕분에 여관 문을 닫지 않아도 되겠어요. 손님들이 다들 좋아할 거예요.'],0,()=>{
+      delete P.gq.hfood;const d=(P.gqDone=P.gqDone||{}).hfood||{n:0};P.gqDone.hfood={n:(d.n|0)+1,t:Date.now()};
+      hfReward(2);log(`${gqTag('hfood')} 퀘스트 완료: ${G.title}`,'good');done();updateQuestHud();save();
+      npcEndLine('이건 보수, 그리고 갓 끓인 스튜예요. 길 떠날 때 챙겨 가요. 언제든 들러요, 수프는 늘 데워 둘게요!');});return;}
+  done();renderNpc(n.lines[(n.li|0)%n.lines.length]);}
+/* 한나: 받을 수 있을 때와 하는 동안만 '식재료 구하기'가 보이고, 재료를 건넬 때는 말을 걸면 바로 이야기한다 */
+{const h=NPCS.find(n=>n.id==='hanna');if(h){const prev=h.onOpen,A=['식재료 구하기','gq:hfood'];
+  h.onOpen=()=>{h.mqLock=false;const i=h.acts.indexOf(A),show=!!P&&!gqClear('hfood')&&(gqOf('hfood')||P.lv>=GENQ.hfood.minLv);
+    if(show&&i<0)h.acts.unshift(A);else if(!show&&i>=0)h.acts.splice(i,1);
+    const st=P&&hfStep();if(st==='b1'||st==='b2'||st==='report'){hfTalk(h);return true;}return prev?prev():false;};}}
 
 /* ---------- 조각가 지븐: 장인 지구 길모퉁이의 조각 공방 ----------
    buildArtisans가 석공 마당 한 자리를 비워 두고(EXM.zbn) 여기서 지븐의 공방을 짓는다.
