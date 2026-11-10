@@ -60,7 +60,7 @@ module.exports = [
 <tr><td><kbd>Ctrl</kbd></td><td>앉기</td></tr>
 <tr><td>마우스 왼쪽 클릭</td><td>기본 공격</td></tr>
 <tr><td>마우스 오른쪽 클릭, 휠 위·아래</td><td>스킬 1~3</td></tr>
-<tr><td><kbd>E</kbd> <kbd>R</kbd> <kbd>T</kbd></td><td>스킬 5~7</td></tr>
+<tr><td><kbd>E</kbd> <kbd>R</kbd> <kbd>T</kbd></td><td>스킬 4~6</td></tr>
 <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>물약 같은 아이템 쓰기</td></tr>
 <tr><td><kbd>F</kbd></td><td>말 걸기, 물건 줍기, 문 열기</td></tr>
 <tr><td><kbd>G</kbd></td><td>탈것 타기와 내리기</td></tr>
