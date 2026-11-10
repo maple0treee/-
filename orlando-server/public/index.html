@@ -26034,7 +26034,14 @@ addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#gwin')&&!$('#gwin').hidd
    때린 쪽이 피해를 계산해 1:1 메시지로 보내고, 맞은 쪽이 자기 방어·막기·보호막으로 받는다.
    HP가 바닥나면 쓰러지지 않고 1로 남으며 진다. 끝나면 둘 다 결투 전 HP로 돌아간다.
    메시지: xreq 신청 · xacc 수락 · xno 거절 · xhit 맞힘 · xhp 내 HP 알림 · xend 끝 */
-const DUEL_MUL=.5,DUEL_SEC=120,DUEL_FAR=60,DUEL_COUNT=6,DUEL_POT=2;   /* 투기장으로 옮겨 가는 동안을 기다렸다 센다 */
+const DUEL_MUL=.26,DUEL_SEC=120,DUEL_FAR=60,DUEL_COUNT=6,DUEL_POT=2;   /* 투기장으로 옮겨 가는 동안을 기다렸다 센다 */
+/* 결투 피해 (2026-11-11): 사냥 피해는 그대로 두고 결투에서만 따로 맞춘다.
+   - 방어는 맞는 사람 레벨의 보통 방어력(DUEL_DEF)을 기준으로 비율로 줄인다 → 그 레벨 보통 방어면 절반
+   - 같은 레벨 보통 장비끼리 평타 한 대 ≈ 상대 최대 HP의 2.5% (레벨이 달라도 비슷하게)
+   - 한 대가 최대 HP의 8%를 넘으면 넘는 만큼은 40%만, 한 대에 20%를 넘지 못한다 (큰 스킬·연계 한 방에 끝나지 않게) */
+const DUEL_DEF=[[1,7],[5,18],[10,40],[20,70],[30,112],[45,145],[60,195],[80,250],[100,315],[130,360],[165,410],[200,460]],DUEL_SOFT=.08,DUEL_CAP=.2;
+function duelDefK(L){const T=DUEL_DEF;if(L<=T[0][0])return T[0][1];for(let i=1;i<T.length;i++)if(L<=T[i][0]){const [a,va]=T[i-1],[b,vb]=T[i];return va+(vb-va)*(L-a)/(b-a);}return T[T.length-1][1];}
+function duelTaken(v){const df=P.def*buffV('def'),K=duelDefK(P.lv);let f=v*K/(K+df)/P.maxhp;if(f>DUEL_SOFT)f=DUEL_SOFT+(f-DUEL_SOFT)*.4;return Math.max(1,Math.round(Math.min(DUEL_CAP,f)*P.maxhp));}
 let DUEL=null;
 function duelRequest(peer){const o=others.get(peer);if(!o)return;if(DUEL&&DUEL.state!=='ask'){toast('이미 결투 중이다');return;}
   DUEL={peer,name:o.name,state:'ask',t:tAll};dm(peer,{k:'xreq'});log(`${o.name}님에게 결투를 신청했다`,'sys');}
@@ -26047,8 +26054,8 @@ function onDuelDm(from,name,d){
     case 'xacc':if(DUEL&&DUEL.peer===from&&DUEL.state==='ask')duelStart(from,true);return;
     case 'xno':if(DUEL&&DUEL.peer===from&&DUEL.state==='ask')DUEL=null;toast(`${name}: ${typeof d.why==='string'?d.why.slice(0,40):'거절'}`);log(`${name}님이 결투를 받지 않았다`,'bad');return;
     case 'xhit':{if(!DUEL||DUEL.peer!==from||DUEL.state!=='on')return;const v=Math.max(1,Math.min(99999,Math.round(+d.d||0)));
-      /* 결투에서는 방어를 비율로 (몬스터처럼 빼면 낮은 레벨끼리는 1씩만 들어간다) */
-      const df=P.def*buffV('def');damagePlayer(v*60/(60+df)+df*.6,DUEL.src);duelFlash('hurt');{const q=player.position;VFX.burst(new THREE.Vector3(q.x,q.y+1.1,q.z),0xff4a3a,d.c?22:12,d.c?5:3.5,.4,{mix:0xffd0c0});VFX.shock(q,0xff5040,1.4,.3);shakeT=Math.max(shakeT,d.c?.22:.12);}if(DUEL&&DUEL.state==='on')dm(from,{k:'xhp',h:Math.max(0,P.hp)/P.maxhp});duelHud();return;}
+      /* 결투에서는 방어를 비율로 (몬스터처럼 빼면 낮은 레벨끼리는 1씩만 들어간다) — duelTaken, damagePlayer는 방어를 다시 빼지 않는다 */
+      damagePlayer(duelTaken(v),DUEL.src,null,true);duelFlash('hurt');{const q=player.position;VFX.burst(new THREE.Vector3(q.x,q.y+1.1,q.z),0xff4a3a,d.c?22:12,d.c?5:3.5,.4,{mix:0xffd0c0});VFX.shock(q,0xff5040,1.4,.3);shakeT=Math.max(shakeT,d.c?.22:.12);}if(DUEL&&DUEL.state==='on')dm(from,{k:'xhp',h:Math.max(0,P.hp)/P.maxhp});duelHud();return;}
     case 'xhp':if(DUEL&&DUEL.peer===from){DUEL.oppH=Math.max(0,Math.min(1,+d.h||0));duelHud();}return;
     case 'xend':if(DUEL&&DUEL.peer===from)duelEnd(d.r==='win'?'win':d.r==='lose'?'lose':'draw',typeof d.why==='string'?d.why.slice(0,30):'',true);return;
   }}
@@ -30955,7 +30962,7 @@ function toggleView(){cam.third=!cam.third;toast(cam.third?'3인칭 시점':'1�
 
 $('#mnInv').onclick=()=>{$('#menu').hidden=true;mode='world';openInv();};
 
-function damagePlayer(d,src,mon){
+function damagePlayer(d,src,mon,raw){   /* raw: 이미 방어를 반영한 피해 (결투) */
   if(invuln>0||(mode!=='world'&&mode!=='dialog')||!P||P.hp<=0||!$('#dead').hidden)return;   /* 메뉴·소지품 창을 열어도 몬스터에게 맞는다 */
   P.hurtAt=tAll;
   if(P.fly&&Math.random()<.35)P.flyFall=true;   /* 비행 중 맞으면 떨어질 수 있다 */
@@ -30968,7 +30975,7 @@ function damagePlayer(d,src,mon){
     else floatText('막음!',innerWidth/2+rnd(-30,30),innerHeight*.6,'heal');
     sfx('block');{const q=player.position;VFX.burst(new THREE.Vector3(q.x,q.y+1.2,q.z),0xbfe3ff,14,3,.35,{mix:0xffffff});}return;}
   if(P.pushPrep)d*=.5;
-  d=Math.max(1,Math.round(d-P.def*buffV('def')*.6));
+  d=Math.max(1,Math.round(raw?d:d-P.def*buffV('def')*.6));
   {const B=P.buffs.mshield;if(B&&B.v>0){const a=Math.min(d,B.v);B.v-=a;d-=a;const q=player.position;VFX.burst(new THREE.Vector3(q.x,q.y+1.1,q.z),0x9fd0ff,10,2.4,.3,{mix:0xffffff});
     if(B.v<=0)delete P.buffs.mshield;if(d<=0){floatText('보호막',innerWidth/2+rnd(-30,30),innerHeight*.6,'heal');sfx('block',null,.6,1.3);updateHud();return;}}}   /* 방출하기의 보호막이 먼저 받아낸다 */
   if(typeof duelLethal==='function'&&duelLethal(d,src))return;   /* 결투에서는 쓰러지지 않고 진다 */
