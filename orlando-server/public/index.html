@@ -24548,7 +24548,22 @@ await BOOT.y();(function buildHInn(){
     sitN(OUT.c_knight||OUT.c_old_knight,'sitb',-4.75,FZ);
     N(OUT.c_hunter,'sitdrink',CXc-1.05,CZ0+.7+1.6,.03,PI/2,1);
     /* 자는 종자: 가운데 칸 동쪽 침대 이불 위에 반듯이 누워 낮잠 */
-    {const bx=1.15,bz=-HD+1.5;take(bx,bz,1);const g=N(OUT.c_squire||OUT.c_youth,'sleep',bx,bz+.95,.79,0,0);if(g){g.rotation.set(-PI/2,0,0,'YXZ');g.scale.setScalar(.9);HINN_ST.sleeper=g;}}
+    /* 자는 종자: 요 위에 등을 대고 눕히고(머리는 베개 위로 살짝 들림), 가슴 아래로 이불을 덮는다.
+       이불은 몸 모양대로 불룩한 천 한 장(가장자리는 침대 옆과 발치로 늘어짐)과 가슴께 접어 내린 단 */
+    {const bx=1.15,bz=-HD+1.5;take(bx,bz,1);const g=N(OUT.c_squire||OUT.c_youth,'sleep',bx,bz+.86,.79,0,0);
+      if(g){g.rotation.set(-PI/2+.09,0,0,'YXZ');g.scale.set(.8,.8,.68);g.updateMatrixWorld(true);
+        const bb=new THREE.Box3().setFromObject(g);g.position.y+=.535-bb.min.y;g.updateMatrixWorld(true);bb.setFromObject(g);HINN_ST.sleeper=g;
+        const z0=bb.min.z-Z+.47,z1=bz+.9,hw=.55,dr=.3,base=.625,L=z1-z0;
+        const hump=(x,v)=>{const k=Math.min(1,Math.max(0,(v-.4)/.16)),ch=(v<.86?.25-.12*k:.13+(v-.86)/.14*.07)*(.82+.18*Math.min(1,v/.1)),w=.33-.11*k,a=Math.abs(x);return ch*(a<w?1:Math.exp(-(((a-w)/.11)**2)));};
+        /* 천 한 장: za~zb 띠를 몸 모양대로. 바깥으로 나가면 침대 옆·발치로 늘어진다 */
+        const sheet=(za,zb,lift,col,NX,NZ)=>{const Lb=zb-za,pos=[],idx=[];for(let j=0;j<=NZ;j++)for(let i=0;i<=NX;i++){const u=i/NX*2-1,v=j/NZ,ex=Math.abs(u)*(hw+dr);
+            const hx=hw+lift*.8;let x=Math.sign(u)*Math.min(ex,hx),z=za+v*(Lb+(zb>=z1?dr:0)),y=base;if(ex>hw)y=base-(ex-hw);if(z>z1){y-=z-z1;z=z1+lift*.8;}
+            if(ex<=hw&&z<z1)y+=hump(x,(z-z0)/L);y+=lift+(lift?0:Math.sin(u*9+z*5)*.006);pos.push(X+bx+x,y,Z+z);}
+          for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){const a=j*(NX+1)+i,b=a+1,c=a+NX+1,d=c+1;idx.push(a,c,b,b,c,d);}
+          const cg=new THREE.BufferGeometry();cg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));cg.setIndex(idx);cg.computeVertexNormals();
+          const cm=FMK(col).clone();cm.side=THREE.DoubleSide;const m=new THREE.Mesh(cg,cm);m.castShadow=true;m.receiveShadow=true;G.add(m);return m;};
+        const cloth=sheet(z0,z1,0,'c3a4a6a',26,34),fold=sheet(z0-.03,z0+.2,.022,'cd4ae63',26,4);
+        HINN_ST.quilt={cloth,fold};}}
     /* 식탁 위: 잔과 접시, 기대 둔 활과 칼 */
     {const p=piece(-2.3,.76,.9,0);p.l([[.001,0],[.16,.005],[.18,.03],[.001,.025]],'CLAY',.2,0,-.25,16);p.s(.06,'c8a5a32',.2,.05,-.25,1,.6,1);p.l([[.001,0],[.16,.005],[.18,.03],[.001,.025]],'CLAY',-.25,0,.3,16);
       const q=piece(-1.3,0,.2,-.4);q.t(.8,.016,'WD2',-.62,.67,0,0,0,-.95,1.9);q.c(.004,.004,1.3,'cf0e8d8',-.15,.67,0,4);q.c(.022,.022,.14,'LEATH',.18,.67,0,6);   /* 의자 옆에 세워 둔 활 */
@@ -24572,7 +24587,7 @@ function hinnTick(t){if(!player||!HINN_ST.group)return;const inH=OR.inHInn(playe
   if(HINN_ST.group.visible!==inH)HINN_ST.group.visible=inH;
   if(inH&&HINN_ST.fire)HINN_ST.fire.intensity=1.35+Math.sin(t*9.3)*.12+Math.sin(t*23.1)*.08;
   if(HINN_ST.npcs){if(HINN_ST.inH!==inH){HINN_ST.inH=inH;for(const n of HINN_ST.npcs)n.g.visible=inH;}
-    if(inH){for(const n of HINN_ST.npcs)if(n.pose!=='sleep')stickNpcPose(n.g,n.pose,t+n.ph);const g=HINN_ST.sleeper;if(g)g.scale.set(.9,.9,.9*(1+Math.sin(t*1.4)*.012));}}}   /* 자는 사람은 숨 쉬듯 가슴만 조금 */
+    if(inH){for(const n of HINN_ST.npcs)if(n.pose!=='sleep')stickNpcPose(n.g,n.pose,t+n.ph);const g=HINN_ST.sleeper,b=Math.sin(t*1.4);if(g)g.scale.set(.8,.8,.68*(1+b*.014));const q=HINN_ST.quilt;if(q){q.cloth.scale.y=q.fold.scale.y=1+b*.008;}}}}   /* 자는 사람은 숨 쉬듯 가슴만 조금 */
 /* 한나의 여관 평면도 (미니맵·큰 지도 공용) */
 function drawHInnPlan(c,X,Z,sc){const T=OR.HINN,R=(x0,z0,x1,z1,col)=>{c.fillStyle=col;c.fillRect(X(T.x+x0),Z(T.z+z0),(x1-x0)*sc,(z1-z0)*sc);};
   c.fillStyle='#211b14';c.fillRect(-9999,-9999,99999,99999);
