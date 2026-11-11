@@ -12775,15 +12775,15 @@ function makeNpcStick(o){const G0=o.gear,g=makeStickPlayer('warrior',G0?{helm:G0
   if(o.ruff){const rm=hm(o.ruff),U=u.stick&&u.stick.upper;if(U)for(let k=0;k<14;k++){const a=k/14*Math.PI*2,f=new THREE.Mesh(new THREE.SphereGeometry(.05,6,5),rm);f.scale.set(1,.55,1);f.position.set(Math.sin(a)*.13,.7,Math.cos(a)*.11);U.add(f);}}   /* 목에 두른 흰 주름 깃 */
   if(o.small)g.scale.setScalar(.7);
   const mk=new THREE.Mesh(new THREE.OctahedronGeometry(.16,0),mat(0xf0c95f,{emissive:0xb08a20,emissiveIntensity:.8}));mk.position.y=(o.small?2.2:2.6)/(o.small?.7:1);mk.userData.marker=true;g.add(mk);u.marker=mk;
-  const hq=NPC_HQ&&!!o.fine&&!o.lhelm&&!o.cit;   /* 주민(cit)은 미리 구운 모양을 쓰므로 아직 예전 몸 */
+  const cm=o.cit?CIT_HQ:null,hq=NPC_HQ&&!!o.fine&&!o.lhelm&&cm!=='old';   /* 주민(cit): 'skel' 구운 모양을 입힐 뼈대만(새 옷은 짓지 않음), 'full' 굽는 도구, 'old' 예전 몸 (아직 안 받았을 때) */
   if(o.cloth||(typeof NPC_CLOTHES!=='undefined'&&NPC_CLOTHES))npcClothes(g,o,hq);
   if(o.gear)npcGearOn(g,o);
-  if(o.fine){npcFine(g,o,hq);if(hq)npcBodyHQ(g,o);npcRoundBoxes(g);if(!o.lhelm)npcSculptMerge(g,o);npcFineMerge(g);}
+  if(o.fine){npcFine(g,o,hq);if(hq&&cm!=='skel')npcBodyHQ(g,o);npcRoundBoxes(g);if(!o.lhelm)npcSculptMerge(g,o);npcFineMerge(g);}
   if(o.lhelm)lDress(g,o);
   if(o.rhood)rDress(g,o);
   g.traverse(m=>{if(m.isMesh)m.castShadow=true;});u.ph=Math.random()*6;return g;}
 /* 이름 있는 NPC 몸을 천 옷으로 새로 짓는다 (얼굴·머리카락·모자·소품은 그대로). 끄면 예전 막대+도형 몸 */
-const NPC_HQ=true;
+const NPC_HQ=true;var CIT_HQ='old';
 /* 바지·신발·소매 색: npcClothes와 같은 고르기 (o.cloth가 없으면 예전에도 치마·긴 옷이 없었다) */
 function npcClothInfo(o){const C=o.cloth||{},on=!!(o.cloth||(typeof NPC_CLOTHES!=='undefined'&&NPC_CLOTHES));
   const h=(()=>{let v=0;const k=String(o.robe)+String(o.hatC)+String(o.robe2);for(let i=0;i<k.length;i++)v=(v*31+k.charCodeAt(i))>>>0;return v;})(),pick=(a,s)=>a[(h>>>s)%a.length];
@@ -12799,7 +12799,7 @@ function npcBodyHQ(g,o){const S=g.userData.stick;if(!S)return;const F=o.fine||{}
     apron:I.on?(C.apron??null):null,apronP:!!CL.apronPockets,cape:I.on?(C.cape??null):null,capeTrim:C.capeTrim};
   const old=new Set();g.traverse(q=>old.add(q));
   const G0=o.gear||{};stickLook(g,ap,{npc:N,armor:G0.armor??-1,boots:G0.boots??-1,helm:G0.helm??-1});
-  g.traverse(q=>{if(q.isMesh&&!old.has(q))q.userData.noSculpt=1;});S.L.foot.traverse(q=>{if(q.isMesh)q.userData.noSculpt=1;});S.R.foot.traverse(q=>{if(q.isMesh)q.userData.noSculpt=1;});   /* 새로 지은 천 옷은 빚기(npcSculptMerge)에서 뺀다 */
+  g.traverse(q=>{if(!old.has(q)){q.userData.hqp=1;if(q.isMesh)q.userData.noSculpt=1;}});S.L.foot.traverse(q=>{if(q.isMesh)q.userData.noSculpt=1;});S.R.foot.traverse(q=>{if(q.isMesh)q.userData.noSculpt=1;});   /* 새로 지은 천 옷은 빚기(npcSculptMerge)에서 뺀다 */
   g.userData.hq=1;}
 /* 치마·긴 옷 (천 결·세로 주름 그늘이 있는 판): clothBell과 같은 모양·자리 */
 function npcBellGeo(rt,rb,len,n,fold,t0,t1,dr,seg,ph0=0,phL=Math.PI*2){const key=[rt,rb,len,n,fold,t0,t1,dr,seg,ph0,phL].join(',');const C=npcBellGeo.c||(npcBellGeo.c={});if(C[key])return C[key];
@@ -13085,7 +13085,7 @@ function npcFine(g,o,hq){const S=g.userData.stick,F=o.fine;if(!S||!F)return;cons
   if(F.props)for(const k of F.props)npcProp(S,k,(c,x)=>m(c,x));
 }
 /* 정교한 NPC는 조각이 많아서, 같은 마디에 붙은 같은 재질 조각을 한 덩어리로 합쳐 그리는 횟수를 줄인다 (움직이는 마디·이름 붙은 조각은 그대로) */
-function npcFineMerge(g){const S=g.userData.stick;if(!S)return;const keep=new Set([g.userData.marker]);for(const v of Object.values(S))if(v&&v.isObject3D)keep.add(v);
+function npcFineMerge(g){const S=g.userData.stick;if(!S)return;const keep=new Set([g.userData.marker]);for(const v of Object.values(S)){if(v&&v.isObject3D)keep.add(v);else if(v&&typeof v==='object'&&!Array.isArray(v))for(const w of Object.values(v))if(w&&w.isObject3D)keep.add(w);}   /* 팔다리 마디(발·손)도 합치지 않는다 */
   const key=m=>[m.color.getHex(),m.emissive?m.emissive.getHex():0,m.emissiveIntensity,m.metalness,m.roughness,m.transparent,m.opacity,m.side,m.flatShading].join(',');
   const groups=[];g.traverse(o=>{if(o.children&&o.children.length>1)groups.push(o);});
   for(const G of groups){const by=new Map();for(const c of G.children){if(!c.isMesh||c.isSkinnedMesh||c.userData.gear||c.children.length||keep.has(c)||!c.visible||!c.material||c.material.map||Array.isArray(c.material))continue;const k=key(c.material);(by.get(k)||by.set(k,[]).get(k)).push(c);}
@@ -15623,8 +15623,8 @@ async function buildMarcus(H){
       /* 보이지 않는 벽: 길과 그 둘레를 가로질러 */
       for(let k=-12;k<=12;k++){const q=F.W(k*.9,0);colliders.push({x:q.x,z:q.z,r:.62,wallg:1});}
       const W0=F.W(0,0);WALLG.at.push({x:W0.x,z:W0.z,ux,uz,name:g.name});
-      const gl=CIT_OUTFIT.c_guard,look={...gl,cloth:{...(gl.cloth||{}),prop:'spear'}};
-      for(const [lx,lz,pose] of [[-1.9,-.9,'guard'],[1.9,-.9,'guard'],[6,-6,'hips']]){const o=typeof npcMaybeGear==='function'?npcMaybeGear(look,1,4,7,['warrior','swordsman']):look,n=makeNpcStick(o),u=n.userData;if(u.marker){n.remove(u.marker);u.marker=null;}if(typeof stickSlim==='function')stickSlim(n);
+      const gl=CIT_OUTFIT.c_guard,look={...gl,fine:{body:CIT_FINE.c_guard.body,cl:CIT_FINE.c_guard.cl},cloth:{...(gl.cloth||{}),prop:'spear'}};   /* 몸만 새 천 옷 (얼굴은 예전 그대로라 빚지 않는다) */
+      for(const [lx,lz,pose] of [[-1.9,-.9,'guard'],[1.9,-.9,'guard'],[6,-6,'hips']]){const o=typeof npcMaybeGear==='function'?npcMaybeGear(look,1,4,7,['warrior','swordsman']):look,n=npcNoSculpt(()=>makeNpcStick(o)),u=n.userData;if(u.marker){n.remove(u.marker);u.marker=null;}if(typeof stickSlim==='function')stickSlim(n);
         const q=F.W(lx,lz);n.position.set(q.x,heightAt(q.x,q.z),q.z);n.rotation.y=ry+PI;n.visible=false;scene.add(n);const it={g:n,pose,ph:Math.random()*9,gate:g.name};WALLG.g.push(it);
         if(typeof chatterAdd==='function')chatterAdd({kind:'wallguard',name:pose==='hips'?'경비대장':'성문 경비병',pos:()=>n.position,visible:()=>n.visible,look:o,pose,seed:WALLG.g.length*37+g.name.charCodeAt(0)});}}}
   /* ===== 등불 ===== */
@@ -16262,8 +16262,8 @@ async function buildMarcus(H){
       for(const sd of [-1,1]){F.P(CYL(.03,.035,6),sd*.125,1.5,0,1,3.75,1,DARKW,{rz:sd*A});const hx=-sd*1.0,hy=3.0;F.P(CONE(4),hx-sd*.12,hy+.25,0,.06,.5,.06,0xc8ccd4,{rz:sd*A});F.P(BOX,hx+sd*.02,hy-.12,0,.36,.3,.03,0xc8ccd4,{rz:sd*A});F.P(BOX,hx-sd*.24,hy-.2,0,.16,.08,.03,0xc8ccd4,{rz:sd*A});
         F.P(BOX,hx+sd*.08,hy-.55,0,.06,.4,.06,0x8a1822,{rz:sd*A});}
       for(let k=-5;k<=5;k++)colliders.push({x:nx+k*.95,z:gz,r:.62});
-      const kl=CIT_OUTFIT.c_knight,look={...kl,cloth:{...(kl.cloth||{}),prop:'spear'}};
-      for(const [lx,ry] of [[-1.75,0],[1.75,0],[-4.3,0],[4.3,0]]){const g=makeNpcStick(typeof npcMaybeGear==='function'?npcMaybeGear(look,1,5,8,['warrior','swordsman']):look);const u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}if(typeof stickSlim==='function')stickSlim(g);
+      const kl=CIT_OUTFIT.c_knight,look={...kl,fine:{body:CIT_FINE.c_knight.body,cl:CIT_FINE.c_knight.cl},cloth:{...(kl.cloth||{}),prop:'spear'}};
+      for(const [lx,ry] of [[-1.75,0],[1.75,0],[-4.3,0],[4.3,0]]){const g=npcNoSculpt(()=>makeNpcStick(typeof npcMaybeGear==='function'?npcMaybeGear(look,1,5,8,['warrior','swordsman']):look));const u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}if(typeof stickSlim==='function')stickSlim(g);
         g.position.set(nx+lx,y0,gz+.35);g.rotation.y=ry;g.visible=false;scene.add(g);KHQ.gate.push({g,pose:'guard',ph:Math.random()*9});if(typeof chatterAdd==='function')chatterAdd({kind:'gateknight',pos:()=>g.position,visible:()=>g.visible,look,pose:'guard'});}}
     block(x0,z0,x0+W,iz0);                                  /* 북쪽 날개 */
     block(x0,iz0+id,nx-PW,z0+D);block(nx+PW,iz0+id,x0+W,z0+D);{const F=frame(nx,(iz0+id+z0+D)/2,0,y0);F.P(BOX,0,(HT+9)/2,0,PW*2,HT-9,z0+D-iz0-id,PIETRA);F.P(BOX,0,9.6,(z0+D-iz0-id)/2,PW*2+1.4,1.2,.6,PIETRA2);for(let q=0;q<9;q++)F.P(BOX,-4+q,8.6,(z0+D-iz0-id)/2,.12,1.2,.12,IRON);}
@@ -17039,34 +17039,59 @@ function citStickMake(type){const id=CITM.ids[type]||'c'+type;citSculptLoad(id,1
 /* ---------- 빚은 주민 (주요 NPC처럼 한 덩어리로 매끈하게 빚은 모양) ----------
    빚기는 한 사람에 몇 초씩 걸리고 면이 수십만 개라, tools/citbake-stick.js 로 미리 빚고 면을 줄여 citbake/s_<id>.json 에 구워 둔다.
    게임에서는 같은 차림의 막대 인형(뼈대)만 만들고, 구운 모양을 그 뼈대에 입힌다. 받기 전에는 빚지 않은 모양으로 보이다가 받으면 바꿔 입는다. */
-const CITS={ver:'1',geo:{},req:{},q:[],busy:0};
+const CITS={ver:'2',geo:{},req:{},q:[],busy:0};
 function npcNoSculpt(f){const W0=NSM.w;NSM.w=false;try{return f();}finally{NSM.w=W0;}}   /* 일꾼에게 빚기를 맡기지 않는다 (구운 모양을 쓸 사람) */
-/* 뼈 목록과 이름표: stickSkin과 같은 규칙(무리·자식 있는 조각)으로 고르고, 이름 붙은 마디는 이름으로, 나머지는 부모 이름+자리로 부른다. 굽는 도구도 이걸 쓴다 */
+/* 뼈 목록과 이름표: 무리·이름 있는 마디·자식 있는 조각(새 천 옷 자식은 빼고 셈)으로 고르고, 이름 붙은 마디는 이름으로, 나머지는 부모 이름+자리로 부른다. 굽는 도구도 이걸 쓴다 */
 function citBoneSigs(g){const u=g.userData,refs=new Map();const walk=(o,p,d)=>{for(const k in o){const v=o[k];if(v&&v.isObject3D){if(!refs.has(v))refs.set(v,p+k);}else if(v&&typeof v==='object'&&!Array.isArray(v)&&d<2&&!v.isMaterial&&!v.isColor&&!v.isBufferGeometry)walk(v,p+k+'.',d+1);}};
   walk(u.stick||{},'S.',0);if(u.cloth)walk(u.cloth,'C.',1);
-  const bones=[],sig=[],seen=new Map();const rec=(o,ps)=>{if(o.userData&&o.userData.nsmOld)return;let s=ps;
-    if(o===g||!o.isMesh||o.children.length){s=o===g?'root':refs.get(o)||(ps+'/'+(o.isMesh?'m':'g')+o.position.toArray().map(v=>v.toFixed(3)).join(','));const n=seen.get(s)||0;seen.set(s,n+1);if(n)s+='#'+n;bones.push(o);sig.push(s);}
+  const bones=[],sig=[],seen=new Map();const rec=(o,ps)=>{if(o.userData&&(o.userData.nsmOld||o.userData.hqp))return;   /* 새 천 옷(hqp)은 뼈가 아니다: 구운 모양을 입힐 뼈대는 옷 없이 만든다 */
+    let s=ps;
+    if(o===g||!o.isMesh||refs.has(o)||o.children.some(c=>!(c.userData&&c.userData.hqp))){s=o===g?'root':refs.get(o)||(ps+'/'+(o.isMesh?'m':'g')+o.position.toArray().map(v=>v.toFixed(3)).join(','));const n=seen.get(s)||0;seen.set(s,n+1);if(n)s+='#'+n;bones.push(o);sig.push(s);}
     for(const c of o.children)rec(c,s);};rec(g,'');return {bones,sig};}
 function citSculptDecode(r){const ab=s=>{const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u.buffer;};
-  const n=r.nv,qP=new Uint16Array(ab(r.P)),qN=new Int8Array(ab(r.N)),qC=new Uint8Array(ab(r.C)),qB=new Uint8Array(ab(r.B)),I=r.i32?new Uint32Array(ab(r.I)):new Uint16Array(ab(r.I));
+  const n=r.nv,v2=r.v===2,qP=new Uint16Array(ab(r.P)),qN=new Int8Array(ab(r.N)),qC=new Uint8Array(ab(r.C)),qB=new Uint8Array(ab(r.B)),I=r.i32?new Uint32Array(ab(r.I)):new Uint16Array(ab(r.I));
+  const qW=v2?new Uint8Array(ab(r.W)):null,qU=v2?new Int16Array(ab(r.U)):null,qT=v2?new Uint8Array(ab(r.T)):null;
   const P=new Float32Array(n*3),N=new Float32Array(n*3),C=new Float32Array(n*3),SI=new Uint16Array(n*4),SW=new Float32Array(n*4),lin=new Float32Array(256);
   for(let i=0;i<256;i++){const s=i/255;lin[i]=s<=.04045?s/12.92:Math.pow((s+.055)/1.055,2.4);}   /* 색은 sRGB로 담아 왔다 */
-  for(let i=0;i<n;i++){for(let a=0;a<3;a++){const k=i*3+a;P[k]=r.lo[a]+qP[k]/65535*(r.hi[a]-r.lo[a]);N[k]=qN[k]/127;C[k]=lin[qC[k]];}SI[i*4]=qB[i];SW[i*4]=1;}
+  for(let i=0;i<n;i++){for(let a=0;a<3;a++){const k=i*3+a;P[k]=r.lo[a]+qP[k]/65535*(r.hi[a]-r.lo[a]);N[k]=qN[k]/127;C[k]=lin[qC[k]];}
+    if(v2){const w=qW[i]/255;SI[i*4]=qB[i*2];SI[i*4+1]=qB[i*2+1];SW[i*4]=1-w;SW[i*4+1]=w;}else{SI[i*4]=qB[i];SW[i*4]=1;}}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(P,3));g.setAttribute('normal',new THREE.BufferAttribute(N,3));g.setAttribute('color',new THREE.BufferAttribute(C,3));
-  if(qS){g.setAttribute('skinIndex',new THREE.BufferAttribute(SI,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(SW,4));}g.setIndex(new THREE.BufferAttribute(I,1));g.computeBoundingSphere();g.boundingSphere.radius+=1.2;return g;}
+  g.setAttribute('skinIndex',new THREE.BufferAttribute(SI,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(SW,4));
+  if(v2){const U=new Float32Array(n*2);for(let i=0;i<n*2;i++)U[i]=qU[i]/256;g.setAttribute('uv',new THREE.BufferAttribute(U,2));g.setAttribute('ctile',new THREE.BufferAttribute(Float32Array.from(qT),1));}
+  g.setIndex(new THREE.BufferAttribute(I,1));g.computeBoundingSphere();g.boundingSphere.radius+=1.2;return g;}
+/* 새 천 옷을 입은 주민의 한 덩어리 재질: 천 결 넷(평직·굵은 천·가죽·수놓은 띠)을 한 장에 모으고 꼭짓점마다 어느 결인지(ctile) 골라 쓴다.
+   ctile 0~3 결, 4 쇠붙이, 255 결 없음(살·머리·빚은 몸). 사람 하나를 그리기 한 번으로 그대로 그린다 */
+const LK_AT=['weave','wool','leather','trim'],LK_AP=8,LK_AS=128;
+function lkAtlas(){if(lkAtlas.t)return lkAtlas.t;const C=LK_AS+2*LK_AP,W=C*2;
+  const mk=(get,flat)=>{const cv=document.createElement('canvas');cv.width=cv.height=W;const x=cv.getContext('2d');x.fillStyle=flat;x.fillRect(0,0,W,W);
+    for(let k=0;k<4;k++){const src=get(lkTex(LK_AT[k])),ox=(k%2)*C,oy=Math.floor(k/2)*C;if(!src)continue;
+      x.save();x.beginPath();x.rect(ox,oy,C,C);x.clip();for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)x.drawImage(src.image,ox+LK_AP+dx*LK_AS,oy+LK_AP+dy*LK_AS);x.restore();}
+    const t=new THREE.CanvasTexture(cv);t.anisotropy=4;return t;};
+  return lkAtlas.t={map:mk(T=>T.map,'#fff'),nor:mk(T=>T.normalMap,'rgb(128,128,255)'),K:LK_AS/W,P:LK_AP/W};}
+function citHQMat(){if(citHQMat.m)return citHQMat.m;const A=lkAtlas(),gl2=renderer.capabilities.isWebGL2;
+  const m=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.72,side:THREE.DoubleSide,skinning:true,map:A.map,normalMap:A.nor,normalScale:new THREE.Vector2(.5,.5)});
+  const smp=t=>gl2?`textureGrad(${t},LKUV,dFdx(vUv)*LK_K,dFdy(vUv)*LK_K)`:`texture2D(${t},LKUV)`;
+  m.onBeforeCompile=sh=>{
+    sh.vertexShader='attribute float ctile;\nvarying float vT;\n'+sh.vertexShader.replace('#include <uv_vertex>','#include <uv_vertex>\n\tvT=ctile;');
+    sh.fragmentShader='varying float vT;\n#define LK_K '+A.K.toFixed(6)+'\n#define LKUV (vec2(mod(floor(vT+.5),2.),floor((vT+.5)*.5))*.5+'+A.P.toFixed(6)+'+fract(vUv)*LK_K)\n'+sh.fragmentShader
+      .replace('#include <map_fragment>',`vec4 texelColor=mapTexelToLinear(${smp('map')});if(vT<3.5)diffuseColor*=texelColor;`)
+      .replace('#include <roughnessmap_fragment>','float roughnessFactor=vT<1.5?.92:vT<2.5?.55:vT<3.5?.92:vT<4.5?.38:roughness;')
+      .replace('#include <metalnessmap_fragment>','float metalnessFactor=vT>3.5&&vT<4.5?.6:metalness;')
+      .replace('#include <normal_fragment_maps>',`vec3 mapN=${smp('normalMap')}.xyz*2.-1.;mapN.xy*=normalScale;vec3 lkN=perturbNormal2Arb(-vViewPosition,normal,mapN,faceDirection);if(vT<2.5)normal=lkN;`);};
+  m.customProgramCacheKey=()=>'citHQ';return citHQMat.m=m;}
 /* 하나씩 차례로 받는다 (첫 로딩과 겹치지 않게, 엑시즈에 들어온 뒤에) */
 function citSculptLoad(id,first){if(!CIT_FINE[id]||CITS.geo[id])return;if(CITS.req[id]){const i=CITS.q.indexOf(id);if(first&&i>0){CITS.q.splice(i,1);CITS.q.unshift(id);}return;}   /* 눈앞에 나올 사람 것부터 */
   CITS.req[id]=1;if(first)CITS.q.unshift(id);else CITS.q.push(id);citSculptPump();}
 function citSculptPump(){if(CITS.busy||!CITS.q.length)return;const id=CITS.q.shift();CITS.busy=1;
-  fetch(CITM.dir+'s_'+id+'.json?v='+CITS.ver).then(r=>r.ok?r.json():null).then(r=>{if(r&&r.v===1){CITS.geo[id]={geo:citSculptDecode(r),sig:r.sig};citSculptSwap(id);}})
+  fetch(CITM.dir+'s_'+id+'.json?v='+CITS.ver).then(r=>r.ok?r.json():null).then(r=>{if(r&&(r.v===1||r.v===2)){CITS.geo[id]={geo:citSculptDecode(r),sig:r.sig,hq:r.v===2};citSculptSwap(id);}})
     .catch(()=>{}).then(()=>{CITS.busy=0;setTimeout(citSculptPump,40);});}
 function citSculptStick(id){const R=CITS.geo[id];if(!R||R.bad)return null;
-  const g=npcNoSculpt(()=>makeNpcStick(citStickLook(id))),u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}
+  const g=npcNoSculpt(()=>{const m0=CIT_HQ;CIT_HQ=R.hq?'skel':'old';try{return makeNpcStick(citStickLook(id));}finally{CIT_HQ=m0;}}),u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}
   const cl=u.cloth;if(cl){cl.skG.scale.setScalar(1);cl.lap.scale.setScalar(1);}g.updateMatrixWorld(true);
   const {bones,sig}=citBoneSigs(g),m=new Map(sig.map((s,i)=>[s,bones[i]])),bl=R.sig.map(s=>m.get(s));
   if(bl.some(b=>!b)){R.bad=1;console.warn('citbake 뼈가 안 맞음',id,R.sig.filter((s,i)=>!bl[i]));return null;}   /* 차림이 바뀌었는데 다시 굽지 않았으면 빚지 않은 모양으로 */
   const bs=new Set(bl),parts=[];g.traverse(o=>{if(o.isMesh)parts.push(o);});for(const p of parts){if(bs.has(p))p.visible=false;else if(p.parent)p.parent.remove(p);}
-  const sm=new THREE.SkinnedMesh(R.geo,_skinMat());g.add(sm);g.updateMatrixWorld(true);sm.bind(new THREE.Skeleton(bl),sm.matrixWorld);sm.castShadow=false;u.skin=sm;u.sculpt=1;
+  const sm=new THREE.SkinnedMesh(R.geo,R.hq?citHQMat():_skinMat());g.add(sm);g.updateMatrixWorld(true);sm.bind(new THREE.Skeleton(bl),sm.matrixWorld);sm.castShadow=false;u.skin=sm;u.sculpt=1;
   if(cl){cl.sit=undefined;clothSit(g,false);}return g;}
 /* 받아 오면: 그 차림의 빚지 않은 사람들을 빚은 사람으로 바꿔 세운다 (자리·방향·크기·몸짓 그대로) */
 function citSculptSwap(id){const type=CITM.ids.indexOf(id);if(type<0)return;const M=CROWD;if(M.spool&&M.spool[type])M.spool[type].length=0;
