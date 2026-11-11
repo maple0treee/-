@@ -324,6 +324,7 @@ label.f,.f{display:grid;gap:6px;font-size:12px;color:var(--dim);letter-spacing:.
 .apgrid.aphair span{position:absolute;left:0;right:0;bottom:0;padding:14px 4px 6px;background:linear-gradient(transparent,rgba(13,9,6,.85));color:#f2e6c8;font-size:12.5px}
 .apgrid.aphair button[aria-pressed=true]{border-color:#f0d79a;box-shadow:0 0 0 1px #f0d79a,inset 0 0 18px rgba(217,178,94,.25)}
 .apgrid.aphair button[aria-pressed=true] span{color:#ffeab0;font-weight:700}
+.apgrid.apps{grid-template-columns:repeat(3,minmax(0,150px))}.apgrid.apps button{aspect-ratio:3/4}
 .aprow .swc.swn{width:auto;border-radius:13px;padding:0 9px;font-size:12px;color:#f2e6c8;background:linear-gradient(180deg,#3c2c1a,#1a120a)}
 .aprow .swc.swpick{position:relative;display:inline-block;background:conic-gradient(#e44,#ec4,#4c6,#4ce,#46e,#c4e,#e44)}
 .aprow .swc.swpick input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;padding:0;border:0}
@@ -12215,15 +12216,22 @@ const APTH={q:[],run:false,cam:null};
 function apThumbs(grid,ap,key){const base={...ap};delete base[key];const sig=JSON.stringify(base);if(grid.dataset.sig===sig)return;grid.dataset.sig=sig;
   APTH.q=APTH.q.filter(w=>w.grid!==grid);[...grid.children].forEach((b,i)=>{const cv=b.querySelector('canvas');if(cv)APTH.q.push({grid,cv,ap:{...ap,[key]:i},sig});});
   if(!APTH.run){APTH.run=true;requestAnimationFrame(apThumbStep);}}
+/* 미리 만들어 둔 생김새 셋: 누르면 모든 칸이 한 번에 바뀌고, 그 뒤로 칸마다 이어서 손볼 수 있다 */
+const AP_PRESETS=[
+  {n:'기사',ap:{g:'m',h:0x2a2220,e:0x3a6aa8,s:13,k:2,t:2,c:0x2f5a9c,p:0x2a2a30,b:1,y:1,w:1,f:0,d:2,u:0,l:0,o:0,hv:25,wv:22,q:{sh:25,jl:21,fw:19,bt:23,bh:20,br:20,ek:15,nz:20,at:21,lt:20}}},
+  {n:'마법사',ap:{g:'f',h:0xe8e2d8,e:0x7a4ab0,s:14,k:1,t:2,c:0x6a4a8a,p:0x2e2e32,b:1,y:0,w:2,f:1,d:0,u:3,l:1,o:2,hv:18,wv:12,sv:19,q:{la:3,ek:21,ev:19,et:15,co:22,cc:1,ml:1,bt:13,bc:5,hd:18,fw:15,jl:16,nk:13,sh:15,wa:13}}},
+  {n:'모험가',ap:{g:'f',h:0xb03a2e,e:0x3a9a6a,s:20,k:2,t:2,c:0x3f7a3a,p:0x7a5a3a,b:1,y:1,w:0,f:2,d:0,u:2,l:2,o:1,hv:14,wv:16,sv:16,q:{la:1,ek:19,et:20,co:18,cc:2,br:19,ba:22,ll:20,hp:18,lt:18}}}];
 function apThumbStep(){const w=APTH.q.shift();
   if(w&&w.grid.dataset.sig===w.sig){if(!OLD_LOOK&&!PM.data[w.ap.g]){APTH.q.unshift(w);}else try{
     if(!APTH.cam)APTH.cam=new THREE.PerspectiveCamera(30,1,.05,20);
     const m=makePlayerMesh('warrior',{helm:-1,armor:-1,boots:-1,weapon:-1,sub:-1},w.ap);apRelaxPose(m,1);m.rotation.y=.35;m.updateMatrixWorld(true);
-    const top=new THREE.Box3().setFromObject(m).max.y,y=top-.2,c=APTH.cam;c.position.set(0,y+.02,1.25);c.lookAt(0,y,0);
-    pvDraw(m,c,w.cv,192,192,true);}catch(e){}}
+    const bb=new THREE.Box3().setFromObject(m),top=bb.max.y,c=APTH.cam;
+    c.aspect=w.full?.75:1;c.updateProjectionMatrix();
+    if(w.full){const h=top-bb.min.y,y=(top+bb.min.y)/2-h*.04;c.position.set(0,y+.05,h*2.2+.4);c.lookAt(0,y,0);pvDraw(m,c,w.cv,192,256,true);}
+    else{const y=top-.2;c.position.set(0,y+.02,1.25);c.lookAt(0,y,0);pvDraw(m,c,w.cv,192,192,true);}}catch(e){}}
   if(APTH.q.length)requestAnimationFrame(apThumbStep);else APTH.run=false;}
 /* 새 캐릭터 만들기는 한 단계씩: 이름 → 머리 → 얼굴 → 몸 → 옷 (외모 바꾸기 창은 예전처럼 한 번에) */
-const AP_STEPS=[['이름',['성별']],['머리',['머리색','헤어스타일']],['얼굴',['피부','머리 크기','얼굴 너비','턱 길이','턱 끝','코 크기','코 높이','콧대','볼·주근깨','볼 빛','볼 색','점','흉터','화상 자국','화상 크기','수염']],
+const AP_STEPS=[['이름',['성별','프리셋']],['머리',['머리색','헤어스타일']],['얼굴',['피부','머리 크기','얼굴 너비','턱 길이','턱 끝','코 크기','코 높이','콧대','볼·주근깨','볼 빛','볼 색','점','흉터','화상 자국','화상 크기','수염']],
   ['눈·눈썹',['눈','눈색','왼눈 색','눈 크기','눈 세로','눈 간격','눈 높이','눈꼬리','속눈썹','눈썹','눈썹 굵기','눈썹 길이','눈썹 높이','눈썹 기울기','눈썹 휨','눈썹 간격','눈썹 색']],
   ['몸',['키','체형','가슴','어깨 너비','허리','골반','엉덩이','목 길이','팔 길이','다리 길이','팔 굵기','다리 굵기']],['옷',['윗옷','윗옷 색','아래','아래 색','신발']]];
 const AP_STEP_OF={};AP_STEPS.forEach(([,ls],i)=>ls.forEach(l=>AP_STEP_OF[l]=i));
@@ -12244,6 +12252,11 @@ function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
   grp('얼굴·머리');
   const gr=row('성별','g');for(const [g,nm] of [['m','남자'],['f','여자']]){const b=document.createElement('button');b.type='button';b.textContent=nm;b.setAttribute('aria-pressed',ap.g===g);
     b.onclick=()=>{if(ap.g!==g){ap.g=g;ap.s=0;ap.d=0;delete ap.sv;buildApControls(box,ap,onChange);}onChange();};gr.appendChild(b);}
+  if(box.id==='apBox'){const w=row('프리셋','ps'),g=document.createElement('div');g.className='apgrid aphair apps';
+    AP_PRESETS.forEach(pr=>{const b=document.createElement('button');b.type='button';const cv=document.createElement('canvas');cv.className='apth';const sp=document.createElement('span');sp.textContent=pr.n;b.append(cv,sp);
+      b.onclick=()=>{for(const k of Object.keys(ap))delete ap[k];Object.assign(ap,JSON.parse(JSON.stringify(pr.ap)));buildApControls(box,ap,onChange);onChange();};g.appendChild(b);});
+    w.after(g);g.dataset.step=w.dataset.step;
+    if(g.dataset.sig!=='ps'){g.dataset.sig='ps';[...g.children].forEach((b,i)=>APTH.q.push({grid:g,cv:b.querySelector('canvas'),ap:AP_PRESETS[i].ap,sig:'ps',full:true}));if(!APTH.run){APTH.run=true;requestAnimationFrame(apThumbStep);}}}
   /* 목록이 긴 칸(머리·눈썹·얼굴)은 좌우 화살표로 하나씩 넘긴다. 끝에서 넘기면 처음으로 */
   const CHEV=d=>`<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="${d<0?'M10.5 2.5 5 8l5.5 5.5':'M5.5 2.5 11 8l-5.5 5.5'}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const arrow=(label,list,key,def=0)=>{const w=row(label,'a'),bx=document.createElement('div');bx.className='apar';
