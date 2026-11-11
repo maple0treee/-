@@ -15305,6 +15305,53 @@ const MTEX=(()=>{let tex=null;
   const g=v=>{v=Math.max(0,Math.min(255,v|0));return `rgb(${v},${v},${v})`;};
   const noise=(x,n,base,amp,count,rmin,rmax,alpha)=>{for(let i=0;i<count;i++){const r=rmin+R()*(rmax-rmin);x.fillStyle=g(base+(R()-.5)*2*amp);x.globalAlpha=alpha;const px=R()*n,py=R()*n;
       for(const ox of [-n,0,n])for(const oy of [-n,0,n]){x.beginPath();x.arc(px+ox,py+oy,r,0,7);x.fill();}}x.globalAlpha=1;};
+  /* ---- 바닥 돌 그림 (돌길·판돌): 칸마다 계산해 RGBA로. RGB = 돌 빛깔, A = 높이(줄눈 0 → 돌 위 1). 높이로 빛을 꺾어 돌이 하나하나 도드라진다 ----
+     그림은 처음에 고른 빛깔로 두고, 한 번에 몇 ms씩만 나눠 굽는다 (첫 로딩·게임이 멈칫하지 않게) */
+  const FLOOR=(()=>{let q=90817;const R=()=>(q=(q*16807)%2147483647)/2147483647;
+    /* 이어 붙여도 이음매 없는 값 잡음: P×P 격자(2의 거듭제곱)를 n 픽셀에 */
+    const field=(n,P)=>{const L=new Float32Array(P*P),M=P-1;for(let i=0;i<L.length;i++)L[i]=R();const k=P/n;
+      return (x,y)=>{const fx=x*k,fy=y*k,i=Math.floor(fx),j=Math.floor(fy),u=fx-i,v=fy-j,su=u*u*(3-2*u),sv=v*v*(3-2*v),i0=i&M,j0=j&M,i1=(i0+1)&M,j1=(j0+1)&M,r0=j0*P,r1=j1*P;
+        const a=L[r0+i0],b=L[r0+i1],c=L[r1+i0],d=L[r1+i1];return a+(b-a)*su+(c-a)*sv+(a-b-c+d)*su*sv;};};
+    const sm=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
+    /* 돌마다 빛깔: 회색·누런빛·붉은빛·푸른 회색·짙은 돌 */
+    const TINT=[[1,1,1],[1,1,1],[1.02,1,.97],[1.07,.99,.86],[1.06,.97,.84],[1.09,.92,.85],[.92,.96,1.06],[.9,.95,1.05],[.86,.85,.86],[1.03,1.01,.95]];
+    /* 1) 돌길: 손바닥만 한 돌(12cm 안팎)을 빽빽하게, 가운데가 볼록하고 테두리는 둥글게 닳았다. 2.4m 한 장 = 20×20개 */
+    const cobble=n=>{const G=20,cs=n/G,S=[];
+      for(let j=0;j<G;j++)for(let i=0;i<G;i++){const t0=TINT[Math.floor(R()*TINT.length)];S.push({x:(i+.5+(R()-.5)*.6)*cs,y:(j+.5+(R()-.5)*.6)*cs,v:.8+(R()-.5)*.34,t:[1+(t0[0]-1)*.75,1+(t0[1]-1)*.75,1+(t0[2]-1)*.75],dm:.7+R()*.3,o:R()*n});}
+      const mot=field(n,32),grn=field(n,128),snd=field(n,128),wr=field(n,64),NX=new Float32Array(9),NY=new Float32Array(9);
+      return (x,y,O)=>{const gi=Math.floor(x/cs),gj=Math.floor(y/cs);let d1=1e9,ax=0,ay=0,A=null,c=0,bi=0;
+        for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){const ii=gi+di,jj=gj+dj,w=ii<0?ii+G:ii>=G?ii-G:ii,h=jj<0?jj+G:jj>=G?jj-G:jj,s=S[h*G+w],sx=s.x+(ii-w)*cs,sy=s.y+(jj-h)*cs;NX[c]=sx;NY[c]=sy;const dd=(sx-x)*(sx-x)+(sy-y)*(sy-y);if(dd<d1){d1=dd;ax=sx;ay=sy;A=s;bi=c;}c++;}
+        let e=1e9;for(let k=0;k<9;k++){if(k===bi)continue;const dx=NX[k]-ax,dy=NY[k]-ay,l=Math.sqrt(dx*dx+dy*dy);const t=((ax+NX[k])*.5-x)*dx/l+((ay+NY[k])*.5-y)*dy/l;if(t<e)e=t;}
+        e+=(wr(x,y)-.5)*1.4;   /* 돌 테두리를 살짝 울퉁불퉁하게 */
+        const g=1.2;
+        if(e<g){const v=.36+snd(x,y)*.12;O[0]=v*1.04;O[1]=v;O[2]=v*.86;O[3]=.04+.06*sm(0,g,e);}   /* 줄눈: 모래·흙 */
+        else{const rr=Math.sqrt(d1)/(cs*.62),dome=Math.max(0,1-rr*rr),ed=sm(g,g+3.2,e),h=dome*.55+ed*.45,m=.86+.28*mot(x+A.o,y),gr=.92+.16*grn(x,y);
+          const v=A.v*(.82+.18*h)*m*gr*(.74+.26*ed);O[0]=v*A.t[0];O[1]=v*A.t[1];O[2]=v*A.t[2];O[3]=(.2+.8*h)*A.dm;}};};
+    /* 2) 판돌(광장·큰길·작은 광장): 6.4m 한 장. 줄마다 폭이 다른 긴 돌판을 어긋나게 깔고, 모서리는 닳아 둥글다. 얼룩·잔결, 가끔 금 간 돌 */
+    const flag=n=>{const M=6.4,rows=[];let tot=0;while(tot<M-.4){const h=.5+R()*.42;rows.push(h);tot+=h;}const ks=n/tot;let y0=0;const RW=[];
+      for(const h of rows){const y1=y0+h*ks,sl=[],ws=[];let w=0;while(w<M-.5){const a=.65+R()*.95;ws.push(a);w+=a;}const kx=n/w;let x0=0;
+        for(const a of ws){const t0=TINT[Math.floor(R()*TINT.length)],ca=R()*3.14,cl=R();
+          sl.push({a:x0,b:x0+a*kx,v:.78+(R()-.5)*.28,t:[1+(t0[0]-1)*.55,1+(t0[1]-1)*.55,1+(t0[2]-1)*.55],rc:4+R()*9,cr:cl<.14,cx:R(),cy:R(),cnx:Math.cos(ca),cny:Math.sin(ca),cL:40+R()*90,o:R()*n,lv:(R()-.5)*.16});x0+=a*kx;}
+        RW.push({y0,y1,off:R()*n,sl});y0=y1;}
+      const rowOf=new Int16Array(n+1);for(let y=0;y<n;y++){let k=0;while(k<RW.length-1&&y>=RW[k].y1)k++;rowOf[y]=k;}
+      const wx=field(n,16),wy=field(n,16),mot=field(n,32),grn=field(n,256),crk=field(n,64);
+      return (x,y,O)=>{const X=x+(wx(x,y)-.5)*5,Y=y+(wy(x,y)-.5)*5,Yw=((Y%n)+n)%n,Rw=RW[rowOf[Math.floor(Yw)]];   /* 줄눈이 자로 잰 듯 곧지 않게 살짝 휜다 */
+        const xs=(((X+Rw.off)%n)+n)%n;let S=Rw.sl[Rw.sl.length-1];for(const s of Rw.sl)if(xs<s.b){S=s;break;}
+        const dx=Math.min(xs-S.a,S.b-xs),dy=Math.min(Yw-Rw.y0,Rw.y1-Yw),e=dx<S.rc&&dy<S.rc?S.rc-Math.hypot(S.rc-dx,S.rc-dy):Math.min(dx,dy);
+        const g=1.9,gn=grn(x,y);
+        if(e<g){const v=.3+gn*.12;O[0]=v*1.05;O[1]=v;O[2]=v*.85;O[3]=.03+.05*sm(0,g,e);return;}
+        const qq=Math.min(1,(e-g)/9),h=1-(1-qq)*(1-qq),m=.84+.3*mot(x+S.o,y);let v=S.v*m*(.9+.2*gn)*(.78+.22*sm(g,g+6,e));if(gn>.9)v*=.85;
+        let c=0;if(S.cr){/* 금: 돌 안 한 점에서 한 방향으로, 잡음으로 살짝 꺾인다 */const px0=S.a+(S.b-S.a)*(.2+.6*S.cx),py0=Rw.y0+(Rw.y1-Rw.y0)*(.2+.6*S.cy),rx=xs-px0,ry=Yw-py0,al=rx*S.cnx+ry*S.cny,pe=-rx*S.cny+ry*S.cnx+(crk(x,y)-.5)*14;
+          if(Math.abs(al)<S.cL)c=(1-sm(.35,1.1,Math.abs(pe)))*(1-sm(S.cL*.6,S.cL,Math.abs(al)));v*=1-c*.5;}
+        O[0]=v*S.t[0];O[1]=v*S.t[1];O[2]=v*S.t[2];O[3]=(.45+.5*h+S.lv+(m-1)*.4)*(1-c*.5);};};
+    /* 나눠 굽기: 먼저 성기게 훑어 밝기 평균을 mean(셰이더에서 ×1.3)에 맞추고, 줄 단위로 6ms씩 */
+    const bake=(n,mk,mean)=>{const U=new Uint8Array(n*n*4);for(let i=0;i<U.length;i+=4){U[i]=U[i+1]=U[i+2]=mean*255;U[i+3]=128;}
+      const t=new THREE.DataTexture(U,n,n,THREE.RGBAFormat);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.magFilter=THREE.LinearFilter;t.minFilter=THREE.LinearMipmapLinearFilter;t.generateMipmaps=true;
+      t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());t.needsUpdate=true;
+      const pf=mk(n),O=new Float32Array(4);let s=0,c=0;for(let y=0;y<n;y+=8)for(let x=0;x<n;x+=8){pf(x,y,O);s+=O[0]*.3+O[1]*.59+O[2]*.11;c++;}const k=mean/(s/c)*255;let y=0;
+      const step=()=>{const t0=performance.now();while(y<n&&performance.now()-t0<6){for(let x=0;x<n;x++){pf(x,y,O);const o=(y*n+x)*4;U[o]=Math.min(255,O[0]*k);U[o+1]=Math.min(255,O[1]*k);U[o+2]=Math.min(255,O[2]*k);U[o+3]=Math.max(0,Math.min(255,O[3]*255));}y++;}
+        if(y<n)setTimeout(step,0);else t.needsUpdate=true;};setTimeout(step,0);return t;};
+    return {cobble:()=>bake(512,cobble,.66),flag:()=>bake(1024,flag,.66)};})();
   const make=()=>{
     /* 1 회반죽: 얼룩과 잔점 */
     const stucco=cv(512,(x,n)=>{x.fillStyle=g(196);x.fillRect(0,0,n,n);noise(x,n,196,22,260,10,46,.18);noise(x,n,190,30,3000,.6,2.2,.35);
@@ -15321,12 +15368,8 @@ const MTEX=(()=>{let tex=null;
         for(const ox of [0,-n]){const gr=x.createLinearGradient(X0+ox,0,X0+ox+cw,0);gr.addColorStop(0,g(v-55));gr.addColorStop(.35,g(v+18));gr.addColorStop(.6,g(v+6));gr.addColorStop(1,g(v-60));
           x.fillStyle=gr;x.beginPath();x.moveTo(X0+ox+1,Y0);x.lineTo(X0+ox+cw-1,Y0);x.lineTo(X0+ox+cw-2,Y0+rh+3);x.quadraticCurveTo(X0+ox+cw/2,Y0+rh+8,X0+ox+2,Y0+rh+3);x.closePath();x.fill();}}
       noise(x,n,170,40,1600,.5,1.6,.3);});
-    /* 4 돌길 (둥근 돌을 빽빽하게) */
-    const cobble=cv(512,(x,n)=>{x.fillStyle=g(105);x.fillRect(0,0,n,n);const S=26;
-      /* 돌마다 빛깔을 조금씩 다르게: 회색·누런빛·붉은빛·푸른 회색·짙은 돌이 섞인 돌길 (한 가지 베이지로 보이지 않게) */
-      const TINT=[[1,1,1],[1,1,1],[1,1,1],[1.07,.98,.84],[1.07,.98,.84],[1.1,.9,.84],[.9,.96,1.08],[.9,.96,1.08],[.8,.8,.83]],tc=(v,t)=>`rgb(${Math.max(0,Math.min(255,v*t[0]|0))},${Math.max(0,Math.min(255,v*t[1]|0))},${Math.max(0,Math.min(255,v*t[2]|0))})`;
-      for(let r=0;r<n/S;r++)for(let c=0;c<n/S+1;c++){const cx=c*S+(r%2?S/2:0)+(R()-.5)*6,cy=r*S+S/2+(R()-.5)*6,rx=S*.46+(R()-.5)*4,ry=S*.42+(R()-.5)*4,v=180+(R()-.5)*50,t=TINT[Math.floor(R()*TINT.length)];
-        for(const ox of [0,n,-n])for(const oy of [0,n,-n]){const gr=x.createRadialGradient(cx+ox-3,cy+oy-3,1,cx+ox,cy+oy,rx);gr.addColorStop(0,tc(v+25,t));gr.addColorStop(1,tc(v-35,t));x.fillStyle=gr;x.beginPath();x.ellipse(cx+ox,cy+oy,rx,ry,R()*3,0,7);x.fill();}}});
+    /* 4 돌길: 새로 굽는 돌 그림 (FLOOR) */
+    const cobble=FLOOR.cobble();
     /* 5 나무 (판자와 결) */
     const wood=cv(256,(x,n)=>{const P=6;for(let i=0;i<P;i++){const v=170+(R()-.5)*40;x.fillStyle=g(v);x.fillRect(0,i*n/P,n,n/P);x.fillStyle=g(v-60);x.fillRect(0,i*n/P,n,2);
         x.globalAlpha=.35;for(let k=0;k<14;k++){x.fillStyle=g(v-30-R()*30);const y=i*n/P+R()*n/P;x.fillRect(0,y,n,1);}x.globalAlpha=1;}});
@@ -15336,23 +15379,30 @@ const MTEX=(()=>{let tex=null;
     const marble=cv(256,(x,n)=>{x.fillStyle=g(214);x.fillRect(0,0,n,n);x.strokeStyle=g(170);for(let i=0;i<10;i++){x.globalAlpha=.25+R()*.2;x.lineWidth=.6+R()*1.5;x.beginPath();let px=R()*n,py=0;x.moveTo(px,py);while(py<n){px+=(R()-.5)*30;py+=10+R()*14;x.lineTo(px,py);}x.stroke();}x.globalAlpha=1;noise(x,n,214,8,500,.5,1.5,.3);});
     /* 8 풀밭·흙 (땅) */
     const grass=cv(512,(x,n)=>{x.fillStyle=g(190);x.fillRect(0,0,n,n);noise(x,n,190,26,500,6,26,.22);x.globalAlpha=.5;for(let i=0;i<9000;i++){x.fillStyle=g(150+R()*90);const px=R()*n,py=R()*n;x.fillRect(px,py,1,2+R()*3);}x.globalAlpha=1;});
-    return [stucco,stone,tile,cobble,wood,brick,marble,grass];};
+    return [stucco,stone,tile,cobble,wood,brick,marble,grass,FLOOR.flag()];};
   const uniforms={tx:{value:null}};
   const get=()=>{if(!tex)tex=make();return tex;};
-  /* 재질 번호: 0 없음, 1 회반죽, 2 돌, 3 기와, 4 돌길, 5 나무, 6 벽돌, 7 대리석 */
+  /* 재질 번호: 0 없음, 1 회반죽, 2 돌, 3 기와, 4 돌길, 5 나무, 6 벽돌, 7 대리석, 8 풀밭·흙, 9 판돌(광장·큰길) */
   const SC=[1,3.5,3.2,2.4,2.6,1.8,1.8,2.5,7];
-  const patch=(m,key)=>{m.onBeforeCompile=s=>{const T=get();for(let i=0;i<8;i++)s.uniforms['mtx'+i]={value:T[i]};
+  const patch=(m,key)=>{m.onBeforeCompile=s=>{const T=get();for(let i=0;i<9;i++)s.uniforms['mtx'+i]={value:T[i]};
       s.vertexShader='attribute float mt;varying float vMt;varying vec3 vWP;varying vec3 vWN;\n'+s.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\nvMt=mt;vWP=(modelMatrix*vec4(transformed,1.)).xyz;vWN=normalize(mat3(modelMatrix)*objectNormal);');
-      let fn='uniform sampler2D mtx0,mtx1,mtx2,mtx3,mtx4,mtx5,mtx6,mtx7;varying float vMt;varying vec3 vWP;varying vec3 vWN;\n';
+      let fn='uniform sampler2D mtx0,mtx1,mtx2,mtx3,mtx4,mtx5,mtx6,mtx7,mtx8;varying float vMt;varying vec3 vWP;varying vec3 vWN;\n';
       fn+='float mtFar(){return smoothstep(9.,38.,length(vWP-cameraPosition));}\n';
       fn+='uniform sampler2D uNT;\n';s.uniforms.uNT={value:NAT.noiseTex};   /* 멀리 있는 무늬는 평균 빛으로 녹인다: 걸을 때 돌길에 흰 줄(무늬 겹침)이 흐르지 않게 */
       for(let i=0;i<8;i++)fn+=`vec3 tx${i}(vec2 u,float f){vec3 a=texture2D(mtx${i},u).rgb;return f>0.?mix(a,texture2D(mtx${i},u,12.).rgb,f):a;}
 vec3 tri${i}(){vec3 w=pow(abs(vWN),vec3(4.));w/=(w.x+w.y+w.z);float s=${SC[i+1].toFixed(2)};float f=mtFar();return tx${i}(vWP.zy/s,0.)*w.x+tx${i}(vWP.xz/s,f*.85)*w.y+tx${i}(vWP.xy/s,0.)*w.z;}\n`;
+      /* 바닥(돌길·판돌): 위를 보는 면은 한 번만 읽는다 (세 방향으로 읽는 것보다 싸다). A = 돌 높이 */
+      fn+='vec4 flr(sampler2D t,vec2 u,float f){vec4 a=texture2D(t,u);return f>0.?mix(a,texture2D(t,u,12.),f):a;}\n';
       s.fragmentShader=fn+s.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
-float mtH=0.,mtB=0.;   /* 무늬 밝기를 높낮이로 삼아 빛을 꺾는다(돌 사이 줄눈·기와 골·돌길 돌이 도드라져 보이게). 멀면 끈다 */
+float mtH=0.,mtB=0.,pvH=-1.;   /* 무늬 밝기를 높낮이로 삼아 빛을 꺾는다(돌 사이 줄눈·기와 골이 도드라져 보이게). 바닥 돌은 그림에 담긴 높이(A)로. 멀면 끈다 */
 {int k=int(vMt+.5);vec3 d=vec3(1.);
-if(k==1)d=tri0()*1.3;else if(k==2)d=tri1()*1.24;else if(k==3)d=tri2()*1.22;else if(k==4)d=tri3()*1.3;else if(k==5)d=tri4()*1.28;else if(k==6)d=tri5()*1.2;else if(k==7)d=tri6()*1.15;
-diffuseColor.rgb*=d;mtH=dot(d,vec3(.333));mtB=(k==1?.006:k==2?.03:k==3?.028:k==4?.034:k==5?.012:k==6?.026:k==7?.004:0.)*(1.-mtFar());
+if(k==1)d=tri0()*1.3;else if(k==2)d=tri1()*1.24;else if(k==3)d=tri2()*1.22;
+else if(k==4||k==9){float f=mtFar();vec4 a=vWN.y>.7?(k==4?flr(mtx3,vWP.xz/2.6,f*.85):flr(mtx8,vWP.xz/6.4,f*.85)):vec4(tri3(),.6);
+  /* 넓게 번진 때·얼룩과 따뜻하고 서늘한 돌빛: 같은 무늬가 되풀이돼 보이지 않게, 멀리서도 바닥이 밋밋하지 않게 */
+  vec4 p1=texture2D(uNT,vWP.xz*.011);float dirt=smoothstep(.45,.85,p1.g*.6+p1.r*.4);   /* 잡음 그림 한 번만 읽는다 (R·G 넓은 얼룩, B 돌빛, A 잔 얼룩) */
+  d=a.rgb*1.3*mix(1.,.82,dirt)*mix(vec3(1.),vec3(1.05,1.,.9),p1.b*.8)*(.94+.12*p1.a);pvH=a.a;}
+else if(k==5)d=tri4()*1.28;else if(k==6)d=tri5()*1.2;else if(k==7)d=tri6()*1.15;
+diffuseColor.rgb*=d;mtH=pvH>=0.?pvH:dot(d,vec3(.333));mtB=(k==1?.006:k==2?.03:k==3?.028:k==4?.03:k==5?.012:k==6?.026:k==7?.004:k==9?.02:0.)*(1.-mtFar());
 /* 풀밭·흙 땅: 두 크기 무늬를 겹쳐 되풀이가 안 보이게, 큰 얼룩(풀 짙고 옅음·마른 풀빛)과 가파른 비탈의 바위를 더한다 */
 if(k==8){vec2 u=vWP.xz;float f=mtFar();vec3 a=texture2D(mtx7,u/2.4).rgb,b=texture2D(mtx7,u/8.3+.37).rgb;
   vec3 g=mix(a*b*1.62,vec3(.9),f*.55);vec4 q1=texture2D(uNT,u*.0108),q2=texture2D(uNT,u*.0027+.37),q3=texture2D(uNT,u*.075);float m=q1.r*.62+q2.r*.38,dry=smoothstep(.55,.85,texture2D(uNT,u*.0052+.61).r);
@@ -16007,9 +16057,9 @@ async function buildMarcus(H){
         for(const sd of [-1,1]){let e=hw;while(e>.6&&!(dry(mx+nx*sd*e,my+ny*sd*e)&&dry(mx+ux*pl/2+nx*sd*e,my+uy*pl/2+ny*sd*e)&&dry(mx-ux*pl/2+nx*sd*e,my-uy*pl/2+ny*sd*e)))e-=.5;if(sd<0)l=e;else r=e;}
         if(l<=.6&&r<=.6)continue;const off=(r-l)/2,wd=l+r,F=frame(cx+mx+nx*off,cz+my+ny*off,Math.atan2(ux,uy),0);
         if(big){F.P(BOX,0,.025,0,wd+(l>=hw?.45:0)+(r>=hw?.45:0),.05,pl+.06,SERENA);if(l>.8&&r>.8)F.P(BOX,-off,.1,0,1.2,.03,pl+.02,0xc8bca4);}
-        F.P(BOX,0,big?.0675:PY,0,wd,.06,pl+.04,big?PAVE:PV);}}   /* 큰길은 7.5mm 높게: 큰길과 골목이 만나는 곳에서 두 돌판 윗면이 겹쳐 걸을 때 바닥이 깜빡이지 않게 */
+        F.P(BOX,0,big?.0675:PY,0,wd,.06,pl+.04,big?PAVE:PV,big?{mt:9}:{});}}   /* 큰길은 7.5mm 높게: 큰길과 골목이 만나는 곳에서 두 돌판 윗면이 겹쳐 걸을 때 바닥이 깜빡이지 않게 */
       for(let i=1;i<P.length-1;i++){const [x,y]=P[i];if(PL.hillH(x,y)>.05)continue;let ok=true;for(let a=0;a<8&&ok;a++){const q=a/8*PI*2;if(!dry(x+Math.cos(q)*hw,y+Math.sin(q)*hw))ok=false;}if(!ok)continue;
-        const F=frame(cx+x,cz+y,0,0);if(big)F.P(CYL(1,1,16),0,.025,0,hw+.45,.05,hw+.45,SERENA);F.P(CYL(1,1,16),0,big?.0675:PY,0,hw,.06,hw,big?PAVE:PV);}}}
+        const F=frame(cx+x,cz+y,0,0);if(big)F.P(CYL(1,1,16),0,.025,0,hw+.45,.05,hw+.45,SERENA);F.P(CYL(1,1,16),0,big?.0675:PY,0,hw,.06,hw,big?PAVE:PV,big?{mt:9}:{});}}}
   /* ===== 막다른 골목의 막힌 끝: 집과 집 사이를 막는 돌담(갓돌·담쟁이·벽 등)과 그 앞에 쌓아 둔 통·상자 ===== */
   for(const st of PL.streets){if(!st.dead)continue;const P=st.p,[ax,ay]=P[P.length-2],[bx,by]=P[P.length-1],L=Math.hypot(bx-ax,by-ay),ux=(bx-ax)/L,uy=(by-ay)/L,W=st.w+1.6,H=3.2;
     let h=0;for(const ch of st.name)h=(h*31+ch.charCodeAt(0))%9973;const r=k=>{const v=Math.sin((h+k)*12.9898)*43758.5453;return v-Math.floor(v);};
@@ -16026,7 +16076,7 @@ async function buildMarcus(H){
     else if(kind===1){F.P(BOX,sx*(W/2-1.2),.45,-.9,.9,.9,.9,0x9a7a4a,{ry:.2});F.P(BOX,sx*(W/2-1.2),1.2,-.9,.6,.6,.6,0x8a6a3a,{ry:-.3});F.P(BOX,sx*(W/2-2),.35,-1.1,.7,.7,.7,0xa88a5a,{ry:.5});}   /* 상자 */
     else{for(let k=0;k<6;k++)F.P(CYL(.13,.13,7),sx*(W/2-1.4)+(k%3-1)*.28,.15+Math.floor(k/3)*.26,-.85,1,1.4,1,0x6a4a2a,{rx:PI/2,rz:PI/2});F.P(CYL(.42,.42,10),sx*(W/2-2.4),.4,-.9,1,.8,1,0x6a6a70);}   /* 장작·물통 */
     {const q=F.W(sx*(W/2-1.4),-1.1);colliders.push({x:q.x,z:q.z,r:.9,h:1.5});}}
-  for(const [px,py,r] of PL.piazze){const F=frame(cx+px,cz+py,0,0);F.P(CYL(1,1,32),0,.03,0,r+.6,.05,r+.6,SERENA);F.P(CYL(1,1,32),0,.05,0,r,.06,r,PAVE);F.P(RING,0,.1,0,r*.6,1,r*.6,MAR2);}
+  for(const [px,py,r] of PL.piazze){const F=frame(cx+px,cz+py,0,0);F.P(CYL(1,1,32),0,.03,0,r+.6,.05,r+.6,SERENA);F.P(CYL(1,1,32),0,.05,0,r,.06,r,PAVE,{mt:9});F.P(RING,0,.1,0,r*.6,1,r*.6,MAR2);}
   /* 성 밖 길: 네 문에서 바깥으로, 남쪽 길은 입구까지 */
   /* 성 밖 흙길: 땅 높이를 따라 2m 토막으로 (평평한 판 하나로 깔면 비탈에서 뜨거나 묻힌다) */
   const dirt=(x0,y0,x1,y1)=>{const L=Math.hypot(x1-x0,y1-y0),ux=(x1-x0)/L,uy=(y1-y0)/L,n=Math.ceil(L/2),pl=L/n;
@@ -16620,10 +16670,10 @@ async function buildMarcus(H){
   /* ===== 중앙 광장: 피렌체 시뇨리아 광장을 본떠 — 북쪽에 성채 같은 시청(베키오 궁)과 높은 탑, 동쪽에 조각상을 세운 열린 회랑(란치 회랑),
      한쪽으로 치우친 큰 분수(넵투누스). 시청 가운데는 큰 아치로 뚫려 왕궁 가는 길로 이어진다. 바닥은 네모난 돌판 ===== */
   await BOOT.y();{const p=Z('plaza'),x=cx+p.x,z=cz+p.y,R=p.r,F=frame(x,z,0,0),ST=0xe8e2d4,PV=0xb8a888;
-    F.P(CYL(1,1,64),0,.055,0,R,.05,R,PV);
-    /* 돌판마다 빛깔이 조금씩 다르게: 줄눈 칸 안에 아주 얇은 판을 몇 장 (색만 살짝, 정해진 칸에만 — 무작위 수열은 안 씀). 돌 결 무늬(mt)는 넓은 바닥 전체에 그리면 광장 그리기가 10% 넘게 느려져 넣지 않는다 */
+    F.P(CYL(1,1,64),0,.055,0,R,.05,R,PV,{mt:9});
+    /* 돌판마다 빛깔이 조금씩 다르게: 줄눈 칸 안에 아주 얇은 판을 몇 장 (색만 살짝, 정해진 칸에만 — 무작위 수열은 안 씀). 바닥 전체에 판돌 무늬(mt 9: 위를 보는 면은 한 번만 읽어 싸다) */
     {const TN=[0xc4b494,0xac9c7e,0xbcae90,0xa89880];for(let i=-7;i<7;i++)for(let j=-7;j<7;j++){const h=((i*73856093)^(j*19349663))>>>0;if(h%5>1)continue;
-      const ox=i*6+3,oz=j*6+3;if(ox*ox+oz*oz>(R-4.5)*(R-4.5))continue;F.P(BOX,ox,.081,oz,5.82,.004,5.82,TN[h%4],{mt:0});}}
+      const ox=i*6+3,oz=j*6+3;if(ox*ox+oz*oz>(R-4.5)*(R-4.5))continue;F.P(BOX,ox,.081,oz,5.82,.004,5.82,TN[h%4],{mt:9});}}
     /* 돌판 줄눈: 가로·세로 */
     for(let k=-7;k<=7;k++){const o=k*6,hl=Math.sqrt(Math.max(0,R*R-o*o))-1;if(hl<2)continue;F.P(BOX,o,.085,0,.12,.012,hl*2,0x8a7c64);F.P(BOX,0,.085,o,hl*2,.012,.12,0x8a7c64);}
     /* --- 시청(베키오 궁): 북쪽 가장자리에 등을 대고 광장을 본다. 거친 돌, 두 줄 아치창, 까치발 위 총안 난간, 앞쪽 모서리의 높은 탑 --- */
