@@ -32104,6 +32104,35 @@ function attachRoom(r,isWs){
 const cleanChat=t=>typeof t==='string'?t.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g,'').trim().slice(0,80):'';
 function logChat(name,text,me){const p=document.createElement('p');p.className='chat'+(me?' mine':'');const b=document.createElement('b');b.textContent=name+': ';p.append(b,document.createTextNode(text));logEl.appendChild(p);while(logEl.children.length>80)logEl.firstChild.remove();logEl.scrollTop=logEl.scrollHeight;}
 let chatAt=0;
+/* /item proper: 지금 레벨의 모험가가 흔히 끼고 있을 장비 한 벌을 입힌다.
+   방어구·장신구는 필요 레벨이 맞는 가장 높은 등급(보스에게서만 나오는 것은 뺌), 무기는 지금 직업의 전용 무기 중 필요 레벨이 맞는 가장 높은 등급
+   (기본 직업은 기본 무기), 보조무기는 전사 나무 방패·쉴더 파르마·마법사 계열은 Lv30부터 탐욕의 그리무어. 강화는 레벨 따라 +0~+7. 탈것은 그대로 */
+function properGearPlan(lv,job){
+  const plan={},ok=id=>{const I=ITEMS[id];return I&&I.kind==='gear'&&I.req<=lv&&canWear(id,job);};
+  const top=ids=>ids.filter(ok).sort((a,b)=>ITEMS[b].req-ITEMS[a].req||ITEMS[b].tier-ITEMS[a].tier)[0]||null;
+  for(const slot of ['helm','armor','boots','acc'])plan[slot]=top(Object.keys(ITEMS).filter(k=>{const I=ITEMS[k];return I.slot===slot&&!I.jobs&&I.tier<10;}));
+  const grades=b=>[b,b+'_2',b+'_3',b+'_4',b+'_5'].filter(k=>ITEMS[k]);
+  if(job==='shielder'){plan.weapon=top(grades('scutum'));plan.sub=top(grades('parma'));}
+  else{plan.weapon=CLASS_WEAPON[job]?top(grades(CLASS_WEAPON[job])):top(['w2','w4','w6','w8','w10']);
+    if(JOBS[job].sub==='shield')plan.sub=ok('sh1')?'sh1':null;
+    else if(JOBS[job].sub==='grimoire')plan.sub=lv>=30&&ok('grim_greed')?'grim_greed':null;
+    else plan.sub=null;}
+  const enh=Math.max(0,Math.min(7,Math.floor((lv-5)/15)));
+  return {plan,enh};
+}
+function properGear(){
+  const {plan,enh}=properGearPlan(P.lv,P.job);let lost=0;const names=[];
+  for(const slot of ['weapon','sub','helm','armor','boots','acc']){
+    if(!(slot in plan))continue;const id=plan[slot],old=P.equip[slot],oldEnh=P.enh[slot]||0;
+    const e=id&&!ITEMS[id].noEnh?enh:0;
+    if(old===id&&oldEnh===e){if(id)names.push(itemName(id,P.job)+(e?' +'+e:''));continue;}
+    if(old){if(P.bag.length>=BAG_SIZE){lost++;continue;}P.bag.push(bagGear(old,oldEnh));}   /* 가방이 차면 그 칸은 그대로 둔다 (원래 장비를 버리지 않게) */
+    P.equip[slot]=id;P.enh[slot]=id?e:0;if(id)names.push(itemName(id,P.job)+(e?' +'+e:''));}
+  computeStats(P);P.hp=P.maxhp;P.mp=P.maxmp;
+  log(`[테스트] Lv ${P.lv}에 맞는 장비로 갈아입었다: ${names.join(', ')}`,'sys');
+  if(lost)log(`[테스트] 가방이 가득 차서 ${lost}칸은 갈아입지 못했다`,'bad');
+  invDirty();updateHud();save();
+}
 function sendChat(){
   const inp=$('#chatIn');const text=cleanChat(inp.value);inp.value='';
   if(!text||!P)return;
@@ -32119,6 +32148,7 @@ function sendChat(){
       for(const k in ITEMS){const I=ITEMS[k];if(!(I.slot==='weapon'||I.slot==='sub')||!I.cls||I.cls==='basic'||!line.has(I.cls)||have.has(k))continue;if(P.bag.length>=BAG_SIZE){full++;continue;}P.bag.push(bagGear(k,10));got++;}
       if(got)log(`[테스트] 전직 무기 ${got}개를 가방에 넣었다`,'sys');if(full)log(`[테스트] 가방이 가득 차서 전직 무기 ${full}개를 못 넣었다`,'sys');}
     computeStats(P);P.hp=P.maxhp;P.mp=P.maxmp;log('[테스트] 모든 장비를 최상급 +10으로 맞췄다','sys');invDirty();updateHud();save();return;}
+  if(/^\/item\s+proper$/i.test(text)){properGear();return;}   /* 테스트: 지금 레벨에 맞는 흔한 장비 한 벌 */
   if(text==='/fly'){if(P.fly){toggleFly(false);return;}if(mode!=='world'||P.hp<=0||CCAR.ride)return;   /* 지팡이에 올라타 난다. 다시 치면 내린다 */
     if(P.seat!=null)seatLeave();if(P.ride&&typeof rideOff==='function')rideOff(true);toggleFly(true);return;}
   if(text==='/class'){if(!(JOBS[P.job].adv||[]).length){toast('더 전직할 직업이 없어요');return;}openMentor();return;} // 테스트: 레벨·스승과 상관없이 전직 창
