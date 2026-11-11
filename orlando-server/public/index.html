@@ -10413,19 +10413,109 @@ function scyPlaceFP(H,k,sc){const cf=Math.cos(k[4]);_scfD.set(Math.sin(k[3])*cf,
   _scfM.makeBasis(_scfB,_scfD,_scfZ);H.quaternion.setFromRotationMatrix(_scfM);
   H.position.set(k[0],k[1],k[2]).addScaledVector(_scfD,-SCY_G0*sc);H.scale.setScalar(sc);H.updateMatrix();}
 let SCY_FHR=[0,0,0],SCY_FHL=[0,0,0];const _scyKm=[0,0,0,0,0,0];
+/* ---- 사이드루터 기본 공격 3타 (2026-11-11 원호: "3타까지, 1인칭 이펙트와 모션에 특히 신경써서")
+   1타 scyreap: 오른쪽 위로 감았다가 왼쪽 아래로 대각선 내려베기
+   2타 scyrev : 날을 뒤집어 왼쪽 아래에서 오른쪽 위로 거슬러 올려베기 (1타와 8자로 이어진다)
+   3타 scyend : 머리 위로 크게 들어 올렸다가 정면 땅에 날을 박아 내려찍기 (충격파·영혼 불꽃) */
+Object.assign(SCYKF,{
+  scyreap:[[.12,[.36,-.26,-.86,.7,.7,-.45]],[.28,[.44,-.14,-.8,.95,.55,-.3]],[.38,[.3,-.22,-.95,.4,.95,-.08]],[.46,[.1,-.36,-1.02,-.35,1.2,0]],[.54,[-.1,-.48,-1.0,-1.2,1.0,0]],[.66,[-.26,-.56,-.98,-1.75,.78,.05]],[.84,[-.16,-.5,-1.02,-1.9,.75,1.4]]],
+  scyrev:[[.1,[-.22,-.48,-.98,-1.95,.85,1.6]],[.2,[-.32,-.5,-.95,-2.4,1.05,3.14]],[.3,[-.22,-.44,-1.0,-1.8,1.15,3.14]],[.38,[-.02,-.36,-1.04,-.75,1.25,3.14]],[.44,[.14,-.3,-1.02,.15,1.2,3.14]],[.52,[.3,-.22,-.96,.85,1.0,3.14]],[.64,[.38,-.18,-.92,1.3,.75,3.1]],[.82,[.34,-.24,-.95,1.0,.55,2.0]]],
+  scyend:[[.1,[.32,-.24,-.92,.8,.6,1.2]],[.24,[.3,-.16,-.9,.55,.3,-.6]],[.34,[.28,-.12,-.88,.5,.2,-.6]],[.42,[.2,-.2,-.95,.35,.85,-.6]],[.48,[.1,-.32,-1.0,.1,1.3,-.55]],[.54,[.02,-.4,-1.04,-.05,1.62,-.55]],[.7,[.02,-.41,-1.04,-.05,1.66,-.55]],[.82,[.14,-.42,-1.04,.2,1.15,-.7]]]});
+Object.assign(SCYK3,{
+  scyrev:[[.1,[-.2,.1,.35,-1.4,1.9,0]],[.22,[-.3,.05,.2,-2.0,2.2,0]],[.34,[-.15,.1,.45,-1.0,2.0,0]],[.41,[.08,.25,.55,.2,1.55,0]],[.5,[.3,.5,.35,1.3,1.0,0]],[.64,[.38,.7,.1,2.0,.6,0]],[.82,[.3,.45,.15,1.0,.75,-.6]]],   /* 왼쪽 아래 땅 가까이에서 오른쪽 위로 거슬러 올려벤다 */
+  scyend:[[.1,[.3,.5,.2,1.4,.7,-1.57]],[.24,[.05,.85,-.05,0,-.25,-1.57]],[.34,[.05,.9,-.1,0,-.4,-1.57]],[.42,[.05,.6,.3,0,.7,-1.57]],[.5,[.05,.2,.55,0,1.6,-1.57]],[.56,[.05,.05,.6,0,2.0,-1.57]],[.72,[.05,.06,.6,0,2.0,-1.57]],[.86,[.15,.18,.45,-.5,1.2,-1.4]]]});
+Object.assign(SCYB3,{
+  scyrev:[[.1,{tw:-.5,ln:.25,cr:.3,sp:-.2,wf:.3}],[.22,{tw:-1.0,ln:.3,cr:.38,sp:-.5,fl:.2,wf:.1,ws:-.4,dp:.06}],[.34,{tw:-.4,ln:.32,cr:.38,fl:.3,wf:.5,dp:.07}],[.41,{tw:.3,ln:.25,cr:.3,sp:.2,fl:.34,wf:.7,ws:.2,dp:.05}],[.5,{tw:.8,ln:.05,cr:.15,sp:.45,fl:.3,wf:.6,ws:.4}],[.64,{tw:.95,ln:-.12,lf:.1,sp:.5,fl:.25,wf:.4,ws:.4}],[.82,{tw:.4,ln:0,sp:.2,wf:.15}]],
+  scyend:[[.1,{tw:.3,ln:-.05}],[.24,{tw:.1,ln:-.35,cr:-.05,lf:.15,wf:-.5,fr:-.1}],[.34,{tw:.1,ln:-.42,cr:-.08,lf:.2,wf:-.6,fr:-.12}],[.42,{tw:0,ln:.2,cr:.15,fl:.2,wf:.3}],[.5,{tw:0,ln:.7,cr:.45,fl:.4,wf:1.0,dp:.12}],[.56,{tw:0,ln:.78,cr:.5,fl:.42,wf:1.0,dp:.14}],[.72,{tw:0,ln:.75,cr:.48,fl:.42,wf:.95,dp:.13}],[.86,{tw:-.1,ln:.3,cr:.2,wf:.4,dp:.04}]]});
+/* 1인칭 낫 상태: 이어 받기 자세(from·cur), 맞는 순간 멈춤(stop), 화면 반동(kick) */
+const SLF={mo:null,n:-1,from:null,cur:[0,0,0,0,0,0],stop:0,kicks:[]};
+/* 1인칭 낫 궤적: 날 끝과 날 안쪽이 지나간 자리를 지금 동작 곡선에서 바로 짚어(프레임 빠르기와 상관없이 매끄럽게) 띠로 그린다.
+   SL_TR[동작] = [그리기 시작, 그리기 끝, 꼬리 길이] (동작 시간 0..1) */
+const SL_TR={scyreap:[.36,.6,.18],scyrev:[.28,.56,.18],scyend:[.4,.56,.15]};
+const SLT=(function(){const N=26,mk=(add)=>{const g=new THREE.BufferGeometry(),pos=new Float32Array((N+1)*2*3),col=new Float32Array((N+1)*2*4),idx=[];
+    for(let i=0;i<N;i++){const a=i*2;idx.push(a,a+1,a+2,a+1,a+3,a+2);}g.setIndex(idx);g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('c',new THREE.BufferAttribute(col,4));
+    const m=new THREE.ShaderMaterial({vertexShader:'attribute vec4 c;varying vec4 vc;void main(){vc=c;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+      fragmentShader:'varying vec4 vc;void main(){gl_FragColor=vc;}',transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:add?THREE.AdditiveBlending:THREE.NormalBlending});
+    const me=new THREE.Mesh(g,m);me.frustumCulled=false;me.renderOrder=add?9:8;me.visible=false;return me;};
+  return {N,smoke:mk(false),glow:mk(true),core:mk(true),M:new THREE.Object3D(),k:[0,0,0,0,0,0],a:new THREE.Vector3(),b:new THREE.Vector3(),c:new THREE.Vector3(),col:new THREE.Color()};})();
+SLT.M.matrixAutoUpdate=false;
+/* 날 위의 두 점 (낫 모양 표에서): 날 끝, 날 안쪽 오목한 곳 */
+function slBladePts(){const o=SICKLE_V[SL_LOOK]||SICKLE_V[0],L=o.L,y0=o.hl+.01,qb=(a,b,c,t)=>(1-t)*(1-t)*a+2*t*(1-t)*b+t*t*c;
+  const ex=[L,L*.52,.02],ey=[y0-o.dr*L,y0-o.w+L*o.arch*.5,y0-o.w],t=.55;
+  return {tip:[L*SCY_BIG,(y0-o.dr*L)*SCY_BIG],inn:[qb(ex[0],ex[1],ex[2],t)*SCY_BIG,qb(ey[0],ey[1],ey[2],t)*SCY_BIG]};}
+function slTrailTick(dt,force){const T=SLT,vm=viewModel;
+  const off=()=>{T.smoke.visible=T.glow.visible=T.core.visible=false;};
+  if(!vm||!vm.userData.scy||!vm.visible||!myMo||!myMo.scf||swingT>=1){off();return;}
+  const W=SL_TR[myMo.v];if(!W){off();return;}
+  for(const m of [T.smoke,T.glow,T.core])if(m.parent!==vm)vm.add(m);
+  const [w0,w1,len]=W,hd=Math.min(swingT,w1),tl=Math.max(w0,swingT-len);if(hd<=tl+.004){off();return;}
+  const bp=T.bp||(T.bp=slBladePts()),doom=typeof pas==='function'&&pas('sldoom'),fi=SCYF.idle;
+  const cs=doom?[.72,.6,1]:[.62,1,.86];
+  const ps=[T.smoke,T.glow,T.core].map(m=>m.geometry.attributes.position.array),cl=[T.smoke,T.glow,T.core].map(m=>m.geometry.attributes.c.array);
+  for(let i=0;i<=T.N;i++){const u=i/T.N,t=tl+(hd-tl)*u;   /* u=1 이 지금(머리) */
+    const k=scyFrom(SLF.from,t,scyLerp(myMo.scf,fi,t,T.k,true),true);scyPlaceFP(T.M,k,SCYF.sc);
+    T.a.set(bp.tip[0],bp.tip[1],0).applyMatrix4(T.M.matrix);T.b.set(bp.inn[0],bp.inn[1],0).applyMatrix4(T.M.matrix);
+    const age=(swingT-t)/len,f=Math.max(0,1-age),fa=f*f*(u<.08?u/.08:1);   /* 꼬리로 갈수록 옅게, 맨 끝은 부드럽게 */
+    const fade=swingT>w1?Math.max(0,1-(swingT-w1)/len*1.2):1;
+    const A=T.a,B=T.b,C=T.c,D=T.d||(T.d=new THREE.Vector3());D.copy(A).sub(B).multiplyScalar(.1).add(A);   /* D: 날 끝보다 조금 바깥 */
+    // 연기 띠 (날 안쪽 → 날 끝, 어둡게): 무게감
+    C.copy(B).lerp(A,-.15);ps[0].set([C.x,C.y,C.z,A.x,A.y,A.z],i*6);cl[0].set([.03,.04,.05,0, .02,.03,.04,.62*fa*fade],i*8);
+    // 빛 띠 (날 끝 쪽 바깥 테두리, 영혼빛)
+    C.copy(B).lerp(A,.38);ps[1].set([C.x,C.y,C.z,D.x,D.y,D.z],i*6);const g=fa*fade;cl[1].set([0,0,0,0, cs[0]*g,cs[1]*g,cs[2]*g,1],i*8);
+    // 가장 밝은 심 (날 끝이 지난 줄)
+    C.copy(B).lerp(A,.8);ps[2].set([C.x,C.y,C.z,D.x,D.y,D.z],i*6);const h=Math.pow(f,3)*fade*.9;cl[2].set([0,0,0,0, h,h,h,1],i*8);}
+  for(const m of [T.smoke,T.glow,T.core]){m.geometry.attributes.position.needsUpdate=true;m.geometry.attributes.c.needsUpdate=true;m.visible=true;}}
+/* 3인칭 낫 궤적 (내 3인칭·다른 모험가): 프레임마다 날 끝·날 안쪽의 실제 자리를 모아 두었다가 곡선으로 이어 띠로 그린다 */
+const SLT3=new Map(),_s3a=new THREE.Vector3(),_s3b=new THREE.Vector3(),_s3c=new THREE.Vector3(),_s3d=new THREE.Vector3();
+function slTrail3Mk(){const N=SLT.N,mk=(add)=>{const g=new THREE.BufferGeometry(),idx=[];for(let i=0;i<N;i++){const a=i*2;idx.push(a,a+1,a+2,a+1,a+3,a+2);}g.setIndex(idx);
+    g.setAttribute('position',new THREE.BufferAttribute(new Float32Array((N+1)*6),3));g.setAttribute('c',new THREE.BufferAttribute(new Float32Array((N+1)*8),4));
+    const me=new THREE.Mesh(g,(add?SLT.glow:SLT.smoke).material);me.frustumCulled=false;me.renderOrder=add?9:8;me.visible=false;scene.add(me);return me;};
+  return {smoke:mk(false),glow:mk(true),h:[]};}
+function slTrail3(mesh,doom){const S=mesh&&mesh.userData.stick;let T=SLT3.get(mesh);
+  const mo=S&&S.scy&&S.w?S._scM:null,W=mo&&SL_TR[mo.v],sw=S?S._scS:1,on=!!(W&&mesh.visible&&sw>=W[0]&&sw<=W[1]);
+  if(!on&&!T)return;if(!T){T=slTrail3Mk();SLT3.set(mesh,T);}
+  const H=T.h;while(H.length&&tAll-H[0].t>.13)H.shift();
+  if(on){mesh.updateMatrixWorld(true);const bp=SLT.bp||(SLT.bp=slBladePts());const p={t:tAll,a:new THREE.Vector3(bp.tip[0],bp.tip[1],0).applyMatrix4(S.w.matrixWorld),b:new THREE.Vector3(bp.inn[0],bp.inn[1],0).applyMatrix4(S.w.matrixWorld)};
+    const l=H[H.length-1];if(!l||l.a.distanceToSquared(p.a)>1e-5)H.push(p);}
+  if(H.length<2){T.smoke.visible=T.glow.visible=false;if(!H.length&&!on){scene.remove(T.smoke,T.glow);T.smoke.geometry.dispose();T.glow.geometry.dispose();SLT3.delete(mesh);}return;}
+  const N=SLT.N,ps=[T.smoke,T.glow].map(m=>m.geometry.attributes.position.array),cl=[T.smoke,T.glow].map(m=>m.geometry.attributes.c.array),cs=doom?[.72,.6,1]:[.62,1,.86];
+  const cr=(o,k,q,u)=>{const i=Math.min(H.length-2,Math.floor(q)),f=q-i,P0=H[Math.max(0,i-1)][k],P1=H[i][k],P2=H[i+1][k],P3=H[Math.min(H.length-1,i+2)][k],f2=f*f,f3=f2*f;
+    for(const c of ['x','y','z'])o[c]=.5*(2*P1[c]+(P2[c]-P0[c])*f+(2*P0[c]-5*P1[c]+4*P2[c]-P3[c])*f2+(3*P1[c]-P0[c]-3*P2[c]+P3[c])*f3);return o;};
+  for(let i=0;i<=N;i++){const u=i/N,q=u*(H.length-1),A=cr(_s3a,'a',q),B=cr(_s3b,'b',q),ti=H[Math.min(H.length-1,Math.round(q))].t,f=Math.max(0,1-(tAll-ti)/.13),fa=f*f*(u<.1?u/.1:1);
+    _s3d.copy(A).sub(B).multiplyScalar(.1).add(A);_s3c.copy(B).lerp(A,-.15);ps[0].set([_s3c.x,_s3c.y,_s3c.z,A.x,A.y,A.z],i*6);cl[0].set([.04,.05,.06,0,.03,.04,.05,.45*fa],i*8);
+    _s3c.copy(B).lerp(A,.38);ps[1].set([_s3c.x,_s3c.y,_s3c.z,_s3d.x,_s3d.y,_s3d.z],i*6);cl[1].set([0,0,0,0,cs[0]*fa,cs[1]*fa,cs[2]*fa,1],i*8);}
+  for(const m of [T.smoke,T.glow]){m.geometry.attributes.position.needsUpdate=true;m.geometry.attributes.c.needsUpdate=true;m.visible=true;}}
+function slTrail3All(){if(cam.third&&player&&P&&P.job==='sidelooter')slTrail3(player,pas('sldoom'));
+  for(const o of others.values())if(o.mesh&&o.job==='sidelooter')slTrail3(o.mesh,false);
+  for(const [m] of SLT3)if(!m.parent||(m===player&&!cam.third))slTrail3(m,false);}
+/* 화면 반동: 1인칭 시야를 맞는 방향으로 짧게 튕긴다 (pitch 아래로 +, roll 왼쪽으로 +) */
+function slKick(px,rz,dur,rise=.18){if(SLF.kicks.length<6)SLF.kicks.push({t:0,dur,px,rz,rise});}
+function slKickApply(dt){const L=SLF.kicks;if(!L.length)return;if(cam.third){L.length=0;return;}
+  for(let i=L.length-1;i>=0;i--){const K=L[i];K.t+=dt;const k=K.t/K.dur;if(k>=1){L.splice(i,1);continue;}const r=K.rise;
+    const e=k<r?Math.sin(k/r*Math.PI/2):Math.pow(1-(k-r)/(1-r),2);   /* 빠르게 튕기고 천천히 돌아온다 */
+    camera.rotation.x-=K.px*e;camera.rotation.z+=K.rz*e;}}
 let SCY_PR=new THREE.Vector3(.8,-.5,-.3),SCY_PL=new THREE.Vector3(-.8,-.5,-.3);
 /* 열쇠 자세 사이를 매끄러운 곡선(캣멀롬)으로 잇는다. 예전처럼 마디마다 느려졌다 빨라지면(_sm) 열쇠마다 낫이 멈칫해 흔들려 보였다 */
 const _scyKP=[];
-function scyLerp(keys,idle,p,out){const K=_scyKP;K.length=0;K.push([0,idle]);for(const k of keys)K.push(k);K.push([1,idle]);
+function scyLerp(keys,idle,p,out,wrap){const K=_scyKP;K.length=0;K.push([0,idle]);for(const k of keys)K.push(k);K.push([1,idle]);
+  if(wrap)for(const j of [3,5]){let pv=K[0][1][j];for(let n=1;n<K.length;n++){const a=K[n][1][j];let b=a;while(b-pv>Math.PI)b-=Math.PI*2;while(b-pv<-Math.PI)b+=Math.PI*2;if(b!==a){K[n]=[K[n][0],K[n][1].slice()];K[n][1][j]=b;}pv=b;}}   /* 1인칭 자루 각도 θ: 바로 앞 열쇠와 가까운 쪽으로 펴서 한 바퀴 헛돌지 않게 (2타는 θ가 아래를 지나 -5까지 돈다) */
   let i=0;while(i<K.length-2&&p>K[i+1][0])i++;
   const A=K[i],B=K[i+1],P0=K[i>0?i-1:i][1],P3=K[i+2<K.length?i+2:i+1][1];let u=Math.max(0,Math.min(1,(p-A[0])/Math.max(1e-4,B[0]-A[0])));
   if(i===0||i===K.length-2)u=u*u*(3-2*u);   /* 쉬는 자세에서 나갈 때와 돌아올 때는 부드럽게 출발·멈춤 */
   const u2=u*u,u3=u2*u;for(let j=0;j<6;j++){const p0=P0[j],p1=A[1][j],p2=B[1][j],p3=P3[j];
     out[j]=.5*(2*p1+(p2-p0)*u+(2*p0-5*p1+4*p2-p3)*u2+(3*p1-p0-3*p2+p3)*u3);}return out;}
+/* 연속 공격: 새 동작이 시작되면 앞 동작이 멈춘 자세(F)에서 첫 SCY_BL 동안 이어 받는다 (쉬는 자세로 툭 튀었다 나가지 않게) */
+const SCY_BL=.13;
+function scyFrom(F,p,out,wrap){if(!F||p>=SCY_BL)return out;const u=p/SCY_BL,k=1-u*u*(3-2*u);
+  for(let j=0;j<6;j++){let a=F[j];if(wrap&&(j===3||j===5)){while(a-out[j]>Math.PI)a-=Math.PI*2;while(a-out[j]<-Math.PI)a+=Math.PI*2;}out[j]+=(a-out[j])*k;}return out;}
 function scyPlace(H,k){H.quaternion.setFromAxisAngle(_scyAy,k[3]).multiply(_scyQa.setFromAxisAngle(_scyAx,k[4]));H.quaternion.multiply(_scyQa.setFromAxisAngle(_scyAy,k[5]));
   _scyT.set(0,SCY_G0,0).applyQuaternion(H.quaternion);H.position.set(k[0]-_scyT.x,k[1]-_scyT.y,k[2]-_scyT.z);H.updateMatrix();}
 function scyHold(S,mo,swing){
-  scyPlace(S.w,mo?scyLerp(mo.sc,SCY3.idle,swing,_scyK):SCY3.idle);
+  if(mo&&(mo!==S._scM||swing<(S._scS??1)-.02))S._scF=S._scC?S._scC.slice():null;   /* 새 동작이 시작됐다: 앞 동작이 멈춘 자세에서 이어 받는다 */
+  S._scM=mo;S._scS=swing;let k=SCY3.idle;
+  if(mo){k=scyLerp(mo.sc,SCY3.idle,swing,_scyK,true);if(S._scF)scyFrom(S._scF,swing,k,true);}
+  if(!S._scC)S._scC=[0,0,0,0,0,0];for(let j=0;j<6;j++)S._scC[j]=k[j];
+  scyPlace(S.w,k);
   stickReachPole(S.AL,_scyT.set(0,SCY_G0,0).applyMatrix4(S.w.matrix),SCY_PL);   /* 왼손이 아래(자루 끝 쪽), 오른손이 위 (2026-11-10 원호) */
   stickReachPole(S.AR,_scyT.set(0,SCY_G0+SCY_GRIP,0).applyMatrix4(S.w.matrix),SCY_PR);
   S.AR.hand.rotation.set(0,0,0);S.AL.hand.rotation.set(0,0,0);}
@@ -10966,7 +11056,7 @@ const MOTION_OF={
   pierce2:{v:'shoot',dur:.8,c:.35},blast:{v:'quick',n:1,dur:.5,a:1.25},precise:{v:'channel',dur:.8,a:.6,sd:-1},scatter:{v:'multi',n:2,dur:.75},doom:{v:'shoot',dur:1.15,c:.38,a:1.35},
 };
 // 활 기본공격: 시위 당기기(누르고 있는 동안 .99에서 멈춘다) → 쏘기
-Object.assign(MOTION_OF,{slb1:{v:'scyreap',dur:.6},slb2:{v:'scyrise',dur:.6},sharvest:{v:'scyharvest',dur:.62},slambush:{v:'scythrust',dur:.45},inevit:{v:'scydash',dur:.45},intang:{v:'scyfade',dur:.55},scarecrow:{v:'scyplant',dur:.62}});
+Object.assign(MOTION_OF,{slb1:{v:'scyreap',dur:.6},slb2:{v:'scyrev',dur:.6},slb3:{v:'scyend',dur:.9},sharvest:{v:'scyharvest',dur:.62},slambush:{v:'scythrust',dur:.45},inevit:{v:'scydash',dur:.45},intang:{v:'scyfade',dur:.55},scarecrow:{v:'scyplant',dur:.62}});
 Object.assign(MOTION_OF,{xarrows:{v:'xreload',dur:.55},xhook:{v:'xhook',dur:.6},xamp:{v:'xamp',dur:.8},xload:{v:'xreload',dur:.7},xtrap:{v:'place',dur:.6},tchalk:{v:'place',dur:.6},tmine:{v:'place',dur:.6},tambush:{v:'lurk',dur:.5},tpoach:{v:'multi',n:2,dur:.75},triple:{v:'shoot',dur:.42,c:.1},pull2:{v:'pump',dur:.5,a:.7},barrage:{v:'multi',dur:.45},arrows:{v:'multi',dur:.6},pull:{v:'pump',dur:.5,a:.7},bdraw:{v:'bowdraw',dur:.8},bshot:{v:'bowshot',dur:.42},rapid:{v:'pump',dur:.5,a:.7},roll:{v:'roll',dur:.7},burstout:{v:'channel',dur:.6},holycircle:{v:'castup',dur:.7},lightning:{v:'quick',n:1,dur:.45},flame:{v:'flamecast',dur:.6},empower:{v:'pump',dur:.7,a:.8},dupe:{v:'pump',dur:.6,a:.7},approach:{v:'dash',dur:.5},counterm:{v:'shove',dur:.55,a:1.1},leapblast:{v:'leap',j:.5,dur:.45},lbcast:{v:'staffshot',dur:.5},whack:{v:'overhead',dur:.55,a:1.1},grasp:{v:'castdown',dur:.7,a:1.2},beams:{v:'channel',dur:1.0,a:1.1},farblast:{v:'castup',dur:1.5,a:1.15},fbfire:{v:'staffshot',dur:.5,a:1.2},ride:{v:'ride',dur:1},holyray:{v:'channel',dur:.8},angel:{v:'castup',dur:.8},fizzle:{v:'pump',dur:.45,a:.5},roll0:{v:'roll',dur:.7,dir:0},roll4:{v:'roll',dur:.7,dir:4}});
 const M3=['rx','rz','re','lx','lz','le','tw','ln','wr','sp','lf','cr','wy','kr','rl','fl','fr','wd','wf','ws','py','dp'];
 // 3인칭 열쇠 자세들
@@ -28527,7 +28617,8 @@ function setViewModel(job){if(viewModel)camera.remove(viewModel);viewModel=makeV
 function updateViewModel(dt,moving){
   if(!viewModel)return;if(P&&P.needBook){viewModel.visible=false;return;}const u=viewModel.userData,F=FP[u.style]||FP.sword;if(u.grim)u.grim.visible=!(P&&P.fly);
   const sx=moving?Math.cos(cam.bob*.5)*.018:0,sy=moving?Math.abs(Math.sin(cam.bob*.5))*.018:Math.sin(tAll*1.6)*.006;
-  swingT=Math.min(swingCap(),swingT+dt*(myMo?1/myMo.dur:swingSpd(P?P.job:'warrior')));
+  {let hs=1;if(SLF.stop>0){SLF.stop-=dt;hs=.05;}   /* 사이드루터 기본 공격이 맞는 순간 낫이 살에 걸린 듯 아주 잠깐 멈춘다 */
+  swingT=Math.min(swingCap(),swingT+dt*hs*(myMo?1/myMo.dur:swingSpd(P?P.job:'warrior')));}
   const alt=(u.style==='dagger'&&!u.oneD||(u.style==='fist'&&!u.shieldL))&&swingN%2===1;
   const apply=(h,keys,mirror)=>{if(!keys)return;const q=fpPose(keys,swingT);
     h.position.set((mirror?-q[0]:q[0])+sx,q[1]+sy-jumpY*.02,q[2]);h.rotation.set(q[3],mirror?-q[4]:q[4],mirror?-q[5]:q[5]);};
@@ -28548,13 +28639,16 @@ function updateViewModel(dt,moving){
   if(u.xbow){const xl=xlMine(),st=xbState(myMo,swingT,xl),c=xbPose(XBF,st),w=u.xbow;
     w.position.set(c[0]+sx,c[1]+sy-jumpY*.02,c[2]);w.rotation.set(c[3],Math.PI+c[4],c[5]);w.updateMatrix();xbSet(w,st.draw,st.rail);xbShowBolt(u.xbH,st.hand);
     xbRightHand(XBF,st,w.matrix,u.R.position);u.R.rotation.set(.2,0,0);u.L.position.copy(XB_FORE).applyMatrix4(w.matrix);u.L.rotation.set(.3,0,.5);u.R.visible=u.L.visible=true;}
-  if(u.scy){const H=u.scy,fi=SCYF.idle,k=myMo&&swingT<1&&myMo.scf?scyLerp(myMo.scf,fi,swingT,_scyK):fi;
+  if(u.scy){const H=u.scy,fi=SCYF.idle,on=!!(myMo&&swingT<1&&myMo.scf);
+    if(on&&(myMo!==SLF.mo||swingN!==SLF.n))SLF.from=SLF.cur.slice();SLF.mo=on?myMo:null;SLF.n=swingN;   /* 연속 공격: 앞 타가 멈춘 자세에서 이어 받는다 */
+    const k=on?scyFrom(SLF.from,swingT,scyLerp(myMo.scf,fi,swingT,_scyK,true),true):fi;for(let j=0;j<6;j++)SLF.cur[j]=k[j];
     /* 걸을 때 흔들림은 자세 값에 더해 놓는다. 행렬에 바로 더하면 자리가 그대로인 프레임에 행렬을 다시 만들지 않아(updateMatrix 건너뛰기) 흔들림이 쌓여 팔이 점점 올라갔다.
        가만히 있을 땐 숨쉬듯 흔들리지 않게 더하지 않는다 */
     const kk=moving?_scyKm:k;if(moving){for(let i=0;i<6;i++)kk[i]=k[i];kk[0]+=sx;kk[1]+=sy;}scyPlaceFP(H,kk,SCYF.sc);H.matrixWorldNeedsUpdate=true;
     u.L.position.set(0,SCY_G0,0).applyMatrix4(H.matrix);u.R.position.set(0,SCY_G0+SCY_GRIP,0).applyMatrix4(H.matrix);   /* 왼손이 아래, 오른손이 위 */
     u.R.quaternion.copy(H.quaternion);u.R.rotateX(SCY_FHR[0]);u.R.rotateY(SCY_FHR[1]);u.R.rotateZ(SCY_FHR[2]);
     u.L.quaternion.copy(H.quaternion);u.L.rotateX(SCY_FHL[0]);u.L.rotateY(SCY_FHL[1]);u.L.rotateZ(SCY_FHL[2]);u.R.visible=u.L.visible=true;}   /* 큰 낫: 두 손을 자루에 */
+  if(u.scy||SLT.smoke.visible)slTrailTick(dt);
   if(u.A){for(const h of [u.R,u.L]){h.position.y+=.07;h.position.z+=.03;}viewModel.updateMatrixWorld(true);u.R.userData.arm.visible=u.L.userData.arm.visible=false;try{pmFPPose(u.A,viewModel,{R:u.R,L:u.L});}catch(e){}}else{fpArm(u.R);fpArm(u.L);}
   if(u.style==='sword'&&(P.job==='barbarian')){const w=u.R.userData.wpn;if(w){if(w.userData.ry0===undefined)w.userData.ry0=w.rotation.y;w.rotation.y=w.userData.ry0+(myMoId==='axeb2'&&swingT<1?Math.PI:0);}}
   if(u.style==='dagger'){const w=u.R.userData.wpn;if(w){if(w.userData.rx0===undefined)w.userData.rx0=w.rotation.x;w.rotation.x=w.userData.rx0+(P&&P.deepHold&&!((myMoId==='deepstab'||myMoId==='sassn')&&swingT<.82)?Math.PI:0);}}
@@ -32430,7 +32524,7 @@ function updatePlayer(dt){
     if(cam.third&&GS&&GS.w>.5)cam.bob=GS.ph+GS.be*Math.PI*GS.dir;else cam.bob+=dt*(P.fly?moving*9:pgParams(Math.hypot(pvel.x,pvel.z)/((player.scale.y||1)*((player.userData.stick&&player.userData.stick.body.scale.y)||1))).om);if(Math.floor(cam.bob/Math.PI)!==st0&&!(P.dash||P.leap))sfx('step',null,1,.9+Math.random()*.2);}
   if(CCAR.ride)ccarSeatPlayer();else if(standUp)standUpTick(dt);else if(P.seat!=null){const s=SEATS[P.seat];if(s){player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;}else P.seat=null;}
   const bobY=(moving&&jumpY===0?Math.sin(cam.bob)*.06:0)-(cam.land||0);
-  camera.rotation.set(cam.pitch,cam.yaw,0);
+  camera.rotation.set(cam.pitch,cam.yaw,0);slKickApply(dt);
   cam.dw=(cam.dw??1)+(((sitting||P.seat!=null)?0:1)-(cam.dw??1))*Math.min(1,dt*2.5);   /* 앉아 있으면 취해도 시야가 흔들리지 않는다 (일어서면 서서히 다시) */
   if(P.drunk>0&&!cam.third&&cam.dw>.01){const k=Math.min(1,P.drunk/3)*cam.dw;camera.rotation.z=Math.sin(tAll*1.1)*.07*k+Math.sin(tAll*2.3)*.03*k;camera.rotation.y+=Math.sin(tAll*.8)*.04*k;camera.rotation.x+=Math.sin(tAll*1.5+2)*.025*k;}   /* 취해서 시야가 흔들린다 */
   let rollA=0,rollCr=0;if(myMo&&myMo.v==='roll'&&swingT<1){const v=blendKeys(myMo.k3,swingT,{},M3);rollA=v[14]||0;rollCr=v[11]||0;}   // 1인칭 구르기: 시야도 같이 한 바퀴
@@ -32452,7 +32546,7 @@ function updatePlayer(dt){
     if(hallCeil(player.position.x,player.position.z)!=null)hallCamFit(eye,cp);   /* 지하실(둥근 방·위층 방·계단·창고): 카메라가 벽·천장 밖으로 나가지 않게 */
     else camFitIndoor(eye,cp);   /* 다른 건물 안(길드홀·집·회관 등): 천장과 벽을 뚫고 나가지 않게 */
     camera.position.copy(cp);if(typeof petFP==='function')petFP();
-    swingT=Math.min(swingCap(),swingT+dt*(myMo?1/myMo.dur:swingSpd(P.job)));
+    {let hs=1;if(SLF.stop>0){SLF.stop-=dt;hs=.05;}swingT=Math.min(swingCap(),swingT+dt*hs*(myMo?1/myMo.dur:swingSpd(P.job)));}
   }else{
     player.visible=false;if(viewModel)viewModel.visible=true;
     camera.position.set(player.position.x,player.position.y+1.62+bobY-sitEase(player.userData.sitK||0)*.95+(player.userData.rideY||0),player.position.z);
@@ -32805,15 +32899,48 @@ function slSoulFx(m){const c=mCenter(m),q=player.position;VFX.burst(c,SL_SOUL,26
 /* 다가오는 죽음: 기본 공격에 맞은 적의 처형 가능 HP를 올린다 */
 function slDoomHit(m){if(!pas('sldoom')||!m||m.dying!==null||m.dummy)return;const D=SK.sldoom;m.slDoomN=m.slDoomT>tAll?Math.min(D.maxN,(m.slDoomN||0)+1):1;m.slDoomT=tAll+D.dur;
   const c=mCenter(m);VFX.burst(c,0x6a5a8a,6,1.6,.5,{up:.4,glow:false});}
-/* 기본 공격: 낫으로 번갈아 비스듬히 베어 넘긴다 (앞쪽 넓게) */
-function slBasic(B){const sw=swingN;myMoId='slb1';   /* 대낫 기본 공격은 한 가지 (2026-11-10 원호: 1타만) */
-  myMo=motionFor('sword',myMoId);
-  setTimeout(()=>{if(mode!=='world'||!P||swingN!==sw)return;const q=player.position,f=flatFwd(),doom=pas('sldoom'),mul=B.mult*(JOBS[P.job].bmul||1)*(doom?SK.sldoom.bmul:1);let n=0;
-    shared(()=>{for(const m of alive()){const dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz);if(d>B.range+.7+m.r)continue;if(d>1.2&&(dx*f.x+dz*f.z)/d<.2)continue;
-      damageMonster(m,mul,{color:0xffffff});if(doom)slDoomHit(m);n++;}});
-    const p=q.clone();p.y+=1.15;p.x-=Math.sin(cam.yaw)*.25;p.z-=Math.cos(cam.yaw)*.25;const a=false;
-    VFX.slash(p,cam.yaw,doom?0xb0a0d8:0xe0e8e0,{r:2.6,arc:2.2,tilt:-1.0,dur:.2,dir:1});   /* 오른쪽 위에서 왼쪽 아래로 대각선으로 내려찍는다 */
-    VFX.burst(new THREE.Vector3(q.x+f.x*2.2,heightAt(q.x+f.x*2.2,q.z+f.z*2.2)+.1,q.z+f.z*2.2),0xb8a888,10,3,.4,{up:1,grav:8});if(n){shakeT=Math.max(shakeT,.08);sfx('heavy',q,.5);}},270);}
+/* 기본 공격 3타: 1타 대각선 내려베기 → 2타 낮게 걷어 올려베기 → 3타 머리 위에서 정면 땅으로 내려찍기 (2026-11-11 원호)
+   이어 누르면 다음 타, 쉬면 1타부터. SL_B[타] = [동작 시간 비율 중 맞는 순간, 다음 공격까지(초), 피해 배율] */
+let slN=0,slAt=0;
+const SL_B=[null,{hit:.46,cd:.5,mul:.95},{hit:.4,cd:.5,mul:1.0},{hit:.53,cd:.82,mul:1.6}];
+function slBasic(B){const now=performance.now(),st=now-slAt<(SL_B[slN]?SL_B[slN].cd*1000:0)+650?slN%3+1:1;slN=st;slAt=now;
+  const sw=swingN,C=SL_B[st],aspd=(JOBS[P.job].aspd||1)/(1+famLv()*.05*(P.famN||0));
+  myMoId='slb'+st;myMo=motionFor('sword',myMoId);basicCd=C.cd*aspd;
+  const dur=myMo?myMo.dur:.6,hitMs=C.hit*dur*1000;
+  /* 휘두르기 시작 소리: 낫이 바람을 가른다 (3타는 들어 올리는 동안 낮게 울린다) */
+  setTimeout(()=>{if(mode!=='world'||!P||swingN!==sw)return;sfx('whoosh',null,st===3?.75:.55,st===1?.8:st===2?.92:.62);if(st===3)sfx('w_swing',null,.7,.7);},Math.max(0,hitMs-(st===3?170:110)));
+  if(st===3&&!cam.third)slKick(-.045,.012,hitMs/1000+.05,.62);   /* 3타: 낫을 들어 올리는 동안 시야도 살짝 따라 올라갔다가 내려찍을 때 함께 떨어진다 */
+  setTimeout(()=>{if(mode!=='world'||!P||swingN!==sw)return;slBasicHit(B,st);},hitMs);}
+function slBasicHit(B,st){const q=player.position,f=flatFwd(),doom=pas('sldoom'),C=SL_B[st],mul=B.mult*(JOBS[P.job].bmul||1)*(doom?SK.sldoom.bmul:1)*C.mul;
+  const fp=!cam.third,col=doom?0xb0a0d8:0xd8f0e8,sx=-f.z,sz=f.x;   /* (sx,sz): 오른쪽 */
+  let n=0;const hit=[];
+  shared(()=>{if(st<3){for(const m of alive()){const dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz);if(d>B.range+.7+m.r)continue;if(d>1.2&&(dx*f.x+dz*f.z)/d<.2)continue;
+        damageMonster(m,mul,{color:0xffffff});if(doom)slDoomHit(m);hit.push(m);n++;}}
+    else{const at={x:q.x+f.x*2.4,z:q.z+f.z*2.4};   /* 3타: 날이 박힌 자리 둘레 + 그 앞까지 */
+      for(const m of alive()){const dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,d=Math.hypot(dx,dz),da=Math.hypot(m.mesh.position.x-at.x,m.mesh.position.z-at.z);
+        if(da>2.3+m.r&&!(d<B.range+1+m.r&&(d<1.2||(dx*f.x+dz*f.z)/d>.5)))continue;
+        const ux=d>.01?dx/d:f.x,uz=d>.01?dz/d:f.z;damageMonster(m,mul,{color:0xffffff,stun:.35,kb:[+(ux*2.2).toFixed(2),+(uz*2.2).toFixed(2)]});if(doom)slDoomHit(m);hit.push(m);n++;}}});
+  /* 맞은 적마다: 베인 자리 빛줄·검은 피·영혼 조각 */
+  for(const m of hit){const c=mCenter(m),yaw=cam.yaw;
+    if(st===1)VFX.slash(c,yaw,col,{r:.75+m.r*.5,arc:1.5,tilt:-1.05,dur:.16,dir:1});else if(st===2)VFX.slash(c,yaw,col,{r:.75+m.r*.5,arc:1.6,tilt:1.0,dur:.16,dir:-1});
+    VFX.flare(c,0xffffff,st===3?2.6:1.7,.12);VFX.burst(c,0xffffff,st===3?10:6,6,.16,{layer:2,grav:0,glow:false,plain:true});
+    VFX.burst(c,0x1a1418,st===3?16:10,st===3?4.5:3.2,.5,{up:.5,grav:9,glow:false,plain:true});
+    VFX.burst(c,SL_SOUL,st===3?14:7,2.4,.55,{mix:0xffffff,up:.9,grav:-1.5});
+    for(let i=0;i<(st===3?6:3);i++)VFX.emit(1,c.x+(Math.random()-.5)*.4,c.y+(Math.random()-.2)*.5,c.z+(Math.random()-.5)*.4,(Math.random()-.5)*.8,1.2+Math.random(),(Math.random()-.5)*.8,SL_SOUL,.45+Math.random()*.3,-1.5,1.4);}
+  if(n){SLF.stop=st===3?.11:.065;sfx('blood2',q,st===3?.9:.6,st===2?1.1:1);sfx('heavy',q,st===3?.9:.55,st===3?.7:1);}
+  /* 1인칭: 시야 반동 (맞히면 더 크게) */
+  const kk=n?1:.45;if(st===1)slKick(.03*kk,.035*kk,.22);else if(st===2)slKick(-.022*kk,-.04*kk,.22);
+  if(st===3){/* 내려찍기: 땅에 날이 박히며 충격파, 흙, 갈라진 땅, 영혼 불꽃이 솟는다 */
+    const at=new THREE.Vector3(q.x+f.x*2.3,0,q.z+f.z*2.3);at.y=floorAt(at.x,at.z,q.y+.5);
+    SLF.stop=Math.max(SLF.stop,.08);slKick(.075*(n?1:.7),0,.38);cam.land=Math.max(cam.land||0,n?.16:.1);shakeT=Math.max(shakeT,n?.26:.16);
+    if(typeof groundCrack==='function')groundCrack(at,1.3,.9);if(typeof dustPuffs==='function')dustPuffs(at,1.1,9);if(typeof rockDebris==='function')rockDebris(at,.8,7);
+    VFX.shock(at,0x3a9a80,2.6,.42);VFX.burst(at.clone().setY(at.y+.15),0xb8a888,18,5,.45,{up:1,grav:10,glow:false});
+    for(let i=0;i<16;i++){const a=Math.random()*Math.PI*2,r=Math.random()*1.4;VFX.emit(i%3?0:1,at.x+Math.cos(a)*r,at.y+.1,at.z+Math.sin(a)*r,Math.cos(a)*.6,2.2+Math.random()*2.4,Math.sin(a)*.6,i%4?SL_SOUL:0xe8fff8,.55+Math.random()*.35,-1,1.6);}
+    flash('#2a5a50',n?.12:.06);sfx('slam',at,n?.9:.65,.8);if(fp)sfx('a_crush',at,.5,.8);}
+  else{const p=q.clone();p.y+=1.15;
+    if(!fp)VFX.slash(p,cam.yaw,col,st===1?{r:2.6,arc:2.2,tilt:-1.0,dur:.2,dir:1}:{r:2.5,arc:2.2,tilt:1.0,dur:.2,dir:-1});   /* 3인칭: 큰 궤적 (1인칭은 낫 끝 궤적 띠가 대신한다) */
+    if(st===1)VFX.burst(new THREE.Vector3(q.x+f.x*2.2-sx*.6,heightAt(q.x+f.x*2.2,q.z+f.z*2.2)+.1,q.z+f.z*2.2-sz*.6),0xb8a888,8,3,.4,{up:1,grav:8,glow:false});
+    if(n)shakeT=Math.max(shakeT,.08);}}
 /* 영혼 수확: 앞쪽 부채꼴을 크게 휩쓴다 */
 function slHarvest(S,pw,opt){const sn=swingN;
   setTimeout(()=>{if(mode!=='world'||!P||P.hp<=0)return;const q=player.position,f=flatFwd();let n=0;
@@ -33893,6 +34020,7 @@ function loopBody(){if(HCHL.u)return;   /* 허칠을 서둘러 짓는 동안(로
   if(mode!=='title'){miniT-=dt;if(miniT<=0){miniT=1/20;drawMini();}if(wmapOpen&&(tAll*10|0)%2===0)drawWorldMap();updateHotbar();wpTick();saveT+=dt;if(saveT>8){saveT=0;if(mode==='world')save();}}
   /* 첫 화면(시작 창)은 불투명해서 뒤의 세상이 보이지 않는다: 그동안은 세상을 그리지 않는다 (물체 4만 개를 매 프레임 그리느라 로딩이 끝난 뒤에도 첫 화면이 늦게 떴다) */
   if(mode==='title'&&!START_EL.hidden){titleWarm();return;}
+  if(mode==='world'&&SLT3.size+(cam.third?1:0)+others.size)slTrail3All();
   renderer.render(scene,camera);if(typeof ninVisionRender==='function')ninVisionRender();
   /* 시작 창에서 다 못 올린 세상은 게임 안에서도 프레임마다 조금씩 이어서 올린다 (들어가기 전에 다 올릴 때까지 기다리지 않는다) */
   if(!TW.done&&TW.list)titleWarm(true);
