@@ -31090,7 +31090,7 @@ function killMonster(m,mine=true,partyN=1){
   if(m.D.dragon){dragonReward(m,partyN);return;}
   const exp=Math.max(1,Math.round(m.st.exp*gapExp(m.lv)));
   log(`${m.D.name} 처치 · EXP +${Math.round(exp*expMul())}${partyN>1?` (함께 ${partyN}명)`:''}`,'good');
-  dropLoot(m);questKill(m);if(typeof lqKill==='function')lqKill(m);if(typeof rqKill==='function')rqKill(m);if(typeof hfKill==='function')hfKill(m);
+  dropLoot(m);questKill(m);if(typeof lqKill==='function')lqKill(m);if(typeof rqKill==='function')rqKill(m);if(typeof hqKill==='function')hqKill(m);
   gainExp(exp);partyShareExp(exp);
 }
 function levelUpFx(lv,n=1){sfx('levelup');
@@ -34957,7 +34957,12 @@ let _gqGlow=null;
 function gqGlowTex(){if(_gqGlow)return _gqGlow;const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d'),rg=x.createRadialGradient(32,32,0,32,32,32);
   rg.addColorStop(0,'rgba(220,255,170,.95)');rg.addColorStop(.4,'rgba(160,232,100,.4)');rg.addColorStop(1,'rgba(120,200,60,0)');x.fillStyle=rg;x.fillRect(0,0,64,64);return _gqGlow=new THREE.CanvasTexture(c);}
 function gqSpotMesh(kind){const g=new THREE.Group();g.userData.noMap=1;
-  if(kind==='weed'){const m=new THREE.MeshStandardMaterial({color:0x3f6a24,roughness:.9,flatShading:true}),m2=new THREE.MeshStandardMaterial({color:0x5a7a2a,roughness:.9,flatShading:true});
+  if(kind==='page'||kind==='book'){   /* 숲에 떨어진 책장 몇 장 / 가죽 표지 일지 한 권 */
+    const pm=new THREE.MeshStandardMaterial({color:0xeee4cc,roughness:.95,side:THREE.DoubleSide});
+    if(kind==='page')for(let k=0;k<3;k++){const l=new THREE.Mesh(new THREE.PlaneGeometry(.26,.34),pm);l.rotation.set(-Math.PI/2+(k-1)*.12,0,k*1.1);l.position.set(Math.cos(k*2.3)*.22,.03+k*.012,Math.sin(k*2.3)*.18);g.add(l);}
+    else{const cv=new THREE.MeshStandardMaterial({color:0x5a3a22,roughness:.8}),b=new THREE.Mesh(new THREE.BoxGeometry(.3,.07,.4),cv);b.position.y=.035;b.rotation.y=.4;g.add(b);
+      const pg=new THREE.Mesh(new THREE.BoxGeometry(.27,.05,.37),pm);pg.position.set(.012,.036,0);pg.rotation.y=.4;g.add(pg);}}   /* 종이 속은 표지 속으로 넣어 면이 겹치지 않게 */
+  else if(kind==='weed'){const m=new THREE.MeshStandardMaterial({color:0x3f6a24,roughness:.9,flatShading:true}),m2=new THREE.MeshStandardMaterial({color:0x5a7a2a,roughness:.9,flatShading:true});
     for(let k=0;k<9;k++){const a=k/9*Math.PI*2+k*.7,r=.12+(k%3)*.13,h=.45+(k*37%5)*.09,c=new THREE.Mesh(new THREE.ConeGeometry(.07,h,4),k%2?m:m2);c.position.set(Math.cos(a)*r,h/2,Math.sin(a)*r);c.rotation.set(Math.sin(a)*.5,0,Math.cos(a)*.5);g.add(c);}
     const fl=new THREE.MeshStandardMaterial({color:0xe8d84a,roughness:.7});for(let k=0;k<3;k++){const f=new THREE.Mesh(new THREE.SphereGeometry(.05,6,4),fl);f.position.set(Math.cos(k*2.1)*.22,.55+k*.05,Math.sin(k*2.1)*.22);g.add(f);}}
   else{const d=new THREE.Mesh(new THREE.CircleGeometry(1.15,18),new THREE.MeshStandardMaterial({color:0xb89668,roughness:1,polygonOffset:true,polygonOffsetFactor:-2}));d.rotation.x=-Math.PI/2;d.position.y=.04;g.add(d);g.userData.soil=d;
@@ -34967,12 +34972,20 @@ function gqSpotMesh(kind){const g=new THREE.Group();g.userData.noMap=1;
   return g;}
 function gqClearSpots(id){const L=GQ.sp[id];if(L)for(const o of L)if(o.mesh)scene.remove(o.mesh);delete GQ.sp[id];}
 /* 지금 단계의 남은 자리만 땅에 놓는다 (불러온 뒤에도 남은 수만큼) */
-function gqPlaceSpots(id){gqClearSpots(id);const st=gqStepOf(id),q=gqOf(id);if(!st||st.talk)return;   /* 이야기 퀘스트는 일할 자리가 없다 */const H=MARCUS.farmHouse;if(!H||!H.spots.length)return;
+function gqPlaceSpots(id){gqClearSpots(id);const st=gqStepOf(id),q=gqOf(id);if(!st||st.talk)return;   /* 이야기 퀘스트는 일할 자리가 없다 */
+  if(st.spots){const F=st.spots(),left=st.need-(q.h|0),L=[];   /* 맡긴 사람이 있는 퀘스트(HQ): 그 땅에서 고른 자리 */
+    for(let k=0;k<left&&F.length;k++){const p=F[k%F.length],m=gqSpotMesh(st.mesh||st.key);m.position.set(p.x,heightAt(p.x,p.z),p.z);m.rotation.y=k*1.7;scene.add(m);L.push({x:p.x,z:p.z,mesh:m,done:false});}
+    L.fresh=!!(player&&OR.zoneAt(player.position.x,player.position.z)===st.zone);GQ.sp[id]=L;return;}
+  const H=MARCUS.farmHouse;if(!H||!H.spots.length)return;
   if(!H.free)H.free=H.spots.filter(p=>!colliders.some(c=>Math.abs(c.x-p.x)<12&&Math.abs(c.z-p.z)<12&&Math.hypot(c.x-p.x,c.z-p.z)<(c.box?Math.max(c.hw||0,c.hd||0):c.r||1)+1.8));   /* 나중에 놓인 나무·사람에도 막히지 않게 한 번 더 거른다 */
   const F=H.free.length>=10?H.free:H.spots,left=st.need-(q.h|0),off=q.s?6:0,L=[];
   for(let k=0;k<left;k++){const p=F[(off+k)%F.length],m=gqSpotMesh(st.key);m.position.set(p.x,heightAt(p.x,p.z),p.z);m.rotation.y=k*1.7;scene.add(m);L.push({x:p.x,z:p.z,mesh:m,done:false});}
   GQ.sp[id]=L;}
-function gqSync(){if(!P)return;for(const id in GQ.sp)if(!gqOf(id))gqClearSpots(id);if(!P.gq)return;for(const id in P.gq)if(GENQ[id]&&!GQ.sp[id])gqPlaceSpots(id);}
+function gqSync(){if(!P)return;if(typeof hqHook==='function'&&(gqSync.n=(gqSync.n|0)+1)%60===1)hqHook();
+  for(const id in GQ.sp)if(!gqOf(id))gqClearSpots(id);if(!P.gq)return;
+  for(const id in P.gq){if(!GENQ[id])continue;const L=GQ.sp[id];if(!L){gqPlaceSpots(id);continue;}
+    const st=gqStepOf(id);   /* 그 땅에 처음 들어오면 자리를 다시 골라 땅 높이·나무에 맞춘다 */
+    if(st&&st.zone&&!L.fresh&&!L.some(o=>o.done)&&player&&OR.zoneAt(player.position.x,player.position.z)===st.zone)gqPlaceSpots(id);}}
 /* F로 일할 수 있는 자리 (2m 안) */
 function gqNear(){if(!P||!P.gq||!player||GQ.work)return null;const p=player.position;let best=null,bd=2.1;
   for(const id in GQ.sp)for(let i=0;i<GQ.sp[id].length;i++){const o=GQ.sp[id][i];if(o.done)continue;const d=Math.hypot(p.x-o.x,p.z-o.z);if(d<bd&&Math.abs(p.y-o.mesh.position.y)<2.5){bd=d;best=`gq:${id}:${i}`;}}
@@ -34995,6 +35008,7 @@ function gqTick(dt){if(!gqTick.ok||!P)return;
   gqBar(Math.min(1,W.t/W.st.dur),W.st.act+'…');if(W.t<W.st.dur)return;
   GQ.work=null;gqBar(-1);W.o.done=true;const u=W.o.mesh.userData;if(u.glow)u.glow.visible=false;if(u.dia)u.dia.visible=false;
   const q=gqOf(W.id),G=GENQ[W.id];q.h=(q.h|0)+1;sfx('coin',null,.5,1.3);
+  if(q.h>=W.st.need&&G.hqNext){G.hqNext();return;}   /* 맡긴 사람이 있는 퀘스트는 다음 단계를 그쪽에서 */
   if(q.h>=W.st.need){q.s++;q.h=0;const nx=G.steps[q.s];
     if(nx){log(`${W.st.goal} 끝! 이제 ${nx.goal}.`,'sys');toast(nx.goal);setTimeout(()=>{if(gqOf(W.id)&&gqOf(W.id).s===q.s)gqPlaceSpots(W.id);},1500);}
     else{log(`밭일을 다 했다. ${G.report}.`,'sys');toast(G.report);}}
@@ -35337,55 +35351,160 @@ function rqTalk(n){const st=rqStep(),G=GENQ.rq;n.mqLock=true;const done=()=>{n.m
       npcEndLine('골목 녀석의 방식이 낫다 싶으면 그대로 써라. 번개는 누구 편도 아니다.');});return;}
   done();renderNpc('…');}
 
-/* ---------- 한나의 식재료: 하레나 여관 주인 한나가 맡기는 세 단계 사냥 ----------
-   창고가 비어서 사막 짐승을 잡아 식재료를 모아 온다: 낙타(고기) → 모래 슬라임(국물 젤리) → 사막 거북(수프).
-   단계마다 한나에게 돌아가면 그 단계 보수를 주고 다음 재료를 알려 준다. 한 번만 할 수 있다.
-   보수는 같은 사냥터의 하레나 게시판 의뢰와 같은 셈 (경험치 = 몬스터 경험치×마리×1.4, 골드 = 레벨×마리×11) */
-const HFOOD=[{ty:'ogre',zone:'ruins',need:10,lv:10},{ty:'sandslime',zone:'wwest',need:12,lv:16},{ty:'nomad',zone:'wnorth',need:10,lv:26}];
-const hfPay=k=>{const H=HFOOD[k];return {exp:Math.round(OR.monStats(H.ty,H.lv).exp*H.need*1.4),gold:H.lv*H.need*11};};
-GENQ.hfood={title:'한나의 식재료',npc:'hanna',minLv:15,maxLv:999,where:'하레나 광장 · 한나의 여관 앞',
-  steps:[{key:'h0',talk:1,need:HFOOD[0].need,goal:'깊은 사막1의 낙타 잡기'},{key:'b1',talk:1,need:1,one:1,goal:'한나에게 낙타 고기 건네기'},
-    {key:'h1',talk:1,need:HFOOD[1].need,goal:'깊은 사막2의 모래 슬라임 잡기'},{key:'b2',talk:1,need:1,one:1,goal:'한나에게 슬라임 젤리 건네기'},
-    {key:'h2',talk:1,need:HFOOD[2].need,goal:'깊은 사막3의 사막 거북 잡기'}],
-  report:'한나에게 거북 고기 건네기',exp:0,gold:0,talk:(id,n)=>hfTalk(n),
-  rewardLine:()=>{const a=[0,1,2].map(hfPay);return `단계마다 경험치 ${a.map(p=>qwNum(p.exp)).join(' / ')} · 골드 ${a.map(p=>qwNum(p.gold)).join(' / ')} · 마지막에 양고기 스튜 3개`;},
-  markWho:id=>{const st=gqStepOf(id);return st&&(st.key==='b1'||st.key==='b2')?['hanna']:[];}};
-const hfStep=()=>{const st=gqStepOf('hfood');return st?st.key:(gqOf('hfood')?'report':null);};
-function hfNext(){const q=gqOf('hfood');if(!q)return;q.s++;q.h=0;const nx=gqStepOf('hfood'),g=nx?nx.goal:GENQ.hfood.report;
-  log(`한나의 식재료 — ${g}`,'sys');toast(g);updateQuestHud();save();if(!$('#qwin').hidden)renderQuestWin();}
-const HF_GOT=['낙타 고기','슬라임 젤리','거북 고기'];
-function hfKill(m){const st=hfStep();if(!st||st[0]!=='h')return;const k=+st[1],H=HFOOD[k];if(m.t!==H.ty)return;const q=gqOf('hfood');q.h=(q.h|0)+1;
-  log(`${HF_GOT[k]}를 챙겼다 (${Math.min(q.h,H.need)}/${H.need})`,'sys');
-  if(q.h>=H.need)hfNext();else{updateQuestHud();if(q.h%5===0)save();}}
-/* 단계 보수: 경험치·골드 (마지막엔 스튜도) */
-function hfReward(k){const p=hfPay(k);P.gold+=p.gold;const items=[];if(k===2&&addItem('f_stew',3,true))items.push(['f_stew',3]);
-  lootShow(null,p.gold,items);log(`한나의 식재료 ${k+1}단계 보수 · 경험치 ${p.exp.toLocaleString('ko-KR')} · ${p.gold.toLocaleString('ko-KR')} 골드`,'good');sfx('coin');gainExp(p.exp);updateHud();}
-function hfTalk(n){const st=hfStep(),G=GENQ.hfood;n.mqLock=true;const done=()=>{n.mqLock=false;};
-  if(gqClear('hfood')){done();renderNpc('창고가 꽉 차니 마음이 다 든든해요. 그때 정말 고마웠어요!');return;}
-  if(!st){if(P.lv<G.minLv){done();renderNpc('마음은 고마운데, 바깥 사막 짐승들이 만만치 않아요. 조금 더 단단해지면 그때 부탁할게요.');return;}
-    showPages(['아이고, 마침 잘 왔어요. 큰일 났어요…','석굴 쪽으로 가는 손님이 부쩍 늘어서 냄비를 온종일 끓였더니, 창고가 텅 비었지 뭐예요.','식재료 마차는 사막 짐승들 때문에 며칠째 오지도 않고요.'],0,()=>{
-      renderNpc('사막에 나가서 먹을 만한 짐승을 좀 잡아다 줄래요? 보수는 넉넉히 챙겨 드릴게요.',box=>{box.dataset.noskip='1';
-        npcBtn(box,'맡겨 주세요',()=>{(P.gq=P.gq||{}).hfood={s:0,h:0};done();updateQuestHud();save();log(`${gqTag('hfood')} 퀘스트: ${G.title} — ${G.steps[0].goal}`,'sys');
-          npcEndLine('고마워요! 먼저 고기부터요. 깊은 사막1에 낙타가 다녀요. 열 마리면 스튜 냄비를 며칠은 채울 수 있어요.');gqFx('hfood');},'pri wide');
-        npcBtn(box,'다음에요',()=>{done();renderNpc('그래요, 시간 날 때 꼭 들러 줘요.');},'wide');});});return;}
-  if(st[0]==='h'){const k=+st[1],q=gqOf('hfood'),left=HFOOD[k].need-(q.h|0);
-    renderNpc([`낙타 고기가 아직 ${left}마리 몫 모자라요. 깊은 사막1에 가면 낙타가 있어요.`,`모래 슬라임이 ${left}마리 더 필요해요. 깊은 사막2에서 말랑말랑 굴러다녀요.`,`사막 거북이 ${left}마리 남았어요. 깊은 사막3이에요. 등딱지 조심하고요!`][k],box=>{box.dataset.noskip='1';
-      npcBtn(box,'부탁 그만두기',()=>{delete P.gq.hfood;done();updateQuestHud();save();log(`${gqTag('hfood')} 퀘스트를 그만뒀다: ${G.title}`,'sys');renderNpc('괜찮아요, 무리하지 마세요. 냄비는 어떻게든 채워 볼게요.');},'wide');
-      npcBtn(box,'다녀올게요',()=>{done();closeNpc();},'pri wide');});return;}
-  if(st==='b1'){showPages(['어머, 이게 다 낙타 고기예요? 냄비가 웃겠네!','이걸로 스튜는 됐고… 그런데 국물을 걸쭉하게 할 게 없어요.','깊은 사막2의 모래 슬라임 알아요? 껍질 안쪽 젤리를 걸러 끓이면 묵처럼 굳어요. 우리 여관 국물 맛의 비밀이에요.'],0,()=>{
-      hfReward(0);done();hfNext();npcEndLine('이건 고기 값이에요. 슬라임은 열두 마리면 넉넉해요. 모래는 잘 털어 오고요!');});return;}
-  if(st==='b2'){showPages(['말랑말랑하네요! 오늘 밤 국물은 끝내주겠어요.','마지막으로 하나만 더 부탁할게요. 귀한 손님 상에 올릴 거요.','깊은 사막3의 사막 거북이요. 거북 수프는 하레나에서 우리 여관만 끓여요. 대신 등딱지가 돌처럼 단단하니 조심해요.'],0,()=>{
-      hfReward(1);done();hfNext();npcEndLine('이건 젤리 값이에요. 거북은 열 마리요. 힘들다 싶으면 꼭 돌아와요.');});return;}
-  if(st==='report'){showPages(['세상에, 거북을 열 마리나! 이제 창고가 꽉 찼어요.','덕분에 여관 문을 닫지 않아도 되겠어요. 손님들이 다들 좋아할 거예요.'],0,()=>{
-      delete P.gq.hfood;const d=(P.gqDone=P.gqDone||{}).hfood||{n:0};P.gqDone.hfood={n:(d.n|0)+1,t:Date.now()};
-      hfReward(2);log(`${gqTag('hfood')} 퀘스트 완료: ${G.title}`,'good');done();updateQuestHud();save();
-      npcEndLine('이건 보수, 그리고 갓 끓인 스튜예요. 길 떠날 때 챙겨 가요. 언제든 들러요, 수프는 늘 데워 둘게요!');});return;}
-  done();renderNpc(n.lines[(n.li|0)%n.lines.length]);}
-/* 한나: 받을 수 있을 때와 하는 동안만 '식재료 구하기'가 보이고, 재료를 건넬 때는 말을 걸면 바로 이야기한다 */
-{const h=NPCS.find(n=>n.id==='hanna');if(h){const prev=h.onOpen,A=['식재료 구하기','gq:hfood'];
-  h.onOpen=()=>{h.mqLock=false;const i=h.acts.indexOf(A),show=!!P&&!gqClear('hfood')&&(gqOf('hfood')||P.lv>=GENQ.hfood.minLv);
-    if(show&&i<0)h.acts.unshift(A);else if(!show&&i>=0)h.acts.splice(i,1);
-    const st=P&&hfStep();if(st==='b1'||st==='b2'||st==='report'){hfTalk(h);return true;}return prev?prev():false;};}}
+/* ---------- 맡기는 사람이 있는 일반 퀘스트 틀 (HQ) ----------
+   한 사람이 맡기고, 몇 단계를 거쳐 그 사람에게 돌아가 보고하면 끝난다. 한 번만 할 수 있다. 단계 수는 퀘스트마다 다르다.
+   단계 종류  kill: 몬스터 ty를 need마리 잡기 / spot: 정해진 땅(zone)의 일할 자리에서 F로 일하기(밭일 돕기와 같은 자리) /
+             visit: 다른 사람(who)에게 가서 말 걸기 / back: 맡긴 사람에게 돌아가 그때까지 몫의 보수 받기.  마지막엔 맡긴 사람에게 보고(D.report).
+   보수: back·report 때 앞 단계 kill 몫(게시판 의뢰와 같은 셈: 몬스터 경험치×마리×1.4, 레벨×마리×11 골드) + 그 단계의 worth(같은 셈의 몫) × D.mul.
+   대사: pages의 마지막 장은 대화를 맺는 말(버튼 없이 끝난다). offer의 마지막 장은 받을지 묻는 말(맡기 / 다음에 버튼). */
+const HQ={};
+const hqLv=(ty,lv)=>lv||(OR.MON[ty]&&OR.MON[ty].lv)||1;
+const hqMon=(ty,n,lv)=>{lv=hqLv(ty,lv);return {exp:Math.round(OR.monStats(ty,lv).exp*n*1.4),gold:lv*n*11};};
+/* i번째 단계(back 또는 report=steps.length)에서 받는 보수 */
+function hqPay(id,i){const D=HQ[id],S=D.steps,p={exp:0,gold:0};let j=i-1;for(;j>=0&&S[j].k!=='back';j--)if(S[j].k==='kill'){const m=hqMon(S[j].ty,S[j].need,S[j].lv);p.exp+=m.exp;p.gold+=m.gold;}
+  const W=(S[i]||D.report).worth;if(W){const m=hqMon(W[0],W[1],W[2]);p.exp+=m.exp;p.gold+=m.gold;}
+  const k=D.mul||[1,1];p.exp=Math.round(p.exp*k[0]);p.gold=Math.round(p.gold*k[1]);return p;}
+const hqPayAt=id=>{const D=HQ[id],L=[];D.steps.forEach((s,i)=>{if(s.k==='back')L.push(i);});L.push(D.steps.length);return L;};
+const hqItemName=([id,n])=>id==='gear:weapon'?'몸에 맞는 무기 한 자루':`${ITEMS[id]?ITEMS[id].name:id} ${n}개`;
+function hqReward(id,i){const D=HQ[id],p=hqPay(id,i),R=D.steps[i]||D.report,items=[];P.gold+=p.gold;
+  for(const it of R.items||[]){if(it[0]==='gear:weapon'){const w=properGearPlan(P.lv,P.job).plan.weapon;if(!w)continue;
+      if(P.bag.length<BAG_SIZE){P.bag.push(bagGear(w,0));invDirty();items.push([w,1]);}else log(`가방이 가득 차서 ${itemName(w,P.job)}을(를) 받지 못했다`,'bad');continue;}
+    if(addItem(it[0],it[1],true))items.push(it);}
+  lootShow(null,p.gold,items);const L=hqPayAt(id),k=L.indexOf(i);
+  log(`${D.title}${L.length>1?` ${k+1}단계`:''} 보수 · 경험치 ${p.exp.toLocaleString('ko-KR')} · ${p.gold.toLocaleString('ko-KR')} 골드`,'good');sfx('coin');gainExp(p.exp);updateHud();}
+const hqWho=(id,n)=>!!n&&HQ[id].npcs.includes(n.id);
+function hqNext(id){const q=gqOf(id),D=HQ[id];if(!q)return;const was=D.steps[q.s];q.s++;q.h=0;const nx=gqStepOf(id),g=nx?nx.goal:GENQ[id].report;
+  log(`${D.title} — ${g}`,'sys');toast(g);
+  if(was&&was.k==='spot')setTimeout(()=>{gqClearSpots(id);},1500);   /* 끝낸 자리는 사라지는 모습을 보여 준 뒤 치운다 (다음 단계 자리는 gqSync가 놓는다) */
+  else gqClearSpots(id);
+  updateQuestHud();save();if(!$('#qwin').hidden)renderQuestWin();}
+function hqKill(m){if(!P||!P.gq)return;for(const id in HQ){const st=gqStepOf(id);if(!st||!st.hq||st.hq.k!=='kill'||m.t!==st.hq.ty)continue;
+  const q=gqOf(id),S=st.hq;q.h=(q.h|0)+1;log(S.got?`${S.got}를 챙겼다 (${Math.min(q.h,S.need)}/${S.need})`:`${S.goal} (${Math.min(q.h,S.need)}/${S.need})`,'sys');
+  if(q.h>=S.need)hqNext(id);else{updateQuestHud();if(q.h%5===0)save();}}}
+function hqFinish(id,n){const D=HQ[id],R=D.report;n.mqLock=true;
+  showPages(R.pages,0,t=>{delete P.gq[id];gqClearSpots(id);const d=(P.gqDone=P.gqDone||{})[id]||{n:0};P.gqDone[id]={n:(d.n|0)+1,t:Date.now()};
+    hqReward(id,D.steps.length);log(`${gqTag(id)} 퀘스트 완료: ${D.title}`,'good');n.mqLock=false;updateQuestHud();save();npcEndLine(t);});}
+/* 맡긴 사람과의 이야기 */
+function hqTalk(id,n){const D=HQ[id],G=GENQ[id],q=gqOf(id),st=gqStepOf(id),done=()=>{n.mqLock=false;};n.mqLock=true;
+  if(gqClear(id)){done();renderNpc(D.after);return;}
+  if(!q){if(P.lv<G.minLv){done();renderNpc(D.low);return;}
+    showPages(D.offer,0,t=>{renderNpc(t,box=>{box.dataset.noskip='1';
+      npcBtn(box,D.yes[0],()=>{(P.gq=P.gq||{})[id]={s:0,h:0};done();updateQuestHud();save();log(`${gqTag(id)} 퀘스트: ${G.title} — ${G.steps[0].goal}`,'sys');npcEndLine(D.yes[1]);gqFx(id);},'pri wide');
+      npcBtn(box,'다음에요',()=>{done();renderNpc(D.later);},'wide');});});return;}
+  if(!st){hqFinish(id,n);return;}
+  const S=st.hq;
+  if(S.k==='back'){const i=q.s;showPages(S.pages,0,t=>{hqReward(id,i);done();hqNext(id);npcEndLine(t);});return;}
+  const left=S.need-(q.h|0),w=typeof S.wait==='function'?S.wait(left):S.wait;
+  renderNpc(w,box=>{box.dataset.noskip='1';
+    npcBtn(box,'부탁 그만두기',()=>{delete P.gq[id];gqClearSpots(id);done();updateQuestHud();save();log(`${gqTag(id)} 퀘스트를 그만뒀다: ${G.title}`,'sys');renderNpc(D.quit);},'wide');
+    npcBtn(box,'다녀올게요',()=>{done();closeNpc();},'pri wide');});}
+/* 심부름 받는 사람: 말을 걸면 바로 그 이야기 */
+function hqVisit(id,n){const st=gqStepOf(id);n.mqLock=true;showPages(st.hq.pages,0,t=>{n.mqLock=false;hqNext(id);npcEndLine(t);});}
+/* 사람마다 말을 걸 때: 받을 수 있을 때와 하는 동안만 그 퀘스트 버튼을 보이고, 보수 받을 차례·심부름 차례면 바로 이야기한다.
+   사람은 맵을 지을 때 늦게 생기기도 해서 gqSync가 볼 때마다 아직 안 붙인 사람을 찾아 붙인다 */
+const HQ_HOOKED=new Set();
+function hqOpen(n){if(!P)return false;
+  for(const id in HQ){const D=HQ[id];if(!D.npcs.includes(n.id))continue;const i=n.acts.indexOf(D._A),show=!gqClear(id)&&(!!gqOf(id)||P.lv>=GENQ[id].minLv);
+    if(show&&i<0)n.acts.unshift(D._A);else if(!show&&i>=0)n.acts.splice(i,1);}
+  for(const id in HQ){if(!gqOf(id))continue;const st=gqStepOf(id);
+    if(st&&st.hq.k==='visit'&&st.hq.who===n.id){hqVisit(id,n);return true;}
+    if((!st||st.hq.k==='back')&&hqWho(id,n)){hqTalk(id,n);return true;}}
+  return false;}
+function hqHook(){for(const n of NPCS){if(HQ_HOOKED.has(n))continue;let want=false;
+    for(const id in HQ){const D=HQ[id];if(D.npcs.includes(n.id)||D.steps.some(s=>s.who===n.id)){want=true;break;}}
+    if(!want)continue;HQ_HOOKED.add(n);const prev=n.onOpen;n.onOpen=()=>{n.mqLock=false;if(hqOpen(n))return true;return prev?prev():false;};}}
+/* 일할 자리: 그 땅 가운데 둘레에서 나무·바위를 피해 고른다 (땅에 처음 들어왔을 때 한 번 더 골라 높이를 맞춘다) */
+function hqZoneSpots(zone,n,seed,rad=.5){const I=OR.ISLES[zone];if(!I)return [];let s=seed;const rnd=()=>(s=(s*16807)%2147483647)/2147483647,L=[];
+  for(let t=0;t<200&&L.length<n;t++){const a=rnd()*Math.PI*2,r=(.12+rnd()*(rad-.12))*I.R,x=I.x+Math.cos(a)*r,z=I.z+Math.sin(a)*r;
+    if(OR.zoneAt&&OR.zoneAt(x,z)!==zone)continue;if(colliders.some(c=>Math.abs(c.x-x)<12&&Math.abs(c.z-z)<12&&Math.hypot(c.x-x,c.z-z)<(c.box?Math.max(c.hw||0,c.hd||0):c.r||1)+1.5))continue;
+    if(L.some(p=>Math.hypot(p.x-x,p.z-z)<14))continue;L.push({x,z});}
+  return L;}
+/* 퀘스트 하나 넣기: GENQ 항목을 만들고 단계마다 hq 자료를 단다 */
+function hqDef(id,D){D.npcs=D.npcs||[D.npc];D._A=[D.act,'gq:'+id];HQ[id]=D;
+  const steps=D.steps.map((s,i)=>{const o={key:s.k[0]+i,hq:s,goal:s.goal,need:s.need||1};
+    if(s.k==='spot')Object.assign(o,{act:s.act,dur:s.dur||1.6,fx:s.fx||0xe8dcc0,mesh:s.mesh,zone:s.zone,spots:()=>hqZoneSpots(s.zone,Math.max(8,s.need),s.seed||(i+7)*7919)});
+    else{o.talk=1;if(s.k!=='kill')o.one=1;}return o;});
+  GENQ[id]={title:D.title,npc:D.npc,npcs:D.npcs.length>1?D.npcs:undefined,minLv:D.minLv,maxLv:D.maxLv||999,where:D.where,steps,report:D.report.goal,exp:0,gold:0,
+    talk:(id2,n)=>hqTalk(id,n),hqNext:()=>hqNext(id),
+    rewardLine:()=>{const a=hqPayAt(id).map(i=>hqPay(id,i)),one=a.length===1,it=D.report.items;
+      return `${one?'':'단계마다 '}경험치 ${a.map(p=>qwNum(p.exp)).join(' / ')} · 골드 ${a.map(p=>qwNum(p.gold)).join(' / ')}${it&&it.length?` · ${one?'':'마지막에 '}${it.map(hqItemName).join(', ')}`:''}`;},
+    markWho:id2=>{const st=gqStepOf(id);return !st?null:st.hq.k==='back'?D.npcs:st.hq.k==='visit'?[st.hq.who]:[];}};
+  hqHook();}
+
+/* ---------- 한나의 식재료: 하레나 여관 주인 한나가 맡기는 세 단계 사냥 (Lv15) ----------
+   창고가 비어서 사막 짐승을 잡아 식재료를 모아 온다: 낙타(고기) → 모래 슬라임(국물 젤리) → 사막 거북(수프). 레벨은 예전 그대로 정해 둔다 */
+hqDef('hfood',{title:'한나의 식재료',npc:'hanna',act:'식재료 구하기',minLv:15,where:'하레나 광장 · 한나의 여관 앞',
+  low:'마음은 고마운데, 바깥 사막 짐승들이 만만치 않아요. 조금 더 단단해지면 그때 부탁할게요.',
+  offer:['아이고, 마침 잘 왔어요. 큰일 났어요…','석굴 쪽으로 가는 손님이 부쩍 늘어서 냄비를 온종일 끓였더니, 창고가 텅 비었지 뭐예요.','식재료 마차는 사막 짐승들 때문에 며칠째 오지도 않고요.','사막에 나가서 먹을 만한 짐승을 좀 잡아다 줄래요? 보수는 넉넉히 챙겨 드릴게요.'],
+  yes:['맡겨 주세요','고마워요! 먼저 고기부터요. 깊은 사막1에 낙타가 다녀요. 열 마리면 스튜 냄비를 며칠은 채울 수 있어요.'],
+  later:'그래요, 시간 날 때 꼭 들러 줘요.',quit:'괜찮아요, 무리하지 마세요. 냄비는 어떻게든 채워 볼게요.',
+  after:'창고가 꽉 차니 마음이 다 든든해요. 그때 정말 고마웠어요!',
+  steps:[{k:'kill',ty:'ogre',lv:10,need:10,got:'낙타 고기',goal:'깊은 사막1의 낙타 잡기',wait:l=>`낙타 고기가 아직 ${l}마리 몫 모자라요. 깊은 사막1에 가면 낙타가 있어요.`},
+    {k:'back',goal:'한나에게 낙타 고기 건네기',pages:['어머, 이게 다 낙타 고기예요? 냄비가 웃겠네!','이걸로 스튜는 됐고… 그런데 국물을 걸쭉하게 할 게 없어요.','깊은 사막2의 모래 슬라임 알아요? 껍질 안쪽 젤리를 걸러 끓이면 묵처럼 굳어요. 우리 여관 국물 맛의 비밀이에요.','이건 고기 값이에요. 슬라임은 열두 마리면 넉넉해요. 모래는 잘 털어 오고요!']},
+    {k:'kill',ty:'sandslime',lv:16,need:12,got:'슬라임 젤리',goal:'깊은 사막2의 모래 슬라임 잡기',wait:l=>`모래 슬라임이 ${l}마리 더 필요해요. 깊은 사막2에서 말랑말랑 굴러다녀요.`},
+    {k:'back',goal:'한나에게 슬라임 젤리 건네기',pages:['말랑말랑하네요! 오늘 밤 국물은 끝내주겠어요.','마지막으로 하나만 더 부탁할게요. 귀한 손님 상에 올릴 거요.','깊은 사막3의 사막 거북이요. 거북 수프는 하레나에서 우리 여관만 끓여요. 대신 등딱지가 돌처럼 단단하니 조심해요.','이건 젤리 값이에요. 거북은 열 마리요. 힘들다 싶으면 꼭 돌아와요.']},
+    {k:'kill',ty:'nomad',lv:26,need:10,got:'거북 고기',goal:'깊은 사막3의 사막 거북 잡기',wait:l=>`사막 거북이 ${l}마리 남았어요. 깊은 사막3이에요. 등딱지 조심하고요!`}],
+  report:{goal:'한나에게 거북 고기 건네기',items:[['f_stew',3]],pages:['세상에, 거북을 열 마리나! 이제 창고가 꽉 찼어요.','덕분에 여관 문을 닫지 않아도 되겠어요. 손님들이 다들 좋아할 거예요.','이건 보수, 그리고 갓 끓인 스튜예요. 길 떠날 때 챙겨 가요. 언제든 들러요, 수프는 늘 데워 둘게요!']}});
+
+/* ---------- 바르톨의 아침 빵 배달 (Lv30, 엑시즈 시내) ----------
+   제빵소 바르톨이 단골 셋에게 갈 빵을 맡긴다: 대장장이 그레고르(호밀빵) → 잡화상 페트라(꿀빵) → 마구간지기 올라프(고기 파이) → 바르톨에게 돌아가기.
+   보수는 숲 가는 길 들늑대 열다섯 마리 몫 */
+hqDef('bdeliv',{title:'아침 빵 배달',npc:'bake_bartol',act:'빵 배달',minLv:30,where:'엑시즈 서문대로 · 바르톨 제빵소',
+  low:'고맙소만, 엑시즈 길이 꽤 넓고 복잡하오. 이 도시에 조금 더 익숙해지면 그때 부탁하리다.',
+  offer:['어이쿠, 마침 잘 왔소! 손 좀 빌려 주시겠소?','아침마다 단골들한테 빵을 돌리는데, 배달하던 녀석이 오늘 감기에 걸려 드러누웠지 뭐요.','로제타는 창구를 비울 수 없고, 나는 화덕 앞을 떠날 수가 없소. 불씨가 꺼지면 큰일이니.','따끈할 때 세 집에 좀 갖다주겠소? 대장간, 시장 잡화점, 마구간이오.'],
+  yes:['갖다 드릴게요','고맙소! 먼저 대장간 그레고르한테 호밀빵이오. 망치 소리 나는 쪽으로 가면 되오. 식기 전에!'],
+  later:'그러시오. 빵은 내가 어떻게든 돌려 보리다.',quit:'괜찮소, 남은 건 내가 저녁에 돌리리다.',
+  after:'요즘은 단골들이 빵 맛이 더 좋아졌다고 하더이다. 그날 따끈하게 갖다준 덕이오, 허허.',
+  steps:[{k:'visit',who:'ex_smith',goal:'대장간 그레고르에게 호밀빵 건네기',wait:'대장간 그레고르한테 호밀빵 먼저요. 식기 전에 부탁하오!',
+      pages:['응? 바르톨네 호밀빵이군. 오늘은 웬 낯선 얼굴이 들고 왔나.','배달하던 꼬마가 앓아누웠다고? 허, 그 녀석 이 시간이면 꼭 망치질 구경하고 갔는데.','쇠 두드리다 보면 아침 거르기 일쑤야. 이거 하나면 점심까지 버티지. 바르톨한테 잘 받았다고 전해.']},
+    {k:'visit',who:'ex_goods',goal:'시장 잡화상 페트라에게 꿀빵 건네기',wait:'다음은 중앙 시장 잡화점 페트라요. 꿀빵을 기다리고 있을 거요.',
+      pages:['어머, 꿀빵이다! 이 냄새 때문에 아침마다 가게 문을 일찍 열어요.','손님들이 물약 고르다가 자꾸 빵 어디서 샀냐고 물어요. 저는 그냥 바르톨네 가라고 해요.','고마워요! 하나는 지금 먹고, 하나는 이따 손님 없을 때 먹어야지.']},
+    {k:'visit',who:'ex_stable',goal:'마구간 올라프에게 고기 파이 건네기',wait:'마지막은 마구간 올라프요. 고기 파이 두 개는 그 친구 몫이오.',
+      pages:['고기 파이로군. 바르톨은 내가 두 개는 먹어야 하는 걸 알지.','말들도 이 냄새를 좋아해. 저 녀석 코 벌름거리는 것 좀 봐. …안 돼, 이건 내 거야.','잘 받았다고 전해 줘. 다음엔 당근 빵도 좀 구워 달라고. 말들 줄 거야.']}],
+  report:{goal:'바르톨에게 돌아가기',worth:['fieldwolf',15],items:[['f_honeybun',3],['f_meatpie',2]],
+    pages:['벌써 다 돌았소? 빵이 식기도 전에!','그레고르는 투덜대면서 받았을 테고, 페트라는 그 자리에서 하나 먹었을 테고, 올라프는… 당근 빵 얘기를 했겠지. 허허, 다 아오.','이건 품삯이오. 그리고 갓 나온 꿀빵과 고기 파이도 챙겨 가시오. 길 떠날 때 요긴할 거요.']}});
+
+/* ---------- 그레고르의 칼자루 (Lv38, 엑시즈 숲) ----------
+   대장장이 그레고르가 새 칼자루 재료를 부탁한다: 뿔멧돼지 뿔(손잡이 심) → 그레고르에게 → 송진 슬라임 송진(감은 가죽을 굳힐 것) → 보고. 끝에 몸에 맞는 무기 한 자루를 벼려 준다 */
+hqDef('gsmith',{title:'그레고르의 칼자루',npc:'ex_smith',act:'칼자루 재료',minLv:38,where:'엑시즈 중앙 시장 · 그레고르의 대장간',
+  low:'엑시즈 숲 짐승들은 성문 밖 들개랑은 달라. 조금 더 단단해져서 와.',
+  offer:['어이, 거기. 숲에 다닐 줄 아나?','날은 얼마든지 벼리는데, 손잡이 재료가 똑 떨어졌어. 칼은 자루가 시원찮으면 날이 아무리 좋아도 손에서 놀거든.','서문 밖 엑시즈 숲에 뿔멧돼지가 있지. 그 뿔을 깎아 자루 심을 넣으면 손에 착 붙어. 좀 구해 와 줄 텐가?'],
+  yes:['구해 올게요','좋아. 뿔멧돼지 열 마리 몫이면 돼. 뿔 끝이 갈라진 건 빼고.'],
+  later:'그래, 생각나면 와. 화덕은 늘 달아 있으니.',quit:'알았어. 재료는 다른 데서 알아보지.',
+  after:'그 자루 아직 멀쩡하지? 내가 만든 건 십 년은 가.',
+  steps:[{k:'kill',ty:'hornboar',need:10,got:'멧돼지 뿔',goal:'엑시즈 숲의 뿔멧돼지 잡기',wait:l=>`뿔이 아직 ${l}개 모자라. 엑시즈 숲 뿔멧돼지야. 들이받히지 말고.`},
+    {k:'back',goal:'그레고르에게 뿔 건네기',pages:['어디 보자… 결이 곧고 속이 꽉 찼군. 좋은 뿔이야.','이제 자루에 가죽을 감아야 하는데, 그냥 감으면 땀에 미끄러져. 송진을 녹여 바르고 굳혀야 해.','같은 숲에 송진 슬라임이 굴러다니지. 그 녀석들 몸이 다 송진이야. 열두 마리 몫만 걷어 와.','이건 뿔 값이야. 송진은 손에 묻으면 잘 안 지워지니 장갑 끼고.']},
+    {k:'kill',ty:'resinslime',need:12,got:'송진 덩이',goal:'엑시즈 숲의 송진 슬라임 잡기',wait:l=>`송진이 ${l}덩이 더 있어야 해. 엑시즈 숲 송진 슬라임이야.`}],
+  report:{goal:'그레고르에게 송진 건네기',items:[['gear:weapon',1]],pages:['송진 냄새 좋군. 이거면 자루 열 개는 감겠어.','…잠깐 기다려. 받은 게 있으니 그냥 보낼 순 없지.','네 손에 맞춰 하나 벼려 뒀어. 자루는 네가 구해 온 뿔과 송진으로 감았고. 아껴 써, 하지만 아끼느라 안 쓰진 말고.']}});
+
+/* ---------- 돌아오지 않은 학자 (Lv48, 깊은 숲) ----------
+   사서 세실리아: 책을 빌려 간 학자 에드릭이 깊은 숲에서 돌아오지 않는다. 숲에 흩어진 책장 줍기 → 세실리아에게 → 협곡 사냥개 잡기 → 학자의 일지 찾기 → 보고 */
+hqDef('scholar',{title:'돌아오지 않은 학자',npc:'lib_keeper',act:'학자 에드릭',minLv:48,where:'엑시즈 왕립 도서관',
+  low:'깊은 숲은 아직 위험해요. 당신까지 돌아오지 않으면 안 되니까요. 조금 더 단련하고 와 주세요.',
+  offer:['…실례지만, 혹시 서문 밖 깊은 숲까지 가 보신 적 있으세요?','에드릭이라는 학자가 숲의 약초에 관한 오래된 책을 빌려 갔어요. 직접 보고 맞춰 보겠다면서요. 그게 열흘 전이에요.','반납 날짜를 어긴 적이 한 번도 없는 사람이에요. 책도 걱정이지만… 사람이 더 걱정이에요.','숲에 가서 그 사람 흔적을 좀 찾아봐 줄 수 있을까요?'],
+  yes:['찾아볼게요','고마워요. 그 사람은 책장 사이에 늘 메모를 끼워 다녔어요. 종이가 보이면 그게 단서일 거예요.'],
+  later:'네… 혹시 마음이 바뀌면 꼭 와 주세요.',quit:'알겠어요. 기사단에 한 번 더 부탁해 볼게요.',
+  after:'에드릭은 다리가 다 나으면 다시 숲에 가겠대요. 이번엔 반납 날짜를 넉넉히 잡아 줬어요.',
+  steps:[{k:'spot',zone:'m2c',need:6,mesh:'page',act:'책장 줍기',dur:1.4,fx:0xf0e6c8,goal:'깊은 숲에 흩어진 책장 줍기',wait:l=>`책장이 ${l}장 더 있을 거예요. 깊은 숲 땅 위에 하얗게 보일 거예요.`},
+    {k:'back',goal:'세실리아에게 책장 건네기',worth:['gorgehound',6],pages:['이건… 맞아요, 그 책이에요. 가장자리에 에드릭 글씨가 있어요.','그런데 이 자국… 이빨 자국 같아요. 그리고 이 장 뒷면에, 급하게 쓴 글이 있어요. "사냥개 떼. 바위 틈으로 숨는다. 일지는 품에."','협곡 사냥개예요. 그 사람이 숨은 곳 둘레를 그 녀석들이 맴돌고 있을 거예요. 부탁이에요, 길을 터 주세요.']},
+    {k:'kill',ty:'gorgehound',need:12,goal:'깊은 숲의 협곡 사냥개 쫓기',wait:l=>`사냥개가 아직 ${l}마리 남았대요. 깊은 숲이에요. 조심하세요.`},
+    {k:'spot',zone:'m2c',need:1,mesh:'book',act:'일지 줍기',dur:2,fx:0xc8a46a,seed:4421,goal:'바위 틈에서 에드릭의 일지 찾기',wait:'사냥개가 물러났다면, 바위 틈 어딘가에 일지가 있을 거예요.'}],
+  report:{goal:'세실리아에게 일지 건네기',worth:['gorgehound',6],pages:['일지예요! 그리고… 에드릭이 무사하대요? 기사단 순찰이 바위 틈에서 업고 나왔다고 방금 소식이 왔어요.','다리를 다쳐서 움직이질 못했대요. 사냥개가 흩어진 틈에 순찰이 그 사람을 찾은 거예요. 당신 덕분이에요.','일지는 제가 잘 맡아 둘게요. 언젠가 이 숲 약초 이야기가 책이 되면, 가운데 기둥에 꽂힐 거예요. 이건 도서관에서 드리는 감사예요.']}});
+
+/* ---------- 가늘롱의 거인 뿔잔 (Lv56, 추운 계곡) ----------
+   귀족 가늘롱이 다음 귀족 모임에서 자랑할 뿔잔을 원한다: 바위 오우거(잔 받침 돌) → 가늘롱에게 → 봉우리 거인 뿔 → 조각가 지븐에게 무늬 맡기기 → 가늘롱에게. 보수 골드가 넉넉하다 */
+hqDef('ghorn',{title:'가늘롱의 거인 뿔잔',npc:'ganel',npcs:['ganel','ganel_walk'],act:'거인 뿔잔',minLv:56,mul:[1,1.8],where:'엑시즈 귀족 구역 · 가늘롱 저택',
+  low:'오호, 마음은 갸륵하오만 추운 계곡 거인들은 그대를 이쑤시개로 쓸 것이오. 조금 더 자라서 오시오.',
+  offer:['오호, 마침 잘 왔소. 그대에게 아주 우아한 부탁이 하나 있소.','다음 달 귀족 모임에서 저마다 진귀한 잔을 내놓고 자랑하는 자리가 있소. 작년엔 내가 은잔을 냈다가… 크흠, 별로 좋은 소리를 못 들었지.','올해는 아무도 못 가진 걸 내놓을 생각이오. 추운 계곡 봉우리 거인의 뿔로 깎은 잔! 상상만 해도 모자가 저절로 올라가는구려.','그대가 재료를 구해 와 주겠소? 값은 귀족답게 치르겠소.'],
+  yes:['구해 오겠습니다','훌륭하오! 먼저 잔 받침부터요. 추운 계곡 바위 오우거 등에 붙은 검은 돌이 반들반들 아주 좋다오. 열 마리 몫이면 되겠소.'],
+  later:'그러시오. 귀족 모임은 아직 한 달이나 남았으니.',quit:'흠, 아쉽구려. 올해도 은잔인가.',
+  after:'그 뿔잔 얘기는 아직도 모임에서 나온다오. 다들 어디서 구했냐고 묻는데, 비밀이라고 했지. 오호호.',
+  steps:[{k:'kill',ty:'rockogre',need:10,got:'검은 받침돌',goal:'추운 계곡의 바위 오우거 잡기',wait:l=>`받침돌이 ${l}개 더 필요하오. 추운 계곡 바위 오우거요.`},
+    {k:'back',goal:'가늘롱에게 받침돌 건네기',pages:['오호, 이 광택! 내 구두만큼 반짝이는구려.','자, 이제 주인공이오. 봉우리 거인의 뿔. 거인 중에서도 가장 높은 데 사는 녀석들이라 뿔이 하늘빛으로 바랬다오.','여섯 마리 몫이면 잔 하나에 여분까지 넉넉하오. 이건 받침돌 값이오. 귀족은 외상을 하지 않소.']},
+    {k:'kill',ty:'peakgiant',need:6,got:'봉우리 거인 뿔',goal:'추운 계곡의 봉우리 거인 잡기',wait:l=>`뿔이 ${l}개 남았소. 추운 계곡 봉우리 거인이오. 모자 날아가지 않게 조심하시오.`},
+    {k:'visit',who:'zibben',goal:'장인 지구 조각가 지븐에게 뿔 맡기기',wait:'뿔은 내 손으로 깎을 수 없소. 장인 지구 조각가 지븐에게 맡겨 주시오. 무늬는 그 사람이 제일 잘 새긴다오.',
+      pages:['…또 가늘롱 나리 심부름인가. 흉상 모자를 또 높여 달라는 거면 돌려보내게.','뿔잔? 봉우리 거인 뿔이라… 허, 이건 돌보다 결이 곱군. 정이 아니라 칼로 깎아야겠어.','나리 얼굴을 잔에 새기라고? …모자는 작게 새길 걸세. 이건 내 고집이야. 다 되면 저택으로 보내 두지.']}],
+  report:{goal:'가늘롱에게 돌아가기',worth:['peakgiant',4],pages:['오호! 지븐이 벌써 보내왔소. 이 잔을 보시오, 이 하늘빛을!','내 얼굴이 새겨져 있소. 모자가… 조금 작긴 하지만, 뭐, 예술가의 고집이란 그런 것이지.','올해 모임은 내 차지요. 자, 약속한 값이오. 귀족답게, 넉넉히.']}});
 
 /* ---------- 조각가 지븐: 장인 지구 길모퉁이의 조각 공방 ----------
    buildArtisans가 석공 마당 한 자리를 비워 두고(EXM.zbn) 여기서 지븐의 공방을 짓는다.
