@@ -74,7 +74,7 @@
     hlodge: { x: 9500, z: 0, R: 60 },   /* 허칠 산장 안 (2026-11-07): 허칠 산장 맵의 큰 산장 정문으로 들어온다 */
     /* 허칠 사냥터 맵 (땅 좌표는 허칠 산장·동굴과 같다: 같은 산을 옮겨 그린다). hpeak = 눈 비탈, hcave = 박쥐 굴 */
     hwood: { x: 12600, z: 0, R: 120 }, hlake: { x: 13400, z: 0, R: 120 }, hscree: { x: 14200, z: 0, R: 120 }, hridge: { x: 15000, z: 0, R: 120 }, htop: { x: 15800, z: 0, R: 120 },
-    hcrys: { x: 16500, z: 0, R: 240 }, hfall: { x: 17100, z: 0, R: 240 }, hden: { x: 17700, z: 0, R: 240 },       // 기사단 본부: 엑시즈 시내 기사단 본부 정문으로 들어가면 나온다 (2층 회당 건물과 동쪽 훈련 마당)
+    hcrys: { x: 16500, z: 0, R: 240 }, hfall: { x: 17100, z: 0, R: 240 }, hden: { x: 17700, z: 0, R: 240 }, hlair: { x: 18300, z: 0, R: 240 },   /* hlair = 어미의 둥지 (곰 굴 끝 보스방) */       // 기사단 본부: 엑시즈 시내 기사단 본부 정문으로 들어가면 나온다 (2층 회당 건물과 동쪽 훈련 마당)
     // 엑시즈 남문 밖 사냥터 (모래톱, Lv 60–67). 자리는 아래 MLINES에서 정한다
     mfield: { x: 2700, z: 900, R: 150 },
   };
@@ -110,7 +110,7 @@
     if (L.branch) { const prev = i ? ISLES[L.zones[i - 1][0]] : ISLES[MLINES[L.n - 2].zones[MLINES[L.n - 2].zones.length - 1][0]], h = L.branch[i] * PI / 180; I.x = prev.x + Math.cos(h) * MH.STEP; I.z = prev.z + Math.sin(h) * MH.STEP; I.th = h - PI / 2; I.branch = 1; }
     else { const th = MH.TH0 + k * MH.DTH; I.x = MH.cx + Math.cos(th) * MH.RR; I.z = MH.cz + Math.sin(th) * MH.RR; I.th = th; } }));
   const MHUNT = MLINES.flatMap((L) => L.zones.map((q) => q[0]));
-  const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'coachway', 'castle', 'guildhall', 'exmarket', 'arena', 'library', 'hechil', 'hcave', 'hpeak', 'khq', 'hlodge', 'hwood', 'hlake', 'hscree', 'hridge', 'htop', 'hcrys', 'hfall', 'hden', ...MHUNT];
+  const ISLE_ORDER = ['silva', 'arbus', 'kaolis', 'subcus', 'marcus', 'milgol', 'coachway', 'castle', 'guildhall', 'exmarket', 'arena', 'library', 'hechil', 'hcave', 'hpeak', 'khq', 'hlodge', 'hwood', 'hlake', 'hscree', 'hridge', 'htop', 'hcrys', 'hfall', 'hden', 'hlair', ...MHUNT];
   // 엑시즈 성벽(섬 중심 기준 m, 시계 방향)과 가장자리: 성벽에서 바깥으로 약 70m까지만 땅이 있다 (들쭉날쭉)
   const MARCUS_WALL_M = [[-303,-218],[-247,-216],[-173,-213],[-112,-240],[-57,-264],[11,-277],[134,-264],[214,-234],[282,-206],[355,-151],[380,-58],[380,28],[368,101],[355,138],[331,194],[282,243],[220,280],[134,292],[42,286],[-63,264],[-161,249],[-260,218],[-333,175],[-370,89],[-376,15],[-361,-46],[-352,-114],[-333,-169]];
   const MARCUS_EDGE_GAP = 70;
@@ -126,7 +126,9 @@
       PEAK: [[34, 58], [50, 32], [30, 8], [46, -14], [16, -30], [32, -54], [4, -72], [22, -94], [-6, -106], [10, -124], [-14, -131], [2, -141], [-18, -147], [-4, -154], [-16, -162]],
       CAVE: [[34, 58], [66, 50], [98, 40], [130, 28], [162, 16], [192, 6], [216, -4], [236, -10]],
       /* 동굴 (동굴 땅 가운데 기준): [x, z, 반폭, 천장 높이]. 들어오는 굴 입구(남)에서 굽이굽이 북쪽 끝 큰 방까지, 중간에 넓은 방 셋 */
-      TUN: [[0, 214, 5, 6], [3, 194, 5.5, 6], [-6, 172, 6, 6.5], [-24, 150, 7, 7], [-36, 124, 22, 13], [-30, 98, 7, 7], [-8, 80, 6, 6.5], [18, 62, 6.5, 7], [40, 38, 7, 7.5], [46, 12, 24, 14], [34, -14, 7, 7], [10, -30, 6, 6], [-18, -42, 6, 6.5], [-44, -58, 7, 7], [-58, -84, 7, 7.5], [-56, -112, 25, 15], [-36, -134, 7, 7], [-6, -146, 6, 6.5], [22, -158, 7, 7], [38, -176, 12, 10], [40, -196, 27, 16], [38, -218, 8, 7], [36, -226, 2, 4]] };
+      TUN: [[0, 214, 5, 6], [3, 194, 5.5, 6], [-6, 172, 6, 6.5], [-24, 150, 7, 7], [-36, 124, 22, 13], [-30, 98, 7, 7], [-8, 80, 6, 6.5], [18, 62, 6.5, 7], [40, 38, 7, 7.5], [46, 12, 24, 14], [34, -14, 7, 7], [10, -30, 6, 6], [-18, -42, 6, 6.5], [-44, -58, 7, 7], [-58, -84, 7, 7.5], [-56, -112, 25, 15], [-36, -134, 7, 7], [-6, -146, 6, 6.5], [22, -158, 7, 7], [38, -176, 12, 10], [40, -196, 27, 16], [38, -218, 8, 7], [34, -232, 4.6, 5.2],
+        /* 어미의 둥지 (2026-11-11 원호: 동굴 끝 보스방): 곰 굴 끝 좁은 굴목을 지나면 나오는 큰 방 */
+        [30, -246, 7, 8], [26, -264, 19, 13], [20, -290, 23, 15], [16, -316, 19, 13], [14, -334, 9, 9], [14, -342, 2, 4]] };
     const pl = (C) => { let s = 0; return C.map((p, i) => { if (i) s += Math.hypot(p[0] - C[i - 1][0], p[1] - C[i - 1][1]); return { x: p[0], z: p[1], w: p[2] || 0, c: p[3] || 0, s }; }); };
     const chk = (C) => { const o = [C[0]]; for (let i = 0; i + 1 < C.length; i++) { const A = C[i], B = C[i + 1]; o.push(A.map((v, k) => v * 0.75 + B[k] * 0.25), A.map((v, k) => v * 0.25 + B[k] * 0.75)); } o.push(C[C.length - 1]); return o; };   /* 꺾인 굴길을 둥글게 */
     H.pl = pl; H.chk = chk; H.T = pl(chk(chk(H.TUN))); H.TL = H.T[H.T.length - 1].s;
@@ -148,14 +150,16 @@
       return Math.round(60 + 10 * Math.max(0, Math.min(1, (H.vt(lx, lz) - H.HUTT) / (1 - H.HUTT)))); };
     /* 사냥터 (2026-11-06 원호: 레벨별로 나눠서 여러 곳): 골짜기 둘, 동굴 넷(방마다 하나, 좁은 굴목에서 나뉨), 봉우리 넷(벼랑 안 둘레 띠) */
     H.AREAS = [
-      { id: 'wood', name: '산장 숲길', lv: [60, 65] }, { id: 'lake', name: '호숫가 골짜기', lv: [65, 70] },
-      { id: 'bat', name: '박쥐 굴', lv: [70, 75], cave: 1, s: [0, 170] }, { id: 'crys', name: '수정 굴', lv: [75, 80], cave: 1, s: [170, 315] },
-      { id: 'fall', name: '얼음 폭포 굴', lv: [80, 85], cave: 1, s: [315, 470] }, { id: 'den', name: '곰 굴', lv: [85, 90], cave: 1, s: [470, H.TL - 16] },
-      { id: 'slope', name: '눈 비탈', lv: [90, 95] }, { id: 'scree', name: '서리 바위밭', lv: [95, 100] }, { id: 'ridge', name: '바람 능선', lv: [100, 105] }, { id: 'top', name: '꼭대기', lv: [105, 110] }];
+      /* 2026-11-11 원호: 꼭대기를 지나 동굴로 → 바깥 여섯(60–84) 다음 굴 넷(84–100), 맨 끝 어미의 둥지(보스방 100) */
+      { id: 'wood', name: '산장 숲길', lv: [60, 64] }, { id: 'lake', name: '호숫가 골짜기', lv: [64, 68] },
+      { id: 'bat', name: '박쥐 굴', lv: [84, 88], cave: 1, s: [0, 170] }, { id: 'crys', name: '수정 굴', lv: [88, 92], cave: 1, s: [170, 315] },
+      { id: 'fall', name: '얼음 폭포 굴', lv: [92, 96], cave: 1, s: [315, 470] }, { id: 'den', name: '곰 굴', lv: [96, 100], cave: 1, s: [470, H.near(H.T, 34, -232).s] },
+      { id: 'slope', name: '눈 비탈', lv: [68, 72] }, { id: 'scree', name: '서리 바위밭', lv: [72, 76] }, { id: 'ridge', name: '바람 능선', lv: [76, 80] }, { id: 'top', name: '꼭대기', lv: [80, 84] },
+      { id: 'lair', name: '어미의 둥지', lv: [100, 100], cave: 1, boss: 1, s: [H.near(H.T, 34, -232).s, H.TL] }];
     H.areaOfLv = (lv, cave) => { const L = H.AREAS.filter((A) => !!A.cave === !!cave); for (const A of L) if (lv < A.lv[1] || (lv === A.lv[1] && A.id === 'lake')) return A; return L[L.length - 1]; };
     H.caveArea = (s) => { let A = null; for (const B of H.AREAS) if (B.cave) { A = B; if (s < B.s[1]) break; } return A; };
     /* 동굴 적정레벨: 사냥터마다 굴 길이 따라 5씩 */
-    H.lvCave = (lx, lz) => { const s = H.near(H.T, lx, lz).s, A = H.caveArea(s); return Math.min(A.lv[1], Math.floor(A.lv[0] + 5 * Math.max(0, Math.min(1, (s - A.s[0]) / (A.s[1] - A.s[0]))))); };
+    H.lvCave = (lx, lz) => { const s = H.near(H.T, lx, lz).s, A = H.caveArea(s); return Math.min(A.lv[1], Math.floor(A.lv[0] + (A.lv[1] - A.lv[0]) * Math.max(0, Math.min(1, (s - A.s[0]) / (A.s[1] - A.s[0]))))); };
     H.HUTA = { id: 'hut', name: '산장', lv: [0, 0], zone: 'hechil' };
     /* 봉우리 벼랑 안 레벨 (반올림 없이): 벼랑 밖이면 -1 */
     H.pkLv = (lx, lz) => { const d = Math.hypot(lx - H.TOP.x, lz - H.TOP.z), r = H.rb(Math.atan2(lz - H.TOP.z, lx - H.TOP.x)); return d < r ? 90 + 20 * Math.pow(Math.max(0, Math.min(1, (r - d) / (r - 14))), 0.75) : -1; };
@@ -173,7 +177,7 @@
      저마다 제 땅: 남쪽(+z)에서 들어와 북쪽(-z)으로 이어지는 걷는 길 사슬(HCH.OM, [x, z, 반폭]) 둘레를 벼랑·숲(능선·꼭대기는 낭떠러지)이 막는다.
      굴 넷은 한 굴(HCH.T)을 굴목마다 막아 나눈 방이다. 이웃 맵으로는 길 끝 문(HCH.GATES)으로만 넘어간다 */
   {
-    const H = HCH, A = H.AREAS, ZA = { hwood: 'wood', hlake: 'lake', hcave: 'bat', hcrys: 'crys', hfall: 'fall', hden: 'den', hpeak: 'slope', hscree: 'scree', hridge: 'ridge', htop: 'top' };
+    const H = HCH, A = H.AREAS, ZA = { hwood: 'wood', hlake: 'lake', hcave: 'bat', hcrys: 'crys', hfall: 'fall', hden: 'den', hlair: 'lair', hpeak: 'slope', hscree: 'scree', hridge: 'ridge', htop: 'top' };
     for (const z in ZA) A.find((q) => q.id === ZA[z]).zone = z;
     H.HZ = Object.keys(ZA);   // 사냥터 맵
     H.ZONES = ['hechil', ...H.HZ];
@@ -186,11 +190,11 @@
     H.OM = {
       hechil: { up: 1, rise: 6, L: [[[0, 70, 8], [1, 56, 10], [-2, 40, 18], [-8, 20, 34], [-4, 0, 36], [2, -18, 34], [4, -34, 15], [0, -50, 8], [0, -58, 7]]], hut: { x: -24, z: 6, ry: Math.PI / 2, r: 26 } },   // 산장: 호텔처럼 큰 산장 (2026-11-07), 둘레 골짜기를 넓혔다
       hwood: { up: 1, rise: 10, L: [[[0, 90, 8], [0, 78, 15], [-12, 58, 22], [-6, 34, 26], [10, 10, 26], [8, -14, 26], [-8, -38, 24], [-4, -62, 16], [0, -78, 10], [0, -90, 8]]] },
-      hlake: { up: 1, rise: 8, L: [[[0, 85, 8], [0, 72, 16], [8, 48, 30], [0, 16, 40], [-8, -16, 40], [0, -46, 26], [0, -70, 12], [0, -84, 8]], [[20, 6, 10], [38, 2, 9], [54, -1, 8], [66, -2, 7]]], lake: { x: -6, z: 2, r: 20 } },
+      hlake: { up: 1, rise: 8, L: [[[0, 85, 8], [0, 72, 16], [8, 48, 30], [0, 16, 40], [-8, -16, 40], [0, -46, 26], [0, -70, 12], [0, -84, 8]]], lake: { x: -6, z: 2, r: 20 } },
       hpeak: { up: 1, rise: 46, L: [[[0, 85, 8], [0, 72, 14], [-22, 56, 18], [18, 36, 18], [-20, 14, 18], [18, -8, 18], [-16, -30, 18], [0, -52, 14], [0, -70, 10], [0, -82, 8]]] },
       hscree: { up: 1, rise: 22, L: [[[0, 80, 8], [0, 68, 15], [-12, 44, 30], [8, 14, 34], [-6, -18, 32], [4, -46, 22], [0, -66, 12], [0, -80, 8]]] },
       hridge: { up: 0, rise: 24, L: [[[0, 90, 8], [0, 78, 11], [-8, 54, 12], [6, 28, 13], [-6, 2, 12], [8, -24, 13], [-2, -50, 12], [0, -72, 10], [0, -88, 8]]] },
-      htop: { up: 0, rise: 8, L: [[[0, 50, 8], [0, 40, 13], [0, 22, 26], [0, 0, 30], [0, -18, 24], [0, -28, 14]]], cairn: { x: 0, z: -10 } },
+      htop: { up: 0, rise: 8, L: [[[0, 50, 8], [0, 40, 13], [0, 22, 26], [0, 0, 30], [0, -18, 24], [0, -30, 13], [3, -42, 9], [6, -54, 8], [6, -64, 7]]], cairn: { x: 0, z: -10 }, crag: [0.7, 0.86], fall: 7 },   /* 꼭대기 돌탑을 지나 북쪽 바위 턱으로 조금 내려가면 굴 입구 (crag: 길 끝 쪽만 둘레가 바위로 솟는다, fall: 돌탑 뒤로 내려가는 높이) */
     };
     for (const z in H.OM) { const M = H.OM[z]; M.id = z; M.C = M.L.map((c) => H.pl(H.chk(H.chk(c)))); const C0 = M.C[0]; M.len = C0[C0.length - 1].s; M.z0 = C0[0].z; M.z1 = C0[C0.length - 1].z; }
     /* 사슬 위 자리 (길이 s): 가운데·반폭·나아가는 방향 */
@@ -205,10 +209,10 @@
     const link = (a, b, A2, B2, k) => H.GATES.push({ a, b, A: A2, B: B2, k });
     const chain = ['hechil', 'hwood', 'hlake', 'hpeak', 'hscree', 'hridge', 'htop'];
     for (let i = 0; i + 1 < chain.length; i++) { const a = chain[i], b = chain[i + 1]; link(a, b, side(a, H.OM[a].C[0], 1), side(b, H.OM[b].C[0], 0), 'out'); }
-    /* 호숫가 동쪽 갈래 끝 = 굴 입구 ↔ 박쥐 굴 입구 */
-    { const T = H.T, u = H.sAt(0), p = { x: T[0].x - u.ux * 2, z: T[0].z - u.uz * 2, nx: -u.ux, nz: -u.uz, hw: T[0].w, noModel: 1 }; link('hlake', 'hcave', side('hlake', H.OM.hlake.C[1], 1), p, 'mouth'); }
+    /* 꼭대기 북쪽 끝 = 굴 입구 ↔ 박쥐 굴 입구 (2026-11-11 원호: 꼭대기를 지나쳐 동굴로) */
+    { const T = H.T, u = H.sAt(0), p = { x: T[0].x - u.ux * 2, z: T[0].z - u.uz * 2, nx: -u.ux, nz: -u.uz, hw: T[0].w, noModel: 1 }; link('htop', 'hcave', side('htop', H.OM.htop.C[0], 1), p, 'mouth'); }
     /* 굴목: 굴 넷은 같은 굴을 나눈 방 (땅 좌표가 같다) */
-    for (const [a, b] of [['hcave', 'hcrys'], ['hcrys', 'hfall'], ['hfall', 'hden']]) { const s = H.areaOf(b).s[0], p = H.sAt(s), w = p.w;
+    for (const [a, b] of [['hcave', 'hcrys'], ['hcrys', 'hfall'], ['hfall', 'hden'], ['hden', 'hlair']]) { const s = H.areaOf(b).s[0], p = H.sAt(s), w = p.w;
       link(a, b, { x: p.x - p.ux * 1.2, z: p.z - p.uz * 1.2, nx: p.ux, nz: p.uz, hw: w }, { x: p.x + p.ux * 1.2, z: p.z + p.uz * 1.2, nx: -p.ux, nz: -p.uz, hw: w }, 'cave'); H.GATES[H.GATES.length - 1].s = s; H.GATES[H.GATES.length - 1].c = p; }
     H.arrive = (S) => ({ x: S.x - S.nx * 3, z: S.z - S.nz * 3 });   // 그 쪽 문으로 들어와 서는 자리
     const E = 0.3;
@@ -219,7 +223,7 @@
     for (const z of H.ZONES) { const I = ISLES[z], Q = H.areaOf(z), cave = !!Q.cave, M = H.OM[z], L = (q) => ({ x: I.x + q.x, z: I.z + q.z });
       I.harea = Q; if (M) I.hmap = M;
       if (M) I.clamp = (p, rad) => { const q = H.omNear(M, p.x - I.x, p.z - I.z), m = Math.max(0.3, q.w - rad - 0.3); if (q.d > m) { p.x = I.x + q.x + (p.x - I.x - q.x) * m / q.d; p.z = I.z + q.z + (p.z - I.z - q.z) * m / q.d; } return true; };
-      else I.clamp = (p, rad) => { tunnel(p, rad, I, Q.s[0], z === 'hden' ? null : Q.s[1]); return true; };
+      else I.clamp = (p, rad) => { tunnel(p, rad, I, Q.s[0], z === 'hlair' ? null : Q.s[1]); return true; };
       const sides = []; for (const g of H.GATES) { if (g.a === z) sides.push(g.A); if (g.b === z) sides.push(g.B); }
       for (const g of H.GATES) { if (g.b === z) I.entry = L(H.arrive(g.B)); else if (g.a === z && !I.exit) I.exit = L(H.arrive(g.A)); }
       if (z === 'hechil') continue;   // 산장: 사냥터가 아니다 (몬스터·적정레벨 없음). 들어오는 자리는 남쪽 끝 (I.entry 기본값)
@@ -239,6 +243,8 @@
       if (f === 'cave') { const zz = H.zoneAtLocal('cave', x - I.x, z - I.z); return zz && zz !== I.id ? H.shift(x, z, I.id, zz) : null; }
       const q = H.omNear(I.hmap, x - I.x, z - I.z); return q.d > q.w + 1 ? { x: I.entry.x, z: I.entry.z } : null; };
   }
+  /* 어미의 둥지 보스가 싸우는 둥근 자리 (방 가운데, 세상 좌표) */
+  const HLAIR = { x: ISLES.hlair.x + 20, z: ISLES.hlair.z - 290, r: 22 };
   function HCHL() { return HCH.TL; }
   // 고리 위의 자리 (각도 th, 중심에서 거리 r)
   const ringP = (th, r) => ({ x: MH.cx + Math.cos(th) * r, z: MH.cz + Math.sin(th) * r });
@@ -495,18 +501,22 @@
     smokeslime:{ name: '연기 슬라임', lv: 233, build: 'slime', color: 0x6a6662, hpM: 2.2, atkM: 1.75, scale: 1.85, glow: 0xffb070 },
     firegiant:{ name: '불의 거인', lv: 235, build: 'biped', color: 0x6a2a1e, hpM: 3.2, atkM: 2.0, scale: 2.9, club: true },
     // 허칠산 (설산, Lv 60–110): 산장~갈림길 골짜기 60–70, 동굴 70–90, 봉우리 90–110
+    /* 허칠 (2026-11-11 원호: 꼭대기를 지나 동굴로): 바깥 여섯 맵 60–84 → 굴 넷 84–100. 굴 짐승은 뒤로 갈수록 세게 */
     frostfox: { name: '서리 여우', lv: 62, build: 'quad', color: 0xeef2f6, hpM: 1.15, atkM: 1.3 },
-    snowgoat: { name: '눈 산양', lv: 68, build: 'quad', color: 0xe8e4da, hpM: 1.5, atkM: 1.35 },
-    snowyeti: { name: '설인', lv: 92, build: 'biped', color: 0xe9edf0, hpM: 2.2, atkM: 1.6 },
-    icewisp:  { name: '얼음 정령', lv: 96, build: 'wisp', color: 0xcfeaf8, hpM: 1.25, atkM: 1.5 },
-    avagolem: { name: '눈사태 골렘', lv: 101, build: 'biped', color: 0xe6ecf2, hpM: 2.7, atkM: 1.65, defM: 1.3 },
-    snowowl:  { name: '눈부엉이', lv: 104, build: 'bird', color: 0xf4f6f8, hpM: 1.45, atkM: 1.75 },
-    frostmammoth:{ name: '얼음 매머드', lv: 108, build: 'quad', color: 0x8a7a6a, hpM: 3.0, atkM: 1.8 },
-    // 허칠산 동굴 (Lv 70–90): 설산 굴에 사는 짐승 — 박쥐 떼, 굴을 보금자리 삼는 눈표범, 겨울잠 자는 동굴곰
-    cavebat:  { name: '서리 박쥐', lv: 72, build: 'bird', color: 0x4a4650, hpM: 1.0, atkM: 1.45 },
-    snowleopard:{ name: '눈표범', lv: 78, build: 'quad', color: 0xd8d4c8, hpM: 1.5, atkM: 1.6 },
-    cavebear: { name: '동굴곰', lv: 84, build: 'quad', color: 0x5a4636, hpM: 2.4, atkM: 1.6 },
-    elderbear:{ name: '늙은 동굴곰', lv: 89, build: 'quad', color: 0x3e3430, hpM: 3.2, atkM: 1.75, defM: 1.2 },
+    snowgoat: { name: '눈 산양', lv: 66, build: 'quad', color: 0xe8e4da, hpM: 1.5, atkM: 1.35 },
+    snowyeti: { name: '설인', lv: 70, build: 'biped', color: 0xe9edf0, hpM: 2.2, atkM: 1.6 },
+    icewisp:  { name: '얼음 정령', lv: 74, build: 'wisp', color: 0xcfeaf8, hpM: 1.25, atkM: 1.5 },
+    avagolem: { name: '눈사태 골렘', lv: 78, build: 'biped', color: 0xe6ecf2, hpM: 2.7, atkM: 1.65, defM: 1.3 },
+    snowowl:  { name: '눈부엉이', lv: 79, build: 'bird', color: 0xf4f6f8, hpM: 1.45, atkM: 1.75 },
+    frostmammoth:{ name: '얼음 매머드', lv: 82, build: 'quad', color: 0x8a7a6a, hpM: 3.0, atkM: 1.8 },
+    // 허칠 동굴
+    cavebat:  { name: '서리 박쥐', lv: 86, build: 'bird', color: 0x4a4650, hpM: 1.4, atkM: 1.7 },
+    snowleopard:{ name: '눈표범', lv: 90, build: 'quad', color: 0xd8d4c8, hpM: 1.9, atkM: 1.8 },
+    cavebear: { name: '동굴곰', lv: 94, build: 'quad', color: 0x5a4636, hpM: 2.8, atkM: 1.8 },
+    elderbear:{ name: '늙은 동굴곰', lv: 98, build: 'quad', color: 0x3e3430, hpM: 3.4, atkM: 1.9, defM: 1.2 },
+    // 어미의 둥지 (허칠 동굴 끝 보스방, 적정레벨 100): 얼어붙은 굴 끝에서 굴의 짐승을 먹고 알을 낳는 거대한 구더기
+    hmother:  { name: '얼음 구더기 어미', lv: 100, fixed: { hp: 140000, atk: 560, def: 52, exp: 32000 }, gold: 9000, build: 'mother', color: 0xd8cfc4, dragon: true, mother: true, arena: 'HLAIR' },
+    hgrub:    { name: '구더기 새끼', lv: 98, build: 'grub', color: 0xe6dccb, hpM: 0.45, atkM: 1.0, scale: 1 },
     reddragon:{ name: '붉은 용 이그니스', lv: 100, fixed: { hp: 450000, atk: 900, def: 60, exp: 80000 }, gold: 80000, build: 'dragon', color: 0xa8231a, scale: 1, dragon: true },
   };
   /* ---------- 몬스터 능력치 (밸런스) ----------
@@ -646,6 +656,6 @@
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { HCH, boardTierOf, MHUNT, MLINES, MH, THOUSE, inTHouse, MYHOME, inMyHome, GHOUSE, inGHouse, BAKERY, inBakery, MSHOP, inMShop, HINN, inHInn, DINES, inDine, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, HUNT, zoneArea, huntCounts, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { HCH, boardTierOf, MHUNT, MLINES, MH, THOUSE, inTHouse, MYHOME, inMyHome, GHOUSE, inGHouse, BAKERY, inBakery, MSHOP, inMShop, HINN, inHInn, DINES, inDine, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, HLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, HUNT, zoneArea, huntCounts, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);

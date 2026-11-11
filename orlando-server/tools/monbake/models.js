@@ -612,4 +612,6 @@ const TYPES = {
   salamander: () => lizardman({ skin: c(0xb8402a), belly: c(0xf0b060), crest: c(0xffa040), cloth: c(0x4a2a1a), eyeC: [1, .85, .3] }),
 };
 
+TYPES.hmother = require('./mother').hmother;   /* 얼음 구더기 어미 (허칠 동굴 끝 보스) */
+
 module.exports = { TYPES };
