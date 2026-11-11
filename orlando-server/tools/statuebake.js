@@ -6,14 +6,15 @@
  *
  * 쓰는 법:
  *   cd <아무 빈 폴더> && npm i meshoptimizer@0.21.0   # 한 번만
- *   NODE_PATH=<그 폴더>/node_modules node orlando-server/tools/statuebake.js [seagod]
+ *   NODE_PATH=<그 폴더>/node_modules node orlando-server/tools/statuebake.js [seagod dolphin_bronze dolphin_top]
  *   (H=.005 처럼 빚는 칸 크기를 바꿀 수 있다. 작을수록 곱고 느리다)
  */
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const { bakeModel } = require('./monbake/bake');
-const MODELS = { seagod: () => require('./statuebake/seagod').seaGod() };
+const DL = () => require('./statuebake/dolphin');
+const MODELS = { seagod: () => require('./statuebake/seagod').seaGod(), dolphin_bronze: () => DL().fountainBronze(), dolphin_top: () => DL().fountainTop() };
 const OUT = process.env.OUT || path.join(__dirname, '..', 'public', 'statue');
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
