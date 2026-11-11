@@ -3637,9 +3637,12 @@ function skCdTxt(S,lvl,base){const c=skCdAt(S,Math.max(1,lvl),base);if(lvl<1||lv
 /* 특수 스킬: 직업과 상관없이 퀘스트로 배운다. 배운 것은 P.spc[id]=1 */
 const SPECIAL=[
   {id:'chainbolt',name:'연쇄번개',type:'passive',cd:7,hops:4,mult:1.5,range:9,jumpR:7,color:0x7fb6ff,
-   desc:'일반 공격을 하면 번개가 가까운 적에게 튀고, 그 곁의 적에게 차례로 옮겨붙는다 (최대 4마리, 한 번에 공격력 150%)'}];
+   desc:'일반 공격을 하면 번개가 가까운 적에게 튀고, 그 곁의 적에게 차례로 옮겨붙는다 (최대 4마리, 한 번에 공격력 150%)',
+   /* R의 사냥을 끝내면 다른 갈래(P.spc.cb7)를 배우고, 스킬창에서 고른다(P.spc.cbm='seven') */
+   seven:{n:7,mult:.8,gap:.13,desc:'일반 공격을 하면 가까운 적 하나에게 하늘에서 번개가 일곱 번 떨어진다 (한 번에 공격력 80%)'}}];
 const SPC={};SPECIAL.forEach(s=>SPC[s.id]=s);
 const hasSpc=id=>!!(P&&P.spc&&P.spc[id]);
+const cbSeven=()=>!!(P&&P.spc&&P.spc.cb7&&P.spc.cbm==='seven');   /* 연쇄번개를 '일곱 번 떨어지는 번개'로 쓰는 중 */
 /* 패시브 켜고 끄기: P.poff[id]=1 이면 배웠어도 효과가 없다. pas(id) = 켜져 있을 때의 단계 */
 const pOff=id=>!!(P&&P.poff&&P.poff[id]);
 const pas=id=>P&&!pOff(id)?(P.skills[id]||0):0;
@@ -24019,6 +24022,7 @@ const KAOLIS_WY=-.35;   /* 카올리스 바닷물 높이 */
    길(MHR)은 땅마다 고리 방향으로 가로지르는 흙길 + 엑시즈 문 쪽 고갯길, 땅 생김새는 땅마다(mhBase), 두 땅 사이에서는 섞고(mhHeight), 걸을 수 없는 바깥은 산비탈로 솟는다 */
 /* R의 모닥불 자리: 깊은 숲(m2c) 한가운데서 길 동쪽으로 스무 걸음 들어간 빈터. (dx,dz)는 땅 가운데 기준 불 자리, (ux,uz)는 불에서 길 쪽 방향, r 안의 나무·덤불은 치운다 */
 const RCAMP={id:'m2c',dx:-20.3,dz:-19.3,ux:.778,uz:.628,r:6.5};
+const RTREE={id:'m2c',dx:26,dz:-58,r:4.5};   /* R의 사냥: 같은 깊은 숲 안쪽, 번개 맞은 고목 둘레 빈터 */
 const MHR=(()=>{const MH=OR.MH,ISL=OR.ISLES,Zs=OR.MHUNT.map(k=>ISL[k]).filter(I=>!I.branch),cx=MH.cx,cz=MH.cz,TAU=Math.PI*2;
   /* 고리 길: 문마다(한 줄의 땅들을) 고리 방향으로 가로지르는 한 토막 (양 끝 땅 가장자리 조금 안까지). th0~th1은 말굽 뭍(1A부터 동쪽 끝까지), 그 너머 남동은 바다 */
   const th0=MH.TH0,th1=MH.TH1;   /* 말굽 뭍은 늘 옛 1A 자리부터 (남문 줄을 꺼 두어도 바다가 뭍 안쪽으로 들어오지 않게) */
@@ -24532,7 +24536,7 @@ await BOOT.y();await (async function buildIsles(){
           const rg=new THREE.BoxGeometry(.07,.09,2.75);inst(rg,pm,rails,(t,e,sv,v)=>{e.set(0,-t.a,0);sv.set(1,1,1);v.set(t.x,heightAt(t.x,t.z)+.82,t.z);});inst(rg,pm,rails,(t,e,sv,v)=>{e.set(0,-t.a,0);sv.set(1,1,1);v.set(t.x,heightAt(t.x,t.z)+.42,t.z);});}}
       /* 깊은 숲: 햇빛이 잘 들지 않는 빽빽한 숲. 굵은 전나무와 활엽수, 이끼 낀 바위와 쓰러진 통나무, 버섯, 죽은 나무 */
       /* R의 빈터: 놓은 자리는 그대로 두고(뒤 땅들 자리가 바뀌지 않게 srand 개수를 지킨다) 빈터 안 것만 보이지 않게 줄이고 부딪힘을 뺀다 */
-      if(id===RCAMP.id){const cx=I.x+RCAMP.dx,cz=I.z+RCAMP.dz,pl=P.place;P.place=(...a)=>{const o=pl(...a);for(const t of o)if(Math.hypot(t.x-cx,t.z-cz)<RCAMP.r){t.s=1e-4;const j=colliders.findIndex(c=>c.x===t.x&&c.z===t.z);if(j>=0)colliders.splice(j,1);}return o;};}
+      for(const C of [RCAMP,RTREE])if(id===C.id){const cx=I.x+C.dx,cz=I.z+C.dz,pl=P.place;P.place=(...a)=>{const o=pl(...a);for(const t of o)if(Math.hypot(t.x-cx,t.z-cz)<C.r){t.s=1e-4;const j=colliders.findIndex(c=>c.x===t.x&&c.z===t.z);if(j>=0)colliders.splice(j,1);}return o;};}
       if(kd==='deep'){pines(P.place(340,1.6,.5,off(5.5),6),.12);roundTrees(P.place(300,1.6,.55,off(5.5),6),.3,.16);deadTrees(P.place(26,3,.4,off(7),5));
         bushes(P.place(200,1.1,0,off(4)),.3,.16);rocks(P.place(46,2.4,0,off(6)),0x56604e);
         const logs=P.place(28,3,0,off(7));inst(logG,mat(0x3e3222),logs,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)+.3,t.z);});
@@ -30378,10 +30382,16 @@ function renderSpecialSkills(body){
     const nm=document.createElement('div');nm.className='nm';const b=document.createElement('b');b.textContent=S.name;
     const meta=document.createElement('span');meta.textContent=S.type==='passive'?`패시브 · 재사용 ${S.cd}초`:`재사용 ${S.cd}초`;nm.append(b,meta);
     const btn=document.createElement('button');btn.className='learn';btn.type='button';btn.disabled=true;btn.textContent=has?'습득':'미습득';
-    const p=document.createElement('p');p.textContent=S.desc;card.append(nm,btn,p);
+    const p=document.createElement('p');p.textContent=S.id==='chainbolt'&&cbSeven()?S.seven.desc:S.desc;card.append(nm,btn,p);
+    if(S.id==='chainbolt'&&P.spc.cb7)card.appendChild(cbModeSwitch());   /* R에게 배운 다른 갈래로 바꾸기 */
     if(has&&S.type==='passive'){card.appendChild(pasSwitch(S.id));if(pOff(S.id))card.classList.add('off');}
     wrap.appendChild(card);}
 }
+/* 연쇄번개 갈래 고르기: 옮겨붙는 번개 · 일곱 번 떨어지는 번개 */
+function cbModeSwitch(){const row=document.createElement('div');row.className='bind pas';
+  for(const [k,t] of [['',`옮겨붙는 번개`],['seven','일곱 번 떨어지는 번개']]){const bb=document.createElement('button');bb.type='button';bb.textContent=t;bb.setAttribute('aria-pressed',(P.spc.cbm||'')===k);
+    bb.onclick=()=>{if((P.spc.cbm||'')===k)return;if(k)P.spc.cbm=k;else delete P.spc.cbm;sfx('ui');renderSkills();save();};row.appendChild(bb);}
+  return row;}
 /* 패시브 켜기·끄기 줄 */
 const PAS_BUFF={familiar:['fam','famN'],agile:['agile','agN'],vet:['vet','vetN']};
 function pasSwitch(id){const row=document.createElement('div');row.className='bind pas';
@@ -30595,7 +30605,8 @@ let npcPageNext=null;
 function showPages(pages,i=0,last=null){
   const n=npcCur;$('#npcName').textContent=n.name;$('#npcRole').textContent=n.role;$('#npcRole').hidden=!n.role;
   $('#npcBody').innerHTML='';$('#npcActs').innerHTML='';$('#npcChoices').hidden=true;npcPageNext=null;
-  if(i>=pages.length-1){if(last)last(pages[i]);else renderNpc(pages[i]);return;}
+  if(i>=pages.length-1){if(last&&!last.length){typeText($('#npcSay'),pages[i],()=>{npcPageNext=()=>last();$('#npcNext').hidden=false;$('#npcNext').classList.add('pg');});return;}   /* 마지막 장을 받지 않는 뒷일은 마지막 장까지 다 보여 준 뒤에 */
+    if(last)last(pages[i]);else renderNpc(pages[i]);return;}
   typeText($('#npcSay'),pages[i],()=>{npcPageNext=()=>showPages(pages,i+1,last);$('#npcNext').hidden=false;$('#npcNext').classList.add('pg');});
 }
 function nextNpcPage(){if(!npcPageNext)return false;const f=npcPageNext;npcPageNext=null;f();return true;}
@@ -31079,7 +31090,7 @@ function killMonster(m,mine=true,partyN=1){
   if(m.D.dragon){dragonReward(m,partyN);return;}
   const exp=Math.max(1,Math.round(m.st.exp*gapExp(m.lv)));
   log(`${m.D.name} 처치 · EXP +${Math.round(exp*expMul())}${partyN>1?` (함께 ${partyN}명)`:''}`,'good');
-  dropLoot(m);questKill(m);if(typeof lqKill==='function')lqKill(m);if(typeof hfKill==='function')hfKill(m);
+  dropLoot(m);questKill(m);if(typeof lqKill==='function')lqKill(m);if(typeof rqKill==='function')rqKill(m);if(typeof hfKill==='function')hfKill(m);
   gainExp(exp);partyShareExp(exp);
 }
 function levelUpFx(lv,n=1){sfx('levelup');
@@ -31678,6 +31689,7 @@ function chainBolt(){if(!hasSpc('chainbolt')||pOff('chainbolt')||mode!=='world'|
   for(const m of alive()){if(m.pvp)continue;const dx=m.mesh.position.x-q.x,dz=m.mesh.position.z-q.z,l=Math.hypot(dx,dz),d=l-m.r;if(d>S.range||Math.abs(m.mesh.position.y-q.y)>6)continue;
     const fr=l>.01?(dx*f.x+dz*f.z)/l:1,sc=Math.max(0,d)*(1.6-fr*.6);if(sc<best){best=sc;m0=m;}}
   if(!m0)return;P.cbT=tAll+S.cd;
+  if(cbSeven()){cbSevenStrike(m0,S);return;}
   const hit=new Set(),start=q.clone().add(new THREE.Vector3(f.x*.45,1.25,f.z*.45));
   VFX.burst(start,0x9fc8ff,10,2.5,.25,{mix:0xffffff,glow:false});sfx('mg_zap',start,.7,1.15);
   const hop=(m,from,k)=>{if(mode!=='world'||!P||m.dying!==null)return;hit.add(m);const c=mCenter(m);boltFx(from,c,S.color,k===0?1.2:1);
@@ -31686,6 +31698,16 @@ function chainBolt(){if(!hasSpc('chainbolt')||pOff('chainbolt')||mode!=='world'|
       if(k+1>=S.hops)return;let nx=null,nd=S.jumpR;for(const o of alive()){if(hit.has(o)||o.pvp)continue;const d=mCenter(o).distanceTo(c)-o.r;if(d<nd){nd=d;nx=o;}}
       if(nx)setTimeout(()=>hop(nx,c,k+1),140);},90);};
   hop(m0,start,0);}
+/* 일곱 번 떨어지는 번개: 옮겨붙지 않고, 같은 적 머리 위 하늘에서 차례로 일곱 번 내리친다. 적이 쓰러지면 남은 번개는 그친다 */
+function cbSevenStrike(m,S){const V=S.seven;
+  const strike=k=>{if(mode!=='world'||!P||m.dying!==null)return;const c=mCenter(m),a=Math.random()*6.28,r=.4+Math.random()*.9,
+      top=c.clone().add(new THREE.Vector3(Math.cos(a)*r,8.5+Math.random()*2,Math.sin(a)*r)),last=k===V.n-1;
+    boltFx(top,c,S.color,last?1.5:1.1);
+    setTimeout(()=>{if(mode!=='world'||!P||m.dying!==null)return;shared(()=>damageMonster(m,V.mult,{noKnock:true,sk:'chainbolt'}));
+      const g=mCenter(m).setY(m.mesh.position.y+.05);VFX.burst(c,0x7fb0ff,last?22:12,last?7:4.5,.35,{mix:0xdfefff,glow:false});VFX.shock(g,S.color,(last?2.2:1.2)+m.r,.35);
+      sfx('mg_zap',c,last?1:.7,.9+k*.05);shakeT=Math.max(shakeT,last?.22:.08);
+      if(k+1<V.n)setTimeout(()=>strike(k+1),V.gap*1000);},60);};
+  strike(0);}
 // 조준한 파티원 (시야 가운데 근처, 가까운 순)
 function aimOther(maxD=14,cosMin=.95){if(!party)return null;const o0=camera.position,d=camDir();let best=null,bc=cosMin;
   for(const [id,o] of others){if(!party.members.some(m=>m.id===id)||!o.mesh)continue;const c=o.mesh.position.clone().add(new THREE.Vector3(0,1,0)),v=c.sub(o0),l=v.length();if(l>maxD||l<.5)continue;const k=v.dot(d)/l;if(k>bc){bc=k;best={id,o};}}return best;}
@@ -34963,6 +34985,7 @@ function gqWork(it){const [,id,si]=it.split(':'),o=GQ.sp[id]&&GQ.sp[id][+si],st=
   cam.yaw=Math.atan2(-(o.x-player.position.x),-(o.z-player.position.z));sfx(st.key==='weed'?'swing':'potion',null,.6,.8);}
 function gqTick(dt){if(!gqTick.ok||!P)return;
   if(P.gq&&P.gq.lq)lqTick();
+  if(typeof rqTick==='function')rqTick();
   if(P.gqPin&&gqHud.day&&gqHud.day!==gqDay(Date.now()))updateQuestHud();   /* 자정이 지나면 고정한 일일 퀘스트가 다시 '받기'로 */
   for(const id in GQ.sp)for(const o of GQ.sp[id]){if(!o.mesh)continue;const u=o.mesh.userData;if(u.dia){u.dia.rotation.y+=dt*2;u.dia.position.y=2.1+Math.sin(tAll*2.2+o.x)*.08;}
     if(o.done){o.fade=(o.fade||0)+dt;if(u.soil)u.soil.material.color.lerp(_gqWet,Math.min(1,dt*3));if(o.fade>(u.soil?2.6:.5)){scene.remove(o.mesh);o.mesh=null;}else if(!u.soil)o.mesh.scale.setScalar(Math.max(.01,1-o.fade*2));}}
@@ -34999,7 +35022,7 @@ function gqAct(id){const G=GENQ[id],n=npcCur;if(!G||!P)return;if(G.talk)return G
 function gqMarkTick(){if(!gqTick.ok||!player)return;const want=[];
   for(const id in GENQ){const G=GENQ[id];
     {const who=G.markWho&&gqOf(id)&&!gqDoneQ(id)?G.markWho(id):null;if(who){const n=who.map(i=>NPCS.find(q=>q.id===i)).find(n=>n&&n.mesh&&!(n.hideIf&&n.hideIf()));if(n&&!want.includes(n))want.push(n);continue;}}
-    if(!(gqDoneQ(id)||(!gqOf(id)&&gqLvOk(id)&&!gqClear(id))))continue;
+    if(!(gqDoneQ(id)||(!gqOf(id)&&gqLvOk(id)&&!gqClear(id)&&(!G.avail||G.avail()))))continue;
     const n=(G.npcs||[G.npc]).map(i=>NPCS.find(q=>q.id===i)).find(n=>n&&n.mesh&&!(n.hideIf&&n.hideIf()));if(n&&!want.includes(n))want.push(n);}   /* 같은 사람이 여러 곳에 있으면(산책) 지금 보이는 쪽 */
   const L=GQ.mks=GQ.mks||[];while(L.length<want.length)L.push({g:qmarkMake(0x9fe870,0x1e3a10),n:null});
   for(let i=0;i<L.length;i++){const M=L[i],n=want[i]||null,g=M.g;
@@ -35215,9 +35238,104 @@ function buildRCamp(cx,cz,ux,uz){const vx=-uz,vz=ux,y0=heightAt(cx,cz),g=new THR
     lines:['…','불 곁에선 짐승도 사람도 말이 적어진다.','발소리를 죽여라. 숲이 듣고 있다.','이 숲의 나무들은 오래 살았다. 너보다도, 나보다도.','가면은 벗지 않는다. 숲이 내 얼굴을 기억하지 않게.','짐승은 배가 고파서 덤빈다. 너는 무엇 때문이지.','불이 꺼지기 전에 가라. 어둠이 내리면 이 숲은 길을 바꾼다.'],acts:[],
     onOpen:()=>{const n=NPCS.find(q=>q.id==='rman');n.mqLock=false;const done=()=>{n.mqLock=false;};
       if(!n.met){n.met=1;n.mqLock=true;showPages(['…불을 밟지 마라.','이 깊이까지 들어오는 자는 드물다. 길을 잃었거나, 무언가를 쫓고 있거나.','나는 R. 이름은 그것으로 충분하다.'],0,()=>{done();npcEndLine('앉든지, 가든지. 불은 누구에게나 똑같이 따뜻하다.');});return true;}
+      if(typeof rqTalk==='function'&&GENQ.rq&&!gqClear('rq')&&(gqOf('rq')||GENQ.rq.avail())){rqTalk(n);return true;}   /* R의 사냥 */
       if(gqClear('lq')&&!n.bolt){n.bolt=1;n.mqLock=true;showPages(['…쇳내와 번개 냄새가 섞였군.','골목 끝에 앉은 녀석에게서 배웠나. 그 녀석은 내 이름을 꺼내지 않았을 거다.'],0,()=>{done();npcEndLine('그거면 됐다. 너도 꺼내지 마라.');});return true;}
       return false;}});
   {const u=Rn.mesh.userData;u.maxTurn=.35;u.markerY=1.85;if(u.marker)u.marker.position.y=1.85;}})();   /* 앉아 있어 말을 걸어도 몸은 조금만 돌리고, 머리 위 표시도 낮게 */
+
+/* ---------- R의 사냥: S의 시험을 끝내고 연쇄번개를 배운 뒤 R에게 말을 걸면 받는다 ----------
+   깊은 숲 짐승 사냥 → R에게 돌아가기 → 숲 안쪽 번개 맞은 고목 찾기 → R에게 돌아가면 연쇄번개의 다른 갈래 '일곱 번 떨어지는 번개'(P.spc.cb7)를 배운다.
+   스킬창 연쇄번개 칸에서 두 갈래 가운데 하나를 고른다. 한 번만 할 수 있다 */
+function buildRTree(cx,cz){const y0=heightAt(cx,cz),g=new THREE.Group();g.position.set(cx,y0,cz);const RY=.6;g.rotation.y=RY;
+  const vc=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.95}),
+    glow=new THREE.MeshBasicMaterial({color:0x4d94ff,transparent:true,opacity:.9,fog:false}),glow2=new THREE.MeshBasicMaterial({color:0x1a4fe0,transparent:true,opacity:.5,depthWrite:false,blending:THREE.AdditiveBlending,fog:false});
+  const add=(geo,m,px=0,py=0,pz=0,rx=0,ry=0,rz=0,par=g)=>{const o=new THREE.Mesh(geo,m);o.position.set(px,py,pz);o.rotation.set(rx,ry,rz);o.castShadow=o.receiveShadow=true;par.add(o);return o;};
+  const gy=(lx,lz)=>{const c=Math.cos(RY),s=Math.sin(RY);return heightAt(cx+lx*c+lz*s,cz-lx*s+lz*c)-y0;};
+  const C1=new THREE.Color(0x070706),C2=new THREE.Color(0x141210),C3=new THREE.Color(0x2e1f17),tc=new THREE.Color();
+  /* 숯이 된 껍질: 세로 골을 따라 밝고 어두운 무늬 */
+  const paint=(ge,inner)=>{const P=ge.attributes.position,C=[];for(let i=0;i<P.count;i+=3){let flat=inner?inner(P,i):false;
+      for(let k=0;k<3;k++){const x=P.getX(i+k),y=P.getY(i+k),z=P.getZ(i+k);if(flat)tc.copy(C3).lerp(C1,.35+.35*Math.sin(y*6+x*9));else tc.copy(C1).lerp(C2,.5+.5*Math.sin(Math.atan2(x,z)*11+y*.8));C.push(tc.r,tc.g,tc.b);}}
+    ge.setAttribute('color',new THREE.Float32BufferAttribute(C,3));return ge;};
+  /* 밑동: 땅속에서 1m까지 한 덩어리, 아래는 뿌리처럼 여러 갈래로 부푼다 */
+  {const ge=new THREE.CylinderGeometry(.55,.62,1.35,28,8).toNonIndexed();ge.translate(0,.375,0);const P=ge.attributes.position;
+    for(let i=0;i<P.count;i++){const x=P.getX(i),y=P.getY(i),z=P.getZ(i),a=Math.atan2(x,z),fl=Math.max(0,.55-y)/.85,lobe=Math.pow(Math.max(0,Math.cos(a*6+.7)),3),
+      k=1+fl*fl*(.7+1.5*lobe)+.05*Math.sin(a*13+y*3);P.setX(i,x*k);P.setZ(i,z*k);}
+    ge.computeVertexNormals();add(paint(ge),vc);}
+  /* 위: 번개에 세로로 쪼개져 V자로 벌어진 두 쪽. 쪼개진 면은 그을린 속살에 푸른 금 */
+  const cracks=[];
+  for(const [sd,h,lean] of [[1,5.4,.27],[-1,3.9,.2]]){const H=new THREE.Group();H.position.set(0,1.0,0);H.rotation.x=-sd*lean;g.add(H);
+    const sh=new THREE.Shape();const R=.56;sh.moveTo(-R,0);for(let k=0;k<=16;k++){const a=Math.PI-k/16*Math.PI;sh.lineTo(Math.cos(a)*R,Math.sin(a)*R);}sh.lineTo(-R,0);
+    const ge=new THREE.ExtrudeGeometry(sh,{depth:h,steps:14,bevelEnabled:false,curveSegments:16}).toNonIndexed();   /* 반원(앞이 +y)을 z로 밀어낸 덩어리 */
+    {const P=ge.attributes.position;for(let i=0;i<P.count;i++){const x=P.getX(i),y=P.getY(i),z=P.getZ(i),t=z/h,tp=1-.32*t,a=Math.atan2(y,x);
+      const k=tp*(1+.06*Math.sin(a*9+z*2.1+sd)+.03*Math.sin(a*21+z*5));let nz=z;
+      if(t>.97)nz=z-.5-.7*Math.abs(Math.sin(x*7+sd*2))-.4*Math.max(0,y);   /* 부러진 꼭대기 */
+      P.setXYZ(i,x*k,y>.001?y*k:y,nz);}}
+    paint(ge,(P,i)=>Math.abs(P.getY(i))<.002&&Math.abs(P.getY(i+1))<.002&&Math.abs(P.getY(i+2))<.002);ge.computeVertexNormals();
+    /* 밀어낸 쪽(z)을 위(y)로, 둥근 쪽(+y)을 바깥(-sd z)으로 */
+    const M=add(ge,vc,0,0,0,0,0,0,H);M.rotation.order='YXZ';M.rotation.set(-Math.PI/2,sd>0?0:Math.PI,0);
+    /* 푸른 금: 쪼개진 면에서 2.5cm 띄운 꺾인 줄 */
+    for(let c=0;c<3;c++){const pts=[];let x=(c-1)*.2,y=.15+c*.25;const top=h*(.8-.12*c);for(let k=0;k<10;k++){pts.push(new THREE.Vector3(x,y,0));x+=Math.sin(k*3.7+c*5+sd)*.13;x=Math.max(-.34*(1-.3*y/h),Math.min(.34*(1-.3*y/h),x));y+=top/10;}
+      const cv=new THREE.CatmullRomCurve3(pts);const t1=new THREE.Mesh(new THREE.TubeGeometry(cv,48,.014,5,false),glow),t2=new THREE.Mesh(new THREE.TubeGeometry(cv,48,.05,6,false),glow2);
+      for(const t of [t1,t2]){t.position.z=sd*.025;H.add(t);}cracks.push(t1,t2);}
+    /* 마른 가지 */
+    for(let b=0;b<2;b++){const l=.8+b*.6,bg=new THREE.CylinderGeometry(.022,.08,l,6,3).toNonIndexed();bg.translate(0,l/2,0);paint(bg);bg.computeVertexNormals();
+      const br=add(bg,vc,(b?.14:-.12),h*(.42+b*.2),-sd*.33*(1-.3*(.42+b*.2)),0,0,0,H);br.rotation.order='YXZ';br.rotation.set(-sd*(1+b*.15),b*.7-.35,0);}}
+  /* 밑동에서 갈라진 틈: 두 쪽 사이 아래쪽 어두운 쐐기 */
+  {const ge=new THREE.ConeGeometry(.3,.7,4,1);const w=add(ge,new THREE.MeshBasicMaterial({color:0x07080c}),0,1.0,0,Math.PI,0,0);w.scale.set(1.5,1,.12);w.castShadow=false;}
+  /* 그을린 땅 */
+  {const ge=new THREE.CircleGeometry(3.4,32);ge.rotateX(-Math.PI/2);const P=ge.attributes.position;
+    for(let i=0;i<P.count;i++){const x=P.getX(i),z=P.getZ(i),d=Math.hypot(x,z);if(d>.01){const a=Math.atan2(x,z),f=.72+.28*Math.sin(a*5+1)*Math.sin(a*3+.4);P.setX(i,x*f);P.setZ(i,z*f);}P.setY(i,gy(P.getX(i),P.getZ(i))+.035);}
+    const sg=new THREE.Mesh(ge,new THREE.MeshStandardMaterial({color:0x0e0b09,roughness:1,transparent:true,opacity:.82,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}));sg.receiveShadow=true;g.add(sg);}
+  /* 떨어져 나간 꼭대기 토막과 껍질 조각 */
+  {const ge=new THREE.CylinderGeometry(.27,.36,2.2,14,4).toNonIndexed();const P=ge.attributes.position;for(let i=0;i<P.count;i++){if(P.getY(i)>1.05)P.setY(i,1.1-.4*Math.abs(Math.sin(P.getX(i)*9+P.getZ(i)*6)));}ge.computeVertexNormals();paint(ge);
+    const lx=2.1,lz=-1.2;add(ge,vc,lx,gy(lx,lz)+.26,lz,0,.9,Math.PI/2-.08);}
+  for(let k=0;k<11;k++){const a=k*2.4+.5,r=1.2+(k%4)*.5,lx=Math.cos(a)*r,lz=Math.sin(a)*r,ge=new THREE.DodecahedronGeometry(.08+(k%3)*.04,0).toNonIndexed();paint(ge);ge.computeVertexNormals();
+    const ch=add(ge,vc,lx,gy(lx,lz)+.04,lz,k,k*1.7,0);ch.scale.set(1.5,.4,.8);}
+  scene.add(g);g.updateMatrixWorld(true);
+  colliders.push({x:cx,z:cz,r:.95});{const c=Math.cos(RY),s=Math.sin(RY),lx=2.1,lz=-1.2;for(const o of [-.7,0,.7]){const ax=lx+o*Math.cos(.9),az=lz-o*Math.sin(.9);colliders.push({x:cx+ax*c+az*s,z:cz-ax*s+az*c,r:.36});}}
+  return {g,cracks};}
+const RQ={tree:null,mk:null};
+(function(){if(!OR.ISLES[RTREE.id])return;const I=OR.ISLES[RTREE.id];RQ.x=I.x+RTREE.dx;RQ.z=I.z+RTREE.dz;RQ.tree=buildRTree(RQ.x,RQ.z);})();
+GENQ.rq={title:'R의 사냥',npc:'rman',minLv:45,maxLv:999,where:'서문 밖 깊은 숲 · 모닥불 빈터',veil:1,reward:'연쇄번개 다른 갈래',
+  avail:()=>gqClear('lq')&&hasSpc('chainbolt'),
+  steps:[{key:'hunt',talk:1,need:25,goal:'깊은 숲 짐승 처치'},{key:'b1',talk:1,need:1,one:1,goal:'R에게 돌아가기'},{key:'tree',talk:1,need:1,one:1,goal:'번개 맞은 고목 찾기'}],
+  report:'R에게 돌아가기',exp:.5,gold:30,talk:(id,n)=>rqTalk(n),
+  markWho:id=>{const st=gqStepOf(id);return st&&st.key==='b1'?['rman']:[];}};
+const rqStep=()=>{const st=gqStepOf('rq');return st?st.key:(gqOf('rq')?'report':null);};
+function rqNext(){const q=gqOf('rq');if(!q)return;q.s++;q.h=0;const nx=gqStepOf('rq'),g=nx?nx.goal:GENQ.rq.report;
+  log(`R의 사냥 — ${g}`,'sys');toast(g);updateQuestHud();save();if(!$('#qwin').hidden)renderQuestWin();}
+function rqKill(m){const q=gqOf('rq');if(!q||rqStep()!=='hunt'||m.zone!==RTREE.id)return;q.h=(q.h|0)+1;
+  if(q.h>=GENQ.rq.steps[q.s].need)rqNext();else{updateQuestHud();if(q.h%5===0)save();}}
+/* 고목: 푸른 금이 숨 쉬듯 빛나고, 찾아야 할 때는 꼭대기 위에 초록 팔면체가 뜬다. 4m 안에 들어서면 찾은 것 */
+function rqTick(){const T=RQ.tree;if(!T||!player)return;const d=Math.hypot(player.position.x-RQ.x,player.position.z-RQ.z),want=rqStep()==='tree';
+  if(d<70){const k=.55+.35*Math.sin(tAll*1.9)+.1*Math.sin(tAll*7.3);for(const c of T.cracks)c.material.opacity=c.material===T.cracks[1].material?k*.55:.5+k*.5;}
+  if(want&&!RQ.mk){const s=gqSpotMesh('mark');for(const o of [...s.children])if(o!==s.userData.glow&&o!==s.userData.dia)s.remove(o);s.position.set(RQ.x,heightAt(RQ.x,RQ.z)+5.2,RQ.z);s.scale.setScalar(1.6);scene.add(s);RQ.mk=s;}
+  if(!want&&RQ.mk){scene.remove(RQ.mk);RQ.mk=null;}
+  if(RQ.mk){RQ.mk.userData.dia.rotation.y+=.04;RQ.mk.position.y=heightAt(RQ.x,RQ.z)+5.2+Math.sin(tAll*2.2)*.1;}
+  if(want&&d<4.2&&mode==='world'){const c=new THREE.Vector3(RQ.x,heightAt(RQ.x,RQ.z)+2.4,RQ.z);
+    for(let k=0;k<3;k++)setTimeout(()=>{const a=Math.random()*6.28;boltFx(c.clone().add(new THREE.Vector3(Math.cos(a)*.6,7,Math.sin(a)*.6)),c,0x7fb6ff,.9);sfx('mg_zap',c,.5,1.2);},k*160);
+    log('번개 맞은 고목. 밑동부터 갈라졌는데도 서 있다. 쪼개진 틈에서 아직 푸른빛이 새어 나온다.','sys');rqNext();}}
+/* R과 이야기 */
+function rqTalk(n){const st=rqStep(),G=GENQ.rq;n.mqLock=true;const done=()=>{n.mqLock=false;};
+  if(!st){n.bolt=1;showPages(['…쇳내와 번개 냄새가 섞였군.','골목 끝에 앉은 녀석에게서 배웠나. 번개를 이놈 저놈에게 옮겨 붙이는 법을.','흩어진 번개는 여럿을 그을릴 뿐, 하나를 쓰러뜨리지 못한다.'],0,last=>{
+      renderNpc(last+' 한 놈 위에 번개를 거듭 떨어뜨리는 법이 있다. 배우겠다면, 먼저 이 숲에서 내 방식대로 사냥해라.',box=>{box.dataset.noskip='1';
+        npcBtn(box,'배우겠다',()=>{(P.gq=P.gq||{}).rq={s:0,h:0};done();updateQuestHud();save();log(`${gqTag('rq')} 퀘스트: ${G.title} — ${G.steps[0].goal}`,'sys');
+          npcEndLine('이 숲의 짐승 스물다섯. 무리를 쫓지 마라. 한 놈만 보고, 쓰러질 때까지 쳐라.');gqFx('rq');},'pri wide');
+        npcBtn(box,'다음에',()=>{done();renderNpc('…그러든지. 불은 꺼지지 않는다.');},'wide');});});return;}
+  if(st==='hunt'){const q=gqOf('rq');done();renderNpc(`스물다섯. 아직 ${G.steps[q.s].need-(q.h|0)} 남았다.`);return;}
+  if(st==='b1'){showPages(['피를 묻히고도 숨이 고르군. 됐다.','이 숲 안쪽에 번개를 맞은 고목이 한 그루 서 있다. 밑동까지 갈라졌는데, 아직 쓰러지지 않았다.'],0,()=>{done();rqNext();
+      npcEndLine('가서 보고 와라. 하늘이 어떻게 내리치는지 알게 될 거다.');});return;}
+  if(st==='tree'){done();renderNpc('고목. 숲 안쪽. 갈라진 틈이 아직도 푸르게 빛난다.');return;}
+  if(st==='report'){showPages(['보았군. 그 나무는 한 밤에 번개를 일곱 번 맞았다. 같은 자리에.','하늘은 흩뿌리지 않는다. 한 놈을 골라, 쓰러질 때까지 내리친다.','…손을 내밀어라.'],0,()=>{
+      delete P.gq.rq;const d=(P.gqDone=P.gqDone||{}).rq||{n:0};P.gqDone.rq={n:(d.n|0)+1,t:Date.now()};
+      P.spc=P.spc||{};P.spc.cb7=1;P.spc.cbm='seven';const exp=Math.round(needExp(P.lv)*G.exp),gold=P.lv*G.gold;P.gold+=gold;
+      const c=player.position.clone().add(new THREE.Vector3(0,1.1,0));for(let k=0;k<7;k++)setTimeout(()=>{const a=Math.random()*6.28,r=1.2+Math.random()*.8;const e=c.clone().add(new THREE.Vector3(Math.cos(a)*r,-1.05,Math.sin(a)*r));
+        boltFx(e.clone().add(new THREE.Vector3(0,9,0)),e,0x7fb6ff,k===6?1.4:1);VFX.shock(e,0x7fb6ff,1.2,.3);sfx('mg_zap',e,.7,.9+k*.05);},k*130);
+      flash('#bfe0ff',.3);sfx('levelup');
+      log('연쇄번개의 다른 갈래, 일곱 번 떨어지는 번개를 배웠다','good');log(`${gqTag('rq')} 퀘스트 완료: ${G.title} · 경험치 ${exp.toLocaleString('ko-KR')} · ${gold.toLocaleString('ko-KR')} 골드`,'good');
+      gainExp(exp);done();updateQuestHud();updateHud();save();if(!$('#skills').hidden)renderSkills();
+      npcEndLine('골목 녀석의 방식이 낫다 싶으면 그대로 써라. 번개는 누구 편도 아니다.');});return;}
+  done();renderNpc('…');}
 
 /* ---------- 한나의 식재료: 하레나 여관 주인 한나가 맡기는 세 단계 사냥 ----------
    창고가 비어서 사막 짐승을 잡아 식재료를 모아 온다: 낙타(고기) → 모래 슬라임(국물 젤리) → 사막 거북(수프).
