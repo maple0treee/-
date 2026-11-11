@@ -106,7 +106,7 @@
     }
     /* 얼음 구더기 어미 (허칠 동굴 끝 어미의 둥지, Lv 100): 방 안쪽 끝에 똬리를 틀고 있다 */
     function spawnMother() {
-      return makeMon('hmother', 'hlair', { x: HLAIR.x - 2, z: HLAIR.z - 12 }, 100, { dragon: true, r: 3.2, ry: 0, cd: { bile: 4, slam: 6, thrash: 8, burrow: 12, eggs: 14, drop: 10, wail: 20 }, gap: 0, sks: [], phase: 1, idleT: 0, mv: null, skSeq: 0, said: 0, burrowT: 0 });
+      return makeMon('hmother', 'hlair', { x: HLAIR.x - 2, z: HLAIR.z - 12 }, 100, { dragon: true, r: 3.2, ry: 0, cd: { bile: 4, slam: 6, thrash: 8, burrow: 12, eggs: 14, drop: 10, wail: 20, pop: 5, suck: 10 }, gap: 0, sks: [], phase: 1, idleT: 0, mv: null, skSeq: 0, said: 0, burrowT: 0 });
     }
     if (OR.huntCounts) OR.huntCounts();   // 사냥터 넓이만큼 (shared.js HUNT)
     for (const z in ZONE_COUNT) for (let k = 0; k < ZONE_COUNT[z]; k++) spawn(z);
@@ -345,7 +345,7 @@
     // 기술은 용처럼 바닥에 경고(msk)가 먼저 뜨고 잠시 뒤 판정(mskr). 알을 터뜨려 새끼(hgrub)를 낳고, 새끼가 어미 입에 닿으면 어미가 먹고 기운을 차린다
     function mClamp(m) { lairClamp(m, m.r); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(m, m.r * 0.55); }
     function motherTick(m, ts) {
-      const A = HLAIR, tg = ts.filter((t) => inArena(A, t) && zoneAt(t.x, t.z) === 'hlair');
+      const A = HLAIR, hClamp = (p, rad) => { const d = Math.hypot(p.x - A.x, p.z - A.z), mx = A.r - rad; if (d > mx) { p.x = A.x + (p.x - A.x) * mx / d; p.z = A.z + (p.z - A.z) * mx / d; } }, tg = ts.filter((t) => inArena(A, t) && zoneAt(t.x, t.z) === 'hlair');
       for (const sk of [...m.sks]) { sk.t += TICK; if (sk.t >= sk.tele) { dResolve(m, sk, tg); m.sks.splice(m.sks.indexOf(sk), 1); if (sk.k === 'burrow') m.burrowT = 0; } }
       if (m.mv) { m.mv.t += TICK; const k = Math.min(1, m.mv.t / m.mv.dur); m.x = m.mv.fx + (m.mv.tx - m.mv.fx) * k; m.z = m.mv.fz + (m.mv.tz - m.mv.fz) * k; if (k >= 1) m.mv = null; mClamp(m); return; }
       const kids = [...monsters.values()].filter((s) => s.summon && s.zone === 'hlair');
@@ -364,7 +364,17 @@
       const mouth = { x: m.x + Math.sin(m.ry) * (m.r + 1.2), z: m.z + Math.cos(m.ry) * (m.r + 1.2) };
       for (const s of kids) if (s.feed) { moveToward(s, mouth.x, mouth.z, 2.6); if (Math.hypot(s.x - mouth.x, s.z - mouth.z) < 1.6) { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [], eat: m.i }); m.hp = Math.min(m.mh, m.hp + m.mh * 0.03); m.dirty = true; } }
       const frac = m.hp / m.mh, ph = frac < 0.3 ? 3 : frac < 0.65 ? 2 : 1;
-      if (ph > m.phase) { m.phase = ph; say(ph === 2 ? '어미의 등에 붙은 알들이 꿈틀거린다.' : '어미가 찢어지는 소리로 울부짖으며 미친 듯 몸부림친다.'); C.eggs = Math.min(C.eggs, 1); C.wail = Math.min(C.wail, 2); }
+      if (ph > m.phase) { m.phase = ph; say(ph === 2 ? '어미의 등에 붙은 알들이 꿈틀거린다.' : '어미의 옆구리가 쩍 갈라지며 속에서 새끼들이 쏟아진다.'); C.eggs = Math.min(C.eggs, 1); C.wail = Math.min(C.wail, 2);
+        if (ph === 3) {
+          // 몸이 찢어진다: 갈라진 옆구리에서 새끼가 쏟아지고, 온몸의 고름 주머니가 한꺼번에 터진다
+          nearCast(m, { t: 'mfx', i: m.i, k: 'rupture' });
+          for (let k = 0; k < 4 && kids.length + k < 12; k++) { const aa = m.ry + Math.PI / 2 * (k % 2 ? 1 : -1) + rnd(-0.4, 0.4), p = { x: m.x + Math.sin(aa) * (m.r + 1.5), z: m.z + Math.cos(aa) * (m.r + 1.5) }; hClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
+            const s = makeMon('hgrub', 'hlair', p, 98, { summon: true, aggroOn: pick(tg).id, feed: k === 3 }); broadcast({ t: 'mspawn', m: pub(s), from: m.i }); }
+          for (let k = 0; k < 12; k++) { const aa = k / 12 * 6.283 + rnd(-0.2, 0.2), d = rnd(m.r + 1, A.r - 3), p = { x: m.x + Math.sin(aa) * d, z: m.z + Math.cos(aa) * d }; hClamp(p, 1);
+            dSkill(m, { k: 'pop', sh: 'c', x: p.x, z: p.z, r: 2.2, tele: 1.4 + (k % 4) * 0.25, mul: 1.1, pool: [4, 0.16], col: 4 }); }
+          m.gap = 2.2; C.pop = 8;
+        }
+      }
       const fast = ph === 3 ? 0.68 : ph === 2 ? 0.85 : 1;
       if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - mouth.x, t.z - mouth.z) < 3.4) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); broadcast({ t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.7 * fast; } return; }
       if (m.gap > 0 || m.sks.some((s) => s.block)) { mClamp(m); return; }
@@ -377,10 +387,16 @@
       if (ph >= 2 && C.eggs <= 0 && kids.length < 8) {
         // 알 터뜨리기: 등의 알이 터지며 새끼가 쏟아진다. 셋째 단계에선 새끼 몇이 어미에게 기어간다
         const n = ph === 3 ? 5 : 3;
-        for (let k = 0; k < n; k++) { const aa = m.ry + Math.PI + (k - (n - 1) / 2) * 0.7, p = { x: m.x + Math.sin(aa) * (m.r + 2.5), z: m.z + Math.cos(aa) * (m.r + 2.5) }; lairClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
+        for (let k = 0; k < n; k++) { const aa = m.ry + Math.PI + (k - (n - 1) / 2) * 0.7, p = { x: m.x + Math.sin(aa) * (m.r + 2.5), z: m.z + Math.cos(aa) * (m.r + 2.5) }; hClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
           const s = makeMon('hgrub', 'hlair', p, 98, { summon: true, aggroOn: pick(tg).id, feed: ph === 3 && k % 2 === 0 }); broadcast({ t: 'mspawn', m: pub(s), from: m.i }); }
         nearCast(m, { t: 'mfx', i: m.i, k: 'eggs' });
         C.eggs = 18 * fast; m.gap = 1.4;
+      } else if (ph >= 2 && C.suck <= 0 && dist < 17) {
+        // 들이마시기: 입을 크게 벌리고 숨을 빨아들여 앞에 선 사람을 입으로 끌어당긴 뒤 삼키듯 문다
+        const len = 17, mouthP = { x: m.x + Math.sin(a) * (m.r + 1.2), z: m.z + Math.cos(a) * (m.r + 1.2) };
+        dSkill(m, { k: 'suck', sh: 'l', x: mouthP.x, z: mouthP.z, a, len, w: 3.4, tele: 2.6, mul: 0.35, block: true });
+        dSkill(m, { k: 'gulp', sh: 'c', x: mouthP.x, z: mouthP.z, r: 3.6, tele: 2.75, mul: 2.8, block: true });
+        m.ry = a; C.suck = rnd(14, 17) * fast;
       } else if (ph >= 3 && C.wail <= 0) {
         dSkill(m, { k: 'wail', sh: 'c', x: m.x, z: m.z, r: 13, tele: 1.7, mul: 0.9, block: true });
         C.wail = 17;
@@ -390,6 +406,12 @@
         for (let k = 0; k < n; k++) { const q = k < tg.length ? tg[k] : null; const p = q ? { x: q.x + rnd(-1.2, 1.2), z: q.z + rnd(-1.2, 1.2) } : (() => { const aa = rnd(0, 6.28), d = rnd(3, A.r - 4); return { x: A.x + Math.cos(aa) * d, z: A.z + Math.sin(aa) * d }; })();
           dSkill(m, { k: 'drop', sh: 'c', x: p.x, z: p.z, r: 2.2, tele: 1.4 + k * 0.2, mul: 1.0, pool: [3.5, 0.16], col: 4 }); }
         C.drop = 14 * fast; m.gap = 0.8;
+      } else if (C.pop <= 0) {
+        // 고름 주머니 터뜨리기: 몸의 주머니들이 부풀다 터져 둘레에 고름이 튄다 (사람 발밑에도 하나씩)
+        const n = 4 + ph * 2;
+        for (let k = 0; k < n; k++) { const q = k < tg.length && k < 3 ? tg[k] : null; const p = q ? { x: q.x + rnd(-0.8, 0.8), z: q.z + rnd(-0.8, 0.8) } : (() => { const aa = rnd(0, 6.28), d = rnd(m.r + 1, 12); return { x: m.x + Math.sin(aa) * d, z: m.z + Math.cos(aa) * d }; })(); hClamp(p, 1);
+          dSkill(m, { k: 'pop', sh: 'c', x: p.x, z: p.z, r: 2.1, tele: 1.25 + k * 0.08, mul: 1.1, pool: [4, 0.16], col: 4 }); }
+        C.pop = rnd(10, 13) * fast; m.gap = 0.7;
       } else if (C.burrow <= 0 && dist > 7) {
         // 얼음 바닥 밑으로 파고들었다가 노린 사람 발밑에서 솟구친다
         dSkill(m, { k: 'burrow', sh: 'c', x: t.x, z: t.z, r: 5, tele: 2.1, mul: 2.0, block: true });
@@ -398,6 +420,9 @@
         const len = 15, w = 2.5;
         dSkill(m, { k: 'bile', sh: 'l', x: head.x, z: head.z, a, len, w, tele: 1.25, mul: 1.5, pool: [4.5, 0.2], col: 4, block: true });
         if (ph >= 2) { const s2 = Math.random() < 0.5 ? 1 : -1; dSkill(m, { k: 'bile', sh: 'l', x: head.x, z: head.z, a: a + s2 * 0.6, len: len * 0.8, w, tele: 2.1, mul: 1.5, pool: [4.5, 0.2], col: 4, block: true }); }
+        if (ph >= 3) later(() => { if (!monsters.has(m.i)) return; const n = [...monsters.values()].filter((q) => q.summon && q.zone === 'hlair').length; if (n >= 10) return;   // 셋째 단계: 토사물 속에 산 새끼가 섞여 나온다
+          for (let k = 0; k < 2; k++) { const u = len * (0.55 + k * 0.35), p = { x: head.x + Math.sin(a) * u, z: head.z + Math.cos(a) * u }; hClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
+            const tt = tg.length ? pick(tg) : null; const s = makeMon('hgrub', 'hlair', p, 98, { summon: true, aggroOn: tt ? tt.id : null }); broadcast({ t: 'mspawn', m: pub(s), from: m.i }); } }, 1300);
         m.ry = a; C.bile = rnd(7, 9) * fast;
       } else if (C.slam <= 0 && dist < 9) {
         // 앞몸을 높이 쳐들었다가 내리찍는다
