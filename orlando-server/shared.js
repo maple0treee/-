@@ -194,7 +194,7 @@
       hpeak: { up: 1, rise: 46, L: [[[0, 85, 8], [0, 72, 14], [-22, 56, 18], [18, 36, 18], [-20, 14, 18], [18, -8, 18], [-16, -30, 18], [0, -52, 14], [0, -70, 10], [0, -82, 8]]] },
       hscree: { up: 1, rise: 22, L: [[[0, 80, 8], [0, 68, 15], [-12, 44, 30], [8, 14, 34], [-6, -18, 32], [4, -46, 22], [0, -66, 12], [0, -80, 8]]] },
       hridge: { up: 0, rise: 24, L: [[[0, 90, 8], [0, 78, 11], [-8, 54, 12], [6, 28, 13], [-6, 2, 12], [8, -24, 13], [-2, -50, 12], [0, -72, 10], [0, -88, 8]]] },
-      htop: { up: 0, rise: 8, L: [[[0, 50, 8], [0, 40, 13], [0, 22, 26], [0, 0, 30], [0, -18, 24], [0, -30, 13], [3, -42, 9], [6, -54, 8], [6, -64, 7]]], cairn: { x: 0, z: -10 }, crag: [0.7, 0.86], fall: 7 },   /* 꼭대기 돌탑을 지나 북쪽 바위 턱으로 조금 내려가면 굴 입구 (crag: 길 끝 쪽만 둘레가 바위로 솟는다, fall: 돌탑 뒤로 내려가는 높이) */
+      htop: { up: 0, rise: 8, L: [[[0, 50, 8], [0, 40, 13], [0, 22, 26], [0, 0, 30], [0, -18, 24], [0, -30, 13], [3, -42, 9], [6, -54, 8], [6, -64, 7]]], cairn: { x: 0, z: -10 }, fall: 4, hole: { x: 6, z: -57, r: 2.7 } },   /* 꼭대기 돌탑을 지나 북쪽으로 조금 내려가면 땅에 뚫린 구멍(hole)으로 굴에 내려간다 (2026-11-11 원호: 문이 아니라 구멍으로). fall: 돌탑 뒤로 내려가는 높이 */
     };
     for (const z in H.OM) { const M = H.OM[z]; M.id = z; M.C = M.L.map((c) => H.pl(H.chk(H.chk(c)))); const C0 = M.C[0]; M.len = C0[C0.length - 1].s; M.z0 = C0[0].z; M.z1 = C0[C0.length - 1].z; }
     /* 사슬 위 자리 (길이 s): 가운데·반폭·나아가는 방향 */
@@ -210,11 +210,16 @@
     const chain = ['hechil', 'hwood', 'hlake', 'hpeak', 'hscree', 'hridge', 'htop'];
     for (let i = 0; i + 1 < chain.length; i++) { const a = chain[i], b = chain[i + 1]; link(a, b, side(a, H.OM[a].C[0], 1), side(b, H.OM[b].C[0], 0), 'out'); }
     /* 꼭대기 북쪽 끝 = 굴 입구 ↔ 박쥐 굴 입구 (2026-11-11 원호: 꼭대기를 지나쳐 동굴로) */
-    { const T = H.T, u = H.sAt(0), p = { x: T[0].x - u.ux * 2, z: T[0].z - u.uz * 2, nx: -u.ux, nz: -u.uz, hw: T[0].w, noModel: 1 }; link('htop', 'hcave', side('htop', H.OM.htop.C[0], 1), p, 'mouth'); }
+    /* 2026-11-11 원호: 다른 맵 이동과 달리 꼭대기 땅에 뚫린 구멍으로 내려간다. 굴 첫머리 천장에 그 구멍이 뚫려 있고 밧줄이 늘어져 있다 (밧줄을 잡으면 올라간다).
+       hole: 들어서면 넘어가는 둥근 자리의 반지름, land: 넘어와 서는 자리 */
+    { const O = H.OM.htop.hole, u = H.sAt(0), q = H.sAt(3), l = H.sAt(5.8);
+      const A2 = { x: O.x, z: O.z, nx: 0, nz: -1, hw: O.r, hole: O.r, noModel: 1, land: { x: O.x, z: O.z + O.r + 2.2 } };
+      const B2 = { x: q.x, z: q.z, nx: -u.ux, nz: -u.uz, hw: 1.1, hole: 1.1, noModel: 1, land: { x: l.x, z: l.z } };
+      link('htop', 'hcave', A2, B2, 'mouth'); }
     /* 굴목: 굴 넷은 같은 굴을 나눈 방 (땅 좌표가 같다) */
     for (const [a, b] of [['hcave', 'hcrys'], ['hcrys', 'hfall'], ['hfall', 'hden'], ['hden', 'hlair']]) { const s = H.areaOf(b).s[0], p = H.sAt(s), w = p.w;
       link(a, b, { x: p.x - p.ux * 1.2, z: p.z - p.uz * 1.2, nx: p.ux, nz: p.uz, hw: w }, { x: p.x + p.ux * 1.2, z: p.z + p.uz * 1.2, nx: -p.ux, nz: -p.uz, hw: w }, 'cave'); H.GATES[H.GATES.length - 1].s = s; H.GATES[H.GATES.length - 1].c = p; }
-    H.arrive = (S) => ({ x: S.x - S.nx * 3, z: S.z - S.nz * 3 });   // 그 쪽 문으로 들어와 서는 자리
+    H.arrive = (S) => S.land || ({ x: S.x - S.nx * 3, z: S.z - S.nz * 3 });   // 그 쪽 문으로 들어와 서는 자리
     const E = 0.3;
     /* 굴 맵: 굴 벽 안, 제 굴목 사이만 */
     const tunnel = (p, rad, I, s0, s1) => { let q = H.near(H.T, p.x - I.x, p.z - I.z);
