@@ -2617,6 +2617,8 @@ setInterval(tick,400);
       const c = clients.get(id); if (c) c.send(msg);
     };
     const broadcast = (msg, except) => { for (const [id, c] of clients) if (id !== except) c.send(msg); };
+    // 몬스터 공격·기술 표시는 그 몬스터가 보이는(안개 안쪽) 사람에게만 보낸다: 모두에게 보내면 사람 수의 제곱으로 늘어난다
+    const nearCast = (m, msg, except) => { for (const [id, c] of clients) { if (id === except) continue; const p = c.pres; if (p && typeof p.x === 'number' && typeof p.z === 'number') { const dx = p.x - m.x, dz = p.z - m.z; if (dx * dx + dz * dz > NEAR_R2) continue; } c.send(msg); } };
     const inRotunda = (p) => p.z > 300 && p.x < 800 && Math.hypot(p.x - DUN.x, p.z - DUN.z) < DUN.R - 1.5;
     const inLair = (p) => Math.hypot(p.x - LAIR.x, p.z - LAIR.z) < LAIR.r - 0.5;
     // 용 같은 큰 보스는 자기 둥지(원) 안에서만 싸운다
@@ -2791,7 +2793,7 @@ setInterval(tick,400);
           if (A.t >= A.dur) {
             const t = tg.find((q) => q.id === A.to);
             if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 2.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk });
-            broadcast({ t: 'matk', i: m.i, to: null }, A.to);
+            nearCast(m, { t: 'matk', i: m.i, to: null }, A.to);
             m.act = null; m.gap = 0.6; m.windup = 0;
           }
         } else if (A.t >= A.dur) { m.act = null; m.gap = 0.8; }
@@ -2852,14 +2854,14 @@ setInterval(tick,400);
       const sk = { sid: ++m.skSeq, t: 0, ...o };
       sk.msg = { t: 'msk', i: m.i, sid: sk.sid, k: o.k, d: r2(o.tele), ...(o.sh === 'c' ? { sh: 'c', x: r2(o.x), z: r2(o.z), r: r2(o.r) } : { sh: 'l', x: r2(o.x), z: r2(o.z), a: r2(o.a), len: r2(o.len), w: r2(o.w) }) };
       if (o.col !== undefined) sk.msg.col = o.col;
-      m.sks.push(sk); broadcast(sk.msg); return sk;
+      m.sks.push(sk); nearCast(m, sk.msg); return sk;
     }
     function dResolve(m, sk, tg) {
       const hit = tg.filter((t) => inShape(sk, t.x, t.z, 0.8)).map((t) => t.id);
       const out = { ...sk.msg, t: 'mskr', dmg: Math.round(m.atk * sk.mul), lv: m.lv, hit };
       if (sk.pool) { out.pool = sk.pool[0]; out.dps = Math.round(m.atk * sk.pool[1]); }
       if (sk.jump) out.jump = 1;
-      broadcast(out);
+      nearCast(m, out);
       if (sk.k === 'dive' || sk.k === 'burrow') { m.mv = { fx: m.x, fz: m.z, tx: sk.x, tz: sk.z, t: 0, dur: sk.k === 'burrow' ? 0.12 : 0.25 }; }
     }
     function dragonTick(m, ts) {
@@ -2879,7 +2881,7 @@ setInterval(tick,400);
       const frac = m.hp / m.mh, ph = frac < 0.25 ? 3 : frac < 0.55 ? 2 : 1;
       if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? `${NMi} 높이 떠올랐다.` : `${NMi} 울부짖는다.`) : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
       const fast = ph === 3 ? 0.65 : ph === 2 ? 0.82 : 1;
-      if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 3.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); broadcast({ t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.8 * fast; } return; }
+      if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 3.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); nearCast(m, { t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.8 * fast; } return; }
       if (m.gap > 0 || m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }
       let t = tg.find((q) => q.id === m.aggroOn);
       if (m.taunt > 0) m.taunt -= TICK;
@@ -2950,7 +2952,7 @@ setInterval(tick,400);
         const n = ph === 3 ? 5 : 3;
         for (let k = 0; k < n; k++) { const aa = m.ry + Math.PI + (k - (n - 1) / 2) * 0.7, p = { x: m.x + Math.sin(aa) * (m.r + 2.5), z: m.z + Math.cos(aa) * (m.r + 2.5) }; lairClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
           const s = makeMon('hgrub', 'hlair', p, 98, { summon: true, aggroOn: pick(tg).id, feed: ph === 3 && k % 2 === 0 }); broadcast({ t: 'mspawn', m: pub(s), from: m.i }); }
-        broadcast({ t: 'mfx', i: m.i, k: 'eggs' });
+        nearCast(m, { t: 'mfx', i: m.i, k: 'eggs' });
         C.eggs = 18 * fast; m.gap = 1.4;
       } else if (ph >= 3 && C.wail <= 0) {
         dSkill(m, { k: 'wail', sh: 'c', x: m.x, z: m.z, r: 13, tele: 1.7, mul: 0.9, block: true });
@@ -3045,7 +3047,7 @@ setInterval(tick,400);
       }
       if (S.col !== undefined) sk.msg.col = S.col;
       m.sk = sk; m.windup = 0;
-      broadcast(sk.msg);
+      nearCast(m, sk.msg);
     }
     function inShape(sk, x, z, pad) {
       if (sk.msg.sh === 'c') return Math.hypot(x - sk.x, z - sk.z) < sk.r + pad;
@@ -3059,7 +3061,7 @@ setInterval(tick,400);
       const out = { ...sk.msg, t: 'mskr', dmg, lv: m.lv, hit };
       if (S.pool) { out.pool = S.pool[0]; out.dps = Math.round(m.atk * S.pool[1]); }
       if (S.jump) out.jump = 1;
-      broadcast(out);
+      nearCast(m, out);
       if (S.k === 'dash') { const e = sk.len - 0.6; sk.move = { fx: m.x, fz: m.z, tx: m.x + Math.sin(sk.a) * e, tz: m.z + Math.cos(sk.a) * e, dur: 0.32 }; }
       else if (S.k === 'leap') { const e = Math.max(0, Math.hypot(sk.x - m.x, sk.z - m.z) - 0.6), a = Math.atan2(sk.x - m.x, sk.z - m.z); sk.move = { fx: m.x, fz: m.z, tx: m.x + Math.sin(a) * e, tz: m.z + Math.cos(a) * e, dur: 0.3 }; }
     }
@@ -3088,10 +3090,18 @@ setInterval(tick,400);
       // 도발당해 그 쉴더를 노리던 몬스터만 옮겨 간다 (그냥 박아 둔 스쿠툼은 아무도 끌지 않는다)
       { const dcs = new Set(ts.filter((t) => t.dc).map((t) => t.id)); if (dcs.size) for (const m of monsters.values()) if (m.aggroOn && m.taunt > 0 && dcs.has('dc:' + m.aggroOn)) m.aggroOn = 'dc:' + m.aggroOn; }
       const players = [...clients.values()].filter((c) => c.pres.on);
+      // 노릴 대상은 40m 넘으면 보지 않으므로 40m 칸에 나눠 두고 이웃 칸만 본다 (사람이 많을 때 몬스터마다 모든 사람을 훑지 않게)
+      const TG = 40, tCells = new Map();
+      for (const t of ts) { const k = Math.floor(t.x / TG) * 65536 + Math.floor(t.z / TG); const L = tCells.get(k); if (L) L.push(t); else tCells.set(k, [t]); }
+      const nearTs = (m) => { const cx = Math.floor(m.x / TG), cz = Math.floor(m.z / TG), out = []; for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gz = cz - 1; gz <= cz + 1; gz++) { const L = tCells.get(gx * 65536 + gz); if (L) for (const t of L) out.push(t); } return out; };
+      // 사람 둘레 75m 안의 몬스터만 움직인다: 사람도 75m 칸에 나눠 둔다
+      const PG = 75, pCells = new Map();
+      for (const c of players) { const k = Math.floor(c.pres.x / PG) * 65536 + Math.floor(c.pres.z / PG); const L = pCells.get(k); if (L) L.push(c); else pCells.set(k, [c]); }
+      const nearPlayer = (m) => { const cx = Math.floor(m.x / PG), cz = Math.floor(m.z / PG); for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gz = cz - 1; gz <= cz + 1; gz++) { const L = pCells.get(gx * 65536 + gz); if (L) for (const c of L) if (Math.hypot(c.pres.x - m.x, c.pres.z - m.z) < 75) return true; } return false; };
       const active = [];
       const boss = [...monsters.values()].find((q) => q.boss);
       for (const m of [...monsters.values()]) {
-        if (!players.some((c) => Math.hypot(c.pres.x - m.x, c.pres.z - m.z) < 75)) continue;
+        if (!nearPlayer(m)) continue;
         active.push(m);
         m.before = [m.x, m.z, m.ry, Math.round(m.hp), m.windup > 0 || !!(m.sk && !m.sk.done) || !!(m.sks && m.sks.length), m.stun > 0, !!m.dot, m.vuln > 0, m.air > 0];
         if (m.dot) {
@@ -3117,7 +3127,7 @@ setInterval(tick,400);
         const homeD = Math.hypot(m.x - m.home.x, m.z - m.home.z);
         const dun = m.zone === 'dungeon';
         let tgt = null, best = 1e9;
-        for (const t of ts) {
+        for (const t of nearTs(m)) {
           if (dun ? !t.rot : t.dun) continue;
           const d = Math.hypot(t.x - m.x, t.z - m.z);
           // 단단한 감각(쉴더): 노리던 쉴더는 더 멀리 가도 놓치지 않는다
@@ -3130,7 +3140,7 @@ setInterval(tick,400);
         if (m.taunt > 0) { m.taunt -= TICK; const tt = ts.find((q) => q.id === m.aggroOn && (dun ? q.rot : !q.dun)); if (tt) tgt = tt; }
         if (!tgt) m.aggroOn = null;
         // 기절시키면 준비 중인 기술이 끊긴다
-        if (m.sk && !m.sk.done && m.stun > 0) { broadcast({ t: 'mskx', i: m.i }); m.sk = null; m.skCd = rnd(3, 5); }
+        if (m.sk && !m.sk.done && m.stun > 0) { nearCast(m, { t: 'mskx', i: m.i }); m.sk = null; m.skCd = rnd(3, 5); }
         if (m.sk) stepSkill(m, ts);
         else if (m.stun > 0) m.windup = 0;
         else if (tgt && tgt.lu) {
@@ -3151,7 +3161,7 @@ setInterval(tick,400);
             turn(m, Math.atan2(dx, dz), 1);
             m.atkCd = 1.0; m.lastAtk = Date.now();
             send(tgt.id, { t: 'matk', i: m.i, to: tgt.id, atk: m.atk, f: 1 });   // f: 첫 평타 (달려서 스쳐 가도 맞게 게임 쪽에서 조금 더 넓게 본다)
-            broadcast({ t: 'matk', i: m.i, to: null }, tgt.id);
+            nearCast(m, { t: 'matk', i: m.i, to: null }, tgt.id);
           }
           else if (S && m.windup <= 0 && m.skCd <= 0 && dist >= S.range[0] && dist <= S.range[1] && !(m.detour && m.detour.t > 0)) startSkill(m, S, tgt, dist);
           else if (m.windup > 0) {
@@ -3160,7 +3170,7 @@ setInterval(tick,400);
             if (m.windup <= 0) {
               m.atkCd = 1.0; m.lastAtk = Date.now();   /* 공격 사이 쉬는 시간 1.6 → 1.0초 */
               if (dist < reach + 0.9) send(tgt.id, { t: 'matk', i: m.i, to: tgt.id, atk: m.atk });
-              broadcast({ t: 'matk', i: m.i, to: null }, tgt.id);
+              nearCast(m, { t: 'matk', i: m.i, to: null }, tgt.id);
             }
           } else if (dist > reach) {
             const spd = m.D.build === 'slime' ? 2.8 : m.D.build === 'quad' ? 3.9 : 3.5;
@@ -3197,15 +3207,33 @@ setInterval(tick,400);
         }
       }
       // 몬스터끼리 겹치지 않게
-      for (let a = 0; a < active.length; a++) for (let b = a + 1; b < active.length; b++) {
-        const A = active[a], B = active[b];
-        if (!monsters.has(A.i) || !monsters.has(B.i)) continue;
+      // 모든 쌍을 다 보면 몬스터 수의 제곱만큼 느려져서(사람이 흩어져 사냥하면 한 번에 1초 넘게 걸렸다) 4m 칸으로 나눠 이웃 칸끼리만 본다. 큰 몬스터(보스·용)는 모두와 본다
+      const sep = (A, B) => {
+        if (!monsters.has(A.i) || !monsters.has(B.i)) return;
         const dx = B.x - A.x, dz = B.z - A.z, d = Math.hypot(dx, dz), mn = (A.r + B.r) * 0.9;
         if (d < mn && d > 1e-4) {
           const push = mn - d, ux = dx / d, uz = dz / d, wa = A.boss ? 0 : B.boss ? 1 : 0.5, wb = 1 - wa;
           const sp = push;
           A.x -= ux * sp * wa; A.z -= uz * sp * wa; B.x += ux * sp * wb; B.z += uz * sp * wb;
         }
+      };
+      {
+        const SC = 4, cells = new Map(), big = [];
+        for (let a = 0; a < active.length; a++) {
+          const A = active[a];
+          if (A.r > 2.2) { big.push(a); continue; }
+          const k = Math.floor(A.x / SC) * 65536 + Math.floor(A.z / SC);
+          const L = cells.get(k); if (L) L.push(a); else cells.set(k, [a]);
+        }
+        for (let a = 0; a < active.length; a++) {
+          const A = active[a]; if (A.r > 2.2) continue;
+          const cx = Math.floor(A.x / SC), cz = Math.floor(A.z / SC);
+          for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gz = cz - 1; gz <= cz + 1; gz++) {
+            const L = cells.get(gx * 65536 + gz); if (!L) continue;
+            for (const b of L) if (b > a) sep(A, active[b]);
+          }
+        }
+        for (const a of big) for (let b = 0; b < active.length; b++) if (b !== a && (active[b].r <= 2.2 || b > a)) sep(active[Math.min(a, b)], active[Math.max(a, b)]);
       }
       for (const m of active) {
         if (!monsters.has(m.i)) continue;
@@ -4084,9 +4112,14 @@ const FOODK=(()=>{
         if(v<.5){k=v/.5;y=h;}else if(v<.62){const t=(v-.5)/.12;k=1;y=h-t*.003;}else{k=1;y=h-.003-(v-.62)/.38*(h-.003);}
         const kk=v<.5?k*(1-.02):1-.02+.02*Math.sin(Math.min(1,(v-.5)/.12)*PI/2);P.set(ex*kk,y,ez*kk);},
       (C,P)=>{const g=vn(P.x*3,0,P.z*28)*.65+vn(P.x*12,P.y*30,P.z*70)*.35;mixC(C,col,0x6a4020,g*.55);},.22,{m});return A;}
-  /* 접시: 가운데 오목, 테두리에 푸른 띠 */
-  function plate(A,R,m,band=0x2e4f8a){const pr=[[0,.004],[R*.55,.004],[R*.64,.007],[R*.95,.017],[R,.018],[R*.98,.014],[R*.64,.003],[R*.5,0],[0,0]];
-    return lathe(A,pr,36,16,(C,P,th,v)=>{const r=Math.hypot(P.x,P.z);mixC(C,0xf2ead8,0xe0d4bc,vn(P.x*40,0,P.z*40)*.4);if(v<.5){if(r>R*.84&&r<R*.91)C.set(band);if(r>R*.6&&r<R*.62)C.set(band);if(r>R*.86&&r<R*.89&&Math.sin(Math.atan2(P.z,P.x)*24)>.3)C.set(0xf2ead8);}},.78,{m});}
+  /* 접시: 굽 고리 위에 오목한 우물, 넓은 테와 둥글게 만 입술. 흰 주석 유약에 푸른 띠 둘과 그 사이 덩굴 무늬, 입술 끝은 흙빛이 비친다 (2026-11-10 다시 빚음) */
+  function plate(A,R,m,band=0x2e4f8a,lo=0){const pr=[[0,.0045],[R*.55,.0045],[R*.6,.0054],[R*.66,.009],[R*.74,.0128],[R*.92,.0162],[R*.975,.0182],[R,.0176],[R*1.004,.016],[R*.99,.0142],[R*.9,.0122],[R*.68,.0064],[R*.56,.0034],[R*.545,0],[R*.47,0],[R*.455,.0026],[0,.0026]];
+    const bc=new THREE.Color(band),bl=bc.clone().lerp(new THREE.Color(0xf2ead8),.35);
+    return lathe(A,pr,lo?32:56,lo?14:22,(C,P,th,v)=>{const r=Math.hypot(P.x,P.z)/R,a=Math.atan2(P.z,P.x);GLZ(C,P,0xf4eee0,0xe8dfca,R*30);
+      if(v<.5){if(r>.885&&r<.93)C.lerp(bc,.9);else if(r>.795&&r<.81)C.lerp(bc,.85);else if(r>.6&&r<.615)C.lerp(bc,.8);
+        else if(r>.815&&r<.88){const q=((a/TAU*28)%1+1)%1,lf=Math.abs(q-.5)*2,yy=(r-.815)/.065;if(Math.abs(yy-.5-.32*Math.sin(q*TAU))<.12||(lf<.3&&Math.abs(yy-.5)<.35*(1-lf/.3)))C.lerp(bl,.85);}
+        if(r>.985)tint(C,0xb08a5a,sm(.985,1.0,r)*.6);}
+      else{if(P.y<.0035&&r>.44&&r<.56)mixC(C,0xb88a62,0xa07450,vn(P.x*200,0,P.z*200));C.multiplyScalar(.94);}},(P,u,v)=>v<.55?.86:.6,{m});}
   /* 바구니: 엮은 버들 */
   function basket(A,R,H,m){const pr=[[0,.004],[R*.8,.004],[R*.86,.01],[R,H],[R*1.04,H+.008],[R*.96,H+.008],[R*.92,H],[R*.78,.012],[0,.012]];
     return lathe(A,pr,40,14,(C,P,th,v)=>{const a=Math.floor(th/TAU*40),b=Math.floor(P.y*90);mixC(C,0xc89a58,0x8a6230,((a+b)%2)*.6+vn(th*8,P.y*60,0)*.3);if(v>.4&&v<.62)C.set(0x9a6a34);},.15,
@@ -4329,10 +4362,13 @@ const FOODK=(()=>{
       put(A,sprig(),T(-.01,H*.74+.012,.0,1.2,0,0,.5));
       return A;}
     if(v===6){plate(A,PR,null,0x1c1c22);
-      disc(A,th=>.06+.008*Math.sin(th*3)+.005*Math.sin(th*7+1),FY+.0008,30,3,(C,P,u,w)=>mixC(C,0x3a0e08,0x6a1e10,w*.6+vn(P.x*80,0,P.z*80)*.3),.95,{m:T(.01,0,.0)});   /* 붉은 포도주 소스 */
+      disc(A,th=>.062+.006*Math.sin(th*3)+.004*Math.sin(th*7+1)+.002*Math.sin(th*13),FY+.0008,64,5,(C,P,u,w)=>mixC(C,0x3a0e08,0x6a1e10,w*.6+vn(P.x*80,0,P.z*80)*.3),.95,{m:T(.01,0,.0)});   /* 붉은 포도주 소스 */
       blob(A,.052,.016,.036,20,10,null,(C,P,u,w)=>{searC(C,P,3,1.1);if(Math.abs(((P.x+.5)*30+P.z*20)%1-.5)<.08&&P.y>.008)tint(C,0x140604,.75);},.6,{m:T(.005,FY+.014,0,.4),shape:(P)=>{if(P.y<0)P.y*=.5;else P.y*=.9;}});
-      /* 썬 단면 하나 (속은 분홍) */
-      surf(A,24,4,(u,w,P)=>{const th=u*TAU;P.set(.052*Math.cos(th)*w*.9,FY+.02,.03*Math.sin(th)*w*.9);},(C,P,u,w)=>{mixC(C,0xd87070,0xb84848,w);if(w>.82)C.set(0x5a2a10);},.6,{m:T(.06,0,-.04,.4,0,.9)});
+      /* 썬 한 점: 앞뒤 단면은 가운데가 분홍, 가장자리로 갈수록 갈색 (스테이크에 기대어 눕혔다) */
+      {const sl=acc(),E=th=>[.034*Math.cos(th)*(1+.06*Math.sin(th*3)),.022*Math.sin(th)],tk=.011;
+        for(const f of [0,1])surf(sl,28,6,(u,w,P)=>{const e=E(u*TAU);P.set(e[0]*w,f*tk,e[1]*w);},(C,P,u,w)=>{mixC(C,0xe07a78,0xc85a52,w*.7+vn(P.x*200,0,P.z*200)*.2);if(w>.7)mixC(C,0xb86a50,0x4a1a08,(w-.7)*3.3);},.6);
+        surf(sl,28,2,(u,w,P)=>{const e=E(u*TAU);P.set(e[0],w*tk,e[1]);},(C,P)=>searC(C,P,5,1),.6);
+        put(A,sl,T(.068,FY+.003,-.045,.5,0,.18));}
       const pt=potato(4);for(const [x,z,r] of [[-.07,.05,1],[-.085,.015,2],[-.06,.085,3]])put(A,pt,T(x,FY+.011,z,r,.2,0,.85));
       const pea=acc();blob(pea,.0045,.0045,.0045,7,5,null,(C,P)=>mixC(C,0x4a8a1e,0x80b840,P.y/.0045*.5+.5),.65);for(let k=0;k<10;k++){const a=k*.9,r=.01*Math.sqrt(k);put(A,pea,T(-.05+Math.cos(a)*r*.6,FY+.006+(k%3)*.003,-.07+Math.sin(a)*r*.5));}
       put(A,sprig(),T(.0,FY+.03,.01,1.1,0,0,.6));return A;}
@@ -4652,6 +4688,95 @@ const FOODK=(()=>{
       const rot=new THREE.Matrix4().makeRotationX(PI/2);m.multiply(rot);
       disc(A,th=>s*(.55+.45*Math.pow(Math.abs(Math.cos(th*2.5+H(k,5)*3)),.7)),0,20,2,(C,P,u,w)=>{if(w<.35){RAW(C,0xf0c030);C.r=Math.pow(1,1);}else C.setScalar(.92+.08*w);},.2,{m,dy:(x,z,w)=>.012*w*w-.004});}
     return A;};
+  /* ================= 식탁 살림 (ware) =================
+     2026-11-10: 쟁반·수저·물병·잔·그릇·냄비·솥·국자 따위를 빚은 모양으로. 밑바닥 가운데가 원점, 길이는 미터 (사람 손 .1·식탁 .8 높이에 맞춘 실제 크기)
+     수저 차림(ware:2·3·11)은 먹는 사람이 -z 쪽에 앉는다 (그 사람 왼쪽이 +x: 포크, 오른쪽 -x: 칼·숟가락) */
+  /* 유약: 흙빛 바탕 위에 유약 색, 아래로 갈수록 유약이 얇아 흙빛이 비친다 */
+  const GLZ=(C,P,c0,c1,sd=0)=>{mixC(C,c0,c1,fbm(P.x*45+sd,P.y*45,P.z*45,3)*1.2-.1);if(vn(P.x*220+sd,P.y*220,P.z*220)>.86)C.multiplyScalar(.9);};
+  const PEWC=(C,P,sd=0)=>{mixC(C,0x7c7e84,0xc8cad0,fbm(P.x*50+sd,P.y*50,P.z*50,3)*1.3-.15);tint(C,0x4a4a50,sm(.7,.85,vn(P.x*120+sd,P.y*120,P.z*120))*.4);};   /* 백랍·쇠붙이 */
+  const COPC=(C,P,sd=0)=>{mixC(C,0x9a4a22,0xe08a54,fbm(P.x*30+sd,P.y*30,P.z*30,3)*1.3-.1);tint(C,0x4a2a18,sm(.68,.85,fbm(P.x*12+sd,P.y*12,P.z*12,2))*.45);tint(C,0x5a8a6a,sm(.82,.9,vn(P.x*60+sd,P.y*60,P.z*60))*.35);};   /* 구리: 그을음·푸른 녹 조금 */
+  const WOODC=(C,P,sd=0,lo=0x7a5232,hi=0xb88a58)=>{const g=vn(P.x*8+sd,P.y*70,P.z*8)*.6+fbm(P.x*30,P.y*30+sd,P.z*30,2)*.4;mixC(C,lo,hi,g*1.3-.15);};
+  /* 포크: 납작한 자루(나무 손잡이)와 네 갈래 (+x가 갈래 끝) */
+  const fork=(A,m)=>{const S=(C,P)=>mixC(C,0x9a9ea6,0xe4e8ec,.5+.5*Math.sin(P.x*90+P.z*40));
+    tube(A,(t,o)=>o.set(-.1+t*.07,.004+.003*Math.sin(t*PI),0),t=>.0058*(1-.25*t),8,6,(C,P)=>WOODC(C,P,3,0x3a2412,0x6a4428),.4,{m,sx:.45});
+    tube(A,(t,o)=>o.set(-.03+t*.045,.0045+.004*t*t,0),t=>.0028+.0016*t,6,6,S,.95,{m,sx:.4});
+    for(let k=0;k<4;k++){const z=(k-1.5)*.0042;tube(A,(t,o)=>o.set(.015+t*.04,.0062+.006*t*t-.002*t,z*(1+t*.2)),t=>.0011*(1-.4*t),5,5,S,.95,{m});}};
+  /* 숟가락: 백랍 (오목한 머리, +x가 머리) */
+  const spoon=(A,m)=>{surf(A,14,6,(u,w,P)=>{const th=u*TAU,r=w;P.set(.035+.022*r*Math.cos(th),.004+.009*r*r-.002,.015*r*Math.sin(th));},(C,P)=>PEWC(C,P,2),.9,{m});
+    tube(A,(t,o)=>o.set(-.085+t*.1,.006+.006*Math.sin(t*PI)-.003*t,0),t=>.0032*(1+.5*(1-t)),6,8,(C,P)=>PEWC(C,P,3),.9,{m,sx:.45});};
+  /* 냅킨: 반으로 접은 아마천 (모서리가 살짝 들림) */
+  const napkin=(A,w,d,m,col=0xf2ece0)=>surf(A,10,8,(u,v,P)=>{const x=(u-.5)*w,z=(v-.5)*d;P.set(x,.0012+.0025*Math.pow(Math.abs(u-.5)*2,4)+.002*Math.pow(Math.abs(v-.5)*2,4)+.0006*Math.sin(x*90+z*40),z);},
+    (C,P,u,v)=>{mixC(C,col,0xd8d0c0,vn(P.x*60,0,P.z*60)*.4);if(Math.abs(u-.5)<.02)C.multiplyScalar(.9);if(u<.05||u>.95||v<.05||v>.95)C.multiplyScalar(.94);},.1,{m,wrap:false});
+  /* 둥근 쟁반: 나무 판에 낮은 테 (R 반지름, 원점은 밑) */
+  const tray=(A,R,m)=>{lathe(A,[[0,.012],[R*.93,.012],[R*.95,.014],[R*.97,.03],[R,.032],[R*1.01,.026],[R,.004],[R*.97,0],[0,0]],48,12,(C,P,th,v)=>{WOODC(C,P,1,0x6a4426,0xa87a48);if(v>.06&&v<.2)C.multiplyScalar(.85);},.35,{m});};
+  /* 흙 물병: 배부른 몸, 앞(+x)에 꼬집어 낸 주둥이, 뒤(-x)에 손잡이. 아래는 맨 흙, 위는 초록 유약이 흘러내린다 */
+  const jug=(A,m,H=.24,c1=0x4a6a3a,c2=0x7a9a5a)=>{const R=H*.42;
+    lathe(A,[[0,0],[R*.6,0],[R*.66,.006],[R*.92,H*.22],[R,H*.42],[R*.88,H*.66],[R*.5,H*.82],[R*.44,H*.9],[R*.52,H],[R*.47,H*1.005],[R*.4,H*.9],[R*.35,H*.4],[0,H*.36]],40,22,
+      (C,P,th,v)=>{const dl=H*(.5-.12*Math.pow(Math.max(0,Math.sin(th*5+1)),3)-.06*vn(th*3,0,0));if(P.y<dl)mixC(C,0x9a5a34,0xc07a48,vn(P.x*60,P.y*60,P.z*60));else GLZ(C,P,c1,c2,4);if(v>.8)C.multiplyScalar(.6);},
+      P=>P.y>H*.45?.82:.25,{m,dr:(th,v,r,y)=>y>H*.86&&v<.8?.022*H/.24*Math.pow(Math.max(0,Math.cos(th)),6)*sm(H*.86,H,y):0,dy:(th,v,r,y)=>y>H*.95&&v<.8?.008*Math.pow(Math.max(0,Math.cos(th)),6):0});
+    tube(A,(t,o)=>{const a=-PI*.45+t*PI*.95;o.set(-R*.62-.045*H/.24*Math.cos(a),H*.6+.08*H/.24*Math.sin(a),0);},t=>.0085*H/.24,8,14,(C,P)=>GLZ(C,P,c1,c2,5),.8,{m,sx:1.5});};
+  /* 나무 잔: 깎은 잔에 굽, 테두리 홈 둘. lq: 담긴 것 빛깔 (null이면 빈 잔) */
+  const cup=(A,m,lq=0xc88a30,H=.1,lo=0)=>{const R=H*.36;
+    lathe(A,[[0,0],[R*.8,0],[R*.82,.008],[R*.7,.014],[R*.78,.022],[R*.98,H*.75],[R*1.02,H],[R*.92,H],[R*.86,H*.7],[R*.72,.03],[0,.028]],lo?18:32,lo?11:16,(C,P,th,v)=>{WOODC(C,P,6,0x6a3e1e,0xa86c3a);if(v<.5&&(Math.abs(P.y-H*.5)<.002||Math.abs(P.y-H*.62)<.002))C.multiplyScalar(.6);if(v>.6)C.multiplyScalar(.75);},.4,{m});
+    if(lq!=null)disc(A,()=>R*.9,H*.82,24,3,(C,P,u,w)=>mixC(C,lq,0x3a1a08,w*.5),.95,{m});};
+  /* 백랍 술잔(굽 높은 잔) */
+  const goblet=(A,m,lq=0x7a1424)=>{lathe(A,[[0,0],[.034,0],[.036,.003],[.03,.006],[.012,.01],[.006,.024],[.011,.032],[.006,.04],[.008,.052],[.028,.064],[.036,.088],[.038,.11],[.0355,.11],[.033,.09],[.026,.068],[0,.059]],30,24,
+      (C,P,th,v)=>{PEWC(C,P,7);if(v>.88)C.multiplyScalar(.75);},.9,{m});
+    if(lq!=null)disc(A,()=>.0335,.094,30,3,(C,P,u,w)=>mixC(C,lq,0x2a040a,w*.8),.95,{m});};
+  /* 도자기 머그 (김 나는 따뜻한 것): 크림빛 유약, 붉은 띠, 손잡이 */
+  const hotMug=(A,m,lq=0x5a3214,band=0x9a3a2a)=>{const R=.042,H=.1;
+    lathe(A,[[0,0],[R*.9,0],[R,.006],[R*1.02,H*.5],[R,H],[R*.92,H],[R*.9,.012],[0,.012]],36,14,(C,P,th,v)=>{GLZ(C,P,0xe8dcc4,0xf6eedc,2);if(v<.5&&P.y>H*.7&&P.y<H*.78)C.set(band);if(P.y<.006)mixC(C,0xb08060,0x9a6a48,.5);if(v>.5)C.multiplyScalar(.9);},.85,{m});
+    disc(A,()=>R*.9,H*.86,30,3,(C,P,u,w)=>{mixC(C,lq,0x2a1408,w*.6);if(w<.35)tint(C,0xd8b890,.25*(1-w/.35));},.95,{m});
+    tube(A,(t,o)=>{const a=-PI/2+t*PI;o.set(R*.98+.026*Math.cos(a),H*.52+.03*Math.sin(a),0);},t=>.0062,8,12,(C,P)=>GLZ(C,P,0xe8dcc4,0xf6eedc,3),.85,{m,sx:1.4});};
+  /* 나무 그릇 (깎은 결이 둥글게) */
+  const bowlW=(A,R,H,m)=>lathe(A,[[0,0],[R*.45,0],[R*.5,.006],[R*.85,H*.55],[R,H],[R*.95,H*1.02],[R*.88,H*.9],[R*.4,.016],[0,.014]],40,14,(C,P,th,v)=>{const r=Math.hypot(P.x,P.z);mixC(C,0x7a4e2a,0xb07a46,.5+.5*Math.sin(r*260+P.y*120+fbm(P.x*20,P.y*20,P.z*20,2)*6));if(v>.55)C.multiplyScalar(.82);},.35,{m});
+  /* 구리 냄비: 곧은 벽에 말린 테, 긴 쇠 손잡이(+x, 끝에 거는 구멍)와 징 셋 */
+  const pan=(A,m,R=.1,H=.085)=>{lathe(A,[[0,0],[R*.88,0],[R*.97,.006],[R,H*.2],[R*1.01,H*.92],[R*1.06,H],[R*1.02,H*1.03],[R*.97,H*.96],[R*.95,H*.2],[R*.86,.008],[0,.008]],40,12,(C,P,th,v)=>{COPC(C,P,R*50);if(v>.6)tint(C,0x6a3a1e,.3);if(P.y<.012&&v<.3)tint(C,0x1a1008,.5);},.8,{m});
+    tube(A,(t,o)=>o.set(R*.98+t*R*2.1,H*.72+t*t*.02,0),t=>t<.08?.009:(.0055+.0015*Math.sin(t*PI)),8,14,(C,P)=>IRONC(C,P,2),.6,{m,sx:.55});
+    lathe(A,[[.0055,-.003],[.0095,-.003],[.0095,.003],[.0055,.003],[.0055,-.003]],12,4,(C,P)=>IRONC(C,P,4),.6,{m:new THREE.Matrix4().multiplyMatrices(m||new THREE.Matrix4(),T(R*3.02,H*.72+.02,0,0,PI/2,0))});
+    for(const z of [-.012,.012,0])blob(A,.004,.004,.004,6,4,null,(C,P)=>COPC(C,P,1),.9,{m:new THREE.Matrix4().multiplyMatrices(m||new THREE.Matrix4(),T(R*1.015,H*.72+(z?-.006:.008),z))});};
+  /* 국자: 오목한 머리와 길게 휜 자루 (끝 고리) */
+  const ladle=(A,m,L=.32)=>{surf(A,16,7,(u,w,P)=>{const th=u*TAU,ph=w*PI/2;P.set(.042*Math.sin(ph)*Math.cos(th),-.032*Math.cos(ph)+.032,.042*Math.sin(ph)*Math.sin(th));},(C,P)=>PEWC(C,P,9),.85,{m});
+    tube(A,(t,o)=>o.set(-.04-t*L*.25,.03+t*L*.95+.02*Math.sin(t*PI),0),t=>.0038,6,14,(C,P)=>PEWC(C,P,8),.85,{m,sx:.55});
+    lathe(A,[[.008,-.002],[.013,-.002],[.013,.002],[.008,.002],[.008,-.002]],12,4,(C,P)=>PEWC(C,P,8),.85,{m:new THREE.Matrix4().multiplyMatrices(m||new THREE.Matrix4(),T(-.04-L*.25-.006,.03+L*.95+.012,0,0,PI/2,0))});};
+  /* 가벼운 빈 맥주잔 (바 들보에 거꾸로 매단 것처럼 여럿 놓는 곳): 0 돌잔, 1 나무 통잔. 면을 아꼈다 */
+  const mugLo=(A,vv)=>{const R=.06,H=.16;
+    lathe(A,[[0,0],[R*.94,0],[R,.006],[R*1.04,H*.5],[R,H-.004],[R*.97,H],[R*.88,H],[R*.86,.014],[0,.014]],20,10,(C,P,th,v)=>{if(v<.62){if(vv)WOODC(C,P,4,0x7a4a26,0xb0743e);else{mixC(C,0x8a9098,0xb8bcc0,fbm(P.x*80,P.y*80,P.z*80,2));if(P.y>.03&&P.y<.05||P.y>.11&&P.y<.125)C.set(0x2a4888);}}else C.set(0x3a2a1a);},vv?.25:.72);
+    if(vv)for(const y0 of [.028,.128])lathe(A,[[R*1.0,y0],[R*1.05,y0+.001],[R*1.05,y0+.013],[R*1.0,y0+.014]],20,2,(C,P)=>IRONC(C,P,1),.6);
+    tube(A,(t,o)=>{const a=-PI/2+t*PI;o.set(R*.99+.04*Math.cos(a),H*.5-.045*Math.sin(a)*1.1,0);},()=>.009,5,8,(C,P)=>{if(vv)WOODC(C,P,5,0x7a4a26,0xa06a3a);else mixC(C,0x8a9098,0xb0b4b8,.5);},.4,{sx:1.2});return A;};
+  B.ware=v=>{const A=acc();
+    if(v===17||v===18)return mugLo(A,v-17);   /* 17 빈 돌잔, 18 빈 나무 통잔 (가벼운 모양) */
+    if(v===0){tray(A,.21,null);return A;}   /* 0 빈 나무 쟁반 */
+    if(v===1){const Y=.012;   /* 1 쟁반 위 차림: 통잔 둘·포도주 잔·작은 둥근 빵 둘·물병 (서빙 직원이 나르는 것) */
+      put(A,B.mug(1),T(-.08,Y,.06,.4,0,0,.82));put(A,B.mug(0),T(.06,Y,.09,2.2,0,0,.82));const G=acc();goblet(G,null);put(A,G,T(.1,Y,-.06,0));
+      const R=roll(3);put(A,R,T(-.07,Y,-.08,.5));put(A,R,T(-.025,Y,-.12,2.1,0,0,.9));return A;}
+    if(v===2){napkin(A,.11,.15,T(.2,0,0,.05));fork(A,T(.2,.0012,0,PI/2+.05));const K=acc();knife(K,new THREE.Matrix4());put(A,K,T(-.2,.0005,0,PI/2-.04,0,0,.92));return A;}   /* 2 포크·칼 한 벌 (접시 양옆, 접시 가운데가 원점) */
+    if(v===3){napkin(A,.11,.15,T(-.2,0,0,-.05));spoon(A,T(-.2,.0012,0,PI/2));return A;}   /* 3 숟가락 (스튜·수프 오른쪽) */
+    if(v===4){jug(A,null);return A;}   /* 4 흙 물병 */
+    if(v===5){cup(A,null);return A;}   /* 5 사과주 나무 잔 */
+    if(v===6){bowlW(A,.13,.07,null);const Y=.02;   /* 6 나무 그릇에 과일 */
+      put(A,apple(0,true),T(-.035,Y,.03,.4,.2,0));put(A,apple(1,false),T(.04,Y,.035,1.6,-.2,.1));put(A,pear(),T(.01,Y+.012,-.045,2,0,.25));put(A,apple(2,false),T(-.045,Y+.006,-.03,.8,.3,0,.95));put(A,grapes(false),T(.025,Y+.045,0,2.6,0,-.25,.9));return A;}
+    if(v===7){pan(A,null);return A;}   /* 7 구리 냄비 (손잡이 +x) */
+    if(v===8){const R=.2,H=.26;   /* 8 쇠 솥: 다리 셋, 들통 손잡이, 끓는 스튜와 국자 */
+      lathe(A,[[0,.05],[R*.55,.05],[R*.88,H*.3],[R,H*.55],[R*.95,H*.85],[R*.88,H*.95],[R*.92,H],[R*.86,H*1.01],[R*.82,H*.95],[R*.86,H*.6],[R*.6,H*.32],[0,.08]],40,16,(C,P,th,v)=>{IRONC(C,P,6);if(v<.6)tint(C,0x0a0806,sm(H*.7,.05,P.y)*.55);},.55);
+      for(let k=0;k<3;k++){const a=k/3*TAU+.5;tube(A,(t,o)=>o.set(Math.cos(a)*(R*.55+t*.03),.07-t*.07,Math.sin(a)*(R*.55+t*.03)),t=>.016*(1-.3*t),6,4,(C,P)=>IRONC(C,P,7),.5);}
+      for(const sd of [-1,1])blob(A,.014,.02,.014,8,6,null,(C,P)=>IRONC(C,P,8),.5,{m:T(sd*R*.88,H*.92,0)});
+      tube(A,(t,o)=>{const a=t*PI;o.set(Math.cos(a)*R*.9,H*.92+Math.sin(a)*.05,0);},()=>.005,6,18,(C,P)=>IRONC(C,P,9),.6,{m:T(0,0,0,0,-1.1,0)});
+      disc(A,th=>R*.84+.002*Math.sin(th*7),H*.84,40,8,(C,P,u,w)=>{mixC(C,0x6a2a0c,0xa04a1a,fbm(P.x*40,0,P.z*40,3)*1.2-.1);if(vn(P.x*90,0,P.z*90)>.7)tint(C,0xd88a3a,.45);},.9,{dy:(x,z,w)=>.006*(fbm(x*30,0,z*30,2)-.5)});
+      const bb=acc();blob(bb,.012,.004,.012,8,4,null,(C)=>C.set(0xc8702a),.95);for(let k=0;k<7;k++){const a=k*2.4,r=.03+.11*hash3(k,3,3);put(A,bb,T(Math.cos(a)*r,H*.84+.002,Math.sin(a)*r,0,0,0,.6+hash3(k,4,4)*.8));}
+      ladle(A,T(.05,H*.84-.025,.02,-.5,0,-.95,.9));return A;}
+    if(v===9){ladle(A,null);return A;}   /* 9 국자 (걸어 두는 것, 머리 아래) */
+    if(v===10){hotMug(A,null);return A;}   /* 10 김 나는 도자기 머그 (코코아) */
+    if(v===11){plate(A,.12,null,0x6a3a2a,1);const S=acc();put(S,B.ware(2),new THREE.Matrix4());put(A,S,T(0,0,0,0,0,0,.85));const G=acc();cup(G,null,0xd8a040,.1,1);put(A,G,T(-.17,0,.14,.3));return A;}   /* 11 빈 접시 한 벌: 접시·포크·칼·잔 (산장 긴 식탁) */
+    if(v===16){plate(A,.12,null,0x6a3a2a,1);const S=acc();put(S,B.ware(2),new THREE.Matrix4());put(A,S,T(0,0,0,0,0,0,.85));return A;}   /* 16 빈 접시 한 벌 (잔 없이) */
+    if(v===12){basket(A,.13,.07,null);const R=roll(5);for(let k=0;k<5;k++){const a=k/5*TAU+.3,r=k?.06:0;put(A,R,T(Math.cos(a)*r,.012+(k?0:.03),Math.sin(a)*r,a,(k?.25:0),0,.95));}put(A,R,T(0,.045,0,1.1));return A;}   /* 12 빵 바구니 */
+    if(v===13){for(let k=0;k<6;k++)plate(A,.12,T((hash3(k,1,1)-.5)*.006,k*.0125,(hash3(k,2,1)-.5)*.006,k),0x2e4f8a);return A;}   /* 13 포갠 접시 (선반) */
+    if(v===14){bowlW(A,.075,.05,null);disc(A,th=>.064+.001*Math.sin(th*6),.04,30,4,(C,P,u,w)=>{mixC(C,0x9a4a1a,0xc8702a,fbm(P.x*60,0,P.z*60,2));if(vn(P.x*120,0,P.z*120)>.72)tint(C,0xe8c070,.5);},.85);
+      spoon(A,T(.0,.038,-.01,-.4,0,.12,.85));return A;}   /* 14 작은 나무 수프 그릇과 숟가락 */
+    if(v===15){const R=.18;   /* 15 큰 질그릇 사발에 감자·사과 (부엌 조리대) */
+      lathe(A,[[0,0],[R*.5,0],[R*.56,.01],[R*.9,.07],[R,.11],[R*.96,.115],[R*.88,.08],[R*.5,.02],[0,.02]],40,12,(C,P,th,v)=>{if(v<.45)GLZ(C,P,0xa86a3a,0xc8884a,6);else GLZ(C,P,0x3a5a6a,0x5a7a8a,7);},.6);
+      for(let k=0;k<13;k++){const a=k*2.3,r=.1*Math.sqrt((k+.5)/13);put(A,potato(k),T(Math.cos(a)*r,.028+.03*(1-r/.11)+(k>9?.02:0),Math.sin(a)*r,a,.3,0,2.1));}return A;}
+    return A;};
   /* ================= 꾸리기 ================= */
   const done=A=>{const g=new THREE.BufferGeometry(),n=A.p.length/3,p=new Float32Array(A.p);for(let i=1;i<p.length;i+=3)p[i]+=.0015;   /* 밑면이 바닥과 딱 붙지 않게 1.5mm 띄운다 (굽기에서 밑면 붙은 모양을 내려 깜빡임을 막는 장치가 음식을 바닥에 묻지 않게) */
     g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(A.n,3));g.setAttribute('color',new THREE.Float32BufferAttribute(A.c,3));g.setAttribute('mt',new THREE.Float32BufferAttribute(A.g,1));
@@ -4676,7 +4801,7 @@ const FOODK=(()=>{
         const nx=N[i],ny=N[i+1],nz=N[i+2],qx=f[0]*nx+f[3]*ny+f[6]*nz,qy=f[1]*nx+f[4]*ny+f[7]*nz,qz=f[2]*nx+f[5]*ny+f[8]*nz,s=1/(Math.sqrt(qx*qx+qy*qy+qz*qz)||1);
         A.n[o]=qx*s;A.n[o+1]=qy*s;A.n[o+2]=qz*s;A.c[o]=Cc[i];A.c[o+1]=Cc[i+1];A.c[o+2]=Cc[i+2];A.g[o/3]=G[i/3];}}
     return done(A);};
-  return {geo,mat,matV,pickV,merge,T,VARS:{mug:3,wine:1,bread:3,cheese:2,stew:2,plate:3,loaf:5,cart:1,hand:5,veg:3,dough:2,flour:2,dish:8}};
+  return {geo,mat,matV,pickV,merge,T,VARS:{mug:3,wine:1,bread:3,cheese:2,stew:2,plate:3,loaf:5,cart:1,hand:5,veg:3,dough:2,flour:2,dish:8,ware:19}};
 })();
 const colliders=[];
 /* 앉을 자리: 벤치·걸상·소파. {x,z,y:앉는 높이(세계), ry:앉아서 보는 방향} — F로 앉고, 움직이면 일어난다 */
@@ -9476,16 +9601,103 @@ function lkBody(m,ap){const S=m.userData.stick;if(!S||apQDef(ap))return;const X=
   for(const L of [S.L,S.R]){L.hip.position.x*=X.hp;if(X.ll!==1){L.hip.scale.y=X.ll;L.foot.scale.y=1/X.ll;}
     if(X.lt!==1){for(const o of kids(L.hip))lkWarp(o,v=>{const k=v.y>-.4?X.lt:v.y<-.5?calf:X.lt+(calf-X.lt)*(-.4-v.y)/.1;v.x*=k;v.z*=k;});for(const o of kids(L.knee))lkWarp(o,v=>{v.x*=calf;v.z*=calf;});}}
   S.lkLift=(X.ll-1)*.91*hs;S.body.position.y+=S.lkLift;}
+/* ---------- NPC 몸을 플레이어처럼 천 옷으로 (얼굴·머리·모자는 그대로): stickLook(G.npc)가 부르는 덧붙임 ----------
+   깃·높은 깃·띠·끈 허리띠·목걸이·휘장·목도리·두건 수건·어깨 수건·별 장식·앞치마·망토·웃옷 자락·어깨 갑옷.
+   모두 몸판 겉면(SP)을 따라 붙인다 (예전처럼 원통 몸에 맞춘 도형을 띄워 붙이지 않는다) */
+function npcLookExtras(c){const {S,T,N,f,bodyPr,bustF,bellyD,BY,waist,seed,add,M,mm,mTrim,sph}=c;
+  const bp=latheUp(bodyPr),rAt=y=>{if(y<=bp[0][1])return bp[0][0];for(let i=1;i<bp.length;i++)if(bp[i][1]>=y){const a=bp[i-1],b=bp[i],k=(y-a[1])/Math.max(1e-6,b[1]-a[1]);return a[0]+(b[0]-a[0])*k;}return bp[bp.length-1][0];};
+  const R=(az,y)=>rAt(y)+bustF(az,y)[0]+bellyD(az,y);
+  const SP=(az,y,o=0)=>{const r=R(az,y)+o;return [Math.sin(az)*r,y,Math.cos(az)*r*.76];};
+  const CL=(col,k='weave',x)=>{const m=lkCloth(col,k,x);mm.push(m);return m;};
+  const dk=(col,k)=>new THREE.Color(col).multiplyScalar(k).getHex();
+  /* 몸판 겉면을 따라 붙는 천 조각: y0(위)→y1(아래), ha(y)=[왼 각, 오른 각], off(y,az)=겉면에서 띄울 거리, sh(az,y)=그늘 */
+  const panel=(y0,y1,ha,off,ny=24,nx=18,sh)=>{const pos=[],uv=[],col=[],idx=[];let len=0,py=null;
+    for(let j=0;j<=ny;j++){const y=y0+(y1-y0)*j/ny,[a0,a1]=ha(y),rr=R((a0+a1)/2,y);if(py!=null)len+=Math.abs(py-y);py=y;
+      for(let i=0;i<=nx;i++){const az=a0+(a1-a0)*i/nx,p=SP(az,y,off(y,az));pos.push(...p);uv.push(az*rr/LK_TILE,len/LK_TILE);const s=sh?Math.max(.4,1-sh(az,y,i/nx,j/ny)):1;col.push(s,s,s);
+        if(i&&j){const a=(j-1)*(nx+1)+i-1,b=a+1,cc=a+nx+1,d=cc+1;idx.push(a,cc,b,b,cc,d);}}}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();return g;};
+  /* 띠 (길 따라 놓인 납작한 천): pts=[[x,y,z]..], w=너비 */
+  const ribbon=(pts,w,closed=false,th=.004)=>{const pos=[],uv=[],col=[],idx=[],n=pts.length,V=a=>new THREE.Vector3(a[0],a[1],a[2]);let L=0;
+    for(let i=0;i<n;i++){const p=V(pts[i]),a=V(pts[closed?(i-1+n)%n:Math.max(0,i-1)]),b=V(pts[closed?(i+1)%n:Math.min(n-1,i+1)]),t=b.sub(a).normalize(),o=new THREE.Vector3(p.x,0,p.z/.76);if(o.lengthSq()<1e-8)o.set(0,0,1);o.normalize();
+      const sd=new THREE.Vector3().crossVectors(t,o).normalize().multiplyScalar(w/2);if(i)L+=p.distanceTo(V(pts[i-1]));
+      for(const [s,d] of [[-1,0],[1,0],[1,th],[-1,th]]){pos.push(p.x+sd.x*s+o.x*d,p.y+sd.y*s+o.y*d,p.z+sd.z*s+o.z*d);uv.push((s+1)/2*w/LK_TILE,L/LK_TILE);col.push(d?1:.8,d?1:.8,d?1:.8);}
+      if(i||closed){const A=((i-1+n)%n)*4,B=i*4;for(let k=0;k<4;k++){const k2=(k+1)%4;idx.push(A+k,B+k,A+k2,A+k2,B+k,B+k2);}}}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();return g;};
+  const ring=(y,o,n=64,tilt=0)=>{const p=[];for(let i=0;i<n;i++){const az=-Math.PI+i/n*Math.PI*2,yy=y+tilt*Math.sin(az);p.push(SP(az,yy,o));}return p;};
+  const neckRing=(y,r,o=0)=>{const p=[];for(let i=0;i<48;i++){const a=i/48*Math.PI*2;p.push([Math.sin(a)*(r+o),y-.012*Math.cos(a),Math.cos(a)*(r+o)*.9]);}return p;};
+  const onSurf=(geo,m,az,y,o,rz=0)=>{const p=SP(az,y,o),q=add(T,geo,m,p[0],p[1],p[2]);q.rotation.set(0,Math.atan2(Math.sin(az),Math.cos(az)*.76),rz);q.rotation.order='YXZ';q.rotation.x=-.06;return q;};
+  const metal=(col,r=.32)=>M(col,{metalness:.65,roughness:r});
+  /* 깃 (셔츠가 아닌 옷): 목둘레에서 접혀 내려온 뾰족한 두 장 */
+  if(N.collar!=null&&!c.shirt){const mc=CL(N.collar);for(const s of [-1,1]){const sh=new THREE.Shape();sh.moveTo(0,0);sh.lineTo(s*.075,-.004);sh.quadraticCurveTo(s*.08,-.035,s*.052,-.085);sh.lineTo(s*.012,-.022);sh.lineTo(0,0);
+      const cg=new THREE.ExtrudeGeometry(sh,{depth:.005,bevelEnabled:true,bevelThickness:.002,bevelSize:.002,bevelSegments:1,curveSegments:8});cg.setAttribute('color',new THREE.Float32BufferAttribute(new Array(cg.attributes.position.count*3).fill(.92),3));
+      add(T,cg,mc,s*.01,.6,.1,[-.6,0,s*-.06]);}}
+  /* 높은 깃: 목을 감싸 세운 깃, 위 끝이 살짝 벌어진다 */
+  if(N.high!=null){add(T,lkGarment([[.118,.548],[.114,.6],[.104,.655],[.108,.69],[.112,.7],[.094,.7]],48,{z:.9,fold:(az,y)=>lkSeam(az,0,.11,.003)}),CL(N.high,'wool'));
+    add(T,lkBand(.112,.108,.69,.705,48,{z:.9}),CL(dk(N.high,.6),'trim'));}
+  /* 어깨띠: 한쪽 어깨에서 반대쪽 허리로 비스듬히 두른 천 */
+  if(N.sash!=null){const pts=[];for(let i=0;i<72;i++){const az=-Math.PI+i/72*Math.PI*2,y=.3+.2*Math.sin(az+.25);pts.push(SP(az,y,.006+.004*Math.max(0,Math.cos(az))));}
+    add(T,ribbon(pts,.06,true,.006),CL(N.sash,'weave',{side:THREE.DoubleSide}));
+    add(T,lkLock([SP(-.35,.16,.012),SP(-.4,.08,.022),SP(-.38,-.02,.03)],.02,.012,8,12,.35,1),CL(N.sash));}   /* 매듭 아래로 늘어진 끝 */
+  /* 끈 허리띠: 꼬인 끈 + 늘어진 두 가닥과 술 */
+  if(N.rope!=null){const mr=CL(N.rope,'weave');add(T,lkTube(ring(BY,.008,64),.011,true,7),mr);
+    for(const [az,ln] of [[.22,.3],[.36,.24]]){const a=SP(az,BY-.01,.014),b=SP(az+.02,BY-ln*.5,.022),e=SP(az+.01,BY-ln,.026);add(T,lkTube([a,b,e],.008,false,6),mr);add(T,sph(.016,10,8),mr,e[0],e[1]-.01,e[2],null,[1,1.5,1]);}}
+  /* 목걸이: 목 옆에서 가슴으로 늘어진 사슬 + 빛나는 보석 */
+  if(N.pendant!=null){const ch=metal(N.chain??0xc8a050,.3),pts=[];for(let i=0;i<=24;i++){const t=i/24*2-1,az=t*.95,y=.44+.15*t*t;pts.push(SP(az,y,.006));}
+    pts.unshift([-.1,.6,-.02]);pts.push([.1,.6,-.02]);add(T,lkTube(pts,.0035,false,5),ch);
+    const gp=SP(0,.415,.016);add(T,new THREE.OctahedronGeometry(.026,0),M(N.pendant,{emissive:N.pendant,emissiveIntensity:.35,roughness:.25,metalness:.3}),gp[0],gp[1],gp[2],null,[1,1.25,.6]);
+    add(T,new THREE.TorusGeometry(.03,.004,6,20),ch,gp[0],gp[1],gp[2]-.004);}
+  /* 휘장: 왼 가슴의 둥근 쇠 휘장 (가운데 빛깔) */
+  if(N.badge!=null){const az=-.5,y=.43;onSurf(new THREE.CylinderGeometry(.034,.036,.008,24).rotateX(Math.PI/2),metal(N.badge,.3),az,y,.004);
+    onSurf(new THREE.TorusGeometry(.031,.004,6,24),metal(dk(N.badge,.8),.3),az,y,.009);if(N.badgeIn!=null)onSurf(new THREE.CylinderGeometry(.017,.017,.008,6).rotateX(Math.PI/2),M(N.badgeIn,{roughness:.3}),az,y,.009);}
+  /* 목도리: 목을 두툼하게 감고 한쪽 끝이 가슴으로 늘어진다 */
+  if(N.scarf!=null){const ms=CL(N.scarf,'wool',{side:THREE.DoubleSide});add(T,lkTube(neckRing(.6,.1),.034,true,10),ms);
+    const tail=[];for(let i=0;i<=10;i++){const y=.58-i*.022;tail.push(SP(.32-i*.01,y,.012+.003*i));}add(T,ribbon(tail,.07,false,.008),ms);
+    add(T,lkBand(.036,.036,0,.012,16),ms,tail[10][0],tail[10][1]-.012,tail[10][2]);}
+  /* 목 수건: 목에 감은 얇은 천 + 앞으로 늘어진 세모 */
+  if(N.kerchief!=null){const mk=CL(N.kerchief,'weave',{side:THREE.DoubleSide});add(T,lkTube(neckRing(.612,.096),.02,true,8),mk);
+    add(T,panel(.6,.47,y=>{const h=.36*Math.max(.04,(y-.47)/.13);return [-h,h];},(y,az)=>.008+.004*Math.cos(az*8),10,12,(az,y,u,v)=>.18*v),mk);
+    add(T,sph(.022,12,10),mk,0,.6,SP(0,.6,0)[2]+.012,null,[1.2,1,.8]);}   /* 앞 매듭 */
+  /* 어깨에 걸친 수건 (오른 어깨) */
+  if(N.towel!=null){const mt=CL(N.towel,'wool',{side:THREE.DoubleSide});const az0=.95;
+    add(T,panel(.6,.3,y=>[az0-.22,az0+.22],(y,az)=>.012+.004*Math.sin(az*30),14,10),mt);
+    add(T,panel(.6,.36,y=>[Math.PI-az0-.22,Math.PI-az0+.22],(y,az)=>.012+.004*Math.sin(az*30),14,10),mt);
+    const top=[];for(let i=0;i<=8;i++){const t=i/8,a=az0+(Math.PI-2*az0)*t;top.push(SP(a,.6+.03*Math.sin(t*Math.PI),.016));}add(T,ribbon(top,.12,false,.008),mt);}
+  /* 별 장식 */
+  if(N.stars){const sm=M(0xf0d878,{emissive:0xf0c050,emissiveIntensity:.5,metalness:.4,roughness:.3});for(const [az,y] of [[.55,.4],[-.35,.25],[.3,.15],[-.6,.45],[.1,-.02]]){const p=SP(az,y,.006);add(T,new THREE.OctahedronGeometry(.016,0),sm,p[0],p[1],p[2],null,[1,1,.5]);}}
+  /* 앞치마: 가슴받이 + 허리 아래로 늘어진 자락 (바지 입은 사람), 목끈·허리끈·주머니 */
+  if(N.apron!=null){const ma=CL(N.apron,'weave',{side:THREE.DoubleSide}),dr=(az,y)=>lkDrape(az,y,BY-.02,-.6,.008,7,seed+5)[0];
+    add(T,panel(.47,BY+.01,y=>{const h=.42+.25*_lkSS(.47,BY,y);return [-h,h];},(y,az)=>.008,16,16),ma);
+    if(!N.short){add(T,panel(BY+.01,-.6,y=>{const h=.72+.1*_lkSS(BY,-.6,y);return [-h,h];},(y,az)=>.01+Math.max(0,BY-y)*.09+dr(az,y),26,22,(az,y)=>.6*Math.max(0,-lkDrape(az,y,BY-.02,-.6,1,7,seed+5)[0])),ma);
+      if(N.apronP)for(const s of [-1,1]){const y=-.16;add(T,panel(y+.05,y-.05,()=>[s*.18-.15,s*.18+.15],(yy,az)=>.012+Math.max(0,BY-yy)*.09+dr(az,yy)+.006,4,6,(az,yy,u,v)=>v>.9?.2:0),CL(dk(N.apron,.88),'weave',{side:THREE.DoubleSide}));}}
+    const mS=CL(dk(N.apron,.85));add(T,lkTube(ring(BY,.016,64),.01,true,6),mS);   /* 허리끈 */
+    for(const s of [-1,1]){const a=SP(s*.42,.47,.008);add(T,lkTube([a,[s*.1,.6,.05],[s*.09,.63,-.04],[0,.6,-.1]],.007,false,5),mS);}   /* 목끈 */
+    const k=SP(Math.PI,BY,.02);add(T,sph(.02,10,8),mS,k[0],k[1],k[2]);for(const s of [-1,1])add(T,lkLock([k,[k[0]+s*.03,k[1]-.06,k[2]-.01],[k[0]+s*.025,k[1]-.14,k[2]-.012]],.009,.006,6,8,.4,1),mS);}   /* 등 뒤 매듭 */
+  /* 망토: 어깨에서 등 뒤로 늘어진 천, 세로 주름, 앞에는 쇠 고리 */
+  if(N.cape!=null){const mc=CL(N.cape,'wool',{side:THREE.DoubleSide});
+    add(T,panel(.6,-.72,y=>{const h=1.05+.35*_lkSS(.6,.3,y);return [Math.PI-h,Math.PI+h];},(y,az)=>.018+Math.max(0,.5-y)*.07+lkDrape(az,y,.45,-.72,.016,9,seed+7)[0]*Math.min(1,(.6-y)*3),36,40,(az,y)=>.7*Math.max(0,-lkDrape(az,y,.45,-.72,1,9,seed+7)[0])),mc);
+    const mt=metal(N.capeTrim??0xd4af37,.3);for(const s of [-1,1]){const p=SP(s*.8,.55,.02);add(T,new THREE.CylinderGeometry(.022,.022,.008,18).rotateX(Math.PI/2),mt,p[0],p[1],p[2],[0,s*.6,0]);}
+    add(T,lkTube([SP(-.8,.55,.024),SP(0,.5,.02),SP(.8,.55,.024)],.0035,false,5),mt);}
+  /* 웃옷 자락: 허리 아래로 퍼지는 다른 색 천 (사냥꾼·마부) */
+  if(N.tunic!=null){const mtu=CL(N.tunic,'wool');add(T,lkGarment([[waist+.012,BY+.012],[waist+.03,BY-.02],[waist+.05,-.06],[.215,-.16],[.232,-.24]],72,{z:.8,fold:(az,y)=>{let r=[bellyD(az,y),0];r=lkAdd(r,lkDrape(az,y,BY-.01,-.24,.012,9,seed+2));return r;}}),mtu);
+    add(T,lkBand(.236,.232,-.25,-.225,72,{z:.8,fold:(az,y)=>lkDrape(az,-.24,BY-.01,-.24,.012,9,seed+2)}),CL(dk(N.tunic,.65),'trim'));}
+  /* 어깨 갑옷: 겹친 쇠판 두 장 + 테 */
+  if(N.pauldron!=null){const mp=M(N.pauldron,{metalness:.65,roughness:.33,side:THREE.DoubleSide}),me=metal(dk(N.pauldron,.7),.4);for(const A of [S.AL,S.AR]){const B=c.bin(A.sh);
+      add(B,lkLathe([[0,.085],[.045,.08],[.08,.055],[.1,.02],[.108,-.02],[.104,-.03]],32),mp,0,0,0,null,[1.05,1,1.05]);
+      add(B,lkLathe([[.098,-.02],[.11,-.045],[.112,-.07],[.106,-.075]],32),mp,0,0,0,null,[1.05,1,1.05]);
+      add(B,new THREE.TorusGeometry(.107,.006,6,32).rotateX(Math.PI/2),me,0,-.03,0,null,[1.05,1,1.05]);
+      add(B,new THREE.TorusGeometry(.109,.006,6,32).rotateX(Math.PI/2),me,0,-.074,0,null,[1.05,1,1.05]);}}
+}
 function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{};
+  const N=G.npc||null,hs0=S.body.scale.x;   /* N: NPC 몸만 새로 짓는다 (얼굴·머리·모자는 NPC 것 그대로, 살빛·키도 그대로) */
   const H=S.head,f=ap.g==='f',X=apX(ap),XA=apXA(ap);
   const base=new Set(u.mats.slice(0,4)),[limb,skin,body,trim]=u.mats;
-  skin.color.setHex(0xf1e6d2).multiply(new THREE.Color(SKIN_TONES[ap.k|0]??0xffffff));
+  if(!N)skin.color.setHex(0xf1e6d2).multiply(new THREE.Color(SKIN_TONES[ap.k|0]??0xffffff));
   if(ap.c){body.color.setHex(ap.c);trim.color.setHex(new THREE.Color(ap.c).multiplyScalar(.55).getHex());}
   const skC=skin.color.getHex(),shirtC=body.color.getHex(),pantsC=ap.p??PANTS_COLORS[0],hairC=ap.h??HAIR_COLORS[1];
   const mm=[];const M=(c,x)=>{const m=mat(c,Object.assign({flatShading:false,roughness:.72},x||{}));mm.push(m);return m;};
   const dk=(c,k)=>new THREE.Color(c).multiplyScalar(k).getHex();
   const mSkin=M(skC,{roughness:.6}),mSkinD=M(dk(skC,.84),{roughness:.6}),mShirt=M(shirtC,{roughness:.82}),mShirtD=M(dk(shirtC,.7),{roughness:.82});
-  const vest=X.u===2,underC=vest?0xe6dcc6:shirtC,mUnder=vest?M(underC,{roughness:.85}):mShirt,mUnderD=vest?M(dk(underC,.78),{roughness:.85}):mShirtD;
+  const vest=X.u===2,underC=vest?(N&&N.under!=null?N.under:0xe6dcc6):shirtC,mUnder=vest?M(underC,{roughness:.85}):mShirt,mUnderD=vest?M(dk(underC,.78),{roughness:.85}):mShirtD;
   const mPants=M(pantsC,{roughness:.85}),mBoot=M(X.o===2?0x2e2420:0x4a3020,{roughness:.55}),mBootD=M(0x2a1c14,{roughness:.6}),mBelt=M(0x3a2618,{roughness:.5}),mGold=M(0xc9a24a,{roughness:.35,metalness:.6});
   const mHair=M(hairC,{roughness:.6}),mHairD=M(dk(hairC,.72),{roughness:.6});
   /* 막대 조각 숨기기 (장비 조각은 그대로) */
@@ -9499,7 +9711,7 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
   const skinQ=[],skinAdd=(par,geo,m,bones,wf)=>{skinQ.push({par,geo,m,bones,wf});};
   /* 천으로 싼 관절 공: uv를 실제 길이로 잡아 천 결 굵기가 소매·바지와 같게 */
   const clothBall=r=>{const g=sph(r,28,18),uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*Math.PI*2*r/LK_TILE,uv.getY(i)*Math.PI*r/LK_TILE);g.setAttribute('color',new THREE.Float32BufferAttribute(new Array(uv.count*3).fill(.86),3));return g;};
-  const bw=apBody(ap).bw*(f?.93:1),armor=(G.armor??-1)>=1,bootsG=(G.boots??-1)>=0&&S.L.foot.userData.boot;
+  const bw=(N?N.bw:apBody(ap).bw)*(f?.93:1),armor=(G.armor??-1)>=1,bootsG=(G.boots??-1)>=0&&S.L.foot.userData.boot;
 
   /* --- 몸통: 윗옷 --- */
   hideBase(S.upper);
@@ -9525,6 +9737,8 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       /* 몸에서 떠 내려오는 천 밑은 그늘 */
       if(dy<0)sh+=.16*t2*Math.min(1,A)*_lkSS(by-.02,by-.09,y)*(1-_lkSS(BY+.05,BY+.02,y)*.5);}
     return [d,sh];};
+  /* 배 (NPC): 앞 아래쪽이 둥글게 나온다. 몸판·조끼·허리띠·앞치마가 같이 따른다 */
+  const bellyK=N&&N.belly?N.belly:0,bellyD=(az,y)=>bellyK?.085*bellyK*Math.pow(Math.max(0,Math.cos(az)),1.5)*Math.exp(-Math.pow((y-.15)/.17,2)):0;
   /* 가슴 위에서는 천이 팽팽해서 다른 주름이 펴진다 (0이면 그대로, 1이면 다 펴짐) */
   const bFlat=(az,y)=>{if(bTen<=0)return 0;let A=0;for(const c of [-bC,bC])A=Math.max(A,Math.exp(-Math.pow((az-c)/(bW*1.3),2)));return bTen*A*Math.exp(-Math.pow((y-bY)/(bUp*1.6),2));};
   /* 갑옷도 가슴 모양을 따라 앞으로 부풀린다 (큰 가슴이 갑옷을 뚫지 않게) */
@@ -9537,11 +9751,11 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       if(Math.max(y0,y1)>.2&&Math.min(y0,y1)<.5){const n=Math.ceil(Math.abs(y1-y0)/(bTen>0?.007:.012));for(let k=1;k<n;k++){const t=k/n;o.push([pr[i][0]+(q[0]-pr[i][0])*t,y0+(y1-y0)*t]);}}}return o;};
   const robe=X.u===3,shirt=X.u===1,tunic=X.u===0;
   /* 몸판: 허리띠 위로 천이 살짝 부풀어 늘어지고(블라우징), 아래 자락은 퍼지며 세로 주름, 옆·뒤 솔기, 가슴 아래 당긴 주름 */
-  const short_=shirt||vest,hemTo=robe?-.64:short_?-.085:-.2,hemR=robe?.29:short_?waist+.03:.212;
+  const short_=shirt||vest||!!(N&&N.short),tuck=!!(N&&N.short),hemTo=robe?-.64:tuck?BY-.05:short_?-.085:-.2,hemR=robe?.29:tuck?waist+.004:short_?waist+.03:.212;   /* tuck: 치마·긴 옷 속으로 넣어 입은 웃옷 */
   const bodyPr=[];
   {const n=robe?9:short_?3:6;for(let k=n;k>=1;k--){const t=k/n;bodyPr.push([waist+.03+(hemR-waist-.03)*Math.pow(t,1.25),hemTo*t]);}}
   bodyPr.push([waist+.022,BY-.03],[waist+.004,BY-.008],[waist+.002,BY+.012],[waist+.02,BY+.04],[waist+.022,BY+.07],[waist+.008,.12],[chest*.93,.24],[chest*.99,.33],[chest,.41],[chest*.96,.48],[chest*.88,.53],[.15,.565],[.115,.59],[.09,.605],[0,.61]);
-  const bodyFold=(az,y)=>{let r=[0,0];
+  const bodyFold=(az,y)=>{let r=[bellyD(az,y),0];
     r=lkAdd(r,bustF(az,y,true));const fl=1-bFlat(az,y)*.85,sc=q=>[q[0]*fl,(q[1]||0)*fl];
     if(y<BY-.02)r=lkAdd(r,lkDrape(az,y,BY-.01,hemTo,robe?.016:.011,robe?11:8,seed));
     r=lkAdd(r,sc(lkBunch(az,y,BY+.045,.028,.006,120,seed)));   /* 허리띠 위로 모인 천 */
@@ -9559,7 +9773,7 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
   const trimC=dk(shirtC,.62),mTrim=lkCloth(trimC,'trim',{vertexColors:false});mTrim.map=lkTex('trim').map;mm.push(mTrim);
   const mThread=M(dk(shirtC,.45),{roughness:.8});
   /* 아래 단: 수놓은 띠 + 말아 꿰맨 끝 */
-  if(!armor||robe){const hy=hemTo,hr=hemR;
+  if((!armor||robe)&&!tuck){const hy=hemTo,hr=hemR;
     add(T,lkBand(hr+.002,hr-.006,hy,hy+(short_?.022:.04),72,{z:.76*1.0,fold:(az,y)=>lkDrape(az,hemTo-.001,BY-.01,hemTo,robe?.016:.011,robe?11:8,seed)}),short_?bodyM:mTrim);
     const rg=new THREE.TorusGeometry(hr+.001,.0045,6,90);rg.rotateX(Math.PI/2);{const p=rg.attributes.position,v=new THREE.Vector3();for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i);const az=Math.atan2(v.x,v.z),d=lkDrape(az,hemTo,BY-.01,hemTo,robe?.016:.011,robe?11:8,seed)[0],r=Math.hypot(v.x,v.z),k=(r+d)/r;p.setXYZ(i,v.x*k,v.y,v.z*k*.76);}rg.computeVertexNormals();}
     add(T,rg,bodyM,0,hy,0);}
@@ -9576,25 +9790,25 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     for(const s of [-1,1])add(T,lkTube([[s*.014,.555,zf(.555)+.003],[s*.02,.53,zf(.53)+.008],[s*.018,.49,zf(.49)+.01],[s*.024,.46,zf(.46)+.008]],.002),mCord);}
   /* 셔츠: 단추 띠 + 단추 + 뾰족 깃 + 가슴 주머니 */
   if(shirt){const zf=y=>(y>.5?chest*.92:y>.3?chest*.99:waist+.02)*.76;
-    const mBtn=M(0xe8e0cc,{roughness:.35});
-    if(!f){add(T,roundBoxGeo(.026,.62,.007,.002),bodyM,0,.25,(chest*.99)*.76+.003,[-.03,0,0]);
-      for(let i=0;i<6;i++){const y=.53-i*.1;add(T,new THREE.CylinderGeometry(.0075,.0075,.004,14),mBtn,0,y,zf(y)+.01,[Math.PI/2,0,0]);}}
+    const mBtn=M(N&&N.buttons?(N.buttons.c??0xd8c8a0):0xe8e0cc,{roughness:.35,metalness:N&&N.buttons?.55:0}),nBtn=N&&N.buttons?(N.buttons.n??4)+1:6,bStep=.5/(nBtn-1);
+    if(!f){add(T,roundBoxGeo(.026,.62,.007,.002),N&&N.placket!=null?M(N.placket,{roughness:.8}):bodyM,0,.25,(chest*.99)*.76+.003,[-.03,0,0]);
+      for(let i=0;i<nBtn;i++){const y=.53-i*bStep;add(T,new THREE.CylinderGeometry(.0075,.0075,.004,14),mBtn,0,y,zf(y)+.01,[Math.PI/2,0,0]);}}
     else{/* 여자 셔츠: 단추 띠와 단추가 가슴 앞면을 따라간다 */
       const bp=latheUp(bodyPr),rAt=y=>{for(let i=1;i<bp.length;i++)if(bp[i][1]>=y){const a=bp[i-1],b=bp[i],k=(y-a[1])/Math.max(1e-6,b[1]-a[1]);return a[0]+(b[0]-a[0])*k;}return bp[bp.length-1][0];};
       const fz=y=>(rAt(y)+bustF(0,y)[0])*.76;
       {const pos=[],uv=[],col=[],idx=[],n=62;for(let i=0;i<=n;i++){const y=-.06+.61*i/n,z=fz(y)+.005;for(const x of [-.014,-.013,.013,.014]){pos.push(x,y,Math.abs(x)>.0135?z-.004:z);uv.push((x+.014)/LK_TILE,(y+.06)/LK_TILE);col.push(.86,.86,.86);}
           if(i)for(let j=0;j<3;j++){const a=(i-1)*4+j,b=a+1,c=a+4,d=a+5;idx.push(a,b,d,a,d,c);}}
         const pg=new THREE.BufferGeometry();pg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));pg.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));pg.setAttribute('color',new THREE.Float32BufferAttribute(col,3));pg.setIndex(idx);pg.computeVertexNormals();add(T,pg,bodyM);}
-      for(let i=0;i<6;i++){const y=.53-i*.1;add(T,new THREE.CylinderGeometry(.0075,.0075,.004,14),mBtn,0,y,fz(y)+.01,[Math.PI/2,0,0]);}}
+      for(let i=0;i<nBtn;i++){const y=.53-i*bStep;add(T,new THREE.CylinderGeometry(.0075,.0075,.004,14),mBtn,0,y,fz(y)+.01,[Math.PI/2,0,0]);}}
     for(const s of [-1,1]){const sh=new THREE.Shape();sh.moveTo(0,0);sh.lineTo(s*.07,-.005);sh.quadraticCurveTo(s*.075,-.03,s*.05,-.075);sh.lineTo(s*.012,-.02);sh.lineTo(0,0);
-      const cg=new THREE.ExtrudeGeometry(sh,{depth:.004,bevelEnabled:true,bevelThickness:.002,bevelSize:.002,bevelSegments:1,curveSegments:6});add(T,cg,bodyM,s*.008,.605,.095,[-.55,0,s*-.05]);}
-    if(!f){   /* 가슴 주머니는 남자 셔츠만 */
+      const cg=new THREE.ExtrudeGeometry(sh,{depth:.004,bevelEnabled:true,bevelThickness:.002,bevelSize:.002,bevelSegments:1,curveSegments:6});add(T,cg,N&&N.collar!=null?lkCloth(N.collar,'weave'):bodyM,s*.008,.605,.095,[-.55,0,s*-.05]);}
+    if(!f&&!N){   /* 가슴 주머니는 남자 셔츠만 */
     add(T,new THREE.BoxGeometry(.06,.065,.008),bodyM,.085,.36,chest*.99*.76-.004,[-.08,.32,0]);add(T,new THREE.BoxGeometry(.062,.022,.01),mThread,.085,.395,chest*.99*.76-.002,[-.08,.32,0]);
     add(T,new THREE.CylinderGeometry(.006,.006,.004,10),mBtn,.085,.39,chest*.99*.76+.004,[Math.PI/2-.08,0,0]);}}
   /* 조끼: 앞이 V로 트인 덧옷, 앞 끝이 뾰족하게 내려오고, 가장자리 바느질 테두리, 단추 넷, 주머니 둘 */
   if(vest){const vg=y=>.16+.55*_lkSS(.12,.56,y)+.16*bTen*Math.exp(-Math.pow((y-bY)/.1,2)),vy0=-.11,mVest=lkCloth(shirtC,'wool');mm.push(mVest);
     const vpr=[[waist+.036,vy0],[waist+.036,BY-.02],[waist+.036,BY+.03],[waist+.034,.1],[chest*.97+.012,.26],[chest+.014,.4],[chest*.96+.012,.48],[chest*.88+.01,.53],[.152,.565],[.13,.575]];
-    const vfold=(az,y)=>{const fl=1-bFlat(az,y)*.85,bq=lkBunch(az,y,BY+.06,.03,.004,90,seed+3);let r=[bq[0]*fl,(bq[1]||0)*fl];r=lkAdd(r,bustF(az,y,true));for(const s of [-1,1])r=lkAdd(r,lkSeam(az,s*Math.PI/2,.2));return r;};
+    const vfold=(az,y)=>{const fl=1-bFlat(az,y)*.85,bq=lkBunch(az,y,BY+.06,.03,.004,90,seed+3);let r=[bq[0]*fl+bellyD(az,y),(bq[1]||0)*fl];r=lkAdd(r,bustF(az,y,true));for(const s of [-1,1])r=lkAdd(r,lkSeam(az,s*Math.PI/2,.2));return r;};
     const geo=lkGarment(bustDense(vpr),f&&bTen>0?120:64,{fold:vfold,z:.76,gap:vg});
     /* 앞 끝이 아래로 뾰족 */{const p=geo.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i);if(y<0&&z>0){const fr=Math.max(0,z/(waist*.76+.03));p.setY(i,y-.06*Math.pow(fr,3)*(1-Math.min(1,Math.abs(x)/.09)*.4));}}geo.computeVertexNormals();}
     add(T,geo,mVest);
@@ -9617,9 +9831,9 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     const pf=(az,y)=>{const t=_lkSS(BY,-.42,y),u=(az/(Math.PI*2)*n%1+1)%1,tri=Math.abs(u-.5)*2;return [(tri-.5)*.02*t+lkDrape(az,y,BY,-.42,.006,5,seed)[0],(1-tri)*.45*t];};
     const mSkirt=lkCloth(pantsC,'weave');mm.push(mSkirt);add(T,lkGarment(sk,n*8,{fold:pf,z:.8}),mSkirt);add(T,lkBand(.279,.268,-.425,-.39,n*8,{z:.8,fold:(az,y)=>pf(az,-.42)}),mTrim);}
   /* 허리띠: 가죽 결, 쇠 버클(고리+혀), 늘어진 끝과 구멍, 고리, 바느질 주머니(덮개+단추) */
-  if(!armor&&!robe){const mLeather=lkCloth(0x4a2e1c,'leather',{vertexColors:false});mm.push(mLeather);
-    const zR=(waist+.006)*.78,bg=lkGarment([[waist+.006,BY-.018],[waist+.012,BY-.014],[waist+.012,BY+.014],[waist+.006,BY+.018]],64,{z:.78});add(T,bg,mLeather);
-    const bz=zR+.016,mMetal=M(0xb0a080,{roughness:.3,metalness:.75});
+  if(!armor&&!robe&&(!N||N.belt!=null)){const mLeather=lkCloth(N?N.belt:0x4a2e1c,'leather',{vertexColors:false});mm.push(mLeather);
+    const zR=(waist+.006)*.78,bg=lkGarment([[waist+.006,BY-.018],[waist+.012,BY-.014],[waist+.012,BY+.014],[waist+.006,BY+.018]],64,{z:.78,fold:(az,y)=>[bellyD(az,y),0]});add(T,bg,mLeather);
+    const bz=zR+.016+bellyD(0,BY)*.78,mMetal=M(0xb0a080,{roughness:.3,metalness:.75});
     const fr=new THREE.Shape();fr.moveTo(-.024,-.02);fr.lineTo(.024,-.02);fr.quadraticCurveTo(.03,-.02,.03,-.014);fr.lineTo(.03,.014);fr.quadraticCurveTo(.03,.02,.024,.02);fr.lineTo(-.024,.02);fr.quadraticCurveTo(-.03,.02,-.03,.014);fr.lineTo(-.03,-.014);fr.quadraticCurveTo(-.03,-.02,-.024,-.02);
     const ho=new THREE.Path();ho.moveTo(-.02,-.013);ho.lineTo(.02,-.013);ho.lineTo(.02,.013);ho.lineTo(-.02,.013);ho.lineTo(-.02,-.013);fr.holes.push(ho);
     add(T,new THREE.ExtrudeGeometry(fr,{depth:.004,bevelEnabled:true,bevelThickness:.0015,bevelSize:.0015,bevelSegments:2,curveSegments:4}),mMetal,0,BY,bz-.004);
@@ -9628,12 +9842,21 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     const tail=[[.04,BY,bz],[.06,BY-.004,bz-.002],[.066,BY-.03,bz+.002],[.064,BY-.07,bz+.004]];const tg=lkTube(tail,.012,false,4);tg.scale(1,1,1);add(T,tg,mLeather);
     for(let i=0;i<3;i++)add(T,new THREE.CylinderGeometry(.0024,.0024,.004,8),M(0x1a120c),.066,BY-.035-i*.012,bz+.009,[Math.PI/2,0,0]);
     add(T,new THREE.BoxGeometry(.012,.04,.012),mLeather,.064,BY,bz+.002);
-    /* 주머니 */const px=.14*bw>0?.13:.13,pz=(waist+.01)*.78;
+    /* 주머니 */if(!N||N.pouch!=null){const px=.14*bw>0?.13:.13,pz=(waist+.01)*.78;
     const pouch=lkGarment([[0,-.06],[.026,-.058],[.036,-.035],[.036,-.005],[.032,.012],[0,.014]],18,{z:.6,fold:(az,y)=>lkBunch(az,y,-.05,.01,.002,200,seed)});
     add(T,pouch,mLeather,px,BY-.025,pz*.9,[0,.95,0]);const flap=lkGarment([[.0,-.02],[.03,-.024],[.039,-.012],[.039,.004],[.034,.016],[0,.018]],18,{z:.65});add(T,flap,mLeather,px+.006,BY-.006,pz*.9+.006,[0,.95,0]);
-    add(T,sph(.006,8,6),mMetal,px+.022,BY-.03,pz*.9+.028);}
+    add(T,sph(.006,8,6),mMetal,px+.022,BY-.03,pz*.9+.028);}}
 
   /* --- 팔: 소매 --- */
+  const mGlove=N&&N.gloves!=null?lkCloth(N.gloves,'leather'):null;if(mGlove)mm.push(mGlove);
+  /* NPC 반소매·맨팔: 어깨~손목 맨살 한 장(팔꿈치에서 휜다) + 윗팔만 덮는 짧은 소매와 접은 단 */
+  const npcArm=(A,sd,SH,EL,shIn,elW,EY,upPr,sl,sk,lt)=>{
+    skinAdd(A.sh,shIn(lkLathe([[0,.035],[.04,.03],[.054*lt,.0],[.058*lt,-.06],[.056*lt,-.17],[.05*lt,-.28],[.046*lt,EY],[.045*lt,EY-.05],[.041*lt,EY-.15],[.034*lt,EY-.25],[.031,EY-.27],[0,EY-.27]],24)),mSkin,[A.sh,A.el],elW);
+    if(N.sleeve==='short'){const k=Math.max(1,lt*.98),pr=upPr.slice(0,7).map(p=>[p[0]*k,p[1]]),yb=-.2;
+      add(SH,shIn(lkGarment(pr.concat([[.063*k,yb+.02],[.064*k,yb],[0,yb]]),36,{fold:(az,y)=>{let r=lkBunch(az,y,yb+.03,.025,.003,140,sk);r=lkAdd(r,lkSeam(az,sd*-Math.PI/2,.062*k));return r;}})),sl);
+      const mR=N.rolled!=null?lkCloth(N.rolled,'weave'):sl;if(mR!==sl)mm.push(mR);
+      add(SH,lkGarment([[.064*k,yb-.012],[.071*k,yb-.008],[.073*k,yb+.012],[.07*k,yb+.03],[.064*k,yb+.032]],36,{fold:(az,y)=>lkDrape(az,y,yb+.03,yb-.01,.003,6,sk)}),mR);}
+    else add(SH,sph(.057*lt,22,14),mSkin,0,0,0);};
   const bell=robe;
   for(const A of [S.AL,S.AR]){const sd=Math.sign(A.sh.position.x);A.sh.position.x*=bw;
     hideBase(A.sh);hideBase(A.el);hideBase(A.hand);
@@ -9642,17 +9865,20 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     /* 소매: 어깨에서 손목까지 한 장. 팔꿈치 둘레는 위팔·아래팔에 나눠 붙어 굽히면 천이 꺾이지 않고 휜다 (예전엔 두 토막 사이에 공을 끼워 소시지처럼 보였다) */
     /* 어깨: 소매 위를 둥근 소매산으로 닫아 몸통 어깨선에 바로 잇는다 (예전엔 몸통에 붙인 납작한 덩어리와 공이 따로 놀아 어깨가 불룩 튀어나와 보였다) */
     const EY=-.36,elW=y=>_lkSS(EY+.07,EY-.07,y);
-    add(EL,clothBall(.047),sl);   /* 팔꿈치 속 공: 곧을 땐 소매 안에 숨고, 굽히면 바깥 모서리를 둥글게 채운다 */
+    const nArm=N&&N.sleeve!=='long',lt=N&&N.limb||1;
+    if(!nArm)add(EL,clothBall(.047),sl);   /* 팔꿈치 속 공: 곧을 땐 소매 안에 숨고, 굽히면 바깥 모서리를 둥글게 채운다 */
     const upPr=[[0,.052],[.03,.047],[.048,.034],[.059,.014],[.064,-.015],[.065,-.05],[.063,-.15],[.058,-.26],[.055,-.33],[.053,EY]];
     const upFold=(az,y)=>{let r=lkBunch(az,y,-.3,.035,.003,140,sk);r=lkAdd(r,lkDrape(az,-y,.05,.25,.004*(1-elW(y)),4,sk));return r;};
     /* 소매산 안쪽(몸통 쪽)을 몸통 속으로 넓혀, 팔이 몸통 옆에 따로 선 기둥처럼 보이지 않고 어깨선으로 이어진다 */
-    add(T,clothBall(.06),sl,A.sh.position.x/bw,A.sh.position.y-.008,0,null,[1/bw,1,1/bw]);   /* 어깨 속 공(몸통에 붙음): 팔을 내리면 소매산 안에 숨고, 팔을 들면 몸통과 팔 사이를 둥글게 메운다 */
+    add(T,clothBall(.06),N&&N.sleeve==='none'?mSkin:sl,A.sh.position.x/bw,A.sh.position.y-.008,0,null,[1/bw,1,1/bw]);   /* 어깨 속 공(몸통에 붙음): 팔을 내리면 소매산 안에 숨고, 팔을 들면 몸통과 팔 사이를 둥글게 메운다 */
     const shIn=geo=>{const P=geo.attributes.position;for(let i=0;i<P.count;i++){const x=P.getX(i),y=P.getY(i);if(x*sd<0)P.setX(i,x*(1+1.1*_lkSS(-.16,.0,y)));}geo.computeVertexNormals();return geo;};
-    if(bell)skinAdd(A.sh,shIn(lkGarment(upPr.concat([[.055,EY-.09],[.074,EY-.2],[.086,EY-.27],[.08,EY-.276],[.05,EY-.2],[0,EY-.2]]),40,
+    if(nArm){npcArm(A,sd,SH,EL,shIn,elW,EY,upPr,sl,sk,lt);}
+    else if(bell)skinAdd(A.sh,shIn(lkGarment(upPr.concat([[.055,EY-.09],[.074,EY-.2],[.086,EY-.27],[.08,EY-.276],[.05,EY-.2],[0,EY-.2]]),40,
         {fold:(az,y)=>{let r=upFold(az,y);if(y>EY)r=lkAdd(r,lkSeam(az,sd*-Math.PI/2,.06));else r=lkAdd(r,lkDrape(az,y,EY-.05,EY-.27,.009,7,sk));return r;}})),sl,[A.sh,A.el],elW);
     else skinAdd(A.sh,shIn(lkGarment(upPr.concat([[.051,EY-.05],[.046,EY-.14],[.044,EY-.2],[.047,EY-.235],[.046,EY-.255],[0,EY-.255]]),36,
         {fold:(az,y)=>{let r=upFold(az,y);r=lkAdd(r,lkBunch(az,y,EY-.07,.03,.003,170,sk+2));r=lkAdd(r,lkBunch(az,y,EY-.215,.03,.005,150,sk+4));r=lkAdd(r,lkSeam(az,sd*-Math.PI/2,y>EY?.06:.047));return r;}})),sl,[A.sh,A.el],elW);
-    if(bell)add(EL,lkBand(.088,.084,-.29,-.25,40),mTrim);
+    if(nArm){}
+    else if(bell)add(EL,lkBand(.088,.084,-.29,-.25,40),mTrim);
     else{
       /* 소매 끝: 셔츠는 단추 커프스, 튜닉·조끼는 수놓은 띠 */
       add(EL,lkBand(.049,.047,-.285,-.25,32),shirt?bodyM:mTrim);
@@ -9660,11 +9886,12 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       if(shirt)for(const dy of [-.262,-.275])add(EL,new THREE.CylinderGeometry(.0045,.0045,.003,8),M(0xe8e0cc,{roughness:.35}),sd*-.045,dy+.004,.012,[0,0,Math.PI/2]);}
     add(EL,lkLathe([[0,-.27],[.031,-.27],[.03,-.31],[.034,-.35],[0,-.36]],14),mSkin);
     /* 손 */
-    add(HD,sph(.042,24,16),mSkin,-sd*.002,-.018,0,null,[.76,1.32,.96]);}   /* 손가락은 따로 빚지 않고 살짝 오므린 둥근 손 하나로 */
+    add(HD,sph(.042,24,16),mGlove||mSkin,-sd*.002,-.018,0,null,[.76,1.32,.96]);
+    if(mGlove)add(EL,lkGarment([[.044,-.33],[.05,-.32],[.056,-.27],[.058,-.255],[.05,-.25]],28,{fold:(az,y)=>lkBunch(az,y,-.3,.02,.003,150,sk)}),mGlove);}   /* 손가락은 따로 빚지 않고 살짝 오므린 둥근 손 하나로 */
 
   /* --- 다리: 바지·장화 --- */
   const shorts=X.l===2,mPantsC=lkCloth(pantsC,'weave');mm.push(mPantsC);
-  const mLea=lkCloth(X.o===2?0x2e2420:0x553522,'leather',{vertexColors:true});mm.push(mLea);
+  const mLea=lkCloth(N&&N.shoeC!=null?N.shoeC:X.o===2?0x2e2420:0x553522,'leather',{vertexColors:true});mm.push(mLea);
   for(const Lg of [S.L,S.R]){const sd=Math.sign(Lg.hip.position.x)||1;Lg.hip.position.x*=1+(bw-1)*.6;hideBase(Lg.hip);hideBase(Lg.knee);
     const HP=bin(Lg.hip),KN=bin(Lg.knee),lw=bw*.95+.05,sk=seed+sd*3.1;
     const thighFold=(az,y)=>{let r=lkDrape(az,-y,.0,.4,.005,5,sk);r=lkAdd(r,lkBunch(az,y,-.42,.035,.003,120,sk,Math.PI));r=lkAdd(r,lkSeam(az,sd*Math.PI/2,.08));r=lkAdd(r,lkSeam(az,-sd*Math.PI/2,.08,.0015));return r;};
@@ -9672,7 +9899,7 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       add(HP,lkBand(.096,.094,-.285,-.25,36),mTrim,0,0,0,null,[lw,1,1]);}
     /* 다리: 엉덩이에서 발목까지 한 장 (반바지면 맨살 다리, 아니면 바지). 무릎 둘레는 허벅지·정강이에 나눠 붙어 굽히면 휜다 */
     const KY=-.45,knW=y=>_lkSS(KY+.07,KY-.07,y),bootTop=bootsG?-.45:X.o===0?-.17:X.o===1?-.3:-.42;
-    const thick=geo=>{const P=geo.attributes.position;for(let i=0;i<P.count;i++)P.setX(i,P.getX(i)*(lw+(1-lw)*knW(P.getY(i))));geo.computeVertexNormals();return geo;};   /* 허벅지만 체형 따라 굵게 */
+    const thick=geo=>{const P=geo.attributes.position;for(let i=0;i<P.count;i++){const y=P.getY(i),k=N&&N.short?1-.2*_lkSS(-.3,-.05,y):1;P.setX(i,P.getX(i)*(lw+(1-lw)*knW(y))*k);P.setZ(i,P.getZ(i)*k);}geo.computeVertexNormals();return geo;};   /* 허벅지만 체형 따라 굵게 */
     add(KN,shorts?sph(.055,20,14):clothBall(.056),shorts?mSkin:mPantsC);   /* 무릎 속 공: 굽히면 무릎 앞을 둥글게 */
     if(shorts)skinAdd(Lg.hip,thick(lkLathe([[0,-.2],[.066,-.2],[.06,-.4],[.058,KY],[.056,KY-.1],[.05,KY-.25],[.045,KY-.4],[.042,KY-.45],[0,KY-.45]],24)),mSkin,[Lg.hip,Lg.knee],knW);
     else skinAdd(Lg.hip,thick(lkGarment([[0,.06],[.08,.06],[.09,-.02],[.084,-.2],[.072,-.36],[.064,-.42],[.06,KY],[.058,KY-.05],[.054,KY-.18],[.05,KY-.3],[.048,KY-.42],[.046,KY-.45],[0,KY-.45]],36,
@@ -9689,11 +9916,13 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
     /* 발: 앞코가 둥근 신발 + 바닥창·굽 + 앞코 솔기 */
     const ft=Lg.foot,fg=lkGarment([[0,-.05],[.05,-.05],[.056,-.04],[.056,-.01],[.05,.018],[.04,.032],[0,.036]],40,{fold:(az,y)=>lkSeam(az,0,.05,.0012)});fg.scale(1.05,X.o===2?.85:1,2.15);fg.translate(0,X.o===2?-.007:0,.012);
     {const pos=fg.attributes.position;for(let i=0;i<pos.count;i++){const z=pos.getZ(i),y=pos.getY(i);if(z<-.03)pos.setY(i,y+(z+.03)*.25*Math.max(0,y+.02)*10);}fg.computeVertexNormals();}
-    ft.geometry=fg;ft.material=mLea;ft.userData.lookFoot=1;
+    ft.geometry=fg;ft.material=mLea;ft.userData.lookFoot=1;ft.visible=true;
     const so=new THREE.Mesh(lkLathe([[0,-.007],[.059,-.007],[.059,.006],[0,.006]],28),mLeaD);so.geometry.scale(1.08,1,2.2);so.position.set(0,-.05,.012);ft.add(so);
     const he=new THREE.Mesh(roundBoxGeo(.085,.022,.06,.006),mLeaD);he.position.set(0,-.058,-.07);ft.add(he);
     if(X.o===2){const st=new THREE.Mesh(new THREE.TorusGeometry(.05,.005,5,24,Math.PI),mLeaD);st.position.set(0,-.005,.01);st.scale.set(1.05,1,1.4);st.rotation.x=-.3;ft.add(st);}}
+  if(N)npcLookExtras({g,S,T,N,f,bodyPr,bustF,bellyD,BY,waist,chest,seed,shirt,vest,add,M,mm,lkCloth,bin,sph,mTrim,bw});
   /* --- 머리·얼굴 --- */
+  if(!N){
   hideBase(H);H.geometry=new THREE.SphereGeometry(.22,40,28);
   for(const o of H.children)if(o.isMesh&&!o.userData.gear&&o.material.color&&o.material.color.getHex()===0x14110e)o.visible=false;   /* 막대 인형의 각진 옛 눈알(8각 공)은 숨긴다: 새 눈과 겹쳐 울퉁불퉁한 회색 덩어리로 보였다 */
   const HB=bin(H),R=.22;
@@ -9837,10 +10066,11 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
       'f:일자 단발':()=>ani('f_bob',{side:-.17,back:-.15,vol:.02,hang:.6,tipB:.012,C:28,tipL:.04,bg:{n:13,y:.07,blunt:1,v:.004,edgeUp:0}})};
     (HS[ap.g+':'+nm]||HS['m:짧은 머리'])();
   }
+  }
   /* 모아 둔 조각을 마디마다 재질별로 합친다 */
   for(const [par,b] of bins){lkMerge(b,par);}
   for(const o of [S.L.foot,S.R.foot])o.traverse(q=>{if(q.isMesh)q.castShadow=true;});
-  S.body.scale.setScalar(apBody(ap).hs);
+  S.body.scale.setScalar(N?hs0:apBody(ap).hs);
   /* 관절을 넘는 소매·바지: 지금(곧게 선) 자세를 기준으로 두 마디에 묶는다 */
   if(skinQ.length){g.updateMatrixWorld(true);const skM=new Map();   /* 스키닝 재질은 따로 (같은 재질을 막대 조각과 같이 쓰면 셰이더가 엉킨다) */
     for(const q of skinQ){const P=q.geo.attributes.position,n=P.count,si=new Uint16Array(n*4),sw=new Float32Array(n*4);
@@ -11503,7 +11733,8 @@ function sfxSkill(S,id){
 const VOICE={zibben:{p:96,rasp:.28,sp:56,fs:.92,vol:1.15},kyle:{p:128,sp:46,vol:1.75},sera:{p:104,rasp:.35,sp:58,fs:.95,vol:1.06},turpin:{p:104,rasp:.35,sp:58,fs:.95},bron:{p:98,rasp:.3,sp:52,vol:1.13},torgan:{p:84,rasp:.22,sp:50,fs:.9,vol:1.23},
   rowen:{p:112,sp:46,vol:1.72},khq_cmd:{p:104,sp:44,vol:1.7},messenger:{p:132,sp:50,fs:1.02,vol:1.62},mina:{p:236,sp:42,fs:1.16,vol:1.31},hanna:{p:208,sp:45,fs:1.12,vol:1.51},elis:{p:252,sp:46,fs:1.18,air:.25},knight:{p:214,sp:46,fs:1.12,vol:1.48},
   timo:{p:320,sp:40,fs:1.32,vol:1.5},mentor:{p:118,sp:50,vol:1.72},
-  lman:{p:86,sp:64,fs:.84,rasp:.16,vol:1.7,helm:1}};   /* S: 낮고 느리게, 투구 속에서 울리는 쇳소리 */
+  lman:{p:86,sp:64,fs:.84,rasp:.16,vol:1.7,helm:1},   /* S: 낮고 느리게, 투구 속에서 울리는 쇳소리 */
+  rman:{p:94,sp:70,fs:.88,rasp:.24,vol:1.6}};   /* R: 가면 속에서 낮게 쉰 목소리, 말끝을 길게 끈다 */
 const VW_F={a:[800,1200],e:[520,1850],eo:[600,1000],o:[460,820],u:[360,760],eu:[420,1450],i:[310,2250]};
 const VW_OF=['a','e','a','e','eo','e','eo','e','o','a','e','e','o','u','eo','e','i','u','eu','eu','i'];
 function voiceOf(n){if(!n)return {p:130,sp:46};if(n.voice)return n.voice;const v=VOICE[n.id];if(v)return v;
@@ -12607,6 +12838,11 @@ function stickNpcPose(g,pose,t){const S=g.userData.stick;if(!S)return;const AR=S
     case 'gntalk':{const g1=_sn(t*.7,1),up=g1>.1;arm(AR,-.12,0,.12,-.35);
       if(up)arm(AL,-.54,-.18,-.41,-2.33+Math.sin(t*3)*.12,-.08);else arm(AL,-.04,.64,-.39,-2.15,.53);
       S.upper.rotation.x=br-.06;S.head.rotation.set(-.08+Math.max(0,_sn(t*1.6,2))*.08,_sn(t*.35,6)*.22,up?.06:-.03);break;}
+    /* R: 통나무에 걸터앉아 몸을 앞으로 숙이고 무릎에 팔을 얹은 채 모닥불을 본다. 가끔 고개를 들어 숲 소리를 듣는다 */
+    case 'rfire':{S.body.position.y=-.47;legs(-1.45,1.75,-1.5,1.7);S.L.hip.rotation.z=-.16;S.R.hip.rotation.z=.16;S.upper.rotation.x=br+.38;
+      const m=_sn(t*.12,9);
+      if(m>.45){S.upper.rotation.x=br+.18;S.head.rotation.set(-.15,_sn(t*.25,3)*.5,0);arm(AR,-.35,0,.1,-.9);arm(AL,-.35,0,-.1,-.9);}
+      else{const w=Math.sin(t*1.1)*.04;arm(AR,-.45+w,0,.12,-.85);arm(AL,-.45-w,0,-.12,-.85);S.head.rotation.set(.3,0,0);}break;}
     case 'wallsit':{   /* 벽에 등을 기대고 바닥에 반쯤 누워 앉음: 왼다리는 뻗고 오른무릎은 세워 팔을 걸친다. 고개는 졸듯이 숙였다가 가끔 든다 */
       S.body.position.y=-.86;legs(-1.5,.06,-2.05,2.15);S.L.hip.rotation.z=.12;S.R.hip.rotation.z=-.08;S.upper.rotation.x=-.42+br*.5;
       arm(AR,-.4,0,-.3,-.8);arm(AL,.55,0,-.1,-1);const up=_sn(t*.09,5)>.55;S.head.rotation.set(up?.05:.38+Math.sin(t*.8)*.02,up?_sn(t*.3,2)*.3:0,0);break;}
@@ -12721,10 +12957,8 @@ function stickNpcPose(g,pose,t){const S=g.userData.stick;if(!S)return;const AR=S
   if(g.userData.cloth){clothSit(g,S.body.position.y<-.3||pose==='ride');clothFollow(g,null,0);}}
 /* 마시기: 오른손에 나무 잔 (처음 쓸 때 만든다). 마시는 동안은 잔을 기울여 입에 댄다 */
 function stickCup(S,up){if(!S.cup){const c=new THREE.Group(),wd=mat(0x7a4a26,{roughness:.8,flatShading:false}),bd=mat(0x4a2c16,{roughness:.8});
-    const body=new THREE.Mesh(new THREE.CylinderGeometry(.05,.042,.12,12),wd);c.add(body);
-    const top=new THREE.Mesh(new THREE.CircleGeometry(.044,12),mat(0x9a6a3a,{roughness:.5}));top.rotation.x=-Math.PI/2;top.position.y=.052;c.add(top);
-    [-.035,.035].forEach(y=>{const r=new THREE.Mesh(new THREE.TorusGeometry(.049,.006,4,14),bd);r.rotation.x=Math.PI/2;r.position.y=y;c.add(r);});
-    const hd=new THREE.Mesh(new THREE.TorusGeometry(.03,.008,4,10,Math.PI),bd);hd.rotation.z=-Math.PI/2;hd.position.x=.05;c.add(hd);
+    /* 2026-11-10: 깎은 나무 잔(FOODK ware:5, 사과주가 담김). 가운데가 원점이 되게 내린다 */
+    const body=new THREE.Mesh(FOODK.geo('ware:5'),FOODK.mat());body.scale.setScalar(1.15);body.position.y=-.058;c.add(body);
     S.AR.hand.add(c);S.cup=c;}
   const c=S.cup;c.visible=true;
   if(up){c.position.set(-.086,-.083,-.007);c.rotation.set(1.39,.41,.1);}else{c.position.set(-.095,0,.01);c.rotation.set(1.95,-.06,-.08);}}
@@ -12827,11 +13061,45 @@ function makeNpcStick(o){const G0=o.gear,g=makeStickPlayer('warrior',G0?{helm:G0
   if(o.ruff){const rm=hm(o.ruff),U=u.stick&&u.stick.upper;if(U)for(let k=0;k<14;k++){const a=k/14*Math.PI*2,f=new THREE.Mesh(new THREE.SphereGeometry(.05,6,5),rm);f.scale.set(1,.55,1);f.position.set(Math.sin(a)*.13,.7,Math.cos(a)*.11);U.add(f);}}   /* 목에 두른 흰 주름 깃 */
   if(o.small)g.scale.setScalar(.7);
   const mk=new THREE.Mesh(new THREE.OctahedronGeometry(.16,0),mat(0xf0c95f,{emissive:0xb08a20,emissiveIntensity:.8}));mk.position.y=(o.small?2.2:2.6)/(o.small?.7:1);mk.userData.marker=true;g.add(mk);u.marker=mk;
-  if(o.cloth||(typeof NPC_CLOTHES!=='undefined'&&NPC_CLOTHES))npcClothes(g,o);
+  const hq=NPC_HQ&&!!o.fine&&!o.lhelm&&!o.cit;   /* 주민(cit)은 미리 구운 모양을 쓰므로 아직 예전 몸 */
+  if(o.cloth||(typeof NPC_CLOTHES!=='undefined'&&NPC_CLOTHES))npcClothes(g,o,hq);
   if(o.gear)npcGearOn(g,o);
-  if(o.fine){npcFine(g,o);npcRoundBoxes(g);if(!o.lhelm)npcSculptMerge(g,o);npcFineMerge(g);}
+  if(o.fine){npcFine(g,o,hq);if(hq)npcBodyHQ(g,o);npcRoundBoxes(g);if(!o.lhelm)npcSculptMerge(g,o);npcFineMerge(g);}
   if(o.lhelm)lDress(g,o);
+  if(o.rhood)rDress(g,o);
   g.traverse(m=>{if(m.isMesh)m.castShadow=true;});u.ph=Math.random()*6;return g;}
+/* 이름 있는 NPC 몸을 천 옷으로 새로 짓는다 (얼굴·머리카락·모자·소품은 그대로). 끄면 예전 막대+도형 몸 */
+const NPC_HQ=true;
+/* 바지·신발·소매 색: npcClothes와 같은 고르기 (o.cloth가 없으면 예전에도 치마·긴 옷이 없었다) */
+function npcClothInfo(o){const C=o.cloth||{},on=!!(o.cloth||(typeof NPC_CLOTHES!=='undefined'&&NPC_CLOTHES));
+  const h=(()=>{let v=0;const k=String(o.robe)+String(o.hatC)+String(o.robe2);for(let i=0;i<k.length;i++)v=(v*31+k.charCodeAt(i))>>>0;return v;})(),pick=(a,s)=>a[(h>>>s)%a.length];
+  const long=on&&(C.long??(!!o.staff||o.hat==='hood'&&!o.long)),skirt=on&&(C.skirt??(!long&&!!o.long));
+  return {on,long,skirt,pantsC:C.pants??pick([0x3a3a44,0x4a3a2a,0x5a4a32,0x2a3a4a,0x6a5a40,0x3e3428],3),shoeC:C.shoes??pick([0x3a2618,0x2a1e14,0x5a3a22],7),sl:on?(C.sleeve??pick(['long','long','long','short'],11)):'long'};}
+function npcBodyHQ(g,o){const S=g.userData.stick;if(!S)return;const F=o.fine||{},B=F.body||{},CL=F.cl||{},C=o.cloth||{},I=npcClothInfo(o);
+  const f=!!B.bust,vest=I.on&&C.vest!=null;
+  let sleeve=I.sl==='none'?'none':I.sl==='short'?'short':'long';if(CL.rolled!=null&&sleeve==='long')sleeve='short';
+  const ap={g:f?'f':'m',c:vest?C.vest:o.robe,p:I.skirt?(C.stock??0xe8e0d0):I.pantsC,u:vest?2:(CL.buttons||CL.placket||(CL.collar!=null&&CL.tunic==null))?1:0,l:0,o:CL.boots!=null?0:2,h:0};
+  const N={bw:B.w||1,belly:B.belly||0,short:I.skirt||I.long,sleeve,limb:B.limb||1,belt:CL.belt??(CL.rope!=null?null:null),pouch:CL.pouch??null,shoeC:CL.boots??I.shoeC,gloves:CL.gloves??null,rolled:CL.rolled??null,
+    under:vest?o.robe:null,buttons:CL.buttons||null,collar:CL.collar??null,placket:CL.placket??null,high:CL.high??null,sash:CL.sash??null,rope:CL.rope??null,pendant:CL.pendant??null,chain:CL.chain,
+    badge:CL.badge??null,badgeIn:CL.badgeIn??null,scarf:CL.scarf??null,kerchief:CL.kerchief??null,towel:CL.towel??null,stars:!!CL.stars,pauldron:CL.pauldron??null,tunic:CL.tunic??null,
+    apron:I.on?(C.apron??null):null,apronP:!!CL.apronPockets,cape:I.on?(C.cape??null):null,capeTrim:C.capeTrim};
+  const old=new Set();g.traverse(q=>old.add(q));
+  const G0=o.gear||{};stickLook(g,ap,{npc:N,armor:G0.armor??-1,boots:G0.boots??-1,helm:G0.helm??-1});
+  g.traverse(q=>{if(q.isMesh&&!old.has(q))q.userData.noSculpt=1;});S.L.foot.traverse(q=>{if(q.isMesh)q.userData.noSculpt=1;});S.R.foot.traverse(q=>{if(q.isMesh)q.userData.noSculpt=1;});   /* 새로 지은 천 옷은 빚기(npcSculptMerge)에서 뺀다 */
+  g.userData.hq=1;}
+/* 치마·긴 옷 (천 결·세로 주름 그늘이 있는 판): clothBell과 같은 모양·자리 */
+function npcBellGeo(rt,rb,len,n,fold,t0,t1,dr,seg,ph0=0,phL=Math.PI*2){const key=[rt,rb,len,n,fold,t0,t1,dr,seg,ph0,phL].join(',');const C=npcBellGeo.c||(npcBellGeo.c={});if(C[key])return C[key];
+  const R=t=>rt+(rb-rt)*(.22*t+.78*t*t*(3-2*t)),pts=[],NN=24;
+  for(let i=0;i<=NN;i++){const t=t0+(Math.min(t1,1)-t0)*i/NN;pts.push([R(t)+dr,-len*t]);}
+  if(t1>1)pts.push([rb+dr+.004,-len-.012],[rb+dr-.03,-len-.014]);
+  const np=pts.length,arc=[0];for(let j=1;j<np;j++)arc.push(arc[j-1]+Math.hypot(pts[j][0]-pts[j-1][0],pts[j][1]-pts[j-1][1]));
+  const pos=[],uv=[],col=[],idx=[],sd=n*1.37;
+  for(let i=0;i<=seg;i++){const a=ph0+phL*i/seg;for(let j=0;j<np;j++){const [r,y]=pts[j],tt=Math.max(0,Math.min(1,-y/len)),w=Math.sin(a*n)+.35*Math.sin(a*(2*n+3)+1)+.18*Math.sin(a*(3*n+1)+sd+tt*3),k=1+fold*Math.pow(tt,1.4)*w;
+      pos.push(Math.sin(a)*r*k,y,Math.cos(a)*r*k*(1-.06*tt));uv.push(a*rt*1.6/LK_TILE,arc[j]/LK_TILE);const s=Math.max(.45,1-Math.max(0,-w)*.32*Math.min(1,tt*2.2)-(j>=np-3&&t1>1?.12:0));col.push(s,s,s);
+      if(i&&j){const A=(i-1)*np+j-1,B=A+1,Cc=A+np,D=Cc+1;idx.push(A,B,Cc,B,D,Cc);}}}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();
+  if(phL>=Math.PI*2-1e-6){const nn=g.attributes.normal;for(let j=0;j<np;j++){const a=j,b=seg*np+j;const x=(nn.getX(a)+nn.getX(b))/2,y=(nn.getY(a)+nn.getY(b))/2,z=(nn.getZ(a)+nn.getZ(b))/2;nn.setXYZ(a,x,y,z);nn.setXYZ(b,x,y,z);}}
+  return C[key]=g;}
 /* ---------- NPC 옷: 바지·치마·긴 옷·소매·앞치마·망토·신발 (사진으로 먼저 보여 드리는 중: NPC_CLOTHES) ----------
    o.cloth로 정할 수 있고, 없으면 생김새로 고른다: 긴 머리 → 치마, 지팡이·두건 → 긴 옷, 그 밖 → 바지 */
 var NPC_CLOTHES=false;
@@ -12918,7 +13186,7 @@ function npcProp(S,k,m){const R=S.AR.hand,L=S.AL.hand,W=0x7a5232,DW=0x4a3020,ME=
     case 'doll':P(L,sph(.04),0xf0e0d0,0,.02,.06);P(L,new THREE.ConeGeometry(.05,.11,8),0xc84a6a,0,-.06,.06);break;
     case 'fan':P(L,new THREE.CircleGeometry(.14,12,0,Math.PI),m(0xf0d0e0,{side:THREE.DoubleSide}),0,.02,.06,{rz:Math.PI*.1});break;
   }}
-function npcClothes(g,o){const S=g.userData.stick;if(!S)return;const C=o.cloth||{};
+function npcClothes(g,o,hq){const S=g.userData.stick;if(!S)return;const C=o.cloth||{};
   const h=(()=>{let v=0;const k=String(o.robe)+String(o.hatC)+String(o.robe2);for(let i=0;i<k.length;i++)v=(v*31+k.charCodeAt(i))>>>0;return v;})();
   const pick=(a,s)=>a[(h>>>s)%a.length];
   const long=C.long??(!!o.staff||o.hat==='hood'&&!o.long),skirt=C.skirt??(!long&&!!o.long);
@@ -12927,16 +13195,16 @@ function npcClothes(g,o){const S=g.userData.stick;if(!S)return;const C=o.cloth||
   const sl=C.sleeve??(pick(['long','long','long','short'],11)),slC=C.sleeveC??robe;
   const m=(c,x)=>mat(c,Object.assign({flatShading:false,roughness:.8},x||{}));
   const tube=(r0,r1,len,mt,y)=>{const t=new THREE.Mesh(new THREE.CylinderGeometry(r0,r1,len,10),mt);t.position.y=y;return t;};
-  const shoe=m(shoeC);for(const L of [S.L,S.R]){if(L.foot.userData.boot)continue;L.foot.material=shoe;L.foot.scale.set(1.25,1.4,1.1);}   /* 장화를 신었으면 그대로 */
+  const shoe=m(shoeC);if(!hq)for(const L of [S.L,S.R]){if(L.foot.userData.boot)continue;L.foot.material=shoe;L.foot.scale.set(1.25,1.4,1.1);}   /* 장화를 신었으면 그대로 */
   /* 다리: 바지 (치마·긴 옷 아래에도 짧게 보이는 바지) */
-  if(!skirt&&!long){const pm=m(pantsC);for(const L of [S.L,S.R]){L.hip.add(tube(.078,.068,.47,pm,-.225));L.knee.add(new THREE.Mesh(new THREE.SphereGeometry(.07,10,8),pm),tube(.066,.058,.36,pm,-.18));
+  if(!skirt&&!long){if(hq){}else{const pm=m(pantsC);for(const L of [S.L,S.R]){L.hip.add(tube(.078,.068,.47,pm,-.225));L.knee.add(new THREE.Mesh(new THREE.SphereGeometry(.07,10,8),pm),tube(.066,.058,.36,pm,-.18));
       const cuff=tube(.062,.062,.05,m(shade2(pantsC,.75)),-.36);L.knee.add(cuff);}
-    const band=new THREE.Mesh(new THREE.CylinderGeometry(.172,.172,.12,14),m(pantsC));band.position.y=.93;S.body.add(band);}
+    const band=new THREE.Mesh(new THREE.CylinderGeometry(.172,.172,.12,14),m(pantsC));band.position.y=.93;S.body.add(band);}}
   else{const sm=m(skirt?(C.skirtC??pick([robe,robe2,0x6a3a4a,0x3a4a6a,0x7a6a4a],5)):(C.longC??robe),{side:THREE.DoubleSide});
     /* 치마·긴 옷: 허리에 붙어 종처럼 퍼지고, 아래로 갈수록 세로 주름이 깊어지는 천. 허리를 축으로 걸음·자세에 따라 흔들린다 */
     const len=skirt?.55:.89,bot=skirt?.36:.4,top=.155;const skG=new THREE.Group();skG.position.y=1.0;   /* 허리띠 안쪽에서 시작해 몸통과 같은 굵기로 이어진다 */S.body.add(skG);
-    const sk=new THREE.Mesh(clothBell(top,bot,len,skirt?9:8,skirt?.075:.06,0,1,0,40),sm);skG.add(sk);
-    const hem=new THREE.Mesh(clothBell(top,bot,len,skirt?9:8,skirt?.075:.06,.93,1.02,.006,40),m(skirt?shade2(sm.color.getHex(),.72):robe2,{side:THREE.DoubleSide}));skG.add(hem);
+    const sk=new THREE.Mesh(hq?npcBellGeo(top,bot,len,skirt?9:8,skirt?.075:.06,0,1,0,96):clothBell(top,bot,len,skirt?9:8,skirt?.075:.06,0,1,0,40),hq?lkCloth(sm.color.getHex(),skirt?'weave':'wool',{side:THREE.DoubleSide}):sm);skG.add(sk);
+    const hem=new THREE.Mesh(hq?npcBellGeo(top,bot,len,skirt?9:8,skirt?.075:.06,.93,1.02,.006,96):clothBell(top,bot,len,skirt?9:8,skirt?.075:.06,.93,1.02,.006,40),hq?lkCloth(skirt?shade2(sm.color.getHex(),.72):robe2,'trim',{side:THREE.DoubleSide}):m(skirt?shade2(sm.color.getHex(),.72):robe2,{side:THREE.DoubleSide}));skG.add(hem);
     /* 허리 밴드: 허리띠 바로 아래에서 몸통 끝과 치마 윗단을 감싸 이음새가 보이지 않게 (치마가 흔들려도 제자리) */
     const wb=new THREE.Mesh(new THREE.LatheGeometry([[.15,.975],[.163,.972],[.169,.966],[.1715,.952],[.169,.938],[.162,.932],[.15,.93]].map(([r,y])=>new THREE.Vector2(r,y)),40),m(shade2(sm.color.getHex(),.86)));wb.userData.noSculpt=1;S.body.add(wb);
     /* 앉으면 치마 대신 허벅지를 덮고 무릎에서 흘러내리는 천 (다리가 치마를 뚫지 않게) */
@@ -12945,25 +13213,26 @@ function npcClothes(g,o){const S=g.userData.stick;if(!S)return;const C=o.cloth||
       const f=new THREE.Mesh(new THREE.CylinderGeometry(.205,.25,dh,24,1,true,-Math.PI/2,Math.PI),sm);f.scale.set(1,1,.55);f.position.set(0,1.02-dh/2,.5);
       const kn=new THREE.Mesh(new THREE.SphereGeometry(.205,24,12,0,Math.PI*2,0,Math.PI/2),sm);kn.rotation.x=Math.PI/2;kn.scale.set(1,.55,.48);kn.position.set(0,.93,.47);
       const r=new THREE.Mesh(new THREE.CylinderGeometry(.172,.22,.2,20),sm);r.position.y=.9;lap.add(a,f,kn,r);}
-    lap.children.forEach(c=>c.userData.noSculpt=1);sk.userData.noSculpt=hem.userData.noSculpt=1;
+    lap.children.forEach(c=>c.userData.noSculpt=1);
+    if(hq){const lm=lkCloth(sm.color.getHex(),'weave',{side:THREE.DoubleSide});lap.children.forEach(c=>{const G=c.geometry,n=G.attributes.position.count,uv=G.attributes.uv;G.setAttribute('color',new THREE.Float32BufferAttribute(new Array(n*3).fill(.9),3));for(let i=0;i<n;i++)uv.setXY(i,uv.getX(i)*36,uv.getY(i)*14);c.material=lm;});}   /* 앉았을 때 무릎 덮개도 같은 천 */sk.userData.noSculpt=hem.userData.noSculpt=1;
     g.userData.cloth={skG,lap,len,bot,dh};
-    if(skirt){const lm=m(C.stock??0xe8e0d0);for(const L of [S.L,S.R])L.knee.add(tube(.05,.045,.38,lm,-.19));}}
+    if(skirt&&!hq){const lm=m(C.stock??0xe8e0d0);for(const L of [S.L,S.R])L.knee.add(tube(.05,.045,.38,lm,-.19));}}
   /* 소매 */
-  if(sl!=='none'){const am=m(slC);for(const A of [S.AL,S.AR]){A.sh.add(new THREE.Mesh(new THREE.SphereGeometry(.072,10,8),am),tube(.066,.058,sl==='short'?.2:.36,am,sl==='short'?-.1:-.18));
+  if(sl!=='none'&&!hq){const am=m(slC);for(const A of [S.AL,S.AR]){A.sh.add(new THREE.Mesh(new THREE.SphereGeometry(.072,10,8),am),tube(.066,.058,sl==='short'?.2:.36,am,sl==='short'?-.1:-.18));
       if(sl==='long'){A.el.add(new THREE.Mesh(new THREE.SphereGeometry(.058,10,8),am),tube(.058,.064,.3,am,-.15));A.el.add(tube(.07,.07,.05,m(robe2),-.3));}
       else A.sh.add(tube(.07,.07,.04,m(robe2),-.2));}}
   /* 앞치마 */
   if(C.apron){const am=m(C.apron,{side:THREE.DoubleSide}),cl=g.userData.cloth;
-    if(cl){const ap=new THREE.Mesh(clothBell(.155,cl.bot,cl.len,skirt?9:8,skirt?.075:.06,.02,skirt?.86:.7,.012,12,-.5,1),am);ap.userData.noSculpt=1;cl.skG.add(ap);
+    if(cl){const ap=new THREE.Mesh(hq?npcBellGeo(.155,cl.bot,cl.len,skirt?9:8,skirt?.075:.06,.02,skirt?.86:.7,.012,24,-.5,1):clothBell(.155,cl.bot,cl.len,skirt?9:8,skirt?.075:.06,.02,skirt?.86:.7,.012,12,-.5,1),hq?lkCloth(C.apron,'weave',{side:THREE.DoubleSide}):am);ap.userData.noSculpt=1;cl.skG.add(ap);
       const lh=cl.dh*.8,la=new THREE.Mesh(new THREE.CylinderGeometry(.215,.25,lh,10,1,true,-.55,1.1),am);la.scale.set(1,1,.56);la.position.set(0,1.02-lh/2,.5);la.userData.noSculpt=1;cl.lap.add(la);}   /* 앉았을 때 무릎 위 앞치마 */   /* 치마 위에 그대로 얹힌 앞치마 */
-    else{const ap=new THREE.Mesh(new THREE.BoxGeometry(.3,.62,.02),am);ap.position.set(0,.66,.2);ap.rotation.x=-.12;S.body.add(ap);}
-    const tp=new THREE.Mesh(new THREE.CylinderGeometry(.19,.179,.24,10,1,true,-.62,1.24),am);tp.position.set(0,.32,0);tp.userData.noSculpt=1;S.upper.add(tp);}   /* 가슴받이: 몸통을 감싼다 */
+    else if(!hq){const ap=new THREE.Mesh(new THREE.BoxGeometry(.3,.62,.02),am);ap.position.set(0,.66,.2);ap.rotation.x=-.12;S.body.add(ap);}
+    if(!hq){const tp=new THREE.Mesh(new THREE.CylinderGeometry(.19,.179,.24,10,1,true,-.62,1.24),am);tp.position.set(0,.32,0);tp.userData.noSculpt=1;S.upper.add(tp);}}   /* 가슴받이: 몸통을 감싼다 */
   /* 망토 */
-  if(C.cape){const cp=new THREE.Mesh(new THREE.BoxGeometry(.48,1.0,.03),m(C.cape,{side:THREE.DoubleSide}));cp.position.set(0,-.02,-.2);cp.rotation.x=.08;S.upper.add(cp);
+  if(C.cape&&!hq){const cp=new THREE.Mesh(new THREE.BoxGeometry(.48,1.0,.03),m(C.cape,{side:THREE.DoubleSide}));cp.position.set(0,-.02,-.2);cp.rotation.x=.08;S.upper.add(cp);
     const cl=new THREE.Mesh(new THREE.TorusGeometry(.16,.025,6,14,Math.PI),m(C.capeTrim??0xd4af37));cl.position.set(0,.58,-.02);cl.rotation.set(Math.PI/2,0,0);S.upper.add(cl);}
   if(C.prop)npcProp(S,C.prop,m);
   /* 조끼 */
-  if(C.vest){const v=new THREE.Mesh(new THREE.CylinderGeometry(.2,.175,.5,14,1,true,Math.PI*1.12,Math.PI*1.76),m(C.vest,{side:THREE.DoubleSide}));v.position.y=.32;S.upper.add(v);}}
+  if(C.vest&&!hq){const v=new THREE.Mesh(new THREE.CylinderGeometry(.2,.175,.5,14,1,true,Math.PI*1.12,Math.PI*1.76),m(C.vest,{side:THREE.DoubleSide}));v.position.y=.32;S.upper.add(v);}}
 
 /* ---------- 이름 있는 NPC를 정교하게: 얼굴(눈썹·코·입·귀·주름)·머리 모양·수염·몸집·옷 마감 (look.fine, 사람마다 NPC_FINE) ----------
    막대 인형 위에 덧붙이기만 한다. 주민(이름 없는 사람)은 그대로 */
@@ -12975,7 +13244,7 @@ function npcRBox(w,h,d){const k=[w,h,d].map(v=>v.toFixed(4)).join(',');let g=_rb
   g.computeVertexNormals();_rbox.set(k,g);return g;}
 /* 정교한 NPC 몸에 남은 네모 상자(신발·앞치마·책 같은)를 모두 둥근 모서리 상자로 바꾼다 */
 function npcRoundBoxes(g){g.traverse(o=>{if(o.isMesh&&o.geometry&&o.geometry.type==='BoxGeometry'){const p=o.geometry.parameters;o.geometry=npcRBox(p.width,p.height,p.depth);}});}
-function npcFine(g,o){const S=g.userData.stick,F=o.fine;if(!S||!F)return;const u=g.userData,H=S.head,R0=.22;
+function npcFine(g,o,hq){const S=g.userData.stick,F=o.fine;if(!S||!F)return;const u=g.userData,H=S.head,R0=.22;
   const m=(c,x)=>mat(c,Object.assign({flatShading:false,roughness:.75},x||{}));
   const P=(par,geo,c,x,y,z,r,s)=>{const q=new THREE.Mesh(geo,c&&c.isMaterial?c:m(c));q.position.set(x,y,z);if(r){q.rotation.order='YXZ';q.rotation.set(r[0],r[1],r[2]||0);}if(s)q.scale.set(s[0],s[1],s[2]);par.add(q);return q;};
   const sph=(r,a=12,b=8)=>new THREE.SphereGeometry(r,a,b),box=(a,b,c)=>npcRBox(a,b,c),cyl=(r0,r1,h,n=10)=>new THREE.CylinderGeometry(r0,r1,h,n);
@@ -13066,18 +13335,18 @@ function npcFine(g,o){const S=g.userData.stick,F=o.fine;if(!S||!F)return;const u
     P(H,new THREE.CylinderGeometry(.25,.36,.3,16,1,true,Math.PI*.55,Math.PI*.9),dm,0,-.2,-.04);}   /* 어깨로 드리운 깃 */
   /* 몸집: 어깨 너비·배·키·팔다리 굵기 (굽은 허리는 animNpc에서 자세 뒤에 덧붙인다) */
   const B=F.body||{};const bw=B.w||1;
-  if(bw!==1){for(const c of S.upper.children){if(c===H||(c.isMesh&&c.material===u.mats[0]))continue;c.position.x*=bw;c.position.z*=1+(bw-1)*.7;if(c.isMesh){c.scale.x*=bw;c.scale.z*=1+(bw-1)*.7;}}
+  if(bw!==1&&!hq){for(const c of S.upper.children){if(c===H||(c.isMesh&&c.material===u.mats[0]))continue;c.position.x*=bw;c.position.z*=1+(bw-1)*.7;if(c.isMesh){c.scale.x*=bw;c.scale.z*=1+(bw-1)*.7;}}
     for(const c of S.body.children){if(c===S.upper||c===S.L.hip||c===S.R.hip)continue;c.scale.x*=1+(bw-1)*.8;c.scale.z*=1+(bw-1)*.6;}
     for(const l of [S.L,S.R])l.hip.position.x*=1+(bw-1)*.6;}
-  if(B.belly){const tm=B.bellyC!=null?m(B.bellyC):S.torso.material;P(S.upper,sph(.2,16,12),tm,0,.17,.03,null,[bw*.92,.82,B.belly*.85]);if(F.cl&&F.cl.apronBelly)P(S.upper,box(.3*bw,.32,.02),F.cl.apronBelly,0,.1,.03+.2*B.belly*.85,[-.25,0,0]);}
-  if(B.bust){const k=B.bust,pts=[[.16,-.31],[.152,-.2],[.158,-.06],[.178+.012*k,.06],[.19+.014*k,.13],[.186+.008*k,.21],[.19,.31]].map(([r,y])=>new THREE.Vector2(r,y));   /* 어른 여자: 몸통 윤곽을 허리는 들어가고 가슴께는 부드럽게 도톰한 웃옷 모양으로 (따로 덩어리를 붙이지 않는다) */
+  if(B.belly&&!hq){const tm=B.bellyC!=null?m(B.bellyC):S.torso.material;P(S.upper,sph(.2,16,12),tm,0,.17,.03,null,[bw*.92,.82,B.belly*.85]);if(F.cl&&F.cl.apronBelly)P(S.upper,box(.3*bw,.32,.02),F.cl.apronBelly,0,.1,.03+.2*B.belly*.85,[-.25,0,0]);}
+  if(B.bust&&!hq){const k=B.bust,pts=[[.16,-.31],[.152,-.2],[.158,-.06],[.178+.012*k,.06],[.19+.014*k,.13],[.186+.008*k,.21],[.19,.31]].map(([r,y])=>new THREE.Vector2(r,y));   /* 어른 여자: 몸통 윤곽을 허리는 들어가고 가슴께는 부드럽게 도톰한 웃옷 모양으로 (따로 덩어리를 붙이지 않는다) */
     const lg=new THREE.LatheGeometry(pts,20);lg.translate(0,0,0);const T0=S.torso;T0.geometry=lg;T0.scale.z*=1+.06*k;T0.position.z+=.008*k;}
-  if(B.limb){for(const A of [S.AL,S.AR])A.sh.traverse(c=>{if(c.isMesh&&c.geometry.type==='CylinderGeometry'){c.scale.x*=B.limb;c.scale.z*=B.limb;}});}
+  if(B.limb&&!hq){for(const A of [S.AL,S.AR])A.sh.traverse(c=>{if(c.isMesh&&c.geometry.type==='CylinderGeometry'){c.scale.x*=B.limb;c.scale.z*=B.limb;}});}
   if(B.hs)H.scale.multiplyScalar(B.hs);
   if(B.h)S.body.scale.setScalar(B.h);
   u.hunch=B.hunch||0;
-  /* 옷 마감 */
-  const C=F.cl||{},T=S.upper;
+  /* 옷 마감 (천 옷으로 지을 땐 npcBodyHQ가 겉면을 따라 새로 붙인다) */
+  const C=hq?{mask:(F.cl||{}).mask}:F.cl||{},T=S.upper;
   if(C.tunic){const tg=new THREE.Mesh(cyl(.172,.235,.24,16),m(C.tunic));tg.position.y=.86;S.body.add(tg);const th=new THREE.Mesh(cyl(.237,.24,.035,16),m(shade2(C.tunic,.7)));th.position.y=.75;S.body.add(th);}   /* 허리 아래로 퍼지는 웃옷 자락 */
   if(C.buttons){const n=C.buttons.n??4;for(let k=0;k<n;k++){const y=.5-k*(.42/n),r=.16+.03*((y+.03)/.62);P(T,sph(.016,6,4),m(C.buttons.c??0xd8c8a0,{metalness:.5,roughness:.4}),0,y,r*(C.vestOpen?1.08:1)+.012+(B.bust&&y>.3?.012:0));}}
   if(C.placket)P(T,box(.03,.5,.01),C.placket,0,.3,.178,[-.05,0,0]);
@@ -13105,7 +13374,7 @@ function npcFine(g,o){const S=g.userData.stick,F=o.fine;if(!S||!F)return;const u
 function npcFineMerge(g){const S=g.userData.stick;if(!S)return;const keep=new Set([g.userData.marker]);for(const v of Object.values(S))if(v&&v.isObject3D)keep.add(v);
   const key=m=>[m.color.getHex(),m.emissive?m.emissive.getHex():0,m.emissiveIntensity,m.metalness,m.roughness,m.transparent,m.opacity,m.side,m.flatShading].join(',');
   const groups=[];g.traverse(o=>{if(o.children&&o.children.length>1)groups.push(o);});
-  for(const G of groups){const by=new Map();for(const c of G.children){if(!c.isMesh||c.children.length||keep.has(c)||!c.visible||!c.material||c.material.map||Array.isArray(c.material))continue;const k=key(c.material);(by.get(k)||by.set(k,[]).get(k)).push(c);}
+  for(const G of groups){const by=new Map();for(const c of G.children){if(!c.isMesh||c.isSkinnedMesh||c.userData.gear||c.children.length||keep.has(c)||!c.visible||!c.material||c.material.map||Array.isArray(c.material))continue;const k=key(c.material);(by.get(k)||by.set(k,[]).get(k)).push(c);}
     for(const list of by.values()){if(list.length<2)continue;const pos=[],nor=[];
       for(const c of list){c.updateMatrix();const gi=c.geometry.index?c.geometry.toNonIndexed():c.geometry.clone();gi.applyMatrix4(c.matrix);const P=gi.attributes.position.array,N=gi.attributes.normal.array;for(let i=0;i<P.length;i++){pos.push(P[i]);nor.push(N[i]);}G.remove(c);}
       const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));geo.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));geo.computeBoundingSphere();
@@ -13240,6 +13509,97 @@ function lDress(g,o){const S=g.userData.stick;if(!S)return;const H=S.head,U=S.up
     const hem=lathe([[pr[0][0],hb-.02],[pr[0][0]+.005,hb+.005]],64,trim,U,a0,al);folds(hem,.1,13,hb+.28,hb);
     for(const sx of [-1,1]){dot(U,trim,sx*.12,.56,.175,.03,.45);dot(U,steelD,sx*.12,.56,.18,.016,.4);}
     const ch=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-.12,.56,.18),new THREE.Vector3(0,.52,.2),new THREE.Vector3(.12,.56,.18)]),12,.005,5,false),trim);U.add(ch);}   /* 망토 걸쇠와 은 사슬 */
+}
+/* R: 깊은 숲의 사냥꾼. 이끼빛 두건 망토를 깊이 눌러쓰고, 얼굴은 흰 뼈 가면으로 다 가렸다. 어깨엔 털 두른 짧은 덮개, 등엔 화살통, 가죽 토시와 감은 각반 */
+function rDress(g,o){const S=g.userData.stick;if(!S)return;const H=S.head,U=S.upper,u=g.userData;
+  if(u.mats[1])u.mats[1].color.setHex(0x2e2219);   /* 살이 드러나는 곳이 없다: 손은 닳은 가죽 장갑 */
+  const V=a=>a.map(p=>new THREE.Vector2(p[0],p[1])),DS=THREE.DoubleSide;
+  const cloak=mat(o.cloak??0x1f2a1c,{flatShading:false,side:DS,roughness:.97}),cloakIn=mat(0x0e120c,{flatShading:false,side:DS,roughness:1}),
+    coat=mat(0x2c2a20,{flatShading:false,side:DS,roughness:.95}),leather=mat(0x3e2a1c,{flatShading:false,roughness:.78}),leatherD=mat(0x22180f,{flatShading:false,roughness:.8}),
+    bone=mat(0xe9e2cf,{flatShading:false,roughness:.62}),boneD=mat(0xb9ae93,{flatShading:false,roughness:.7}),hole=mat(0x070807,{flatShading:false,roughness:1,side:DS}),
+    fur=mat(0x4e4436,{flatShading:false,roughness:1}),furD=mat(0x342c22,{flatShading:false,roughness:1}),wrap=mat(0x3c3628,{flatShading:false,roughness:.95}),
+    brass=mat(0x8a7444,{metalness:.55,roughness:.45,flatShading:false}),wood=mat(0x5a3f26,{flatShading:false,roughness:.8}),feath=mat(0x8a2a1e,{flatShading:false,side:DS,roughness:.9}),feath2=mat(0xd8d2c0,{flatShading:false,side:DS,roughness:.9}),
+    paint=mat(0x7a1e18,{flatShading:false,roughness:.8});
+  const lathe=(pts,seg,m,par,a0,al,zs)=>{const q=new THREE.Mesh(new THREE.LatheGeometry(V(pts),seg,a0??0,al??Math.PI*2),m);if(zs)q.scale.z=zs;par.add(q);return q;};
+  const folds=(mesh,amp,n,yTop,yBot,ph=0)=>{const P=mesh.geometry.attributes.position;for(let i=0;i<P.count;i++){const x=P.getX(i),y=P.getY(i),z=P.getZ(i),a=Math.atan2(x,z),k=Math.min(1,Math.max(0,(yTop-y)/(yTop-yBot)));
+      const f=1+amp*k*(Math.sin(a*n+ph)*.75+Math.sin(a*n*2.3+ph*1.7)*.25);P.setX(i,x*f);P.setZ(i,z*f);}mesh.geometry.computeVertexNormals();};
+  const dot=(par,m,x,y,z,r,sz=1)=>{const q=new THREE.Mesh(new THREE.SphereGeometry(1,10,7),m);q.position.set(x,y,z);q.scale.set(r,r,r*sz);q.rotation.y=Math.atan2(x,z);par.add(q);return q;};
+  const tube=(par,pts,r,m,seg=20)=>{const q=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p))),seg,r,6,false),m);par.add(q);return q;};
+  for(const c of [...H.children])if(c.isMesh)c.visible=false;   /* 얼굴 조각은 가면 속 */
+  if(H.isMesh){H.material=mat(0x0a0b09,{flatShading:false,roughness:1});H.geometry=new THREE.SphereGeometry(.17,16,12);}   /* 두건 속 그늘: 가면 둘레로 머리 대신 어둠만 보인다 */
+  /* ── 뼈 가면: 이마가 높고 턱으로 갈수록 좁아지는 긴 달걀꼴. 가운데 콧날, 비스듬히 찢어진 눈구멍, 이마에서 턱까지 붉은 줄 하나 ── */
+  {const prof=[[.0,-.235],[.05,-.228],[.095,-.205],[.13,-.165],[.155,-.105],[.166,-.035],[.168,.035],[.163,.1],[.148,.16],[.118,.205],[.07,.23],[0,.24]];
+    const rP=y=>{if(y<=prof[0][1])return 0;for(let i=1;i<prof.length;i++){const A=prof[i-1],B=prof[i];if(y<=B[1])return A[0]+(B[0]-A[0])*(y-A[1])/(B[1]-A[1]);}return 0;};
+    const dzF=(x,y)=>{const ax=Math.abs(x);return .028*Math.max(0,1-ax/.035)*Math.max(0,1-Math.abs(y+.02)/.16)   /* 콧날 */
+      -.014*Math.exp(-((ax-.065)**2)/.0012-((y-.035)**2)/.002)   /* 눈두덩 아래 오목 */
+      +.012*Math.exp(-((ax-.065)**2)/.002-((y-.085)**2)/.0006)   /* 눈썹 턱 */
+      -.01*Math.exp(-((ax-.11)**2)/.002-((y+.08)**2)/.004);};   /* 뺨 아래 꺼짐 */
+    const MY=-.02,MZ=.075,MS=1.05,zOn=(x,y)=>{const r=rP(y-MY);return Math.sqrt(Math.max(0,r*r-x*x))*MS+MZ+dzF(x,y-MY)*MS;};   /* 가면 겉면 높이 (머리 기준) */
+    const mk=lathe(prof,48,bone,H,-1.1,2.2);mk.position.set(0,MY,MZ);mk.scale.set(1,1,MS);const P=mk.geometry.attributes.position;
+    for(let i=0;i<P.count;i++)P.setZ(i,P.getZ(i)+dzF(P.getX(i),P.getY(i)));mk.geometry.computeVertexNormals();
+    const back=lathe(prof.map(([r,y])=>[r*.985,y]),48,boneD,H,-1.1,2.2);back.position.set(0,MY,MZ-.03);back.scale.set(1,1,MS);   /* 가면 안쪽 (옆에서 두께가 보이게) */
+    for(const s of [-1,1]){const ex=s*.064,ey=.03,top=[],bot=[];   /* 눈구멍: 안쪽 끝이 낮고 바깥 끝이 치켜 올라간 아몬드꼴 */
+      for(let k=0;k<=12;k++){const t=k/12,x=ex+s*(t-.5)*.085,lift=(t-.5)*.022;top.push([x,ey+lift+Math.sin(t*Math.PI)*.024]);bot.push([x,ey+lift-Math.sin(t*Math.PI)*.012]);}
+      const sh=new THREE.Shape();sh.moveTo(top[0][0],top[0][1]);for(const p of top)sh.lineTo(p[0],p[1]);for(let k=12;k>=0;k--)sh.lineTo(bot[k][0],bot[k][1]);
+      const ge=new THREE.ShapeGeometry(sh,4),gp=ge.attributes.position;for(let i=0;i<gp.count;i++)gp.setZ(i,zOn(gp.getX(i),gp.getY(i))+.003);ge.computeVertexNormals();H.add(new THREE.Mesh(ge,hole));
+      tube(H,top.map(([x,y])=>[x,y+.004,zOn(x,y)+.004]),.0045,boneD,16);}   /* 눈구멍 위 깎인 턱 */
+    for(const [x,y] of [[.02,-.07],[-.02,-.07]])dot(H,hole,x,y,zOn(x,y)-.002,.008,.4).scale.y=.012;   /* 숨구멍 둘 */
+    for(let k=0;k<3;k++){const y=-.16+k*.013;const w=.03-k*.006;tube(H,[[-w,y,zOn(-w,y)+.001],[0,y-.004,zOn(0,y)+.002],[w,y,zOn(w,y)+.001]],.0022,boneD,8);}   /* 턱께 가는 결 (이빨 자국 같은) */
+    {const pts=[];for(let k=0;k<=12;k++){const y=.2-k/12*.38;pts.push([0,y,zOn(0,y)+.003]);}tube(H,pts,.006,paint,24);}   /* 이마에서 턱까지 붉은 줄 */
+    for(const s of [-1,1])tube(H,[[s*.165,.02,.1],[s*.21,.0,-.02],[s*.19,-.02,-.16]],.007,leatherD,10);}   /* 가면 끈: 귀 뒤로 */
+  /* ── 두건: 머리를 넉넉히 감싸고 앞은 가면 둘레로 깊게 열렸다. 끝은 뒤로 처진다 ── */
+  {const prof=[[.25,-.3],[.285,-.2],[.298,-.08],[.3,.03],[.29,.12],[.265,.2],[.225,.26],[.165,.296],[.09,.314],[0,.318]];
+    const open=.95,shape=m=>{const P=m.geometry.attributes.position;
+      for(let i=0;i<P.count;i++){const x=P.getX(i),y=P.getY(i),z=P.getZ(i),a=Math.atan2(x,z),back=Math.max(0,-Math.cos(a)),top=Math.max(0,(y-.1)/.3);
+        P.setZ(i,z-back*top*top*.2);P.setY(i,y-back*top*top*.09+.01);   /* 뒤 꼭지가 뒤로 늘어진다 */
+        const f=1+.05*Math.max(0,(.1-y)/.4)*Math.sin(a*7+.6);P.setX(i,P.getX(i)*f*.94);P.setZ(i,P.getZ(i)*f);}m.geometry.computeVertexNormals();return m;};
+    shape(lathe(prof,56,cloak,H,open,Math.PI*2-open*2));shape(lathe(prof.map(([r,y])=>[r-.012,y-.006]),56,cloakIn,H,open+.01,Math.PI*2-open*2-.02));
+    for(const s of [-1,1]){const pts=[];for(let k=0;k<=12;k++){const t=k/12,y=-.29+t*.57;const r=(()=>{for(let i=1;i<prof.length;i++){const a=prof[i-1],b=prof[i];if(y<=b[1])return a[0]+(b[0]-a[0])*(y-a[1])/(b[1]-a[1]);}return 0;})();pts.push([s*Math.sin(open)*r*.94,y,Math.cos(open)*r]);}
+      tube(H,pts,.016,cloak,24);}}
+  /* ── 어깨: 털 두른 짧은 덮개 (목을 감싸고 어깨 끝까지) ── */
+  {const cp=[[.3,.4],[.31,.46],[.29,.53],[.24,.59],[.18,.63],[.15,.66]];const cap=lathe(cp,64,cloak,U);folds(cap,.05,12,.6,.4);cap.scale.x=1.12;
+    lathe(cp.map(([r,y])=>[r-.012,y]),64,cloakIn,U).scale.x=1.1;
+    for(let k=0;k<140;k++){const a=k/140*Math.PI*2,r=.3+Math.sin(k*2.3)*.006;const q=new THREE.Mesh(new THREE.ConeGeometry(.016,.055+((k*37)%5)*.007,4),k%3?fur:furD);
+      q.position.set(Math.sin(a)*r*1.12,.41,Math.cos(a)*r);q.rotation.set(Math.PI+Math.cos(a)*.15+Math.sin(k*1.7)*.12,0,-Math.sin(a)*.15+Math.cos(k*2.9)*.12);U.add(q);}   /* 덮개 단에 두른 털 */
+    {const ru=lathe([[.21,.6],[.235,.635],[.215,.67],[.17,.69]],48,fur,U);folds(ru,.06,19,.6,.69);ru.scale.x=1.08;}   /* 목둘레 털 */
+    dot(U,brass,.0,.6,.2,.022,.5);dot(U,leatherD,0,.6,.205,.012,.5);}   /* 덮개 걸쇠 */
+  /* ── 몸: 몸통은 누빈 웃옷, 가죽 가슴띠(화살통 끈), 넓은 허리띠에 주머니·칼 ── */
+  for(const c of U.children)if(c.isMesh&&c.geometry.type==='CylinderGeometry'&&c.position.y>.2&&c.position.y<.35)c.visible=false;
+  {const jp=[[.19,-.02],[.195,.1],[.205,.22],[.215,.34],[.218,.44],[.2,.52],[.17,.58]];const j=lathe(jp,48,coat,U);j.scale.x=1.12;folds(j,.025,10,.45,-.02);
+    for(let k=1;k<6;k++){const y=-.02+k*.1;const pts=[];for(let q=0;q<=20;q++){const a=-1.3+q/20*2.6,r=(()=>{for(let i=1;i<jp.length;i++){const A=jp[i-1],B=jp[i];if(y<=B[1])return A[0]+(B[0]-A[0])*(y-A[1])/(B[1]-A[1]);}return .2;})()+.003;pts.push([Math.sin(a)*r*1.12,y,Math.cos(a)*r]);}tube(U,pts,.0035,leatherD,30);}   /* 누빈 줄 */
+    tube(U,[[.0,.58,.18],[.0,.4,.235],[0,.2,.225],[0,0,.21]],.006,leatherD,16);   /* 앞섶 */
+    tube(U,[[-.2,.56,.1],[-.13,.44,.24],[0,.3,.25],[.15,.14,.235],[.22,.02,.13]],.02,leather,24);   /* 가슴띠: 왼어깨 → 오른허리 */
+    tube(U,[[-.2,.56,.1],[-.2,.5,-.12],[-.05,.3,-.24],[.15,.14,-.23],[.22,.02,.13]],.02,leather,24);
+    dot(U,brass,0,.3,.255,.018,.4);
+    {const bl=lathe([[.2,-.05],[.207,-.01],[.2,.03]],48,leather,U);bl.scale.x=1.14;const bk=new THREE.Mesh(new THREE.TorusGeometry(.028,.007,6,14),brass);bk.position.set(0,-.01,.212);U.add(bk);}
+    for(const [x,z,ry] of [[.17,.13,.8],[-.2,.08,-1.1]]){const pu=new THREE.Mesh(new THREE.BoxGeometry(.075,.085,.045,2,2,2),leatherD);pu.position.set(x,-.07,z);pu.rotation.y=ry;U.add(pu);
+      const fl=new THREE.Mesh(new THREE.SphereGeometry(.042,10,6,0,Math.PI*2,0,Math.PI/2),leather);fl.scale.set(1,.45,.6);fl.position.set(x,-.03,z);fl.rotation.y=ry;U.add(fl);}   /* 허리 주머니 */
+    {const kn=new THREE.Group();kn.position.set(-.06,-.06,-.22);kn.rotation.set(0,0,1.25);U.add(kn);lathe([[0,-.2],[.02,-.17],[.024,-.02],[.022,0]],12,leatherD,kn).scale.z=.55;
+      const hl=new THREE.Mesh(new THREE.CylinderGeometry(.013,.015,.1,10),bone);hl.position.y=.055;kn.add(hl);dot(kn,brass,0,.11,0,.017);}   /* 등허리 가로로 찬 뼈 손잡이 사냥칼 */
+  }
+  /* ── 등: 화살통 (가죽 통, 위로 삐져나온 화살 깃) ── */
+  {const q=new THREE.Group();q.position.set(.06,.33,-.25);q.rotation.set(-.12,0,-.32);U.add(q);
+    lathe([[.055,-.28],[.062,-.2],[.064,.0],[.062,.16],[.066,.2]],20,leather,q).scale.z=.8;lathe([[.068,.19],[.07,.21]],20,brass,q).scale.z=.8;lathe([[.064,-.15],[.066,-.13]],20,leatherD,q).scale.z=.8;
+    for(let k=0;k<9;k++){const a=k/9*Math.PI*2,r=.03*((k*7)%3)/2,x=Math.cos(a)*r,z=Math.sin(a)*r*.8,h=.2+((k*5)%3)*.02;const sh=new THREE.Mesh(new THREE.CylinderGeometry(.005,.005,h,5),wood);sh.position.set(x,.2+h/2-.05,z);sh.rotation.set(z*1.2,0,-x*1.2);q.add(sh);
+      for(let f=0;f<3;f++){const fe=new THREE.Mesh(new THREE.PlaneGeometry(.02,.08),k%3?feath:feath2);fe.position.set(x,.2+h-.09,z);fe.rotation.set(0,f*2.1+k,0);fe.translateX(.011);q.add(fe);}}}
+  /* ── 팔: 긴 소매 위 가죽 토시 (끈으로 엇갈려 묶었다) ── */
+  for(const A of [S.AL,S.AR]){lathe([[.052,-.29],[.06,-.24],[.062,-.14],[.056,-.06]],24,leatherD,A.el);
+    for(let k=0;k<5;k++){const y=-.26+k*.045;tube(A.el,[[-.06,y,.012],[0,y+.02,.063],[.06,y,.012]],.004,leather,8);}
+    lathe([[.06,-.03],[.075,-.0],[.072,.03]],24,fur,A.sh).position.y=-.27;}   /* 위팔 끝 털 */
+  /* ── 다리: 바지 위에 감은 각반, 무두질한 부드러운 장화 ── */
+  for(const Lg of [S.L,S.R]){const sp=[];for(let k=0;k<=60;k++){const t=k/60,y=-.04-t*.36,a=t*Math.PI*2*10;sp.push([Math.sin(a)*.066,y+Math.sin(a)*.01,Math.cos(a)*.066]);}tube(Lg.knee,sp,.0075,wrap,360);
+    lathe([[.06,-.4],[.064,-.22],[.06,-.04]],24,wrap,Lg.knee);
+    lathe([[.068,-.42],[.074,-.36],[.07,-.3]],24,leather,Lg.knee);
+    const f=Lg.foot;if(f){for(const c of f.children||[])if(c.material&&c.material.color)c.material=leatherD;if(f.material)f.material=leatherD;}}
+  /* ── 아랫도리: 무릎 위까지 오는 갈라진 웃옷 자락 ── */
+  S.body.traverse(c=>{if(!c.isMesh||c.geometry.type!=='CylinderGeometry')return;const pr=c.geometry.parameters;
+    if(Math.abs(pr.height-.86)<.01&&pr.radiusBottom>.35)c.visible=false;else if(Math.abs(pr.height-.05)<.01&&pr.radiusBottom>.35)c.visible=false;});
+  for(const s of [-1,1]){const fl=lathe([[.33,-.42],[.29,-.3],[.25,-.18],[.215,-.06],[.205,-.02]],40,coat,U,s>0?.2:Math.PI+.2,Math.PI-.4);folds(fl,.07,8,-.02,-.42,s);fl.scale.x=1.12;}
+  /* ── 등 뒤 망토: 덮개 밑에서 엉덩이 아래까지, 끝은 해지고 주름진다 ── */
+  {const pr=o.sitw?[[.4,-.32],[.37,-.12],[.33,.1],[.31,.3],[.31,.42]]:[[.44,-.82],[.41,-.5],[.36,-.15],[.32,.1],[.31,.3],[.31,.42]],a0=Math.PI/2+.25,al=Math.PI-.5,hb=pr[0][1];
+    const ck=lathe(pr,64,cloak,U,a0,al);folds(ck,.12,11,.38,hb);const P=ck.geometry.attributes.position;
+    for(let i=0;i<P.count;i++){const y=P.getY(i);if(y<hb+.04){const a=Math.atan2(P.getX(i),P.getZ(i));P.setY(i,y+Math.abs(Math.sin(a*23))*.05);}}ck.geometry.computeVertexNormals();   /* 해진 끝 */
+    const ci=lathe(pr.map(([r,y])=>[r-.012,y+.004]),64,cloakIn,U,a0+.02,al-.04);folds(ci,.12,11,.38,hb);}
 }
 /* ---------- 이름 있는 NPC: 지금 조각들을 모양·자리·색 그대로 한 덩어리로 매끈하게 이어 빚기 ----------
    마디(머리·윗몸·팔·다리·치마)마다 같은 색 조각을 거리 함수로 바꿔 부드럽게 잇고, 겉면 하나로 다시 만든다.
@@ -16929,7 +17289,7 @@ function stickSlim(g){
   g.traverse(o=>{if(!o.isMesh||o.geometry.type!=='SphereGeometry')return;const p=o.geometry.parameters;if(p.widthSegments<=8)return;
     const k=[p.radius,p.phiStart,p.phiLength,p.thetaStart,p.thetaLength].join(',');let q=_slimG.get(k);if(!q){q=new THREE.SphereGeometry(p.radius,8,6,p.phiStart,p.phiLength,p.thetaStart,p.thetaLength);_slimG.set(k,q);}o.geometry=q;});
   const groups=[];g.traverse(o=>{if(o.children&&o.children.length>1)groups.push(o);});
-  for(const G of groups){const by=new Map();for(const c of G.children){if(!c.isMesh||c.children.length||c.userData.marker||!c.visible||c.isSkinnedMesh)continue;const k=c.material.uuid;(by.get(k)||by.set(k,[]).get(k)).push(c);}
+  for(const G of groups){const by=new Map();for(const c of G.children){if(!c.isMesh||c.children.length||c.userData.marker||!c.visible||c.isSkinnedMesh||c.userData.gear||c.material.map)continue;const k=c.material.uuid;(by.get(k)||by.set(k,[]).get(k)).push(c);}
     for(const list of by.values()){if(list.length<2)continue;const pos=[],nor=[];
       for(const c of list){c.updateMatrix();const gi=c.geometry.index?c.geometry.toNonIndexed():c.geometry.clone();gi.applyMatrix4(c.matrix);const P=gi.attributes.position.array,N=gi.attributes.normal.array;for(let i=0;i<P.length;i++){pos.push(P[i]);nor.push(N[i]);}G.remove(c);}
       const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));geo.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));geo.computeBoundingSphere();
@@ -18407,7 +18767,9 @@ function buildGuildHallMap(K){
   const tableR=(x,z,y,r=.9,stools=4)=>{P(CYL(1,1,12),x,y+.82,z,r,.08,r,WOOD,IP);P(CYL(.18,.25,8),x,y+.4,z,1,.8,1,DARKW,IP);P(CYL(1,1,8),x,y+.04,z,.5,.08,.5,DARKW,IP);rndC(x,z,r*.8,y,.9);
     for(let k=0;k<stools;k++){const a=k/stools*PI*2+.4,sx=x+Math.cos(a)*(r+.55),sz=z+Math.sin(a)*(r+.55);P(CYL(1,1,8),sx,y+.45,sz,.26,.08,.26,WOOD,IP);P(CYL(.06,.06,4),sx,y+.22,sz,1,.44,1,DARKW,IP);rndC(sx,sz,.2,y,.5);seatAdd(cx+sx,cz+sz,y+.49,Math.atan2(x-sx,z-sz));}   /* 의자도 부딪힌다 */
     /* 탁자 위 음식과 술: 맥주잔·포도주병과 잔·빵·치즈·스튜 그릇·고기 접시·촛불 가운데 두세 가지 */
-    const n=2+Math.floor(rnd()*3);for(let k=0;k<n;k++){const a=k/n*PI*2+rr(-.4,.4),d=rr(.25,r-.3);food(pick(FOODS),x+Math.cos(a)*d,y+.86,z+Math.sin(a)*d,rr(0,6.28));}
+    const n=2+Math.floor(rnd()*3);for(let k=0;k<n;k++){const a=k/n*PI*2+rr(-.4,.4),d=rr(.25,r-.3),kd=pick(FOODS),fx=x+Math.cos(a)*d,fz=z+Math.sin(a)*d,fry=rr(0,6.28);
+      /* 고기 접시는 앉은 사람 쪽으로 돌리고 양옆에 포크·칼 (무작위 수는 예전 그대로 쓴다) */
+      if(kd==='plate'){food(kd,fx,y+.86,fz,-a-PI/2);FK('ware',2,fx,y+.86,fz,-a-PI/2);}else food(kd,fx,y+.86,fz,fry);}
     if(rnd()<.5)food('candle',x+rr(-.15,.15),y+.86,z+rr(-.15,.15),0);else food('candle',x+.12,y+.86,z-.1,0);
     glight(x,y+1.35,z,.5,5.2,0xffb050);pool(x,y+.875,z,r+.35,.32);};
   /* 음식 소품: 탁자 윗면 높이 ty에 놓는다 */
@@ -18703,7 +19065,7 @@ function buildGuildHallMap(K){
       P(BOX,sx+.05,sy,fz,.02,.7,.08,GOLD,IP);P(BOX,sx+.05,sy,fz,.02,.08,.7,GOLD,IP);}
     /* 브람의 바: 잔 걸이(기둥 셋 위 들보에 맥주잔이 거꾸로 매달림)·술통 꼭지·벽의 차림표 판·등잔 둘 */
     {const xc=14.2;for(const z of [-4.9,0,4.9])P(BOX,xc,1.9,z,.1,1.4,.1,DARKW,IP);P(BOX,xc,2.62,0,.3,.1,10.2,DARKW,IP);P(BOX,xc,2.7,0,.36,.06,10.4,BEAM,IP);
-      for(let z=-4.5;z<=4.55;z+=.36){if(Math.abs(z)<.25)continue;for(const sd of [-1,1]){const mz=z+sd*.0;P(CYL(.06,.07,8),xc+sd*.1,2.43,mz,1,.16,1,pick2([0xb8b0a0,0x8a6a48,0xc8c0b0]),IP);P(BOX,xc+sd*.1,2.54,mz,.012,.06,.012,IRON,IP);}}
+      for(let z=-4.5;z<=4.55;z+=.36){if(Math.abs(z)<.25)continue;for(const sd of [-1,1]){const mz=z+sd*.0;{const mc=pick2([0xb8b0a0,0x8a6a48,0xc8c0b0]);P(FOODK.geo(mc===0x8a6a48?'ware:18':'ware:17'),xc+sd*.1,2.515,mz,.9,.9,.9,0xffffff,{b:'fd',rx:PI,ry:sd*1.2+z});}P(BOX,xc+sd*.1,2.54,mz,.012,.06,.012,IRON,IP);}}
       for(const sd of [-1,1])oilLamp(xc,1.2,sd*3.6,.6,6);
       const bxx=HW-T-.55,z0=-4.72,G=.78;for(let k=0;k<4;k++){const z=z0+k*G;P(CYL(.025,.03,6),bxx-.55,.448,z,1,.14,1,GOLD,{b:'ip',rz:PI/2});P(BOX,bxx-.6,.54,z,.03,.16,.04,DARKW,IP);P(SPH,bxx-.6,.63,z,.035,.035,.035,0x7a2a22,IP);}   /* 꼭지 */
       {const mz=-3.4,my=3.0;P(BOX,FX-.03,my,mz,.06,1.1,1.7,DARKW,IP);P(BOX,FX-.05,my,mz,.03,.92,1.52,0x2a2e2a,IP);
@@ -18770,10 +19132,9 @@ function buildGuildHallMap(K){
   if(typeof makeNpcStick==='function'){const look={robe:0x8a3a3a,robe2:0xf0e8d8,hat:'hair',hatC:0x7a4a2a,long:1,cloth:{apron:0xf4f0e6}};
     const g=makeNpcStick(look),u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}if(typeof stickSlim==='function')stickSlim(g);g.position.set(cx+13.3,0,cz+6.4);g.visible=false;scene.add(g);
     const tray=new THREE.Group(),M=c=>new THREE.MeshStandardMaterial({color:c,roughness:.7});tray.position.set(0,.47,.42);
-    {const b=new THREE.Mesh(new THREE.CylinderGeometry(.24,.22,.025,16),M(0x8a6a48));tray.add(b);const r=new THREE.Mesh(new THREE.TorusGeometry(.235,.012,4,18),M(0x6a4a2a));r.rotation.x=PI/2;r.position.y=.012;tray.add(r);}
-    const full=new THREE.Group();tray.add(full);
-    for(const [x,z,c] of [[-.09,.04,0xb8b0a0],[.08,-.06,0x8a6a48]]){const m=new THREE.Mesh(new THREE.CylinderGeometry(.055,.05,.15,10),M(c));m.position.set(x,.09,z);full.add(m);const f=new THREE.Mesh(new THREE.SphereGeometry(.055,8,4),M(0xfff4e0));f.scale.y=.4;f.position.set(x,.17,z);full.add(f);}
-    {const w=new THREE.Mesh(new THREE.CylinderGeometry(.035,.04,.2,8),M(0x2a4a2a));w.position.set(.06,.11,.1);full.add(w);const bd=new THREE.Mesh(new THREE.SphereGeometry(.07,8,6),M(0xc89050));bd.scale.set(1.3,.6,1);bd.position.set(-.04,.04,-.13);full.add(bd);}
+    /* 2026-11-10: 빚은 나무 쟁반(FOODK ware:0)과 그 위 차림(ware:1: 통잔 둘·포도주 잔·작은 빵 둘). 차림은 내려놓으면 감춘다 */
+    {const b=new THREE.Mesh(FOODK.geo('ware:0'),FOODK.mat());b.scale.setScalar(1.1);b.position.y=-.0125;tray.add(b);}
+    const full=new THREE.Mesh(FOODK.geo('ware:1'),FOODK.mat());full.scale.setScalar(1.1);full.position.y=-.0125;tray.add(full);
     if(u.stick)u.stick.upper.add(tray);
     /* 길: 바 끝 → (9.8,6) 갈림목 → 탁자 앞. 탁자·의자·기둥을 비켜 가게 꺾는 점을 둔다 */
     const BAR=[13.3,6.4],HUB=[9.8,6.0],MID=[4.6,4.6],MIDW=[0.5,5.0];
@@ -19765,6 +20126,8 @@ async function buildHechilLodge(){const I=OR.ISLES.hlodge;if(!I||HLODGE.ready)re
   const root=new THREE.Group();root.userData.hl=1;scene.add(root);L.root=root;
   const B=hlBaker(new THREE.Matrix4().makeTranslation(cx,0,cz));B.fl=[0,.1,F1,F2];
   const P=(g,x,y,z,sx,sy,sz,c,o)=>B.P(g,x,y,z,sx,sy,sz,c,o);const K=hlKit(P,{seed:5151}),C=K.C,rnd=K.rnd,rr=K.rr,fr=K.fr;K.MT(B.MT);
+  /* 빚은 음식·그릇(FOODK)은 따로 모아 굽기 때 한 덩어리로 (2026-11-10) */
+  const FLL=[],fkL=(key,x,y,z,ry=0,s=1,rz=0)=>{FLL.push([key,FOODK.T(cx+x,y,cz+z,ry,0,rz,s)]);};
   await HCHL.y();
   /* 부딪힘·바닥 */
   const wallC=(x0,z0,x1,z1,y0,y1,t=.4)=>{const Ln=Math.hypot(x1-x0,z1-z0);if(Ln<.05)return;const ry=Math.atan2(x1-x0,z1-z0);colliders.push({x:cx+(x0+x1)/2,z:cz+(z0+z1)/2,box:1,hw:t/2,hd:Ln/2,cs:Math.cos(ry),sn:Math.sin(ry),r:Math.hypot(t,Ln)/2,y0,y1,bld:true});};
@@ -19933,7 +20296,7 @@ async function buildHechilLodge(){const I=OR.ISLES.hlodge;if(!I||HLODGE.ready)re
     K.candle(-1.9,2.35,ZF2+.2,.24);K.candle(1.9,2.35,ZF2+.2,.24);K.candle(-1.5,2.35,ZF2+.25,.16);K.candle(1.5,2.35,ZF2+.25,.16);
     /* 선반 위: 탁상시계, 질그릇 두 개, 나무로 깎은 산양 두 마리 */
     {const f=fr(0,ZF2+.2,0,2.35);f(G.RB(.42,.5,.2,.04),0,.25,0,1,1,1,C.OAK2);f(G.CYL(20),0,.33,.11,.26,.02,.26,0xf0e8d0,{rx:PI/2});f(G.BOX,0,.36,.125,.012,.09,.005,0x1a1a1a);f(G.BOX,.03,.33,.125,.07,.01,.005,0x1a1a1a);}
-    for(const s of [-1,1]){P(G.LATHE('jug'),s*.85,2.35,ZF2+.22,.2,.32,.2,s<0?0x8a5a3a:0x4a5a6a);const f=fr(s*1.25,ZF2+.24,s*.6,2.35);f(G.RB(.24,.12,.09,.04),0,.17,0,1,1,1,0x8a6a44);f(G.RB(.06,.14,.06,.02),.1,.27,0,1,1,1,0x8a6a44);for(const t of [-1,1])for(const u of [-1,1])f(G.CYL(6),t*.08,.06,u*.03,.025,.12,.025,0x8a6a44);f(G.TOR(.012),.13,.36,0,.08,.08,.08,0x6a4a2a,{rz:1.2});}
+    for(const s of [-1,1]){fkL('ware:4',s*.85,2.35,ZF2+.22,s<0?-2.2:-1,1.3);const f=fr(s*1.25,ZF2+.24,s*.6,2.35);f(G.RB(.24,.12,.09,.04),0,.17,0,1,1,1,0x8a6a44);f(G.RB(.06,.14,.06,.02),.1,.27,0,1,1,1,0x8a6a44);for(const t of [-1,1])for(const u of [-1,1])f(G.CYL(6),t*.08,.06,u*.03,.025,.12,.025,0x8a6a44);f(G.TOR(.012),.13,.36,0,.08,.08,.08,0x6a4a2a,{rz:1.2});}
     /* 벽난로 위 그림 */
     K.frame(0,3.3,ZF2+.02,2.2,1.5,0,pic);
     /* 장작 바구니·불쏘시개 세트 */
@@ -19948,7 +20311,7 @@ async function buildHechilLodge(){const I=OR.ISLES.hlodge;if(!I||HLODGE.ready)re
     K.chairW(-1.1,RZ+2.1,PI*.92);K.chairW(1.1,RZ+2.1,-PI*.92);seat(-1.1,RZ+2.05,.58,PI*.92);seat(1.1,RZ+2.05,.58,-PI*.92);rndC(-1.1,RZ+2.15,.45,0,.95);rndC(1.1,RZ+2.15,.45,0,.95);
     K.table(0,RZ,1.5,.8,.42);objC(0,RZ,1.5,.8,0,.45);
     /* 탁자 위: 나무 쟁반·김 나는 머그 둘·책·솔방울 그릇 */
-    P(G.RB(.56,.04,.36,.015),-.3,.44,RZ,1,1,1,C.OAK2);for(const x of [-.42,-.18]){P(G.LATHE('mug'),x,.46,RZ,.1,.12,.1,0xd8cbb0);P(G.TOR(.18),x+.06,.52,RZ,.06,.06,.06,0xd8cbb0,{rz:PI/2});P(G.CYL(12),x,.575,RZ,.085,.004,.085,0x5a3214);}
+    fkL('ware:0',-.3,.44,RZ,0,1.1);fkL('ware:10',-.4,.4535,RZ+.03,.4);fkL('ware:10',-.2,.4535,RZ-.05,2.6);
     P(G.RB(.3,.05,.22,.01),.36,.445,RZ+.1,1,1,1,0x6a1e1a,{ry:.3});P(G.RB(.28,.04,.2,.01),.36,.49,RZ+.08,1,1,1,0x2a3a5a,{ry:.1});
     P(G.LATHE('bowl'),.4,.44,RZ-.22,.26,.1,.26,0x8a6a44);for(let k=0;k<4;k++)P(G.SPH,.4+Math.cos(k*1.7)*.06,.52,RZ-.22+Math.sin(k*1.7)*.06,.07,.09,.07,0x6a4a2a);
     /* 소파 옆 작은 탁자와 등잔 */
@@ -20004,10 +20367,10 @@ async function buildHechilLodge(){const I=OR.ISLES.hlodge;if(!I||HLODGE.ready)re
   {/* 긴 탁자 둘·의자·긴 의자, 식탁 위 차림 */
     for(const [z,nm] of [[-1.0,0],[2.9,1]]){const X0=9.4,X1=16.6,xm=(X0+X1)/2,Ln=X1-X0;K.table(xm,z,Ln,1.0,.78);objC(xm,z,Ln,1.0,0,.8);
       P(G.BOX,xm,.815,z,Ln-.3,.004,.42,0xe8dcc4);   /* 식탁보 띠 */
-      for(let x=X0+.6;x<X1-.3;x+=1.0){for(const s of [-1,1]){const zz=z+s*.32;P(G.CYL(18),x,.8,zz,.26,.012,.26,0xece4d4);P(G.CYL(18),x,.806,zz,.2,.01,.2,0xd8ccb4);if(rnd()<.6){P(G.LATHE('mug'),x+.2,.79,zz-s*.05,.08,.11,.08,0x8a6a44);}
+      for(let x=X0+.6;x<X1-.3;x+=1.0){for(const s of [-1,1]){const zz=z+s*.32;fkL(rnd()<.6?'ware:11':'ware:16',x,.797,zz,s<0?0:PI);
           if(s<0)K.chair(x,z-.85,0);else K.chair(x,z+.85,PI);seat(x,z+s*.85,.5,s<0?0:PI);rndC(x,z+s*.85,.24,0,.5);}}
-      for(let x=X0+1.1;x<X1-.5;x+=2.0){K.candle(x,.8,z,.22);halo(x,1.15,z,0);P(G.RB(.34,.12,.2,.06),x+.5,.86,z,1,1,1,0xc8904a);P(G.RB(.3,.012,.1,.004),x+.5,.925,z,1,1,1,0xe0b070,{ry:.5});}
-      P(G.LATHE('bowl'),xm,.8,z,.4,.14,.4,0x9a7a52);for(let k=0;k<5;k++)P(G.SPH,xm+Math.cos(k*1.3)*.08,.9,z+Math.sin(k*1.3)*.08,.09,.09,.09,k%2?0xb83a2a:0xc8a03a);}
+      for(let x=X0+1.1;x<X1-.5;x+=2.0){K.candle(x,.8,z,.22);halo(x,1.15,z,0);fkL('bread:1',x+.5,.797,z,.5);}
+      fkL('ware:6',xm,.797,z,z,1.5);}
     for(const z of [-1.0,2.9]){K.chand(13,2.7,z,.9,8,F1-.4);glight(13,2.6,z,1.2,12,0xffc070,[0,F1]);halo(13,2.95,z,1);}
     /* 술 선반·바: 북쪽 벽 (부엌 서쪽) */
     {const X0=8.5,X1=13.2,xm=(X0+X1)/2;P(G.BOX,xm,.55,ZB+1.25,X1-X0,1.1,.6,C.OAK2);P(G.RB(X1-X0+.2,.08,.8,.03),xm,1.14,ZB+1.25,1,1,1,C.OAK);for(let k=0;k<6;k++)P(G.BOX,X0+.4+k*.78,.56,ZB+1.56,.6,.8,.03,0x5a3a20);
@@ -20018,10 +20381,10 @@ async function buildHechilLodge(){const I=OR.ISLES.hlodge;if(!I||HLODGE.ready)re
       K.frame(16.0,2.2,ZF-.06,.9,1.1,PI,(x,y,z,w,h,ry)=>tq(texM(HLT.board(['오늘의 차림','사슴고기 스튜','눈꽃 호밀빵','버섯 구이','따뜻한 사과주'])),x,y,z,w,h,ry));}
     /* 부엌: 배식구 너머 화덕·솥·걸어 둔 냄비와 마늘 */
     {const f=fr(15.6,ZB+.4,0,.1);f(G.BOX,0,.6,0,2.4,1.2,.8,0x6e6a62);f(G.BOX,0,1.21,0,2.4,.04,.8,0x2a2624);f(G.BOX,0,1.9,-.15,2.6,1.4,.5,0x5a5650);
-      f(G.LATHE('pot'),-.5,1.22,.05,.5,.42,.5,0x2a2826);f(G.CYL(14),-.5,1.6,.05,.42,.04,.42,0x3a2a1a);f(G.LATHE('pot'),.5,1.22,.05,.36,.32,.36,0x8a5a3a);
-      for(let k=0;k<5;k++){f(G.LATHE('pot'),-1.0+k*.5,2.3,.35,.22,.2,.22,k%2?0xb06a3a:0x3a3a3a,{rx:PI});f(G.CYL(6),-1.0+k*.5,2.5,.35,.01,.2,.01,C.IRON);}
+      fkL('ware:8',15.1,1.32,ZB+.45,.3,1.25);fkL('ware:7',16.1,1.32,ZB+.45,-PI/2,1.8);
+      for(let k=0;k<5;k++){const ps=k%2?1.05:1.35;fkL(k===2?'ware:9':'ware:7',15.6-1.0+k*.5,k===2?2.18:2.5-.302*ps,ZB+.75-(k===2?.01:.0812*ps),PI/2,k===2?1:ps,k===2?0:PI/2);f(G.CYL(6),-1.0+k*.5,2.5,.35,.01,.2,.01,C.IRON);}
       f(G.BOX,0,2.62,.35,2.4,.03,.03,C.IRON);for(let k=0;k<6;k++)f(G.SPH,-1.1+k*.42,2.15,.6,.08,.1,.08,0xe8e0c8);
-      P(G.BOX,13.85,.55,-4.2,.3,1.1,2.0,C.OAK2);P(G.RB(.5,.06,2.2,.02),13.8,.98,-4.2,1,1,1,C.OAK);for(let k=0;k<3;k++){P(G.CYL(16),13.8,1.02,-4.8+k*.6,.24,.02,.24,0xece4d4);P(G.RB(.15,.06,.1,.03),13.8,1.06,-4.8+k*.6,1,1,1,0xc8904a);}
+      P(G.BOX,13.85,.55,-4.2,.3,1.1,2.0,C.OAK2);P(G.RB(.5,.06,2.2,.02),13.8,.98,-4.2,1,1,1,C.OAK);for(let k=0;k<3;k++)fkL(k===1?'stew:0':'plate:1',13.8,1.01,-4.8+k*.6,k*1.3);
       glight(15.4,1.8,-4.4,1.2,7,0xff9a50,[0,F1]);halo(15.1,1.5,-5.3,1);for(let k=0;k<5;k++)P(G.SPH,15.1+rr(-.6,.6),1.24,-5.3,.06,.06,.06,0xff7a20,{glow:1});
       P(G.BOX,15.6,1.1,-2.68,.95,2.1,.06,0x5a3a22);P(G.SPH,15.25,1.05,-2.62,.05,.05,.05,C.BRASS);}
     /* 식당 벽: 그림·벽등·사슴뿔 대신 겨울 화환 */
@@ -20130,7 +20493,7 @@ async function buildHechilLodge(){const I=OR.ISLES.hlodge;if(!I||HLODGE.ready)re
     rug(rugM(41,['#3a2a4a','#c8a46a','#e8dcc4','#7a2a22','#241a30']),1.2,y,4.6,5.0,3.2);
     K.sofa(1.2,4.0,PI,2.6,0x5a3a5a,y);objC(1.2,4.0,2.6,.95,y,.95);for(const t of [-.8,0,.8])seat(1.2+t,3.9,y+.6,PI);
     for(const s of [-1,1]){K.chairW(1.2+s*2.1,5.4,s*PI*.6,0x2e4a36,y);seat(1.2+s*2.1,5.4,y+.58,s*PI*.6);rndC(1.2+s*2.1,5.4,.42,y,.95);}
-    K.table(1.2,5.3,1.2,.7,.42,0,y);objC(1.2,5.3,1.2,.7,y,.45);P(G.LATHE('jug'),1.0,y+.42,5.3,.16,.28,.16,0x8a5a3a);for(const x of [1.3,1.5])P(G.LATHE('mug'),x,y+.42,5.25,.08,.1,.08,0xd8cbb0);
+    K.table(1.2,5.3,1.2,.7,.42,0,y);objC(1.2,5.3,1.2,.7,y,.45);fkL('ware:4',1.0,y+.42,5.3,PI,1.1);for(const x of [1.3,1.5])fkL('ware:10',x,y+.42,5.25,x*3);
     {const f=fr(-1.6,ZP-1.0,PI*.1,y);for(let k=0;k<3;k++){const a=k/3*PI*2;f(G.CYL(6),Math.cos(a)*.22,.55,Math.sin(a)*.22,.03,1.15,.03,C.OAK,{rx:Math.sin(a)*.2,rz:-Math.cos(a)*.2});}
       f(G.CYL(16),0,1.18,.1,.11,.9,.11,C.BRASS,{rx:1.2});f(G.CYL(16),0,1.08,-.22,.07,.3,.07,0x3a2a1a,{rx:1.2});f(G.TOR(.2),0,1.33,.52,.12,.12,.12,C.BRASS,{rx:1.2-PI/2});rndC(-1.6,ZP-1.0,.35,y,1.4);}
     {const f=fr(4.6,6.6,-PI*.85,y);f(G.BOX,0,.9,0,.05,1.8,.05,C.OAK,{rx:-.12});for(const s of [-1,1])f(G.BOX,s*.36,.85,.1,.05,1.75,.05,C.OAK,{rz:s*.18,rx:.05});f(G.BOX,0,.82,.02,.85,.05,.08,C.OAK);
@@ -20193,6 +20556,7 @@ async function buildHechilLodge(){const I=OR.ISLES.hlodge;if(!I||HLODGE.ready)re
   await HCHL.y();
   /* 굽기 */
   L.mesh=B.mesh(root,true);L.nVert=B.n;
+  if(FLL.length){const fm=new THREE.Mesh(FOODK.merge(FLL),FOODK.mat());fm.receiveShadow=true;fm.add(new THREE.Object3D());root.add(fm);}
   root.updateMatrixWorld(true);root.visible=false;
   L.ready=true;}
 /* ===== 산장 바깥: parent 그룹 아래, 세계 자리 (wx,y0,wz), ry로 돌린다 (+z가 정문 쪽). 돌려주는 값은 예전 산장(HUTW)과 같은 이름:
@@ -23189,6 +23553,8 @@ function ccarPresence(){return CCAR.ride?'k'+CCAR.ride.k+'s'+CCAR.ride.s:'';}
 const KAOLIS_WY=-.35;   /* 카올리스 바닷물 높이 */
 /* 엑시즈 문 밖 사냥터: 문마다 땅 둘 (shared.js의 OR.MH). 한 문의 두 땅은 목으로 이어지고, 다른 문 땅과는 산으로 막혀 있다.
    길(MHR)은 땅마다 고리 방향으로 가로지르는 흙길 + 엑시즈 문 쪽 고갯길, 땅 생김새는 땅마다(mhBase), 두 땅 사이에서는 섞고(mhHeight), 걸을 수 없는 바깥은 산비탈로 솟는다 */
+/* R의 모닥불 자리: 깊은 숲(m2c) 한가운데서 길 동쪽으로 스무 걸음 들어간 빈터. (dx,dz)는 땅 가운데 기준 불 자리, (ux,uz)는 불에서 길 쪽 방향, r 안의 나무·덤불은 치운다 */
+const RCAMP={id:'m2c',dx:-20.3,dz:-19.3,ux:.778,uz:.628,r:6.5};
 const MHR=(()=>{const MH=OR.MH,ISL=OR.ISLES,Zs=OR.MHUNT.map(k=>ISL[k]).filter(I=>!I.branch),cx=MH.cx,cz=MH.cz,TAU=Math.PI*2;
   /* 고리 길: 문마다(한 줄의 땅들을) 고리 방향으로 가로지르는 한 토막 (양 끝 땅 가장자리 조금 안까지). th0~th1은 말굽 뭍(1A부터 동쪽 끝까지), 그 너머 남동은 바다 */
   const th0=MH.TH0,th1=MH.TH1;   /* 말굽 뭍은 늘 옛 1A 자리부터 (남문 줄을 꺼 두어도 바다가 뭍 안쪽으로 들어오지 않게) */
@@ -23699,6 +24065,8 @@ await BOOT.y();await (async function buildIsles(){
           const pm=mat(0x6a4a2e);inst(new THREE.BoxGeometry(.16,1.15,.16).translate(0,.57,0),pm,posts,(t,e,sv,v)=>{e.set(0,-t.a,0);sv.set(1,1,1);v.set(t.x,heightAt(t.x,t.z)-.05,t.z);});
           const rg=new THREE.BoxGeometry(.07,.09,2.75);inst(rg,pm,rails,(t,e,sv,v)=>{e.set(0,-t.a,0);sv.set(1,1,1);v.set(t.x,heightAt(t.x,t.z)+.82,t.z);});inst(rg,pm,rails,(t,e,sv,v)=>{e.set(0,-t.a,0);sv.set(1,1,1);v.set(t.x,heightAt(t.x,t.z)+.42,t.z);});}}
       /* 깊은 숲: 햇빛이 잘 들지 않는 빽빽한 숲. 굵은 전나무와 활엽수, 이끼 낀 바위와 쓰러진 통나무, 버섯, 죽은 나무 */
+      /* R의 빈터: 놓은 자리는 그대로 두고(뒤 땅들 자리가 바뀌지 않게 srand 개수를 지킨다) 빈터 안 것만 보이지 않게 줄이고 부딪힘을 뺀다 */
+      if(id===RCAMP.id){const cx=I.x+RCAMP.dx,cz=I.z+RCAMP.dz,pl=P.place;P.place=(...a)=>{const o=pl(...a);for(const t of o)if(Math.hypot(t.x-cx,t.z-cz)<RCAMP.r){t.s=1e-4;const j=colliders.findIndex(c=>c.x===t.x&&c.z===t.z);if(j>=0)colliders.splice(j,1);}return o;};}
       if(kd==='deep'){pines(P.place(340,1.6,.5,off(5.5),6),.12);roundTrees(P.place(300,1.6,.55,off(5.5),6),.3,.16);deadTrees(P.place(26,3,.4,off(7),5));
         bushes(P.place(200,1.1,0,off(4)),.3,.16);rocks(P.place(46,2.4,0,off(6)),0x56604e);
         const logs=P.place(28,3,0,off(7));inst(logG,mat(0x3e3222),logs,(t,e,sv,v)=>{e.set(0,srand()*6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)+.3,t.z);});
@@ -24917,7 +25285,22 @@ await BOOT.y();(function buildHInn(){
     sitN(OUT.c_knight||OUT.c_old_knight,'sitb',-4.75,FZ);
     N(OUT.c_hunter,'sitdrink',CXc-1.05,CZ0+.7+1.6,.03,PI/2,1);
     /* 자는 종자: 가운데 칸 동쪽 침대 이불 위에 반듯이 누워 낮잠 */
-    {const bx=1.15,bz=-HD+1.5;take(bx,bz,1);const g=N(OUT.c_squire||OUT.c_youth,'sleep',bx,bz+.95,.79,0,0);if(g){g.rotation.set(-PI/2,0,0,'YXZ');g.scale.setScalar(.9);HINN_ST.sleeper=g;}}
+    /* 자는 종자: 요 위에 등을 대고 눕히고(머리는 베개 위로 살짝 들림), 가슴 아래로 이불을 덮는다.
+       이불은 몸 모양대로 불룩한 천 한 장(가장자리는 침대 옆과 발치로 늘어짐)과 가슴께 접어 내린 단 */
+    {const bx=1.15,bz=-HD+1.5;take(bx,bz,1);const g=N(OUT.c_squire||OUT.c_youth,'sleep',bx,bz+.86,.79,0,0);
+      if(g){g.rotation.set(-PI/2+.09,0,0,'YXZ');g.scale.set(.8,.8,.68);g.updateMatrixWorld(true);
+        const bb=new THREE.Box3().setFromObject(g);g.position.y+=.535-bb.min.y;g.updateMatrixWorld(true);bb.setFromObject(g);HINN_ST.sleeper=g;
+        const z0=bb.min.z-Z+.47,z1=bz+.9,hw=.55,dr=.3,base=.625,L=z1-z0;
+        const hump=(x,v)=>{const k=Math.min(1,Math.max(0,(v-.4)/.16)),ch=(v<.86?.25-.12*k:.13+(v-.86)/.14*.07)*(.82+.18*Math.min(1,v/.1)),w=.33-.11*k,a=Math.abs(x);return ch*(a<w?1:Math.exp(-(((a-w)/.11)**2)));};
+        /* 천 한 장: za~zb 띠를 몸 모양대로. 바깥으로 나가면 침대 옆·발치로 늘어진다 */
+        const sheet=(za,zb,lift,col,NX,NZ)=>{const Lb=zb-za,pos=[],idx=[];for(let j=0;j<=NZ;j++)for(let i=0;i<=NX;i++){const u=i/NX*2-1,v=j/NZ,ex=Math.abs(u)*(hw+dr);
+            const hx=hw+lift*.8;let x=Math.sign(u)*Math.min(ex,hx),z=za+v*(Lb+(zb>=z1?dr:0)),y=base;if(ex>hw)y=base-(ex-hw);if(z>z1){y-=z-z1;z=z1+lift*.8;}
+            if(ex<=hw&&z<z1)y+=hump(x,(z-z0)/L);y+=lift+(lift?0:Math.sin(u*9+z*5)*.006);pos.push(X+bx+x,y,Z+z);}
+          for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){const a=j*(NX+1)+i,b=a+1,c=a+NX+1,d=c+1;idx.push(a,c,b,b,c,d);}
+          const cg=new THREE.BufferGeometry();cg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));cg.setIndex(idx);cg.computeVertexNormals();
+          const cm=FMK(col).clone();cm.side=THREE.DoubleSide;const m=new THREE.Mesh(cg,cm);m.castShadow=true;m.receiveShadow=true;G.add(m);return m;};
+        const cloth=sheet(z0,z1,0,'c3a4a6a',26,34),fold=sheet(z0-.03,z0+.2,.022,'cd4ae63',26,4);
+        HINN_ST.quilt={cloth,fold};}}
     /* 식탁 위: 잔과 접시, 기대 둔 활과 칼 */
     {const p=piece(-2.3,.76,.9,0);p.l([[.001,0],[.16,.005],[.18,.03],[.001,.025]],'CLAY',.2,0,-.25,16);p.s(.06,'c8a5a32',.2,.05,-.25,1,.6,1);p.l([[.001,0],[.16,.005],[.18,.03],[.001,.025]],'CLAY',-.25,0,.3,16);
       const q=piece(-1.3,0,.2,-.4);q.t(.8,.016,'WD2',-.62,.67,0,0,0,-.95,1.9);q.c(.004,.004,1.3,'cf0e8d8',-.15,.67,0,4);q.c(.022,.022,.14,'LEATH',.18,.67,0,6);   /* 의자 옆에 세워 둔 활 */
@@ -24941,7 +25324,7 @@ function hinnTick(t){if(!player||!HINN_ST.group)return;const inH=OR.inHInn(playe
   if(HINN_ST.group.visible!==inH)HINN_ST.group.visible=inH;
   if(inH&&HINN_ST.fire)HINN_ST.fire.intensity=1.35+Math.sin(t*9.3)*.12+Math.sin(t*23.1)*.08;
   if(HINN_ST.npcs){if(HINN_ST.inH!==inH){HINN_ST.inH=inH;for(const n of HINN_ST.npcs)n.g.visible=inH;}
-    if(inH){for(const n of HINN_ST.npcs)if(n.pose!=='sleep')stickNpcPose(n.g,n.pose,t+n.ph);const g=HINN_ST.sleeper;if(g)g.scale.set(.9,.9,.9*(1+Math.sin(t*1.4)*.012));}}}   /* 자는 사람은 숨 쉬듯 가슴만 조금 */
+    if(inH){for(const n of HINN_ST.npcs)if(n.pose!=='sleep')stickNpcPose(n.g,n.pose,t+n.ph);const g=HINN_ST.sleeper,b=Math.sin(t*1.4);if(g)g.scale.set(.8,.8,.68*(1+b*.014));const q=HINN_ST.quilt;if(q){q.cloth.scale.y=q.fold.scale.y=1+b*.008;}}}}   /* 자는 사람은 숨 쉬듯 가슴만 조금 */
 /* 한나의 여관 평면도 (미니맵·큰 지도 공용) */
 function drawHInnPlan(c,X,Z,sc){const T=OR.HINN,R=(x0,z0,x1,z1,col)=>{c.fillStyle=col;c.fillRect(X(T.x+x0),Z(T.z+z0),(x1-x0)*sc,(z1-z0)*sc);};
   c.fillStyle='#211b14';c.fillRect(-9999,-9999,99999,99999);
@@ -25290,7 +25673,7 @@ await BOOT.y();(function buildBakery(){
   const brickM=(w,h)=>tm('brick',w/1.6,h/.8);
   /* 빵 모양: 둥근빵·긴빵·바게트·꼬인빵·파이 (x,y,z는 밑바닥 가운데) */
   /* 빵 모양: 둥근빵·긴빵·바게트·꽈배기 빵·고기 파이 (x,y,z는 밑바닥 가운데). FOODK가 빚은 빵을 모아 두었다가 끝에 한 덩어리로 합쳐 그린다 */
-  const FL=[],loaf=(kind,x,y,z,ry=0,s=1)=>{FL.push(['loaf:'+kind,FOODK.T(X+x,y,Z+z,ry+(kind===2?PI/2:0),0,0,s*(kind===0?1.05:1))]);},fk=(key,x,y,z,ry=0,s=1)=>{FL.push([key,FOODK.T(X+x,y,Z+z,ry,0,0,s)]);};   /* fk: 반죽·밀가루 단지·포대 */
+  const FL=[],loaf=(kind,x,y,z,ry=0,s=1)=>{FL.push(['loaf:'+kind,FOODK.T(X+x,y,Z+z,ry+(kind===2?PI/2:0),0,0,s*(kind===0?1.05:1))]);},fk=(key,x,y,z,ry=0,s=1,rz=0)=>{FL.push([key,FOODK.T(X+x,y,Z+z,ry,0,rz,s)]);};   /* fk: 반죽·밀가루 단지·포대 */
   /* ===== 바닥·천장·벽 ===== */
   B(HW*2+.6,.3,HD*2+.6,tm('tile',HW*2/1.5,HD*2/1.5,{roughness:.6}),0,-.15,0);
   B(HW*2+.6,.3,HD*2+.6,m(0xf0e4cc),0,TOP+.15,0);ceilAdd(X,Z,0,HW+.3,HD+.3,TOP);
@@ -25370,7 +25753,7 @@ await BOOT.y();(function buildBakery(){
     for(let k=0;k<6;k++){const y=.3+k*.32;B(.64,.03,z1-z0,0xa8a8a0,rx,y,(z0+z1)/2);for(let q=0;q<6;q++)loaf((k+q)%5===4?4:(k%2?1:0),rx,y+.02,z0+.25+q*.38,PI/2,.85);}
     colliders.push({x:X+rx,z:Z+(z0+z1)/2,box:1,hw:.38,hd:(z1-z0)/2+.05,cs:1,sn:0,r:1.3,y0:-.4,y1:2.1,bld:true});}
   /* 오른쪽 벽: 쇠 막대에 매단 구리 냄비·국자, 마른 허브 다발 */
-  {B(.05,.05,2.6,IRON,HW-.12,2.45,-3.0);for(let k=0;k<5;k++){const z=-4.0+k*.5,r=.12+(k%3)*.04;C(.006,.006,.18,IRON,HW-.16,2.34,z,4);const pn=C(r,r*.9,r*.8,COPPER,HW-.2-r,2.2-r*.4,z,14);pn.material=m(COPPER,{metalness:.6,roughness:.35});}
+  {B(.05,.05,2.6,IRON,HW-.12,2.45,-3.0);for(let k=0;k<5;k++){const z=-4.0+k*.5,r=.12+(k%3)*.04;C(.006,.006,.18,IRON,HW-.16,2.34,z,4);const ps=r/.1;fk('ware:7',HW-.15,2.25-.302*ps,z,0,ps,PI/2);}   /* 빚은 구리 냄비를 손잡이 구멍으로 걸었다 (바닥이 벽 쪽) */
     for(let k=0;k<4;k++){const z=1.0+k*.5;C(.005,.005,.3,0x8a7a5a,HW-.18,TOP-.4,z,4);S(.09,k%2?0x6a8a4a:0x8a7a3a,HW-.18,TOP-.65,z,.8,1.6,.8);}}
   /* ===== 손님 자리 (왼쪽) ===== */
   /* 왼쪽 벽 빵 선반: 세 칸, 바구니마다 다른 빵, 키 큰 바게트 바구니 */
@@ -25495,7 +25878,7 @@ function buildDine(id){const T=OR.DINES[id],Df=DINE_DEF[id],st=Df.st,X=T.x,Z=T.z
   const colB=(x,z,hw,hd,h=1.7)=>colliders.push({x:X+x,z:Z+z,box:1,hw,hd,cs:1,sn:0,r:Math.hypot(hw,hd),y0:-.4,y1:h,bld:true});
   const seg=(x0,z0,x1,z1,y1=TOP)=>{const L=Math.hypot(x1-x0,z1-z0),k=Math.max(1,Math.ceil(L/.35));for(let i=0;i<=k;i++){const t=i/k;colliders.push({x:X+x0+(x1-x0)*t,z:Z+z0+(z1-z0)*t,r:.2,y0:-.4,y1,bld:true});}};
   const tm=(tex,w,h,o)=>{const t=tex.clone();t.needsUpdate=true;t.repeat.set(Math.max(1,w),Math.max(1,h));return new THREE.MeshStandardMaterial(Object.assign({map:t,roughness:.9},o||{}));};
-  const FL=[],fk=(key,x,y,z,ry=0,s=1)=>{FL.push([key,FOODK.T(X+x,y,Z+z,ry,0,0,s)]);};
+  const FL=[],fk=(key,x,y,z,ry=0,s=1,rz=0)=>{FL.push([key,FOODK.T(X+x,y,Z+z,ry,0,rz,s)]);};
   const WD=Df.beam,WAIN=Df.wain,IRON=0x2a2624,COP=0xb8683a,LIN=0xf4ecdc,SILV=0xc8ccd4;
   const DX=-HW+2.3,KX=.6,KZ=-1.2;   /* DX: 문 가운데 (바깥 dineShop과 같은 자리), 주방: x>KX, z<KZ (조리대가 KZ 줄을 따라 놓인다) */
   /* ===== 바닥·천장·벽 ===== */
@@ -25558,7 +25941,7 @@ function buildDine(id){const T=OR.DINES[id],Df=DINE_DEF[id],st=Df.st,X=T.x,Z=T.z
     for(const sd of [-1,1]){B(.05,1.3,.05,IRON,kx+sd*1.0,.95,fz-.25);B(.18,.05,.05,IRON,kx+sd*1.0,1.6,fz-.25);}
     {const sp=new THREE.Group();sp.position.set(X+kx,1.58,Z+fz-.25);G.add(sp);const rod=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,2.3,8),m(IRON));rod.rotation.z=PI/2;sp.add(rod);
       const crank=new THREE.Mesh(new THREE.BoxGeometry(.04,.25,.04),m(IRON));crank.position.set(1.15,-.1,0);sp.add(crank);R0.spit=sp;R0.spitMeat=FOODK.geo('dish:7');
-      const meat=new THREE.Mesh(R0.spitMeat,FOODK.mat());meat.scale.setScalar(1.6);meat.add(new THREE.Object3D());sp.add(meat);}
+      const meat=new THREE.Mesh(R0.spitMeat,FOODK.mat());meat.scale.setScalar(1.25);meat.add(new THREE.Object3D());sp.add(meat);}
     colB(kx,kz,OW/2+.1,OD/2+.35,TOP);
     /* 서까래에 매단 햄·소시지 줄, 통, 장작 */
     for(let k=0;k<4;k++){const x=KX+.6+k*.6;C(.004,.004,.35,0x8a7a5a,x,TOP-.4,KZ-.5,4);S(.13,0x8a3a1c,x,TOP-.75,KZ-.5,.9,1.5,.9);}
@@ -25569,8 +25952,8 @@ function buildDine(id){const T=OR.DINES[id],Df=DINE_DEF[id],st=Df.st,X=T.x,Z=T.z
     B(3.0,.92,.95,m(0x1c1c22,{metalness:.4,roughness:.45}),kx,.46,kz);B(3.1,.06,1.0,m(0x3a3a40,{metalness:.6,roughness:.3}),kx,.95,kz);
     for(const sd of [-1,1]){B(1.1,.55,.03,m(0x2a2a30,{metalness:.5,roughness:.4}),kx+sd*.72,.45,kz+.49);B(.7,.03,.04,SILV,kx+sd*.72,.78,kz+.51);}
     const flame=new THREE.MeshStandardMaterial({color:0x2050ff,emissive:0x3060ff,emissiveIntensity:1.4,transparent:true,opacity:.8});for(const x of [-.9,0,.9]){const r=new THREE.Mesh(new THREE.TorusGeometry(.13,.015,6,16),flame);r.rotation.x=PI/2;r.position.set(X+kx+x,.995,Z+kz);G.add(r);}
-    C(.2,.18,.24,m(COP,{metalness:.6,roughness:.3}),kx-.9,1.12,kz,16);C(.17,.17,.16,m(0x9aa0a8,{metalness:.7,roughness:.25}),kx,1.08,kz,16);B(.4,.03,.4,m(0x3a3a40),kx+.9,1.0,kz);
-    B(2.6,.04,.04,IRON,kx,2.35,kz+.2);for(let k=0;k<6;k++){const x=kx-1.1+k*.44,r=.1+(k%3)*.04;C(.005,.005,.15,IRON,x,2.27,kz+.2,4);C(r,r*.9,r*.8,m(COP,{metalness:.6,roughness:.35}),x,2.08-r*.4,kz+.2,14);}
+    fk('ware:7',kx-.9,.98,kz,-PI/2,1.9);fk('ware:8',kx,.94,kz,.4,.75);B(.4,.03,.4,m(0x3a3a40),kx+.9,1.0,kz);
+    B(2.6,.04,.04,IRON,kx,2.35,kz+.2);for(let k=0;k<6;k++){const x=kx-1.1+k*.44,r=.1+(k%3)*.04;C(.005,.005,.15,IRON,x,2.27,kz+.2,4);const ps=r/.1;fk('ware:7',x,2.2-.302*ps,kz+.2-.0812*ps,PI/2,ps,PI/2);}
     B(1.2,.6,.9,m(0x9aa0a8,{metalness:.7,roughness:.3}),kx,TOP-.9,kz);B(.5,.6,.5,m(0x9aa0a8,{metalness:.7,roughness:.3}),kx,TOP-.3,kz);
     const L=new THREE.PointLight(0x7090ff,.5,4,1.6);L.position.set(X+kx,1.3,Z+kz+.3);G.add(L);R0.lights.push(L);
     colB(kx,kz,1.55,.5,TOP);
@@ -25583,13 +25966,15 @@ function buildDine(id){const T=OR.DINES[id],Df=DINE_DEF[id],st=Df.st,X=T.x,Z=T.z
     B(1.95,1.35,.06,st==='noble'?SILV:WD,-2.6,2.4,-HD+.03);}
   /* ===== 손님 자리: 식탁과 의자 (앉을 수 있다) ===== */
   const TBL=[];
+  /* 접시 양옆 수저 (2026-11-10): 2 포크·칼, 3 숟가락. 먹는 사람이 앉은 쪽이 접시의 -z */
+  const DCUT={'dish:0':2,'dish:2':2,'dish:3':2,'dish:5':2,'dish:6':2,'plate:0':2,'dish:1':3,'dish:4':3};
   const table=(tx,tz,rot,dishes)=>{const lw=st==='timber'?2.2:1.15,ld=st==='timber'?.85:.85,rx=rot?ld:lw,rz=rot?lw:ld;
     if(st==='noble'){B(rx+.1,.04,rz+.1,m(Df.cloth),tx,.76,tz);B(rx+.12,.4,rz+.12,m(Df.cloth,{side:THREE.DoubleSide}),tx,.56,tz);}
     else{B(rx,.07,rz,m(Df.tbl),tx,.74,tz);for(const sx of [-1,1])for(const sz of [-1,1])B(.08,.72,.08,m(Df.tbl),tx+sx*(rx/2-.1),.36,tz+sz*(rz/2-.1));}
     if(st==='sea'){B(rx*.92,.006,.3,m(0x3a6a8a),tx,.78,tz);}   /* 푸른 식탁보 띠 */
     if(st==='noble'){C(.025,.04,.06,SILV,tx,.82,tz,10);C(.012,.012,.18,0xf4ecd8,tx,.94,tz,8);const fl=new THREE.MeshStandardMaterial({color:0xffd890,emissive:0xffb040,emissiveIntensity:1.5});S(.018,fl,tx,1.05,tz,1,1.8,1);}
-    else{C(.05,.05,.08,st==='sea'?0xd8e4ea:0xc8a050,tx+(rot?0:.0),.82,tz,10);}
-    dishes.forEach((d,i)=>{const a=(rot?0:PI/2)+(i?PI:0),off=st==='timber'?.55:.3;const qx=rot?0:(i?off:-off),qz=rot?(i?off:-off):0;fk(d,tx+qx,.775+(st==='noble'?.01:0),tz+qz,a,1);});
+    else fk(st==='sea'?'ware:4':'ware:12',tx,.775,tz,tx*2.1,st==='sea'?.8:.9);   /* 가운데: 바다 집은 물병, 화덕 집은 빵 바구니 */
+    dishes.forEach((d,i)=>{const a=(rot?0:PI/2)+(i?PI:0),off=st==='timber'?.55:.3;const qx=rot?0:(i?off:-off),qz=rot?(i?off:-off):0;fk(d,tx+qx,.775+(st==='noble'?.01:0),tz+qz,a,1);const cu=DCUT[d];if(cu)fk('ware:'+cu,tx+qx,.775+(st==='noble'?.01:0),tz+qz,a,1);});
     colB(tx,tz,rx/2,rz/2,.9);
     /* 의자 (긴 식탁에는 긴 의자) */
     if(st==='timber'){for(const sd of [-1,1]){const bx=rot?tx+sd*(rx/2+.38):tx,bz=rot?tz:tz+sd*(rz/2+.38),bw=rot?.38:lw,bd=rot?lw:.38;B(bw,.06,bd,m(Df.chair),bx,.46,bz);for(const q of [-1,1])B(rot?.3:.08,.44,rot?.08:.3,m(Df.chair),bx+(rot?0:q*(lw/2-.2)),.22,bz+(rot?q*(lw/2-.2):0));
@@ -29759,11 +30144,11 @@ function renderQuestWin(){const body=$('#qwBody');body.innerHTML='';if(!P)return
       info:[['찾아갈 사람',np?qwWho(np):''],['곳',np?qwPlace(np.x,np.z):at?qwPlace(at.x,at.z):''],['길잡이',np||at?'지도(M)와 화면에 금빛 팔면체로 표시돼요':''],['지금까지',done?`메인 퀘스트 ${done}개 끝냄`:'']]}));n++;}
   /* 일반 · 일일 퀘스트 */
   if(typeof GENQ!=='undefined'&&P.gq)for(const id in P.gq){const G=GENQ[id];if(!G)continue;const q=P.gq[id],np=qwNpc(G.npc);
-    const steps=G.steps.map((st,i)=>i<q.s?{t:st.goal,n:st.one?'':`${st.need}/${st.need}`,st:'done'}:i===q.s?(st.one?{t:st.goal,st:'now'}:{t:st.goal,n:`${Math.min(q.h|0,st.need)}/${st.need}`,st:'now',p:(q.h|0)/st.need}):G.veil?{t:'???'}:{t:st.goal,n:`0/${st.need}`});
+    const steps=G.steps.map((st,i)=>i<q.s?{t:st.goal,n:st.one?'':`${st.need}/${st.need}`,st:'done'}:i===q.s?(st.one?{t:st.goal,st:'now'}:{t:st.goal,n:`${Math.min(q.h|0,st.need)}/${st.need}`,st:'now',p:(q.h|0)/st.need}):G.veil?{t:'???'}:st.one?{t:st.goal}:{t:st.goal,n:`0/${st.need}`});
     const fin=q.s>=G.steps.length;steps.push({t:G.veil&&!fin?'???':G.report,st:fin?'now':''});
     body.appendChild(qwCard(gqTag(id),'gen',G.title,{ok:fin?'보고만 남았어요':'',steps,
       info:[['맡긴 사람',qwWho(np)],['곳',G.where||(np?qwPlace(np.x,np.z):'')],['적정레벨',G.maxLv>=999?`Lv ${G.minLv}~`:`Lv ${G.minLv}~${G.maxLv}`],
-        ['보상',`${G.reward?G.reward+' · ':''}경험치 ${qwNum(needExp(P.lv)*G.exp)} · ${qwNum(P.lv*G.gold)} 골드`],['다시 하기',G.daily?'하루에 한 번 (자정이 지나면 다시)':'한 번만 할 수 있어요']]}));n++;}
+        ['보상',G.rewardLine?G.rewardLine():`${G.reward?G.reward+' · ':''}경험치 ${qwNum(needExp(P.lv)*G.exp)} · ${qwNum(P.lv*G.gold)} 골드`],['다시 하기',G.daily?'하루에 한 번 (자정이 지나면 다시)':'한 번만 할 수 있어요']]}));n++;}
   /* 게시판 의뢰 */
   const q=P.quest;
   if(q&&!(q.special&&P.mq==='portal60')){const fin=qDone(q),from=q.fromName||'의뢰인';let steps;
@@ -29937,7 +30322,7 @@ function killMonster(m,mine=true,partyN=1){
   if(m.D.dragon){dragonReward(m,partyN);return;}
   const exp=Math.max(1,Math.round(m.st.exp*gapExp(m.lv)));
   log(`${m.D.name} 처치 · EXP +${Math.round(exp*expMul())}${partyN>1?` (함께 ${partyN}명)`:''}`,'good');
-  dropLoot(m);questKill(m);if(typeof lqKill==='function')lqKill(m);
+  dropLoot(m);questKill(m);if(typeof lqKill==='function')lqKill(m);if(typeof hfKill==='function')hfKill(m);
   gainExp(exp);partyShareExp(exp);
 }
 function levelUpFx(lv,n=1){sfx('levelup');
@@ -31441,6 +31826,7 @@ function playRemoteFx(d){
   else if(d.k==='l'){addLightZone(new THREE.Vector3(n(d.x,-WB,WB),0,n(d.z,-WB,WB)),n(d.s,1,12,5),n(d.d,1,10,6),n(d.g,100,200,115)/100,false);}
   else{spawnFx(col,new THREE.Vector3(n(d.x,-WB,WB),n(d.y,-50,200),n(d.z,-WB,WB)),n(d.s,.2,6,1),n(d.d,.1,2,.45));}
 }
+let onlineKey='';
 function syncPeers(peers){
   const seen=new Set();pageViewers=peers.filter(p=>p.kind==='viewer').length;
   for(const p of peers){
@@ -31468,7 +31854,7 @@ function syncPeers(peers){
     o.b.textContent=o.name;o.s.textContent=`${JOBS[job].name} Lv ${o.lv}`;guildTag(o,pr,p.peer);
   }
   for(const [k,o] of others)if(!seen.has(k)){shdRemoteClear(o);if(o.slSc){scene.remove(o.slSc);o.slSc=null;}scene.remove(o.mesh);o.tag.remove();others.delete(k);partyPeerLeft(k);}
-  renderOnline();
+  {let key=pageViewers+'|';for(const [k,o] of others)key+=k+o.name+o.job+o.lv+',';if(key!==onlineKey){onlineKey=key;renderOnline();}}   /* 접속자 목록은 사람·이름·레벨이 바뀔 때만 다시 그린다 (위치 소식마다 다시 그리면 사람이 많을 때 느려졌다) */
 }
 function renderOnline(){
   const ul=$('#onList');ul.innerHTML='';
@@ -31493,6 +31879,7 @@ function updateOthers(dt){
     if(Math.hypot(o.tx-m.position.x,o.tz-m.position.z)>30)m.position.set(o.tx,o.ty,o.tz);
     m.position.x+=(o.tx-m.position.x)*Math.min(1,dt*10);m.position.y+=(o.ty-m.position.y)*Math.min(1,dt*10);m.position.z+=(o.tz-m.position.z)*Math.min(1,dt*10);
     let dr=(o.r+Math.PI)-m.rotation.y;dr=Math.atan2(Math.sin(dr),Math.cos(dr));m.rotation.y+=dr*Math.min(1,dt*10);
+    if(Math.abs(m.position.x-camera.position.x)+Math.abs(m.position.z-camera.position.z)>220&&!(o.pr&&o.pr.cr)){if(m.visible)m.visible=false;o.tag.hidden=true;if(o.cb)o.cb.hidden=true;continue;}   /* 안개(140m) 너머 다른 모험가는 그리지도 움직이지도 않는다 (사람이 많을 때 프레임) */
     if(o.pr&&o.pr.cr)ccarPeerSeat(o);
     const sp=prev.distanceTo(m.position)/Math.max(dt,1e-3);
     m.userData.xl=o.pr&&o.pr.xl!=null?o.pr.xl:-1;   // 석궁병이 홈에 얹어 둔 화살
@@ -31518,17 +31905,20 @@ function makeWsRoom(){
   let ws=null,myId=null,ok=false,retry=1000;const peers=new Map(),peerFns=[],topicFns={},connFns=[];const mine={};
   const snap=()=>{const a=[{peer:myId||'me',by:null,isMe:true,sameTab:true,kind:'viewer',guest:false,presence:mine,updatedAt:Date.now()}];
     for(const [id,pr] of peers)a.push({peer:id,by:null,isMe:false,sameTab:false,kind:'viewer',guest:false,presence:pr,updatedAt:Date.now()});return a;};
-  const firePeers=()=>{const ps=snap();peerFns.forEach(f=>{try{f({peers:ps,joined:[],left:[],updated:[]});}catch(e){}});};
+  let fireT=0;const firePeers=()=>{if(fireT){clearTimeout(fireT);fireT=0;}const ps=snap();peerFns.forEach(f=>{try{f({peers:ps,joined:[],left:[],updated:[]});}catch(e){}});};
+  const firePeersSoon=()=>{if(!fireT)fireT=setTimeout(firePeers,50);};   /* 위치 소식은 0.05초 모아서 한 번에: 사람이 많으면 소식마다 모든 사람을 다시 훑느라 화면이 끊겼다 */
   const setConn=v=>{ok=v;connFns.forEach(f=>{try{f(v);}catch(e){}});};
   const send=o=>{if(ok&&ws&&ws.readyState===1)ws.send(JSON.stringify(o));};
   let away=false;   // 자리 비움: 창을 내려 두었거나 오래 손대지 않으면 연결을 잠시 끊는다 (서버 데이터 사용량 줄이기)
   function open(){if(window.__wsOff||away||(ws&&ws.readyState<=1))return;
     try{ws=new WebSocket(url);}catch(e){setTimeout(open,retry);return;}
-    ws.onopen=()=>{retry=1000;setConn(true);send({t:'p',d:mine});};
+    ws.onopen=()=>{retry=1000;setConn(true);send({t:'cap',d:{b:1}});send({t:'p',d:mine});};   /* cap b: 서버가 소식을 묶어(t:'B') 보내도 된다 */
     ws.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch(err){return;}
+      if(m&&m.t==='B'&&Array.isArray(m.l)){for(const x of m.l)if(x&&typeof x==='object')onMsg(x);return;}if(m&&typeof m==='object')onMsg(m);};
+    const onMsg=m=>{
       if(m.t==='hello'){myId=m.id;srvVer=m.v||0;window.__helloAt=performance.now();if(m.b){if(window.__build&&window.__build!==m.b)autoUpdate();window.__build=window.__build||m.b;}peers.clear();for(const k in (m.peers||{}))peers.set(k,m.peers[k]||{});firePeers();
         if(srvVer!==SERVER_VER)setTimeout(()=>log(`서버 파일이 게임과 맞지 않아요 (서버 v${srvVer||'옛날'}, 게임 v${SERVER_VER}). GitHub에 server.js, shared.js, sim.js, colliders.json을 다시 올려 주세요.`,'bad'),1500);}
-      else if(m.t==='p'&&m.id){peers.set(m.id,m.d||{});firePeers();}
+      else if(m.t==='p'&&m.id){peers.set(m.id,m.d||{});firePeersSoon();}
       else if(m.t==='join'&&m.id){if(!peers.has(m.id))peers.set(m.id,{});firePeers();}
       else if(m.t==='leave'&&m.id){peers.delete(m.id);firePeers();}
       else if(m.t==='fx'){(topicFns.fx||[]).forEach(f=>{try{f({topic:'fx',data:m.d,peer:m.id,by:null,isMe:false,sameTab:false,kind:'viewer',guest:false});}catch(err){}});}
@@ -33940,6 +34330,117 @@ function lqGanel(n){n.mqLock=true;
   {const u=Ln.mesh.userData;u.maxTurn=.4;u.markerY=1.75;if(u.marker)u.marker.position.y=1.75;}})();   /* 앉아 있어 말을 걸어도 몸은 조금만 돌리고, 머리 위 표시도 낮게 */
 for(const [k,f] of [['ex_smith',lqSmith],['ganel',lqGanel],['ganel_walk',lqGanel]]){const g=NPCS.find(n=>n.id===k);if(!g)continue;const prev=g.onOpen,want=k==='ex_smith'?'give':'info';
   g.onOpen=()=>{if(P&&lqStep()===want){f(g);return true;}return prev?prev():false;};}
+
+/* ---------- R: 깊은 숲 빈터 모닥불 곁에 앉은 얼굴 없는 사냥꾼 ----------
+   S처럼 이름 말고는 아무것도 밝히지 않는다. 다른 NPC들은 R을 모른다 (R은 골목의 S를 아는 듯 모르는 듯 한마디만 한다) */
+function buildRCamp(cx,cz,ux,uz){const vx=-uz,vz=ux,y0=heightAt(cx,cz),g=new THREE.Group();g.position.set(cx,y0,cz);g.rotation.y=Math.atan2(ux,uz);g.userData.anim=true;   /* 묶음 안: +z = 길 쪽, +x = 옆 */
+  const M=(geo,m,px,py,pz,rx=0,ry=0,rz=0)=>{const o=new THREE.Mesh(geo,m);o.position.set(px,py,pz);o.rotation.set(rx,ry,rz);o.castShadow=true;o.receiveShadow=true;g.add(o);return o;};
+  const gy=(lx,lz)=>heightAt(cx+vx*lx+ux*lz,cz+vz*lx+uz*lz)-y0;   /* 묶음 안 자리의 땅 높이 */
+  const stone=mat(0x5e5a50,{roughness:.95}),stone2=mat(0x4a4740,{roughness:.95}),ash=mat(0x2e2b28,{roughness:1}),bark=mat(0x3a2c1e,{roughness:.95,flatShading:false}),
+    cut=mat(0x8a6a48,{roughness:.9,flatShading:false}),ring=mat(0x6a4e34,{roughness:.9,flatShading:false}),moss=mat(0x2f4a22,{roughness:1,flatShading:false}),
+    wood=mat(0x5a3f26,{roughness:.8,flatShading:false}),stick=mat(0x4a3622,{roughness:.9}),hide=mat(0x6b5640,{roughness:.95,side:THREE.DoubleSide,flatShading:false}),
+    hide2=mat(0x8a7458,{roughness:.95,side:THREE.DoubleSide,flatShading:false}),wool=mat(0x4a4236,{roughness:1,flatShading:false}),strap=mat(0x2e2017,{roughness:.8,flatShading:false}),
+    str=mat(0xd8d0bc,{roughness:.8});
+  /* 불 자리: 돌 고리, 재, 장작불 */
+  {const h=gy(0,0);M(new THREE.CylinderGeometry(.5,.55,.03,18),ash,0,h+.01,0);
+    for(let k=0;k<11;k++){const a=k/11*Math.PI*2+Math.sin(k*3.1)*.08,r=.58+Math.sin(k*1.7)*.03,s=.13+((k*5)%3)*.025;const st=M(new THREE.DodecahedronGeometry(s,1),k%3?stone:stone2,Math.cos(a)*r,h+s*.45,Math.sin(a)*r,k*.7,k*1.3,0);st.scale.set(1.2,.75,1);}
+    /* 꼬챙이 받침: 불 양옆에 갈래 진 막대 둘, 그 위로 가로 막대 */
+    for(const s of [-1,1]){M(new THREE.CylinderGeometry(.018,.024,.7,6),stick,s*.72,h+.33,0,0,0,s*.06);M(new THREE.CylinderGeometry(.012,.016,.16,5),stick,s*.7,h+.72,0,0,0,s*.5);M(new THREE.CylinderGeometry(.012,.016,.16,5),stick,s*.76,h+.72,0,0,0,-s*.5);}
+    M(new THREE.CylinderGeometry(.012,.012,1.7,6),stick,0,h+.68,0,0,0,Math.PI/2);
+    const flames=[];_fireBundle(g,0,h+.03,0,1.15,flames);scene.add(g);g.updateMatrixWorld(true);
+    /* ── R이 앉는 통나무: 불 뒤(길 반대쪽)에 옆으로 누운 이끼 낀 통나무 ── */
+    const lz=-1.45,lh=gy(0,lz),L=new THREE.Group();L.position.set(0,lh+.21,lz);L.rotation.z=Math.PI/2;g.add(L);
+    {const ge=new THREE.CylinderGeometry(.22,.24,2.1,20,8,true),P=ge.attributes.position;for(let i=0;i<P.count;i++){const x=P.getX(i),y=P.getY(i),z=P.getZ(i),a=Math.atan2(x,z),k=1+.05*Math.sin(a*9+y*3)+.03*Math.sin(a*23)+.02*Math.sin(y*11);P.setX(i,x*k);P.setZ(i,z*k);}ge.computeVertexNormals();
+      const lg=new THREE.Mesh(ge,bark);lg.castShadow=lg.receiveShadow=true;L.add(lg);
+      for(const s of [-1,1]){const c=new THREE.Mesh(new THREE.CircleGeometry(.235,20),cut);c.position.y=s*1.05;c.rotation.x=-s*Math.PI/2;L.add(c);for(const r of [.08,.15])
+        {const t=new THREE.Mesh(new THREE.TorusGeometry(r,.006,4,20),ring);t.position.y=s*1.052;t.rotation.x=Math.PI/2;L.add(t);}}
+      for(let k=0;k<7;k++){const m=new THREE.Mesh(new THREE.SphereGeometry(.14,10,6),moss);m.scale.set(1,1.4,.3);const a=Math.PI*.7+Math.sin(k*2.7)*.6;m.position.set(Math.sin(a)*.2,-.85+k*.28,Math.cos(a)*.2);m.rotation.y=a;L.add(m);}   /* 이끼 (앉는 윗면은 비켜서) */
+      const br=new THREE.Mesh(new THREE.CylinderGeometry(.03,.05,.32,6),bark);br.position.set(-.24,.7,.08);br.rotation.set(.3,0,.9);L.add(br);}   /* 꺾인 가지 그루터기 */
+    /* ── 통나무 끝에 기대 세운 긴 활 ── */
+    {const bx=1.2,bz=lz+.18,bh=gy(bx,bz),B=new THREE.Group();B.position.set(bx,bh,bz);B.rotation.set(-.32,.4,0);g.add(B);
+      const pts=[];for(let k=0;k<=16;k++){const t=k/16,y=t*1.7;pts.push(new THREE.Vector3(0,y,-Math.sin(t*Math.PI)*.16+Math.sin(t*Math.PI*2)*.015));}
+      const bow=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),32,.016,6,false),wood);bow.castShadow=true;B.add(bow);
+      const gr=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,.16,8),strap);gr.position.set(0,.85,-.16);B.add(gr);
+      const s0=new THREE.Mesh(new THREE.CylinderGeometry(.002,.002,1.68,3),str);s0.position.set(0,.85,.005);B.add(s0);}
+    /* ── R 뒤: 끈으로 묶은 담요 꾸러미와 가죽 자루 ── */
+    {const bx=-.55,bz=lz-.75,bh=gy(bx,bz);const r=M(new THREE.CylinderGeometry(.15,.15,.75,14),wool,bx,bh+.15,bz,0,.3,Math.PI/2);r.rotation.order='YXZ';r.rotation.set(0,.3,Math.PI/2);
+      for(const o of [-.22,.22]){const t=M(new THREE.TorusGeometry(.155,.012,5,16),strap,bx+Math.cos(.3)*o,bh+.15,bz-Math.sin(.3)*o,0,.3+Math.PI/2,0);}
+      const sk=M(new THREE.SphereGeometry(.2,12,8),hide,.35,gy(.35,lz-.8)+.16,lz-.8);sk.scale.set(.9,.85,.7);M(new THREE.CylinderGeometry(.07,.1,.12,10),hide,.35,gy(.35,lz-.8)+.34,lz-.8);}
+    /* ── 옆: 갈래 막대 둘에 가로대, 그 위에 말리는 짐승 가죽 ── */
+    {const rx=2.4,rz=-.4,rh=gy(rx,rz),R=new THREE.Group();R.position.set(rx,rh,rz);R.rotation.y=.25;g.add(R);
+      for(const s of [-1,1]){const p=new THREE.Mesh(new THREE.CylinderGeometry(.03,.04,1.55,6),stick);p.position.set(0,.77,s*.7);p.rotation.x=s*.05;p.castShadow=true;R.add(p);
+        for(const q of [-1,1]){const f=new THREE.Mesh(new THREE.CylinderGeometry(.015,.02,.18,5),stick);f.position.set(0,1.58,s*.7+q*.04);f.rotation.x=q*.45;R.add(f);}}
+      const bar=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,1.6,6),stick);bar.rotation.x=Math.PI/2;bar.position.y=1.55;R.add(bar);
+      const ge=new THREE.PlaneGeometry(.95,1.0,10,10),P=ge.attributes.position;for(let i=0;i<P.count;i++){const x=P.getX(i),y=P.getY(i);const e=Math.abs(x)>.38||y<-.42?Math.sin(x*37+y*23)*.05:0;P.setX(i,x*(1-.18*(.5-y))+e*.5);P.setY(i,y+e);P.setZ(i,Math.sin(x*6)*.03+(y<0?(-y)*.06:0));}ge.computeVertexNormals();   /* 가장자리가 들쭉날쭉한 가죽 */
+      const hd=new THREE.Mesh(ge,hide2);hd.rotation.y=Math.PI/2;hd.position.y=1.03;hd.castShadow=true;R.add(hd);
+      for(const z of [-.32,0,.32]){const k=new THREE.Mesh(new THREE.TorusGeometry(.03,.006,4,10),strap);k.position.set(0,1.53,z);k.rotation.y=Math.PI/2;R.add(k);}}
+    /* ── 손님 자리: 불 건너편 옆 그루터기 ── */
+    {const sx=-1.55,sz=.55,sh=gy(sx,sz);M(new THREE.CylinderGeometry(.27,.32,.42,14),bark,sx,sh+.19,sz);M(new THREE.CircleGeometry(.27,16),cut,sx,sh+.405,sz,-Math.PI/2);
+      const t=M(new THREE.TorusGeometry(.14,.006,4,16),ring,sx,sh+.408,sz,Math.PI/2);}
+    packAnim(g);_fireAnim(cx,cz,g,flames,h+.55,.3);}
+  const W=(lx,lz)=>({x:cx+vx*lx+ux*lz,z:cz+vz*lx+uz*lz});
+  for(const [lx,lz,r] of [[0,0,.65],[-.75,-1.45,.32],[.75,-1.45,.32],[2.4,-.4-.68,.12],[2.4,-.4+.68,.12],[-1.55,.55,.33],[-.4,-2.2,.3]]){const p=W(lx,lz);colliders.push({x:p.x,z:p.z,r});}   /* 불·통나무 끝·건조대 기둥·그루터기·꾸러미 (R 자리는 addNpc가 막는다) */
+  return W;}
+(function(){if(NPCS.some(n=>n.id==='rman')||!OR.ISLES[RCAMP.id])return;const I=OR.ISLES[RCAMP.id],cx=I.x+RCAMP.dx,cz=I.z+RCAMP.dz,W=buildRCamp(cx,cz,RCAMP.ux,RCAMP.uz);
+  const p=W(0,-1.45),f=W(0,3);NPC_POSE.rman='rfire';
+  const Rn=addNpc({id:'rman',name:'R',role:'',x:p.x,z:p.z,faceX:f.x,faceZ:f.z,
+    look:{robe:0x2c2a20,robe2:0x1f2a1c,hat:'rhood',rhood:1,sitw:1,cloth:{long:false,skirt:false,sleeve:'long',sleeveC:0x2c2a20,pants:0x2a251c,shoes:0x22180f}},
+    lines:['…','불 곁에선 짐승도 사람도 말이 적어진다.','발소리를 죽여라. 숲이 듣고 있다.','이 숲의 나무들은 오래 살았다. 너보다도, 나보다도.','가면은 벗지 않는다. 숲이 내 얼굴을 기억하지 않게.','짐승은 배가 고파서 덤빈다. 너는 무엇 때문이지.','불이 꺼지기 전에 가라. 어둠이 내리면 이 숲은 길을 바꾼다.'],acts:[],
+    onOpen:()=>{const n=NPCS.find(q=>q.id==='rman');n.mqLock=false;const done=()=>{n.mqLock=false;};
+      if(!n.met){n.met=1;n.mqLock=true;showPages(['…불을 밟지 마라.','이 깊이까지 들어오는 자는 드물다. 길을 잃었거나, 무언가를 쫓고 있거나.','나는 R. 이름은 그것으로 충분하다.'],0,()=>{done();npcEndLine('앉든지, 가든지. 불은 누구에게나 똑같이 따뜻하다.');});return true;}
+      if(gqClear('lq')&&!n.bolt){n.bolt=1;n.mqLock=true;showPages(['…쇳내와 번개 냄새가 섞였군.','골목 끝에 앉은 녀석에게서 배웠나. 그 녀석은 내 이름을 꺼내지 않았을 거다.'],0,()=>{done();npcEndLine('그거면 됐다. 너도 꺼내지 마라.');});return true;}
+      return false;}});
+  {const u=Rn.mesh.userData;u.maxTurn=.35;u.markerY=1.85;if(u.marker)u.marker.position.y=1.85;}})();   /* 앉아 있어 말을 걸어도 몸은 조금만 돌리고, 머리 위 표시도 낮게 */
+
+/* ---------- 한나의 식재료: 하레나 여관 주인 한나가 맡기는 세 단계 사냥 ----------
+   창고가 비어서 사막 짐승을 잡아 식재료를 모아 온다: 낙타(고기) → 모래 슬라임(국물 젤리) → 사막 거북(수프).
+   단계마다 한나에게 돌아가면 그 단계 보수를 주고 다음 재료를 알려 준다. 한 번만 할 수 있다.
+   보수는 같은 사냥터의 하레나 게시판 의뢰와 같은 셈 (경험치 = 몬스터 경험치×마리×1.4, 골드 = 레벨×마리×11) */
+const HFOOD=[{ty:'ogre',zone:'ruins',need:10,lv:10},{ty:'sandslime',zone:'wwest',need:12,lv:16},{ty:'nomad',zone:'wnorth',need:10,lv:26}];
+const hfPay=k=>{const H=HFOOD[k];return {exp:Math.round(OR.monStats(H.ty,H.lv).exp*H.need*1.4),gold:H.lv*H.need*11};};
+GENQ.hfood={title:'한나의 식재료',npc:'hanna',minLv:15,maxLv:999,where:'하레나 광장 · 한나의 여관 앞',
+  steps:[{key:'h0',talk:1,need:HFOOD[0].need,goal:'깊은 사막1의 낙타 잡기'},{key:'b1',talk:1,need:1,one:1,goal:'한나에게 낙타 고기 건네기'},
+    {key:'h1',talk:1,need:HFOOD[1].need,goal:'깊은 사막2의 모래 슬라임 잡기'},{key:'b2',talk:1,need:1,one:1,goal:'한나에게 슬라임 젤리 건네기'},
+    {key:'h2',talk:1,need:HFOOD[2].need,goal:'깊은 사막3의 사막 거북 잡기'}],
+  report:'한나에게 거북 고기 건네기',exp:0,gold:0,talk:(id,n)=>hfTalk(n),
+  rewardLine:()=>{const a=[0,1,2].map(hfPay);return `단계마다 경험치 ${a.map(p=>qwNum(p.exp)).join(' / ')} · 골드 ${a.map(p=>qwNum(p.gold)).join(' / ')} · 마지막에 양고기 스튜 3개`;},
+  markWho:id=>{const st=gqStepOf(id);return st&&(st.key==='b1'||st.key==='b2')?['hanna']:[];}};
+const hfStep=()=>{const st=gqStepOf('hfood');return st?st.key:(gqOf('hfood')?'report':null);};
+function hfNext(){const q=gqOf('hfood');if(!q)return;q.s++;q.h=0;const nx=gqStepOf('hfood'),g=nx?nx.goal:GENQ.hfood.report;
+  log(`한나의 식재료 — ${g}`,'sys');toast(g);updateQuestHud();save();if(!$('#qwin').hidden)renderQuestWin();}
+const HF_GOT=['낙타 고기','슬라임 젤리','거북 고기'];
+function hfKill(m){const st=hfStep();if(!st||st[0]!=='h')return;const k=+st[1],H=HFOOD[k];if(m.t!==H.ty)return;const q=gqOf('hfood');q.h=(q.h|0)+1;
+  log(`${HF_GOT[k]}를 챙겼다 (${Math.min(q.h,H.need)}/${H.need})`,'sys');
+  if(q.h>=H.need)hfNext();else{updateQuestHud();if(q.h%5===0)save();}}
+/* 단계 보수: 경험치·골드 (마지막엔 스튜도) */
+function hfReward(k){const p=hfPay(k);P.gold+=p.gold;const items=[];if(k===2&&addItem('f_stew',3,true))items.push(['f_stew',3]);
+  lootShow(null,p.gold,items);log(`한나의 식재료 ${k+1}단계 보수 · 경험치 ${p.exp.toLocaleString('ko-KR')} · ${p.gold.toLocaleString('ko-KR')} 골드`,'good');sfx('coin');gainExp(p.exp);updateHud();}
+function hfTalk(n){const st=hfStep(),G=GENQ.hfood;n.mqLock=true;const done=()=>{n.mqLock=false;};
+  if(gqClear('hfood')){done();renderNpc('창고가 꽉 차니 마음이 다 든든해요. 그때 정말 고마웠어요!');return;}
+  if(!st){if(P.lv<G.minLv){done();renderNpc('마음은 고마운데, 바깥 사막 짐승들이 만만치 않아요. 조금 더 단단해지면 그때 부탁할게요.');return;}
+    showPages(['아이고, 마침 잘 왔어요. 큰일 났어요…','석굴 쪽으로 가는 손님이 부쩍 늘어서 냄비를 온종일 끓였더니, 창고가 텅 비었지 뭐예요.','식재료 마차는 사막 짐승들 때문에 며칠째 오지도 않고요.'],0,()=>{
+      renderNpc('사막에 나가서 먹을 만한 짐승을 좀 잡아다 줄래요? 보수는 넉넉히 챙겨 드릴게요.',box=>{box.dataset.noskip='1';
+        npcBtn(box,'맡겨 주세요',()=>{(P.gq=P.gq||{}).hfood={s:0,h:0};done();updateQuestHud();save();log(`${gqTag('hfood')} 퀘스트: ${G.title} — ${G.steps[0].goal}`,'sys');
+          npcEndLine('고마워요! 먼저 고기부터요. 깊은 사막1에 낙타가 다녀요. 열 마리면 스튜 냄비를 며칠은 채울 수 있어요.');gqFx('hfood');},'pri wide');
+        npcBtn(box,'다음에요',()=>{done();renderNpc('그래요, 시간 날 때 꼭 들러 줘요.');},'wide');});});return;}
+  if(st[0]==='h'){const k=+st[1],q=gqOf('hfood'),left=HFOOD[k].need-(q.h|0);
+    renderNpc([`낙타 고기가 아직 ${left}마리 몫 모자라요. 깊은 사막1에 가면 낙타가 있어요.`,`모래 슬라임이 ${left}마리 더 필요해요. 깊은 사막2에서 말랑말랑 굴러다녀요.`,`사막 거북이 ${left}마리 남았어요. 깊은 사막3이에요. 등딱지 조심하고요!`][k],box=>{box.dataset.noskip='1';
+      npcBtn(box,'부탁 그만두기',()=>{delete P.gq.hfood;done();updateQuestHud();save();log(`${gqTag('hfood')} 퀘스트를 그만뒀다: ${G.title}`,'sys');renderNpc('괜찮아요, 무리하지 마세요. 냄비는 어떻게든 채워 볼게요.');},'wide');
+      npcBtn(box,'다녀올게요',()=>{done();closeNpc();},'pri wide');});return;}
+  if(st==='b1'){showPages(['어머, 이게 다 낙타 고기예요? 냄비가 웃겠네!','이걸로 스튜는 됐고… 그런데 국물을 걸쭉하게 할 게 없어요.','깊은 사막2의 모래 슬라임 알아요? 껍질 안쪽 젤리를 걸러 끓이면 묵처럼 굳어요. 우리 여관 국물 맛의 비밀이에요.'],0,()=>{
+      hfReward(0);done();hfNext();npcEndLine('이건 고기 값이에요. 슬라임은 열두 마리면 넉넉해요. 모래는 잘 털어 오고요!');});return;}
+  if(st==='b2'){showPages(['말랑말랑하네요! 오늘 밤 국물은 끝내주겠어요.','마지막으로 하나만 더 부탁할게요. 귀한 손님 상에 올릴 거요.','깊은 사막3의 사막 거북이요. 거북 수프는 하레나에서 우리 여관만 끓여요. 대신 등딱지가 돌처럼 단단하니 조심해요.'],0,()=>{
+      hfReward(1);done();hfNext();npcEndLine('이건 젤리 값이에요. 거북은 열 마리요. 힘들다 싶으면 꼭 돌아와요.');});return;}
+  if(st==='report'){showPages(['세상에, 거북을 열 마리나! 이제 창고가 꽉 찼어요.','덕분에 여관 문을 닫지 않아도 되겠어요. 손님들이 다들 좋아할 거예요.'],0,()=>{
+      delete P.gq.hfood;const d=(P.gqDone=P.gqDone||{}).hfood||{n:0};P.gqDone.hfood={n:(d.n|0)+1,t:Date.now()};
+      hfReward(2);log(`${gqTag('hfood')} 퀘스트 완료: ${G.title}`,'good');done();updateQuestHud();save();
+      npcEndLine('이건 보수, 그리고 갓 끓인 스튜예요. 길 떠날 때 챙겨 가요. 언제든 들러요, 수프는 늘 데워 둘게요!');});return;}
+  done();renderNpc(n.lines[(n.li|0)%n.lines.length]);}
+/* 한나: 받을 수 있을 때와 하는 동안만 '식재료 구하기'가 보이고, 재료를 건넬 때는 말을 걸면 바로 이야기한다 */
+{const h=NPCS.find(n=>n.id==='hanna');if(h){const prev=h.onOpen,A=['식재료 구하기','gq:hfood'];
+  h.onOpen=()=>{h.mqLock=false;const i=h.acts.indexOf(A),show=!!P&&!gqClear('hfood')&&(gqOf('hfood')||P.lv>=GENQ.hfood.minLv);
+    if(show&&i<0)h.acts.unshift(A);else if(!show&&i>=0)h.acts.splice(i,1);
+    const st=P&&hfStep();if(st==='b1'||st==='b2'||st==='report'){hfTalk(h);return true;}return prev?prev():false;};}}
 
 /* ---------- 조각가 지븐: 장인 지구 길모퉁이의 조각 공방 ----------
    buildArtisans가 석공 마당 한 자리를 비워 두고(EXM.zbn) 여기서 지븐의 공방을 짓는다.

@@ -123,33 +123,96 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8 * 1024,
 const clients = new Map(); // id -> ws
 let counter = 0;
 
-function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+// 보낼 소식은 사람마다 0.05초 모아서 한 묶음(t:'B')으로 보낸다: 소식 하나하나를 따로 압축하면 사람이 많을 때 압축하느라 서버가 밀려
+// 채팅이 몇 초씩 늦게 갔다. 묶음을 아는 게임(cap b)에게만 묶어 보내고, 옛 게임에는 예전처럼 하나씩 보낸다
+const BATCH_MS = 50, dirtyWs = new Set();
+// 받는 쪽이 못 따라오면(느린 인터넷·멈춘 탭) 보낼 것이 서버 메모리에 끝없이 쌓여 서버가 통째로 죽을 수 있다:
+// 밀린 것이 SLOW_B 넘으면 위치·스킬 효과처럼 곧 새로 오는 소식은 버리고, DEAD_B 넘으면 그 연결만 끊는다 (게임이 알아서 다시 붙는다)
+const SLOW_B = 128 * 1024, DEAD_B = 2 * 1024 * 1024;
+const droppable = (str) => str.startsWith('{"t":"p"') || str.startsWith('{"t":"fx"');
+function out(ws, str, pid) {
+  if (ws.readyState !== 1) return;
+  const lag = ws.bufferedAmount;
+  if (lag > DEAD_B) { ws.terminate(); return; }
+  if (lag > SLOW_B && (pid || droppable(str))) return;
+  if (!ws.batch) { ws.send(str); return; }
+  if (pid) { const k = ws.qp.get(pid); if (k !== undefined) { ws.q[k] = str; return; } ws.qp.set(pid, ws.q.length); }   // 같은 사람 위치는 마지막 것만
+  ws.q.push(str);
+  if (dirtyWs.size === 0) setTimeout(flushAll, BATCH_MS);
+  dirtyWs.add(ws);
+}
+function flushAll() {
+  for (const ws of dirtyWs) {
+    const q = ws.q; ws.q = []; ws.qp.clear();
+    if (ws.readyState !== 1 || !q.length) continue;
+    ws.send(q.length === 1 ? q[0] : '{"t":"B","l":[' + q.join(',') + ']}');
+  }
+  dirtyWs.clear();
+}
+function send(ws, obj) { if (ws.readyState === 1) out(ws, JSON.stringify(obj)); }
 function broadcast(obj, except) {
   const msg = JSON.stringify(obj);
-  for (const ws of clients.values()) if (ws !== except && ws.readyState === 1) ws.send(msg);
+  for (const ws of clients.values()) if (ws !== except && ws.readyState === 1) out(ws, msg);
 }
 // 가까운 사람에게만 (멀리 있는 사람은 볼 수 없는 스킬 효과 등)
 const NEAR = 125;
 const isNear = (ws, x, z) => { const p = ws.pres; return typeof p.x !== 'number' || typeof x !== 'number' || Math.hypot(p.x - x, p.z - z) < NEAR; };
+// 사람들을 125m 칸에 나눠 둔다 (0.2초마다 새로): 소식 하나마다 접속자 모두를 훑으면 사람이 많을 때 그것만으로 서버가 꽉 찼다
+const GRID = NEAR, noPos = new Set();
+let grid = new Map();
+const cellKey = (x, z) => Math.floor(x / GRID) * 65536 + Math.floor(z / GRID);
+function regrid() {
+  const g = new Map(); noPos.clear();
+  for (const ws of clients.values()) {
+    const p = ws.pres;
+    if (typeof p.x !== 'number' || typeof p.z !== 'number') { noPos.add(ws); continue; }
+    const k = cellKey(p.x, p.z), L = g.get(k); if (L) L.push(ws); else g.set(k, [ws]);
+  }
+  grid = g;
+}
+setInterval(regrid, 200);
+// (x, z) 둘레 이웃 칸의 사람과 자리를 모르는 사람 (자리가 없으면 모두)
+function* around(x, z) {
+  if (typeof x !== 'number' || typeof z !== 'number') { yield* clients.values(); return; }
+  yield* noPos;
+  const cx = Math.floor(x / GRID), cz = Math.floor(z / GRID);
+  for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gz = cz - 1; gz <= cz + 1; gz++) { const L = grid.get(gx * 65536 + gz); if (L) yield* L; }
+}
 function broadcastNear(obj, x, z, except) {
   let msg = null;
-  for (const ws of clients.values()) if (ws !== except && ws.readyState === 1 && isNear(ws, x, z)) ws.send(msg || (msg = JSON.stringify(obj)));
+  for (const ws of around(x, z)) if (ws !== except && ws.readyState === 1 && isNear(ws, x, z)) out(ws, msg || (msg = JSON.stringify(obj)));
 }
-// 위치 소식: 가까운 사람에게는 바로, 먼 사람에게는 3초에 한 번 마지막 것만 (접속자 목록·지도용)
+// 위치 소식: 40m 안은 바로, 125m 안은 0.4초에 한 번, 그보다 먼 사람에게는 3초에 한 번 마지막 것만 (접속자 목록·지도용)
+const MID = 40, farDirty = new Set();
 function broadcastPres(id, from) {
   const d = from.pres;
-  let msg = null;
-  for (const ws of clients.values()) {
+  let msg = from.pmsg || null;
+  farDirty.add(from);
+  for (const ws of around(d.x, d.z)) {
     if (ws === from || ws.readyState !== 1) continue;
-    if (isNear(ws, d.x, d.z)) { if (ws.farPend) ws.farPend.delete(id); ws.send(msg || (msg = JSON.stringify({ t: 'p', id, d }))); }
-    else (ws.farPend || (ws.farPend = new Map())).set(id, from);
+    const p = ws.pres, dd = typeof p.x === 'number' && typeof d.x === 'number' ? Math.hypot(p.x - d.x, p.z - d.z) : 0;
+    if (dd < MID) { if (ws.midPend) ws.midPend.delete(id); out(ws, msg || (msg = from.pmsg = JSON.stringify({ t: 'p', id, d })), id); }
+    else if (dd < NEAR) (ws.midPend || (ws.midPend = new Map())).set(id, from);
   }
 }
 setInterval(() => {
   for (const ws of clients.values()) {
-    if (!ws.farPend || !ws.farPend.size || ws.readyState !== 1) continue;
-    for (const [id, from] of ws.farPend) if (clients.get(id) === from) ws.send(JSON.stringify({ t: 'p', id, d: from.pres }));
-    ws.farPend.clear();
+    if (!ws.midPend || !ws.midPend.size || ws.readyState !== 1) continue;
+    for (const [id, from] of ws.midPend) if (clients.get(id) === from) out(ws, from.pmsg || (from.pmsg = JSON.stringify({ t: 'p', id, d: from.pres })), id);
+    ws.midPend.clear();
+  }
+}, 400);
+setInterval(() => {
+  if (!farDirty.size) return;
+  const list = [...farDirty]; farDirty.clear();
+  for (const ws of clients.values()) {
+    if (ws.readyState !== 1) continue;
+    const p = ws.pres, hp = typeof p.x === 'number';
+    for (const from of list) {
+      if (from === ws || clients.get(from.id) !== from) continue;
+      const d = from.pres;
+      if (!hp || typeof d.x !== 'number' || Math.hypot(p.x - d.x, p.z - d.z) >= NEAR) out(ws, from.pmsg || (from.pmsg = JSON.stringify({ t: 'p', id: from.id, d })), from.id);
+    }
   }
 }, 3000);
 const cleanText = (s, n) => (typeof s === 'string' ? s.replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, '').trim().slice(0, n) : '');
@@ -366,7 +429,7 @@ function libPageIn(ws, d) {
 
 wss.on('connection', (ws) => {
   const id = 'p' + (++counter).toString(36) + Math.random().toString(36).slice(2, 6);
-  ws.id = id; ws.pres = {}; ws.alive = true; ws.budget = 60; ws.chatAt = 0;
+  ws.id = id; ws.pres = {}; ws.alive = true; ws.budget = 60; ws.chatAt = 0; ws.batch = false; ws.q = []; ws.qp = new Map();
   clients.set(id, ws);
 
   const peers = {};
@@ -380,8 +443,10 @@ wss.on('connection', (ws) => {
     if (ws.budget-- <= 0) return;
     let m;
     try { m = JSON.parse(raw); } catch { return; }
-    if (m.t === 'p') {
-      ws.pres = cleanPresence(m.d);
+    if (m.t === 'cap') {
+      if (m.d && m.d.b === 1) ws.batch = true;   // 이 게임은 묶음 소식(t:'B')을 풀 줄 안다
+    } else if (m.t === 'p') {
+      ws.pres = cleanPresence(m.d); ws.pmsg = null;
       sim.presence(id, ws.pres);
       broadcastPres(id, ws);
       guildSeen(ws);

@@ -44,6 +44,8 @@
       const c = clients.get(id); if (c) c.send(msg);
     };
     const broadcast = (msg, except) => { for (const [id, c] of clients) if (id !== except) c.send(msg); };
+    // 몬스터 공격·기술 표시는 그 몬스터가 보이는(안개 안쪽) 사람에게만 보낸다: 모두에게 보내면 사람 수의 제곱으로 늘어난다
+    const nearCast = (m, msg, except) => { for (const [id, c] of clients) { if (id === except) continue; const p = c.pres; if (p && typeof p.x === 'number' && typeof p.z === 'number') { const dx = p.x - m.x, dz = p.z - m.z; if (dx * dx + dz * dz > NEAR_R2) continue; } c.send(msg); } };
     const inRotunda = (p) => p.z > 300 && p.x < 800 && Math.hypot(p.x - DUN.x, p.z - DUN.z) < DUN.R - 1.5;
     const inLair = (p) => Math.hypot(p.x - LAIR.x, p.z - LAIR.z) < LAIR.r - 0.5;
     // 용 같은 큰 보스는 자기 둥지(원) 안에서만 싸운다
@@ -218,7 +220,7 @@
           if (A.t >= A.dur) {
             const t = tg.find((q) => q.id === A.to);
             if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 2.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk });
-            broadcast({ t: 'matk', i: m.i, to: null }, A.to);
+            nearCast(m, { t: 'matk', i: m.i, to: null }, A.to);
             m.act = null; m.gap = 0.6; m.windup = 0;
           }
         } else if (A.t >= A.dur) { m.act = null; m.gap = 0.8; }
@@ -279,14 +281,14 @@
       const sk = { sid: ++m.skSeq, t: 0, ...o };
       sk.msg = { t: 'msk', i: m.i, sid: sk.sid, k: o.k, d: r2(o.tele), ...(o.sh === 'c' ? { sh: 'c', x: r2(o.x), z: r2(o.z), r: r2(o.r) } : { sh: 'l', x: r2(o.x), z: r2(o.z), a: r2(o.a), len: r2(o.len), w: r2(o.w) }) };
       if (o.col !== undefined) sk.msg.col = o.col;
-      m.sks.push(sk); broadcast(sk.msg); return sk;
+      m.sks.push(sk); nearCast(m, sk.msg); return sk;
     }
     function dResolve(m, sk, tg) {
       const hit = tg.filter((t) => inShape(sk, t.x, t.z, 0.8)).map((t) => t.id);
       const out = { ...sk.msg, t: 'mskr', dmg: Math.round(m.atk * sk.mul), lv: m.lv, hit };
       if (sk.pool) { out.pool = sk.pool[0]; out.dps = Math.round(m.atk * sk.pool[1]); }
       if (sk.jump) out.jump = 1;
-      broadcast(out);
+      nearCast(m, out);
       if (sk.k === 'dive' || sk.k === 'burrow') { m.mv = { fx: m.x, fz: m.z, tx: sk.x, tz: sk.z, t: 0, dur: sk.k === 'burrow' ? 0.12 : 0.25 }; }
     }
     function dragonTick(m, ts) {
@@ -306,7 +308,7 @@
       const frac = m.hp / m.mh, ph = frac < 0.25 ? 3 : frac < 0.55 ? 2 : 1;
       if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? `${NMi} 높이 떠올랐다.` : `${NMi} 울부짖는다.`) : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
       const fast = ph === 3 ? 0.65 : ph === 2 ? 0.82 : 1;
-      if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 3.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); broadcast({ t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.8 * fast; } return; }
+      if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 3.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); nearCast(m, { t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.8 * fast; } return; }
       if (m.gap > 0 || m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }
       let t = tg.find((q) => q.id === m.aggroOn);
       if (m.taunt > 0) m.taunt -= TICK;
@@ -377,7 +379,7 @@
         const n = ph === 3 ? 5 : 3;
         for (let k = 0; k < n; k++) { const aa = m.ry + Math.PI + (k - (n - 1) / 2) * 0.7, p = { x: m.x + Math.sin(aa) * (m.r + 2.5), z: m.z + Math.cos(aa) * (m.r + 2.5) }; lairClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
           const s = makeMon('hgrub', 'hlair', p, 98, { summon: true, aggroOn: pick(tg).id, feed: ph === 3 && k % 2 === 0 }); broadcast({ t: 'mspawn', m: pub(s), from: m.i }); }
-        broadcast({ t: 'mfx', i: m.i, k: 'eggs' });
+        nearCast(m, { t: 'mfx', i: m.i, k: 'eggs' });
         C.eggs = 18 * fast; m.gap = 1.4;
       } else if (ph >= 3 && C.wail <= 0) {
         dSkill(m, { k: 'wail', sh: 'c', x: m.x, z: m.z, r: 13, tele: 1.7, mul: 0.9, block: true });
@@ -472,7 +474,7 @@
       }
       if (S.col !== undefined) sk.msg.col = S.col;
       m.sk = sk; m.windup = 0;
-      broadcast(sk.msg);
+      nearCast(m, sk.msg);
     }
     function inShape(sk, x, z, pad) {
       if (sk.msg.sh === 'c') return Math.hypot(x - sk.x, z - sk.z) < sk.r + pad;
@@ -486,7 +488,7 @@
       const out = { ...sk.msg, t: 'mskr', dmg, lv: m.lv, hit };
       if (S.pool) { out.pool = S.pool[0]; out.dps = Math.round(m.atk * S.pool[1]); }
       if (S.jump) out.jump = 1;
-      broadcast(out);
+      nearCast(m, out);
       if (S.k === 'dash') { const e = sk.len - 0.6; sk.move = { fx: m.x, fz: m.z, tx: m.x + Math.sin(sk.a) * e, tz: m.z + Math.cos(sk.a) * e, dur: 0.32 }; }
       else if (S.k === 'leap') { const e = Math.max(0, Math.hypot(sk.x - m.x, sk.z - m.z) - 0.6), a = Math.atan2(sk.x - m.x, sk.z - m.z); sk.move = { fx: m.x, fz: m.z, tx: m.x + Math.sin(a) * e, tz: m.z + Math.cos(a) * e, dur: 0.3 }; }
     }
@@ -515,10 +517,18 @@
       // 도발당해 그 쉴더를 노리던 몬스터만 옮겨 간다 (그냥 박아 둔 스쿠툼은 아무도 끌지 않는다)
       { const dcs = new Set(ts.filter((t) => t.dc).map((t) => t.id)); if (dcs.size) for (const m of monsters.values()) if (m.aggroOn && m.taunt > 0 && dcs.has('dc:' + m.aggroOn)) m.aggroOn = 'dc:' + m.aggroOn; }
       const players = [...clients.values()].filter((c) => c.pres.on);
+      // 노릴 대상은 40m 넘으면 보지 않으므로 40m 칸에 나눠 두고 이웃 칸만 본다 (사람이 많을 때 몬스터마다 모든 사람을 훑지 않게)
+      const TG = 40, tCells = new Map();
+      for (const t of ts) { const k = Math.floor(t.x / TG) * 65536 + Math.floor(t.z / TG); const L = tCells.get(k); if (L) L.push(t); else tCells.set(k, [t]); }
+      const nearTs = (m) => { const cx = Math.floor(m.x / TG), cz = Math.floor(m.z / TG), out = []; for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gz = cz - 1; gz <= cz + 1; gz++) { const L = tCells.get(gx * 65536 + gz); if (L) for (const t of L) out.push(t); } return out; };
+      // 사람 둘레 75m 안의 몬스터만 움직인다: 사람도 75m 칸에 나눠 둔다
+      const PG = 75, pCells = new Map();
+      for (const c of players) { const k = Math.floor(c.pres.x / PG) * 65536 + Math.floor(c.pres.z / PG); const L = pCells.get(k); if (L) L.push(c); else pCells.set(k, [c]); }
+      const nearPlayer = (m) => { const cx = Math.floor(m.x / PG), cz = Math.floor(m.z / PG); for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gz = cz - 1; gz <= cz + 1; gz++) { const L = pCells.get(gx * 65536 + gz); if (L) for (const c of L) if (Math.hypot(c.pres.x - m.x, c.pres.z - m.z) < 75) return true; } return false; };
       const active = [];
       const boss = [...monsters.values()].find((q) => q.boss);
       for (const m of [...monsters.values()]) {
-        if (!players.some((c) => Math.hypot(c.pres.x - m.x, c.pres.z - m.z) < 75)) continue;
+        if (!nearPlayer(m)) continue;
         active.push(m);
         m.before = [m.x, m.z, m.ry, Math.round(m.hp), m.windup > 0 || !!(m.sk && !m.sk.done) || !!(m.sks && m.sks.length), m.stun > 0, !!m.dot, m.vuln > 0, m.air > 0];
         if (m.dot) {
@@ -544,7 +554,7 @@
         const homeD = Math.hypot(m.x - m.home.x, m.z - m.home.z);
         const dun = m.zone === 'dungeon';
         let tgt = null, best = 1e9;
-        for (const t of ts) {
+        for (const t of nearTs(m)) {
           if (dun ? !t.rot : t.dun) continue;
           const d = Math.hypot(t.x - m.x, t.z - m.z);
           // 단단한 감각(쉴더): 노리던 쉴더는 더 멀리 가도 놓치지 않는다
@@ -557,7 +567,7 @@
         if (m.taunt > 0) { m.taunt -= TICK; const tt = ts.find((q) => q.id === m.aggroOn && (dun ? q.rot : !q.dun)); if (tt) tgt = tt; }
         if (!tgt) m.aggroOn = null;
         // 기절시키면 준비 중인 기술이 끊긴다
-        if (m.sk && !m.sk.done && m.stun > 0) { broadcast({ t: 'mskx', i: m.i }); m.sk = null; m.skCd = rnd(3, 5); }
+        if (m.sk && !m.sk.done && m.stun > 0) { nearCast(m, { t: 'mskx', i: m.i }); m.sk = null; m.skCd = rnd(3, 5); }
         if (m.sk) stepSkill(m, ts);
         else if (m.stun > 0) m.windup = 0;
         else if (tgt && tgt.lu) {
@@ -578,7 +588,7 @@
             turn(m, Math.atan2(dx, dz), 1);
             m.atkCd = 1.0; m.lastAtk = Date.now();
             send(tgt.id, { t: 'matk', i: m.i, to: tgt.id, atk: m.atk, f: 1 });   // f: 첫 평타 (달려서 스쳐 가도 맞게 게임 쪽에서 조금 더 넓게 본다)
-            broadcast({ t: 'matk', i: m.i, to: null }, tgt.id);
+            nearCast(m, { t: 'matk', i: m.i, to: null }, tgt.id);
           }
           else if (S && m.windup <= 0 && m.skCd <= 0 && dist >= S.range[0] && dist <= S.range[1] && !(m.detour && m.detour.t > 0)) startSkill(m, S, tgt, dist);
           else if (m.windup > 0) {
@@ -587,7 +597,7 @@
             if (m.windup <= 0) {
               m.atkCd = 1.0; m.lastAtk = Date.now();   /* 공격 사이 쉬는 시간 1.6 → 1.0초 */
               if (dist < reach + 0.9) send(tgt.id, { t: 'matk', i: m.i, to: tgt.id, atk: m.atk });
-              broadcast({ t: 'matk', i: m.i, to: null }, tgt.id);
+              nearCast(m, { t: 'matk', i: m.i, to: null }, tgt.id);
             }
           } else if (dist > reach) {
             const spd = m.D.build === 'slime' ? 2.8 : m.D.build === 'quad' ? 3.9 : 3.5;
@@ -624,15 +634,33 @@
         }
       }
       // 몬스터끼리 겹치지 않게
-      for (let a = 0; a < active.length; a++) for (let b = a + 1; b < active.length; b++) {
-        const A = active[a], B = active[b];
-        if (!monsters.has(A.i) || !monsters.has(B.i)) continue;
+      // 모든 쌍을 다 보면 몬스터 수의 제곱만큼 느려져서(사람이 흩어져 사냥하면 한 번에 1초 넘게 걸렸다) 4m 칸으로 나눠 이웃 칸끼리만 본다. 큰 몬스터(보스·용)는 모두와 본다
+      const sep = (A, B) => {
+        if (!monsters.has(A.i) || !monsters.has(B.i)) return;
         const dx = B.x - A.x, dz = B.z - A.z, d = Math.hypot(dx, dz), mn = (A.r + B.r) * 0.9;
         if (d < mn && d > 1e-4) {
           const push = mn - d, ux = dx / d, uz = dz / d, wa = A.boss ? 0 : B.boss ? 1 : 0.5, wb = 1 - wa;
           const sp = push;
           A.x -= ux * sp * wa; A.z -= uz * sp * wa; B.x += ux * sp * wb; B.z += uz * sp * wb;
         }
+      };
+      {
+        const SC = 4, cells = new Map(), big = [];
+        for (let a = 0; a < active.length; a++) {
+          const A = active[a];
+          if (A.r > 2.2) { big.push(a); continue; }
+          const k = Math.floor(A.x / SC) * 65536 + Math.floor(A.z / SC);
+          const L = cells.get(k); if (L) L.push(a); else cells.set(k, [a]);
+        }
+        for (let a = 0; a < active.length; a++) {
+          const A = active[a]; if (A.r > 2.2) continue;
+          const cx = Math.floor(A.x / SC), cz = Math.floor(A.z / SC);
+          for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gz = cz - 1; gz <= cz + 1; gz++) {
+            const L = cells.get(gx * 65536 + gz); if (!L) continue;
+            for (const b of L) if (b > a) sep(A, active[b]);
+          }
+        }
+        for (const a of big) for (let b = 0; b < active.length; b++) if (b !== a && (active[b].r <= 2.2 || b > a)) sep(active[Math.min(a, b)], active[Math.max(a, b)]);
       }
       for (const m of active) {
         if (!monsters.has(m.i)) continue;
