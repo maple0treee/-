@@ -2104,7 +2104,7 @@ setInterval(tick,400);
       hpeak: { up: 1, rise: 46, L: [[[0, 85, 8], [0, 72, 14], [-22, 56, 18], [18, 36, 18], [-20, 14, 18], [18, -8, 18], [-16, -30, 18], [0, -52, 14], [0, -70, 10], [0, -82, 8]]] },
       hscree: { up: 1, rise: 22, L: [[[0, 80, 8], [0, 68, 15], [-12, 44, 30], [8, 14, 34], [-6, -18, 32], [4, -46, 22], [0, -66, 12], [0, -80, 8]]] },
       hridge: { up: 0, rise: 24, L: [[[0, 90, 8], [0, 78, 11], [-8, 54, 12], [6, 28, 13], [-6, 2, 12], [8, -24, 13], [-2, -50, 12], [0, -72, 10], [0, -88, 8]]] },
-      htop: { up: 0, rise: 8, L: [[[0, 50, 8], [0, 40, 13], [0, 22, 26], [0, 0, 30], [0, -18, 24], [0, -30, 13], [3, -42, 9], [6, -54, 8], [6, -64, 7]]], cairn: { x: 0, z: -10 }, crag: [0.7, 0.86], fall: 7 },   /* 꼭대기 돌탑을 지나 북쪽 바위 턱으로 조금 내려가면 굴 입구 (crag: 길 끝 쪽만 둘레가 바위로 솟는다, fall: 돌탑 뒤로 내려가는 높이) */
+      htop: { up: 0, rise: 8, L: [[[0, 50, 8], [0, 40, 13], [0, 22, 26], [0, 0, 30], [0, -18, 24], [0, -30, 13], [3, -42, 9], [6, -54, 8], [6, -64, 7]]], cairn: { x: 0, z: -10 }, fall: 4, hole: { x: 6, z: -57, r: 2.7 } },   /* 꼭대기 돌탑을 지나 북쪽으로 조금 내려가면 땅에 뚫린 구멍(hole)으로 굴에 내려간다 (2026-11-11 원호: 문이 아니라 구멍으로). fall: 돌탑 뒤로 내려가는 높이 */
     };
     for (const z in H.OM) { const M = H.OM[z]; M.id = z; M.C = M.L.map((c) => H.pl(H.chk(H.chk(c)))); const C0 = M.C[0]; M.len = C0[C0.length - 1].s; M.z0 = C0[0].z; M.z1 = C0[C0.length - 1].z; }
     /* 사슬 위 자리 (길이 s): 가운데·반폭·나아가는 방향 */
@@ -2120,11 +2120,16 @@ setInterval(tick,400);
     const chain = ['hechil', 'hwood', 'hlake', 'hpeak', 'hscree', 'hridge', 'htop'];
     for (let i = 0; i + 1 < chain.length; i++) { const a = chain[i], b = chain[i + 1]; link(a, b, side(a, H.OM[a].C[0], 1), side(b, H.OM[b].C[0], 0), 'out'); }
     /* 꼭대기 북쪽 끝 = 굴 입구 ↔ 박쥐 굴 입구 (2026-11-11 원호: 꼭대기를 지나쳐 동굴로) */
-    { const T = H.T, u = H.sAt(0), p = { x: T[0].x - u.ux * 2, z: T[0].z - u.uz * 2, nx: -u.ux, nz: -u.uz, hw: T[0].w, noModel: 1 }; link('htop', 'hcave', side('htop', H.OM.htop.C[0], 1), p, 'mouth'); }
+    /* 2026-11-11 원호: 다른 맵 이동과 달리 꼭대기 땅에 뚫린 구멍으로 내려간다. 굴 첫머리 천장에 그 구멍이 뚫려 있고 밧줄이 늘어져 있다 (밧줄을 잡으면 올라간다).
+       hole: 들어서면 넘어가는 둥근 자리의 반지름, land: 넘어와 서는 자리 */
+    { const O = H.OM.htop.hole, u = H.sAt(0), q = H.sAt(3), l = H.sAt(5.8);
+      const A2 = { x: O.x, z: O.z, nx: 0, nz: -1, hw: O.r, hole: O.r, noModel: 1, land: { x: O.x, z: O.z + O.r + 2.2 } };
+      const B2 = { x: q.x, z: q.z, nx: -u.ux, nz: -u.uz, hw: 1.1, hole: 1.1, noModel: 1, land: { x: l.x, z: l.z } };
+      link('htop', 'hcave', A2, B2, 'mouth'); }
     /* 굴목: 굴 넷은 같은 굴을 나눈 방 (땅 좌표가 같다) */
     for (const [a, b] of [['hcave', 'hcrys'], ['hcrys', 'hfall'], ['hfall', 'hden'], ['hden', 'hlair']]) { const s = H.areaOf(b).s[0], p = H.sAt(s), w = p.w;
       link(a, b, { x: p.x - p.ux * 1.2, z: p.z - p.uz * 1.2, nx: p.ux, nz: p.uz, hw: w }, { x: p.x + p.ux * 1.2, z: p.z + p.uz * 1.2, nx: -p.ux, nz: -p.uz, hw: w }, 'cave'); H.GATES[H.GATES.length - 1].s = s; H.GATES[H.GATES.length - 1].c = p; }
-    H.arrive = (S) => ({ x: S.x - S.nx * 3, z: S.z - S.nz * 3 });   // 그 쪽 문으로 들어와 서는 자리
+    H.arrive = (S) => S.land || ({ x: S.x - S.nx * 3, z: S.z - S.nz * 3 });   // 그 쪽 문으로 들어와 서는 자리
     const E = 0.3;
     /* 굴 맵: 굴 벽 안, 제 굴목 사이만 */
     const tunnel = (p, rad, I, s0, s1) => { let q = H.near(H.T, p.x - I.x, p.z - I.z);
@@ -3459,7 +3464,8 @@ const ZONES={
 };
 /* 허칠 사냥터 맵 10곳 (2026-11-06 원호: 사냥터마다 따로 된 맵) */
 for(const A of OR.HCH.AREAS)ZONES[A.zone]={name:A.name,diff:6,sky:A.cave?0x0c1118:0xd2dde9,mm:A.cave?'#2a323c':'#e9eef3'};
-if(ZONES.hlair){ZONES.hlair.sky=0x150a0d;ZONES.hlair.mm='#3a2629';}   /* 어미의 둥지: 검붉은 어둠 */
+if(ZONES.hlair){ZONES.hlair.sky=0x150a0d;ZONES.hlair.mm='#3a2629';}
+if(ZONES.htop)ZONES.htop.sky=0xcadff3;   /* 꼭대기: 구름 위 맑은 하늘 */   /* 어미의 둥지: 검붉은 어둠 */
 /* 엑시즈 문 밖 사냥터: 이름 = 마르쿠스 + 땅 생김새 (예: 마르쿠스 숲). 2026-11-05 원호: 번호(2A 등)는 붙이지 않는다 */
 (function(){const KN={trail:'숲길',deep:'깊은 숲',cold:'추운 계곡',field:'들판',hill:'구릉',wood:'숲',vale:'계곡',pass:'고개',lake:'호숫가',river:'강가',marsh:'늪지',ash:'잿더미',lava:'용암지',beach:'모래톱',rocks:'갯바위',cliff:'해안 절벽',cape:'곶'},CN={field:'해안 들판',wood:'바닷가 숲'},KS={beach:[0xdde8ee,'#cdbb88'],rocks:[0xd0dce4,'#7e7a70'],cliff:[0xd0dde6,'#748c52'],cape:[0xd4e2ea,'#86a056'],ash:[0xd4ccc6,'#5e5650'],lava:[0xe2cbbd,'#4e3a32'],field:[0xd8e4ea,'#8aac52'],trail:[0xd6e2e6,'#86a64e'],deep:[0xa8b8b0,'#36582e'],cold:[0xd8e0ea,'#a8b4b8'],hill:[0xd4e0e6,'#7a9a48'],wood:[0xc4d4c8,'#4a7038'],vale:[0xc8d2d8,'#7a8268'],pass:[0xc0c8d0,'#8a8478'],lake:[0xd0e0e8,'#6a9a6a'],river:[0xcfdfe6,'#6f9a52'],marsh:[0xc4ccc4,'#6a7448']};
   for(const L of OR.MLINES)L.zones.forEach(([id,k,cst,nm],i)=>{ZONES[id]={name:L.names&&nm?nm:(L.region||'마르쿠스')+' '+(nm||(cst==='c'&&CN[k])||KN[k])+(L.branch?L.n+'ABCDE'[i]:''),diff:6,sky:KS[k][0],mm:KS[k][1]};});})();
@@ -14918,6 +14924,7 @@ function usePortal(i){const p=PORTALS[i];if(!p)return;
   if(p.id==='east'&&P&&P.lv>=p.minLv&&P.got&&P.got.wyvern){openPortalChoice(p);return;}
   if(P&&P.lv<p.minLv){toast(`Lv ${p.minLv}부터 들어갈 수 있다`);return;}
   if(p.lock){const why=p.lock();if(why){toast(why);return;}}
+  if(p.hole){hchHoleGo(p);return;}
   const alt=p.alt&&p.alt(),d=alt||p.to;sfx('door');warpTo(d.x,d.z,exitYaw(d,p),d.msg,d.y);arriveBanner(d.x,d.z);}
 /* 문·포탈을 지나 나오면 그 문을 등지고 선다: 도착 자리 가까이에 있는 문(포탈)에서 도착 자리 쪽을 바라본다. 가까운 문이 없으면 정해 둔 방향 그대로 */
 function exitYaw(d,from){let best=null,bd=7;for(const q of PORTALS){if(q===from||q.coach)continue;const dd=Math.hypot(q.x-d.x,q.z-d.z);if(dd<bd&&dd>.3){bd=dd;best=q;}}
@@ -14926,7 +14933,7 @@ function exitYaw(d,from){let best=null,bd=7;for(const q of PORTALS){if(q===from|
 let _portalIn=-1;
 function portalWalk(){if(!player||mode!=='world'||warping)return;let hit=-1;
   for(let i=0;i<PORTALS.length;i++){const p=PORTALS[i];if(p.coach||!portalSeen(p)||!p.fx||!p.fx.g.visible)continue;
-    const dx=player.position.x-p.x,dz=player.position.z-p.z,hw=p.hw||1.45;if(dx*dx+dz*dz>hw*hw+9)continue;
+    const dx=player.position.x-p.x,dz=player.position.z-p.z,hw=p.hw||1.45;if(p.hole){if(dx*dx+dz*dz<p.hr*p.hr&&Math.abs(player.position.y-p.fx.g.position.y)<4){hit=i;break;}continue;}if(dx*dx+dz*dz>hw*hw+9)continue;
     const c=Math.cos(p.ry||0),sn=Math.sin(p.ry||0),lx=dx*c-dz*sn,lz=dx*sn+dz*c;
     if(Math.abs(lx)<hw&&Math.abs(lz)<.6&&Math.abs(player.position.y-p.fx.g.position.y)<3){hit=i;break;}}
   /* 엑시즈 밖 사냥터: 길 끝이 아니어도 가장자리 안개 속으로 걸어 들어가면 그쪽(동·서) 땅으로 넘어간다 */
@@ -23901,17 +23908,19 @@ const HMAP=(()=>{const C=OR.HCH,sm=OR.smooth,Y0={};let acc=0;for(const z of ['he
   /* 땅 높이 (맵 가운데 기준) */
   /* bed가 참이면 호수 바닥(땅 모양), 아니면 걷는 높이 (얼음 위, 얼지 않은 물에선 비탈처럼 가슴께까지 잠긴다) */
   const lakeY=M=>baseAt(M,M.lake.x,M.lake.z)-.5;
+  const holeY=M=>{const O=M.hole,t=C.omT(M,O.x,O.z);return baseAt(M,O.x,O.z)-(M.fall?M.fall*sm(.56,.95,t):0)+.1;};   /* 구멍 둘레 턱 높이 */
   const h=(M,lx,lz,bed)=>{const q=C.omNear(M,lx,lz),t=C.omT(M,lx,lz),e=q.d-q.w;let b=Y0[M.id]+M.rise*t+(HECH.fbm(lx*.04+7,lz*.04,3)-.5)*1.6-(M.fall?M.fall*sm(.56,.95,t):0);   /* fall: 꼭대기 돌탑 뒤로 굴 입구까지 내려간다 */
     if(M.lake){const L=M.lake,dx=lx-L.x,dz=lz-L.z,d=Math.hypot(dx,dz);if(d<L.r+14){const Y=lakeY(M),r=HLAKE.R(L,Math.atan2(dz,dx));b=lerp(Y,b,sm(r+.5,r+7,d));
       if(d<r){const B=Y-HLAKE.dep(dx,dz,r-d);if(bed)return B;const o=HLAKE.openD(dx,dz);return o>0?Y+HLAKE.ICE_T:Math.max(B,Y+HLAKE.WAT-HLAKE.WADE*sm(0,2.6,-o));}
       if(!bed&&d<r+.6)return Math.max(b,Y+HLAKE.ICE_T);}}
     if(M.hut){const d=Math.hypot(lx-M.hut.x,lz-M.hut.z);b=lerp(baseAt(M,M.hut.x,M.hut.z),b,sm(M.hut.r-6,M.hut.r,d));}
+    if(M.hole){const O=M.hole,d=Math.hypot(lx-O.x,lz-O.z);if(d<O.r+8){b=lerp(holeY(M),b,sm(O.r+2.5,O.r+8,d));if(d<O.r)b-=.9*sm(O.r,O.r-1.4,d);}}   /* 꼭대기 굴 구멍: 둘레는 평평한 턱, 구멍 안(걷는 높이)은 조금 꺼진다 (보이는 구멍은 hchTopHole이 따로 그린다) */
     const endK=M.up?1:M.crag?sm(M.crag[0],M.crag[1],t):0;   /* 능선·꼭대기: 둘레가 다 낭떠러지 (끝의 문 너머는 안개가 가린다). 꼭대기 북쪽 끝(crag)은 바위 턱이 솟아 굴 입구를 감싼다 */
     if(e<=0)return b+.5*sm(-5,0,e)*endK;
     const rg=HECH.ridged(lx*.03+M.rise,lz*.03,3),up=Math.min(.5+e*1.25+e*e*.05+rg*e*.45,85+rg*25);
     if(endK>=1)return b+up;
     const dn=Math.max(-(e*1.6+e*e*.07)*(.8+rg*.4),-140);return b+dn+(up-dn)*endK;};
-  return {Y0,h,lakeY,roots:{},firs:{},fx:null,hut:null};})();
+  return {Y0,h,lakeY,holeY,roots:{},firs:{},fx:null,hut:null};})();
 function isleHeight(x,z){
   const I=isleAtQ(x,z),d=Math.hypot(x-I.x,z-I.z),R=I.R,ed=Math.hypot(x-I.entry.x,z-I.entry.z);
   {const M=OR.HCH.OM[I.id];if(M)return HMAP.h(M,x-I.x,z-I.z);if(OR.HCH.fam(I.id)==='cave')return HCAVE.fl(x-I.x,z-I.z);}   /* 허칠 맵들은 같은 산·같은 굴 땅 좌표 */
@@ -24532,6 +24541,194 @@ function snowGroundMat(m){m.onBeforeCompile=sh=>{sh.uniforms.uSnN={value:NAT.noi
 {float w=smoothstep(.62,.8,min(diffuseColor.r,diffuseColor.b));float g=texture2D(uSnN,vSnW.xz*1.9+cameraPosition.xz*.035).a*texture2D(uSnN,vSnW.zx*2.7-cameraPosition.zx*.02).a;
  float d=length(vSnW-cameraPosition);totalEmissiveRadiance+=vec3(1.,.98,.94)*smoothstep(.5,.62,g)*w*(1.-smoothstep(8.,30.,d))*1.6;}`);};
   m.customProgramCacheKey=()=>'snowg';return m;}
+/* ---------- 허칠 꼭대기 (2026-11-11 원호: "꼭대기 맵은 엄청 예쁘게") ----------
+   구름 바다 위로 솟은 봉우리: 발아래로 끝없이 깔린 구름 바다, 구름을 뚫고 솟은 먼 설산들, 맑고 짙은 하늘 (밤엔 별과 오로라).
+   꼭대기엔 서리 덮인 옛 선돌 고리와 두 선돌 위에 돌을 얹은 돌문, 돌탑에서 뻗은 깃발 줄, 얼음 결정 무리, 벼랑 끝에서 바람에 흩날리는 눈가루.
+   북쪽 끝엔 땅에 뚫린 굴 구멍 (hchTopHole). 모두 꼭대기 맵 root 아래라 꼭대기에 있을 때만 그린다 */
+const HTOP={root:null,U:null,Y:0,wisp:null,spin:null,flags:null,mist:null};
+/* 여러 도형을 한 덩어리로 (색 속성이 있으면 같이) */
+function hchMerge(list){let n=0;const G=list.map(g=>{const q=g.index?g.toNonIndexed():g;if(!q.attributes.normal)q.computeVertexNormals();n+=q.attributes.position.count;return q;});
+  const pos=new Float32Array(n*3),nor=new Float32Array(n*3),col=G.some(g=>g.attributes.color)?new Float32Array(n*3).fill(1):null;let o=0;
+  for(const g of G){const c=g.attributes.position.count;pos.set(g.attributes.position.array,o*3);nor.set(g.attributes.normal.array,o*3);if(col&&g.attributes.color)col.set(g.attributes.color.array,o*3);o+=c;}
+  const out=new THREE.BufferGeometry();out.setAttribute('position',new THREE.BufferAttribute(pos,3));out.setAttribute('normal',new THREE.BufferAttribute(nor,3));if(col)out.setAttribute('color',new THREE.BufferAttribute(col,3));return out;}
+async function hchTopDecor(root,M,cx,cz,hAt){
+  let _s=4241;const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647,rr=(a,b)=>a+rnd()*(b-a),sm=OR.smooth,C=OR.HCH;
+  const Y=hAt(0,0),YC=Y-34;HTOP.root=root;HTOP.Y=Y;HTOP.YC=YC;
+  const U={uT:{value:0},uNT:{value:NAT.noiseTex},uHor:SKY.hor,uZen:SKY.zen,uSun:SKY.sun,uL:{value:1},uN:{value:0},uTint:{value:new THREE.Color(1,1,1)},uC:{value:new THREE.Vector3(cx,YC,cz)}};HTOP.U=U;
+  const M4=new THREE.Matrix4(),q4=new THREE.Quaternion(),e4=new THREE.Euler(),v4=new THREE.Vector3(),s4=new THREE.Vector3(),c4=new THREE.Color();
+  const inst=(geo,mat,L,shadow=true)=>{const m=new THREE.InstancedMesh(geo,mat,L.length);L.forEach((t,i)=>{e4.set(t.rx||0,t.ry||0,t.rz||0);q4.setFromEuler(e4);s4.set(t.sx||t.s,t.sy||t.s,t.sz||t.s);v4.set(cx+t.x,t.y,cz+t.z);M4.compose(v4,q4,s4);m.setMatrixAt(i,M4);if(t.c){m.setColorAt(i,t.c);}});
+    if(m.instanceColor)m.instanceColor.needsUpdate=true;m.castShadow=shadow;m.receiveShadow=true;root.add(m);return m;};
+  const vsW='varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}';
+  /* ===== 구름 바다: 벼랑 아래를 덮고 지평선까지. 해 쪽 비탈은 밝고 반대쪽은 푸른 그늘, 천천히 흐른다 ===== */
+  {const g=new THREE.RingGeometry(18,1500,128,44);g.rotateX(-Math.PI/2);
+    const m=new THREE.ShaderMaterial({uniforms:U,vertexShader:vsW,transparent:true,depthWrite:false,fog:false,
+      fragmentShader:`uniform float uT,uL;uniform sampler2D uNT;uniform vec3 uHor,uZen,uSun,uTint,uC;varying vec3 vW;
+float den(vec2 p){vec4 a=texture2D(uNT,p*.0019+vec2(uT*.0007,uT*.0003));vec4 b=texture2D(uNT,p*.0061+vec2(-uT*.0013,uT*.0009)+.37);vec4 c=texture2D(uNT,p*.021+vec2(uT*.0026,-uT*.0018)+.71);
+  return a.r*.52+b.g*.31+c.b*.17;}
+void main(){vec2 p=vW.xz;float d=den(p);vec2 sd=normalize(uSun.xz+vec2(1e-4));float d2=den(p+sd*7.);
+  float lit=clamp(.6+(d-d2)*7.,0.,1.),dist=distance(cameraPosition,vW);
+  vec3 sh=mix(vec3(.72,.77,.87),uZen,.12),hi=mix(vec3(1.),uTint,.5);
+  vec3 col=mix(sh,hi,lit)*mix(.8,1.,smoothstep(.3,.7,d))*uL;
+  vec3 v=normalize(vW-cameraPosition);float sg=pow(max(dot(normalize(vec3(v.x,.12,v.z)),normalize(uSun)),0.),16.);col+=vec3(1.,.9,.75)*sg*.12*uL*uTint;   /* 해 쪽 구름 위 햇무리 */
+  float far=smoothstep(320.,1400.,dist);col=mix(col,uHor*1.03,far*.75);
+  float a=mix(.42,1.,smoothstep(.27,.5,d));a=mix(a,1.,smoothstep(140.,520.,dist));a*=smoothstep(1500.,1250.,length(p-uC.xz));
+  gl_FragColor=linearToOutputTexel(vec4(col,a));`+ORL_GRADE+`}`});
+    const ms=new THREE.Mesh(g,m);ms.position.set(cx,YC,cz);ms.renderOrder=-5;ms.frustumCulled=false;root.add(ms);}
+  /* 벼랑에 걸린 구름 자락: 구름 바다와 벼랑이 만나는 금을 흐리게 가린다 */
+  {const N=70,pp=new Float32Array(N*3),sd=[];for(let i=0;i<N;i++){const a=rr(0,6.28),r=rr(40,150);sd.push({a,r,y:YC+rr(1,9),w:rr(.004,.012)*(rnd()<.5?-1:1)});}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pp,3));
+    const m=new THREE.PointsMaterial({map:edgeMistTex(),color:0xffffff,size:46,sizeAttenuation:true,transparent:true,opacity:.55,depthWrite:false,fog:true});
+    const pts=new THREE.Points(g,m);pts.frustumCulled=false;pts.renderOrder=-4;root.add(pts);HTOP.wisp={pts,pp,sd};}
+  await HCHL.y();
+  /* ===== 먼 설산: 구름을 뚫고 솟은 봉우리들 (안개가 멀수록 하늘빛으로 바래게 한다) ===== */
+  {const L=[],SN=new THREE.Color(.95,.97,1),SN2=new THREE.Color(.78,.84,.93),RK=new THREE.Color(.27,.28,.32),RK2=new THREE.Color(.4,.39,.4);
+    /* 봉우리 하나: 등줄기(능선) 서너 갈래가 꼭대기에서 뻗어 내린 산. 높이 = 능선을 따라 솟고 사이 골짜기는 깊게 패인다. 가파른 바위벽엔 눈이 붙지 않는다 */
+    const peak=(ang,dist,h,w)=>{const px=Math.cos(ang)*dist,pz=Math.sin(ang)*dist,R=26,S=56,sd=rr(0,99),nr=3+Math.floor(rnd()*3),ra=[...Array(nr)].map(()=>rr(0,6.28)),pos=[],idx=[];
+      for(let i=0;i<=R;i++){const k=i/R;for(let j=0;j<=S;j++){const a=j/S*Math.PI*2;let rid=0;for(const q of ra){const d=Math.atan2(Math.sin(a-q),Math.cos(a-q));rid=Math.max(rid,Math.exp(-d*d*9));}
+        const rg=HECH.ridged(Math.cos(a)*1.6+sd,Math.sin(a)*1.6+k*2.6,4),rad=w*Math.pow(1-k,1.15)*(.55+.55*rid+.28*rg),y=YC-50+h*Math.pow(k,.9)*(1+.05*rid)+(rg-.5)*h*.1*(1-k*k);
+        pos.push(cx+px+Math.cos(a)*rad,y,cz+pz+Math.sin(a)*rad);}}
+      for(let i=0;i<R;i++)for(let j=0;j<S;j++){const a=i*(S+1)+j,b=a+S+1;idx.push(a,b,a+1,b,b+1,a+1);}
+      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();
+      const N=g.attributes.normal,P=g.attributes.position,col=[];for(let v=0;v<P.count;v++){const ny=N.getY(v),k=(P.getY(v)-YC+50)/h,n=HECH.fbm(P.getX(v)*.02,P.getZ(v)*.02+P.getY(v)*.03,3);
+        const snow=sm(.55,.75,ny+(n-.5)*.4+k*.1)*sm(.12,.3,k+(n-.5)*.2);c4.copy(RK).lerp(RK2,n);c4.lerp(SN2,snow).lerp(SN,snow*sm(.3,.8,ny));col.push(c4.r,c4.g,c4.b);}
+      g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));L.push(g.toNonIndexed());};
+    const PK=[[.3,560,170,200],[.75,820,280,330],[1.25,470,95,140],[1.9,700,200,260],[2.5,1050,340,420],[2.95,620,140,190],[3.5,900,250,320],[4.05,520,120,160],[4.6,760,215,280],[5.15,1150,360,460],[5.7,640,170,220],[6.05,980,240,330]];
+    for(const [a,d,h,w] of PK){peak(a+rr(-.08,.08),d,h,w);if(rnd()<.7)peak(a+rr(.07,.15),d*rr(1.04,1.18),h*rr(.5,.75),w*.75);}
+    const m=new THREE.Mesh(hchMerge(L),new THREE.MeshStandardMaterial({vertexColors:true,roughness:.9,metalness:0}));m.frustumCulled=false;root.add(m);}
+  await HCHL.y();
+  /* ===== 별과 오로라 (밤에만 서서히) ===== */
+  {const N=1400,pp=new Float32Array(N*3),aS=new Float32Array(N);for(let i=0;i<N;i++){const a=rr(0,6.28),y=Math.pow(rnd(),.7);const r=Math.sqrt(1-y*y);pp[i*3]=Math.cos(a)*r*1200;pp[i*3+1]=y*1200+20;pp[i*3+2]=Math.sin(a)*r*1200;aS[i]=rr(0,1);}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pp,3));g.setAttribute('aS',new THREE.BufferAttribute(aS,1));
+    const m=new THREE.ShaderMaterial({uniforms:U,transparent:true,depthWrite:false,fog:false,blending:THREE.AdditiveBlending,
+      vertexShader:'uniform float uT;attribute float aS;varying float vA;void main(){vec4 w=vec4(position+cameraPosition,1.);vA=aS;gl_Position=projectionMatrix*viewMatrix*w;gl_PointSize=1.+aS*aS*2.2;}',
+      fragmentShader:'uniform float uT,uN;varying float vA;void main(){vec2 q=gl_PointCoord-.5;float k=1.-smoothstep(.15,.5,length(q));float tw=.65+.35*sin(uT*(1.5+vA*3.)+vA*40.);gl_FragColor=vec4(vec3(.9,.94,1.)*k*tw*uN*(.35+.65*vA),1.);}'});
+    const st=new THREE.Points(g,m);st.frustumCulled=false;st.renderOrder=-900;root.add(st);HTOP.stars=st;}
+  {const g=new THREE.CylinderGeometry(1,1,1,96,1,true,Math.PI*.95,Math.PI*1.1);   /* 북쪽 하늘 (−z) 을 감싸는 넓은 띠 */
+    const m=new THREE.ShaderMaterial({uniforms:U,transparent:true,depthWrite:false,fog:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,
+      vertexShader:'varying vec2 vU;void main(){vU=uv;vec4 w=modelMatrix*vec4(position,1.);w.xyz+=cameraPosition;gl_Position=projectionMatrix*viewMatrix*w;}',
+      fragmentShader:`uniform float uT,uN;uniform sampler2D uNT;varying vec2 vU;
+void main(){if(uN<.01)discard;float u=vU.x,v=vU.y;
+  float w1=texture2D(uNT,vec2(u*1.3+uT*.004,.31)).r,w2=texture2D(uNT,vec2(u*3.1-uT*.006,.73)).g;
+  float base=.18+.22*w1+.08*w2;float y=v-base;if(y<0.)discard;
+  float band=smoothstep(0.,.025,y)*exp(-y*4.2);
+  float ray=texture2D(uNT,vec2(u*14.+w1*.6+uT*.002,uT*.01)).b;ray=.35+.65*ray*ray;
+  float fold=.6+.4*sin(u*60.+w2*9.+uT*.25);
+  vec3 c=mix(vec3(.18,1.,.55),vec3(.15,.75,.95),smoothstep(.05,.3,y));c=mix(c,vec3(.75,.35,.95),smoothstep(.25,.6,y)*.7);
+  float a=band*ray*fold*uN*.55*smoothstep(0.,.08,u)*smoothstep(1.,.92,u);
+  gl_FragColor=vec4(c*a,1.);}`});
+    const au=new THREE.Mesh(g,m);au.scale.set(1000,520,1000);au.position.set(0,230,0);au.frustumCulled=false;au.renderOrder=-899;root.add(au);HTOP.aur=au;}
+  await HCHL.y();
+  /* ===== 옛 선돌: 돌탑 둘레 고리와 북쪽 길목의 돌문. 바람 맞는 쪽(서쪽)과 머리에 서리가 두껍게 붙었다 ===== */
+  const stoneGeo=(()=>{const g=new THREE.BoxGeometry(1,1,1,3,8,2);g.translate(0,.5,0);const P=g.attributes.position,col=[];
+    for(let i=0;i<P.count;i++){let x=P.getX(i),y=P.getY(i),z=P.getZ(i);const tp=1-.28*y,n=HECH.fbm(x*2.3+y*3.1,z*2.3+y*1.7,3)-.5;x*=tp*(1+n*.35);z*=tp*(1+n*.3);if(y>.98){x*=.82;z*=.82;}P.setXYZ(i,x+n*.06,y+(y>.98?n*.12:0),z);}
+    g.computeVertexNormals();const N=g.attributes.normal;
+    for(let i=0;i<P.count;i++){const y=P.getY(i),nx=N.getX(i),ny=N.getY(i),n=HECH.fbm(P.getX(i)*5+y*4,P.getZ(i)*5,2);
+      c4.setRGB(.42,.42,.43).lerp(new THREE.Color(.3,.32,.3),sm(.55,.75,n)*.6);const n2=HECH.fbm(P.getX(i)*9+3,P.getZ(i)*9+y*7,3),rime=Math.max(sm(-.2,.6,-nx)*sm(.4,.6,n+y*.2),sm(.35,.8,ny),sm(.8,.97,y)*.85,sm(.56,.66,n2)*.8)*.95;   /* 서리: 바람 맞는 쪽·머리·군데군데 얼룩 */
+      if(sm(.6,.7,HECH.fbm(P.getX(i)*6+9,y*5,2))>.5)c4.lerp(new THREE.Color(.52,.5,.36),.35);   /* 돌이끼 */c4.lerp(new THREE.Color(.94,.96,.99),rime);col.push(c4.r,c4.g,c4.b);}
+    g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));return g;})();
+  {const S=[],P0=M.cairn,ring=[];for(let k=0;k<9;k++){const a=k/9*Math.PI*2+.17;if(Math.abs(Math.sin(a))>.93)continue;ring.push(a);}   /* 길이 지나는 남·북은 비운다 */
+    for(const a of ring){const r=9.2+rr(-.5,.5),x=P0.x+Math.cos(a)*r,z=P0.z+Math.sin(a)*r,h=rr(2.2,3.3);S.push({x,z,y:hAt(x,z)-.35,sx:rr(.9,1.25),sy:h,sz:rr(.5,.7),ry:-a+Math.PI/2+rr(-.12,.12),rz:rr(-.06,.06)});colliders.push({x:cx+x,z:cz+z,r:.7,h:h});}
+    {const z=-27,y=hAt(0,z);for(const sx of [-1,1]){S.push({x:sx*2.3,z,y:y-.4,sx:1.15,sy:4.2,sz:.75,ry:0,rz:sx*.03});colliders.push({x:cx+sx*2.3,z:cz+z,r:.75,h:4});}
+    }
+    const sm2=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.92});inst(stoneGeo,sm2,S);
+    {const z=-27,y=hAt(0,z),g=new THREE.BoxGeometry(5.6,.85,1.0,10,2,3),P=g.attributes.position,col=[];   /* 돌문 위에 얹은 들보 돌: 거칠게 깎은 넓적한 돌, 위엔 눈 */
+      for(let i=0;i<P.count;i++){const x=P.getX(i),yy=P.getY(i),zz=P.getZ(i),n=HECH.fbm(x*.9+3,yy*2+zz*2,3)-.5;P.setXYZ(i,x*(1+(Math.abs(x)>2.7?n*.15:0)),yy+n*.18+(yy>0?-.06*Math.abs(x)/2.8:0),zz*(1+n*.3));}
+      g.computeVertexNormals();const N=g.attributes.normal;for(let i=0;i<P.count;i++){const n=HECH.fbm(P.getX(i)*3,P.getZ(i)*3+P.getY(i),2);c4.setRGB(.42,.42,.43).lerp(new THREE.Color(.94,.96,.99),Math.max(sm(.4,.85,N.getY(i)),sm(-.1,.6,-N.getX(i))*sm(.45,.6,n)));col.push(c4.r,c4.g,c4.b);}
+      g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));const L=new THREE.Mesh(g,sm2);L.position.set(cx,y+4.1,cz+z);L.castShadow=L.receiveShadow=true;root.add(L);}}
+  await HCHL.y();
+  /* ===== 깃발 줄: 돌탑 꼭대기에서 네 장대로 처진 줄, 줄마다 빛바랜 깃발이 바람에 펄럭인다 ===== */
+  {const P0=M.cairn,top=new THREE.Vector3(cx+P0.x,hAt(P0.x,P0.z)+2.55,cz+P0.z),fl=[],line=[],cols=[0x9b2f2a,0xd2a64a,0xece4d0,0x3e5f8a,0x3f6e48];
+    const wood=new THREE.MeshStandardMaterial({color:0x5a3e26,roughness:.9});
+    [.55,2.05,3.75,5.35].forEach((a,pi)=>{const x=P0.x+Math.cos(a)*6.3,z=P0.z+Math.sin(a)*6.3,y=hAt(x,z),pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.09,3.4,7),wood);pole.position.set(cx+x,y+1.55,cz+z);pole.rotation.z=rr(-.05,.05);pole.castShadow=true;root.add(pole);colliders.push({x:cx+x,z:cz+z,r:.2,h:3.2});
+      const end=new THREE.Vector3(cx+x,y+3.15,cz+z),L=top.distanceTo(end),n=Math.floor(L/.5);
+      for(let i=0;i<=n;i++){const k=i/n,p=top.clone().lerp(end,k);p.y-=Math.sin(k*Math.PI)*L*.12;line.push(p);if(i>0&&i<n)fl.push({x:p.x-cx,z:p.z-cz,y:p.y-.02,s:1,ry:Math.atan2(end.x-top.x,end.z-top.z)+Math.PI/2,c:c4.set(cols[(i+pi)%5]).clone()});}
+      line.push(null);});
+    {const pts=[];for(let i=0;i+1<line.length;i++)if(line[i]&&line[i+1])pts.push(line[i],line[i+1]);const g=new THREE.BufferGeometry().setFromPoints(pts);root.add(new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x3a2c20})));}
+    const g=new THREE.PlaneGeometry(.3,.38,3,4);g.translate(0,-.19,0);
+    const m=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.95,side:THREE.DoubleSide});
+    m.onBeforeCompile=sh=>{sh.uniforms.uT=U.uT;sh.vertexShader='uniform float uT;\n'+sh.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
+{float ph=instanceMatrix[3].x*1.7+instanceMatrix[3].z*1.3,k=-position.y/.38;transformed.z+=(sin(uT*7.+ph-position.x*9.)*.12+sin(uT*13.+ph*2.)*.04+.1)*k;transformed.x+=sin(uT*5.+ph)*.03*k;}`);};
+    m.customProgramCacheKey=()=>'htop-flag';
+    const im=inst(g,m,fl);HTOP.flags=im;}
+  await HCHL.y();
+  /* ===== 얼음 결정: 길가 눈 속에서 솟은 육각 기둥 무리 (햇빛에 반짝인다) ===== */
+  {const cl=(()=>{const L=[];for(let k=0;k<7;k++){const h=k?rr(.45,1.1):1.5,r=h*rr(.13,.18),c=new THREE.CylinderGeometry(r,r,h,6,1),t=new THREE.ConeGeometry(r,r*2.2,6,1);t.translate(0,h/2+r*1.1,0);
+        const g=hchMerge([c,t]);g.translate(0,h/2,0);g.rotateZ(k?rr(-.7,.7):rr(-.1,.1));g.rotateX(k?rr(-.6,.6):0);g.rotateY(rr(0,6.28));L.push(g);}return hchMerge(L);})();
+    const m=new THREE.MeshStandardMaterial({color:0xcfeeff,roughness:.04,metalness:.32,transparent:true,opacity:.8,emissive:0x3a7aa8,emissiveIntensity:.45});
+    const L=[],C0=M.C[0];for(let k=0;k<26;k++){const s=rr(6,M.len-10),p=C.cAt(C0,s),sd=rnd()<.5?-1:1,e=k<6?rr(-.5,1.5):rr(-3.2,-.8),lat=sd*(p.w+e),x=p.x-p.uz*lat,z=p.z+p.ux*lat;
+      if(M.hole&&Math.hypot(x-M.hole.x,z-M.hole.z)<M.hole.r+3)continue;const s0=k<6?rr(1.6,2.4):rr(.5,1.2);L.push({x,z,y:hAt(x,z)-.12*s0,s:s0,ry:rr(0,6.28)});if(s0>1)colliders.push({x:cx+x,z:cz+z,r:.4*s0,h:1.5*s0});}
+    inst(cl,m,L);}
+  /* ===== 눈가루: 벼랑 끝에서 바람에 날려 허공으로 흩어지는 눈 (점마다 투명도·크기) ===== */
+  {const N=260,pp=new Float32Array(N*3),aA=new Float32Array(N),sd=[];for(let i=0;i<N;i++){sd.push({life:0,age:rr(0,3),vx:0,vy:0,vz:0});pp[i*3+1]=-9999;}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pp,3));g.setAttribute('aA',new THREE.BufferAttribute(aA,1));
+    const m=new THREE.ShaderMaterial({uniforms:{uMap:{value:edgeMistTex()}},transparent:true,depthWrite:false,fog:false,
+      vertexShader:'attribute float aA;varying float vA;void main(){vA=aA;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;gl_PointSize=min(260.,(5.+aA*7.)*300./max(1.,-mv.z));}',
+      fragmentShader:'uniform sampler2D uMap;varying float vA;void main(){vec4 t=texture2D(uMap,gl_PointCoord);gl_FragColor=vec4(vec3(.96,.98,1.),t.a*vA*.85);}'});
+    const pts=new THREE.Points(g,m);pts.frustumCulled=false;root.add(pts);HTOP.spin={pts,pp,aA,sd};}
+  await HCHL.y();
+  await hchTopHole(root,M,cx,cz,hAt);
+  HTOP.ready=true;}
+/* 꼭대기 북쪽 끝의 굴 구멍: 눈 턱이 둥글게 꺾여 들어가고, 안쪽은 얼음 낀 바위 벽이 캄캄한 어둠으로 떨어진다.
+   턱 아래로 고드름, 옆엔 박아 둔 나무 말뚝에서 밧줄이 구멍 속으로 늘어져 있고, 구멍에선 찬 김이 피어오른다 */
+async function hchTopHole(root,M,cx,cz,hAt){const O=M.hole,sm=OR.smooth,HM=HMAP;let _s=913;const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647,rr=(a,b)=>a+rnd()*(b-a);
+  const Yh=HM.holeY(M),R0=O.r+4.6,rad=a=>O.r*(1+.11*Math.sin(3*a+1.3)+.07*Math.sin(5*a+.4)+.035*Math.sin(11*a+2.1));HTOP.hole={x:cx+O.x,z:cz+O.z,y:Yh,r:O.r,rad};
+  const SNOW=new THREE.Color(0xf3f6fa),ICE=new THREE.Color(0x9fc4d8),ROCK=new THREE.Color(0x262a31),DARK=new THREE.Color(0x030405),tmp=new THREE.Color();
+  /* 고리마다 [반지름 함수, 높이 함수, 색] : 바깥 눈밭 → 턱 → 꺾여 들어가는 눈 → 얼음 벽 → 어둠 */
+  const S=72,rings=[];
+  const SNOW2=new THREE.Color(0xdfe7ef),snowAt=(x,z)=>tmp.copy(SNOW).lerp(SNOW2,HECH.fbm(x*.07,z*.07,2)*.8);   /* 둘레 땅과 같은 눈빛 */
+  for(let k=0;k<=6;k++){const f=k/6;rings.push({r:a=>rad(a)+(R0-rad(a))*(1-f)*(1-f*.15),y:(x,z)=>hAt(x,z)+.03,c:(a,y,x,z)=>snowAt(x,z)});}
+  rings.push({r:a=>rad(a)-.12,y:()=>Yh-.18,c:(a,y,x,z)=>snowAt(x,z)});
+  rings.push({r:a=>rad(a)-.32,y:()=>Yh-.62,c:()=>tmp.copy(SNOW).lerp(ICE,.6)});
+  rings.push({r:a=>rad(a)-.42,y:()=>Yh-1.25,c:()=>tmp.copy(ICE).lerp(ROCK,.75)});
+  for(let j=1;j<=9;j++){const f=j/9;rings.push({r:a=>(rad(a)-.42)*(1-.16*f)+(HECH.fbm(a*3+j,j*.7,2)-.5)*.5,y:()=>Yh-1.25-f*f*26-f*2,c:(a)=>tmp.copy(ROCK).lerp(ICE,(1-f)*.35*sm(.4,.7,HECH.fbm(a*4,j,2))).lerp(DARK,sm(0.,.25,f))});}
+  const pos=[],col=[],idx=[];
+  for(const R of rings)for(let j=0;j<=S;j++){const a=j/S*Math.PI*2,r=R.r(a),x=O.x+Math.cos(a)*r,z=O.z+Math.sin(a)*r,y=R.y(x,z);pos.push(cx+x,y,cz+z);const c=R.c(a,y,x,z);col.push(c.r,c.g,c.b);}
+  for(let i=0;i+1<rings.length;i++)for(let j=0;j<S;j++){const a=i*(S+1)+j,b=a+S+1;idx.push(a,b,a+1,b,b+1,a+1);}
+  {const c0=pos.length/3,ry=Yh-30;pos.push(cx+O.x,ry,cz+O.z);col.push(0,0,0);const r0=(rings.length-1)*(S+1);for(let j=0;j<S;j++)idx.push(r0+j,c0,r0+j+1);}   /* 바닥 (캄캄) */
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();
+  const m=snowGroundMat(new THREE.MeshStandardMaterial({vertexColors:true,roughness:.86,metalness:0,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));
+  {const N=g.attributes.normal;for(let v=0;v<7*(S+1);v++)N.setXYZ(v,0,1,0);}   /* 바깥 눈밭 고리는 둘레 땅과 같은 빛 (금이 보이지 않게) */
+  const pit=new THREE.Mesh(g,m);pit.receiveShadow=true;root.add(pit);
+  /* 고드름: 턱 안쪽으로 늘어진 얼음 */
+  {const cg=new THREE.ConeGeometry(1,1,6,1);cg.rotateX(Math.PI);cg.translate(0,-.5,0);const L=[];
+    for(let i=0;i<34;i++){const a=rr(0,6.28),r=rad(a)-.36,len=rr(.3,1.4);L.push({a,r,len});}
+    const im=new THREE.InstancedMesh(cg,new THREE.MeshStandardMaterial({color:0xdcefff,roughness:.06,metalness:.3,transparent:true,opacity:.85,emissive:0x1a3446}),L.length);const M4=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3(),s=new THREE.Vector3();
+    L.forEach((t,i)=>{v.set(cx+O.x+Math.cos(t.a)*t.r,Yh-.55,cz+O.z+Math.sin(t.a)*t.r);s.set(rr(.05,.11),t.len,rr(.05,.11));M4.compose(v,q,s);im.setMatrixAt(i,M4);});root.add(im);}
+  /* 턱 둘레 바위 (북쪽 반만: 남쪽에서 다가가는 길은 비운다) */
+  {const L=[];for(let i=0;i<9;i++){const a=-Math.PI*.1-rr(0,Math.PI*.8),r=rad(a)+rr(.7,2.4),x=O.x+Math.cos(a)*r,z=O.z+Math.sin(a)*r,s=rr(.45,1.15);L.push({x,z,s,a});}
+    const rm=new THREE.InstancedMesh(NAT.rock(1),NAT.sstone(0x8c8780),L.length),cap=new THREE.InstancedMesh(NAT.rock(2),new THREE.MeshStandardMaterial({color:0xf2f5f9,roughness:.85}),L.length),M4=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler(),v=new THREE.Vector3(),sv=new THREE.Vector3();
+    L.forEach((t,i)=>{const y=hAt(t.x,t.z)-.3*t.s;e.set(0,rr(0,6.28),0);q.setFromEuler(e);v.set(cx+t.x,y,cz+t.z);sv.set(t.s*1.3,t.s*.8,t.s);M4.compose(v,q,sv);rm.setMatrixAt(i,M4);v.y+=t.s*.42;sv.set(t.s*1.18,t.s*.38,t.s*.9);M4.compose(v,q,sv);cap.setMatrixAt(i,M4);   /* 바위 머리엔 눈 */
+      if(t.s>.8)colliders.push({x:cx+t.x,z:cz+t.z,r:t.s*.7,h:t.s});});
+    rm.castShadow=cap.castShadow=true;rm.receiveShadow=cap.receiveShadow=true;root.add(rm,cap);}
+  /* 나무 말뚝과 밧줄: 남동쪽 턱에 박은 말뚝에서 턱을 넘어 구멍 속으로 */
+  {const a=.9,x=O.x+Math.cos(a)*(rad(a)+1.3),z=O.z+Math.sin(a)*(rad(a)+1.3),y=hAt(x,z),wood=new THREE.MeshStandardMaterial({color:0x5a3e26,roughness:.9});
+    const st=new THREE.Mesh(new THREE.CylinderGeometry(.11,.14,1.3,8),wood);st.position.set(cx+x,y+.4,cz+z);st.rotation.z=.18;st.castShadow=true;root.add(st);colliders.push({x:cx+x,z:cz+z,r:.22,h:1});
+    const lx=O.x+Math.cos(a)*(rad(a)-.2),lz=O.z+Math.sin(a)*(rad(a)-.2),ix=O.x+Math.cos(a)*(rad(a)-.9),iz=O.z+Math.sin(a)*(rad(a)-.9);
+    const cv=new THREE.CatmullRomCurve3([new THREE.Vector3(cx+x,y+.95,cz+z),new THREE.Vector3(cx+(x+lx)/2,Yh+.05,cz+(z+lz)/2),new THREE.Vector3(cx+lx,Yh-.12,cz+lz),new THREE.Vector3(cx+ix,Yh-1.6,cz+iz),new THREE.Vector3(cx+ix+.1,Yh-9,cz+iz)]);
+    const rp=new THREE.Mesh(new THREE.TubeGeometry(cv,40,.035,5,false),new THREE.MeshStandardMaterial({color:0x8a6a40,roughness:.95}));rp.castShadow=true;root.add(rp);
+    {const tx=HECH.signTex([{t:OR.HCH.areaOf('hcave').name,s:96,b:1,y:.5}],512,230),g2=new THREE.Group(),sx=O.x-3.4,sz=O.z+2.6;g2.position.set(cx+sx,hAt(sx,sz),cz+sz);g2.rotation.y=.35;root.add(g2);
+      const post=new THREE.Mesh(new THREE.CylinderGeometry(.08,.11,1.9,7),wood);post.position.y=.8;g2.add(post);
+      const mk=new THREE.MeshStandardMaterial({map:tx,roughness:.85,emissive:0xffffff,emissiveMap:tx,emissiveIntensity:.14}),wd2=new THREE.MeshStandardMaterial({color:0x5e4026,roughness:.9});
+      const bd=new THREE.Mesh(new THREE.BoxGeometry(1.35,.6,.08),[wd2,wd2,wd2,wd2,mk,mk]);bd.position.set(0,1.5,0);g2.add(bd);g2.traverse(o=>{if(o.isMesh)o.castShadow=true;});colliders.push({x:cx+sx,z:cz+sz,r:.2,h:2});}}
+  /* 구멍에서 피어오르는 찬 김 */
+  {const tex=edgeMistTex(),L=[];for(let i=0;i<7;i++){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xe8f0f6,transparent:true,opacity:0,depthWrite:false,fog:true}));sp.userData={age:rr(0,6),life:rr(5,8),a:rr(0,6.28),r:rr(0,.6)};root.add(sp);L.push(sp);}HTOP.mist=L;}
+}
+/* 꼭대기 매 프레임 (꼭대기 맵에 있을 때만): 구름·깃발 흐르기, 벼랑 끝 눈가루, 구멍 김, 밤 하늘 */
+function hchTopTick(t,dt){const H=HTOP;if(!H.ready)return;const U=H.U,wind=HECH.wind||{x:2,z:0},c=camera.position;
+  U.uT.value=t;U.uL.value=Math.max(.16,Math.min(1.05,DL.bg*1.02));U.uTint.value.copy(DL.tint);const nt=OR.smooth(.55,.2,DL.sun);U.uN.value+=(nt-U.uN.value)*Math.min(1,dt*.5);
+  H.stars.visible=H.aur.visible=U.uN.value>.01;
+  {const W=H.wisp,R=OR.ISLES.htop;for(let i=0;i<W.sd.length;i++){const q=W.sd[i],a=q.a+t*q.w;W.pp[i*3]=R.x+Math.cos(a)*q.r;W.pp[i*3+1]=q.y+Math.sin(t*.1+i)*1.2;W.pp[i*3+2]=R.z+Math.sin(a)*q.r;}W.pts.geometry.attributes.position.needsUpdate=true;
+    W.pts.material.color.setRGB(1,1,1).multiplyScalar(U.uL.value).multiply(DL.tint);W.pts.material.opacity=.55*Math.min(1,U.uL.value*1.1)*(1-.6*U.uN.value);}
+  /* 눈가루: 길 가장자리에서 바람 부는 쪽으로 날아올라 허공에서 흩어진다 (돌풍 때 더 많이) */
+  {const S=H.spin,M=OR.HCH.OM.htop,R=OR.ISLES.htop,C0=M.C[0],gu=1+.9*Math.max(0,Math.sin(t*.23)*Math.sin(t*.61+1.3));let born=0;
+    for(let i=0;i<S.sd.length;i++){const q=S.sd[i];q.age+=dt;const o=i*3;
+      if(q.age>=q.life){if(born>3||Math.random()>.55*gu){S.aA[i]=0;continue;}born++;const s=Math.random()*M.len,p=OR.HCH.cAt(C0,s),sd=Math.random()<.5?-1:1,lat=sd*(p.w+Math.random()*2-.5),x=p.x-p.uz*lat,z=p.z+p.ux*lat;
+        if(Math.hypot(R.x+x-c.x,R.z+z-c.z)>90){S.aA[i]=0;continue;}
+        S.pp[o]=R.x+x;S.pp[o+1]=HMAP.h(M,x,z)+.1;S.pp[o+2]=R.z+z;q.age=0;q.life=1.6+Math.random()*2.4;q.vx=wind.x*(1.4+Math.random())+(-p.uz*sd)*1.5;q.vz=wind.z*(1.4+Math.random())+(p.ux*sd)*1.5;q.vy=.6+Math.random()*1.4;}
+      const k=q.age/q.life;S.pp[o]+=q.vx*dt*gu;S.pp[o+1]+=q.vy*dt;S.pp[o+2]+=q.vz*dt*gu;q.vy-=dt*.5;S.aA[i]=Math.sin(Math.PI*Math.min(1,k))*.6*(1-k*.4);}
+    S.pts.geometry.attributes.position.needsUpdate=true;S.pts.geometry.attributes.aA.needsUpdate=true;}
+  if(H.mist&&H.hole){const O=H.hole;for(const sp of H.mist){const u=sp.userData;u.age+=dt;if(u.age>u.life){u.age=0;u.a=Math.random()*6.28;u.r=Math.random()*.6;}const k=u.age/u.life,r=O.r*u.r;
+    sp.position.set(O.x+Math.cos(u.a)*r+wind.x*k*.8,O.y-1+k*4.2,O.z+Math.sin(u.a)*r+wind.z*k*.8);const s=1.4+k*3;sp.scale.set(s,s*.7,1);sp.material.opacity=.22*Math.sin(Math.PI*k)*OR.smooth(2,8,camera.position.distanceTo(sp.position));}}}
 async function buildHMaps(){
   const C=OR.HCH,HM=HMAP,sm=OR.smooth,run=async it=>{let r;while(!(r=it.next()).done)await HCHL.y();return r.value;};
   let _s=7717;const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647,rr=(a,b)=>a+rnd()*(b-a);
@@ -24566,6 +24763,7 @@ async function buildHMaps(){
           const dp=HM.lakeY(M)-P.getY(i);c4.setRGB(.43,.42,.36).lerp(tmp2.setRGB(.54,.52,.46),HECH.fbm(lx*.21,lz*.21,2));c4.multiplyScalar(1-.55*sm(.5,3.5,dp));tmp.lerp(c4,1-sm(r-3,r-1.8,d));}}}
         cl[i*3]=tmp.r;cl[i*3+1]=tmp.g;cl[i*3+2]=tmp.b;}
       g.setAttribute('color',new THREE.BufferAttribute(cl,3));
+      if(M.hole){const O=M.hole,ix=g.index.array,keep=[];for(let t=0;t<ix.length;t+=3){let cut=false;for(let k=0;k<3;k++){const v=ix[t+k];if(Math.hypot(P.getX(v)-O.x,P.getZ(v)-O.z)<O.r+1.3)cut=true;}if(!cut)keep.push(ix[t],ix[t+1],ix[t+2]);}g.setIndex(keep);}   /* 꼭대기 굴 구멍 자리는 비운다 (hchTopHole이 구멍을 그린다) */
       g.translate(cx,0,cz);return g;};
     {const m=new THREE.Mesh(await run(ground()),snowGroundMat(new THREE.MeshStandardMaterial({vertexColors:true,roughness:.86,metalness:0})));m.receiveShadow=true;m.castShadow=true;root.add(m);}
     await HCHL.y();
@@ -24677,16 +24875,14 @@ diffuseColor.rgb=col;diffuseColor.a=al;float iceR=sn;`)
     /* ===== 꼭대기: 돌탑과 푯말 ===== */
     if(M.cairn){const P=M.cairn,L=[];let yy=hAt(P.x,P.z)-.2,r=1.6;while(r>.25){const n=Math.max(1,Math.round(r*3));for(let k=0;k<n;k++){const a=k/n*6.28+rr(0,1),d=n>1?r*.55:0,s=r*rr(.55,.75);L.push({x:P.x+Math.cos(a)*d,z:P.z+Math.sin(a)*d,y:yy+s*.3,s,sx:s*1.2,sy:s*.55,sz:s,ry:rr(0,6.28)});}yy+=r*.42;r*=.8;}
       inst(NAT.rock(2),NAT.sstone(0x8c8780),L,0);colliders.push({x:cx+P.x,z:cz+P.z,r:2,h:4});
+      if(z==='htop')await hchTopDecor(root,M,cx,cz,hAt);
       const g=new THREE.Group(),y=hAt(P.x-3.2,P.z+3);g.position.set(cx+P.x-3.2,y,cz+P.z+3);g.rotation.y=-.3;root.add(g);const post=new THREE.Mesh(new THREE.CylinderGeometry(.1,.13,2.2,7),new THREE.MeshStandardMaterial({color:0x4e3420}));post.position.y=.9;g.add(post);
       const tx=signTex([{t:'허칠',s:120,b:1,y:.36},{t:'꼭대기',s:56,y:.76}],512,300),bd=new THREE.Mesh(new THREE.BoxGeometry(1.6,.95,.09),[0,0,0,0,0,0].map((_,i)=>i>=4?new THREE.MeshStandardMaterial({map:tx}):new THREE.MeshStandardMaterial({color:0x5e4026})));bd.position.set(0,1.65,.12);g.add(bd);colliders.push({x:cx+P.x-3.2,z:cz+P.z+3,r:.25,h:2.2});}
     await HCHL.y();
     /* ===== 문: 길 끝마다 문틀·빛 막·이름판 (호숫가 동쪽 갈래 끝은 굴 입구) ===== */
     for(const g of C.GATES){let S=null,o=null;if(g.a===z){S=g.A;o=g.b;}else if(g.b===z){S=g.B;o=g.a;}if(!S||S.noModel)continue;
       hchGateModel(root,cx,cz,{x:S.x,z:S.z,nx:S.nx,nz:S.nz,hw:S.hw,a:z,b:o},hAt);
-      if(g.k==='mouth'){const fx=S.x+S.nx*6,fz=S.z+S.nz*6,y=hAt(S.x,S.z),G2=new THREE.Group();G2.position.set(cx+fx,y,cz+fz);G2.rotation.y=Math.atan2(S.nx,S.nz);root.add(G2);   /* 굴 입구: 벼랑에 뚫린 검은 굴, 위로 고드름 */
-        const ah=6.4,aw=4.2,sh=new THREE.Shape();sh.moveTo(-aw,-1);sh.lineTo(-aw*.96,ah*.45);sh.quadraticCurveTo(-aw*.75,ah*1.02,0,ah);sh.quadraticCurveTo(aw*.8,ah,aw*.98,ah*.4);sh.lineTo(aw,-1);sh.closePath();
-        const hole=new THREE.Mesh(new THREE.ShapeGeometry(sh,12),new THREE.MeshBasicMaterial({color:0x06090e}));hole.rotation.y=Math.PI;G2.add(hole);
-        const icM=new THREE.MeshStandardMaterial({color:0xdcefff,roughness:.08,metalness:.1,transparent:true,opacity:.85});for(let k=0;k<14;k++){const x=rr(-aw*.8,aw*.8),Lc=rr(.3,1.4),ic=new THREE.Mesh(new THREE.ConeGeometry(rr(.05,.12),Lc,5),icM);ic.rotation.x=Math.PI;ic.position.set(x,ah*(1-.35*(x/aw)**2)-Lc/2-.1,-.2);G2.add(ic);}}}
+}
     /* 맵 밖으로 나간 막힘은 지우지 않는다: 길 안에서만 부딪힌다 */
     void col0;
     await HCHL.y();}
@@ -24710,10 +24906,46 @@ function hchPortalsAll(){const C=OR.HCH,HM=HMAP;
   const yOf=(z,q)=>{const I=OR.ISLES[z];return C.OM[z]?HM.h(C.OM[z],q.x,q.z):HCAVE.fl(q.x,q.z);};
   for(const g of C.GATES){const IA=OR.ISLES[g.a],IB=OR.ISLES[g.b];
     const mk=(I,zn,S,id,label,toZ,T)=>{const e=new THREE.Group(),y=yOf(zn,S);e.position.set(I.x+S.x,y,I.z+S.z);scene.add(e);const J=OR.ISLES[toZ],ar=C.arrive(T);
-      PORTALS.push({id,x:I.x+S.x,z:I.z+S.z,ry:Math.atan2(S.nx,S.nz),hw:S.hw,minLv:0,label,to:{x:J.x+ar.x,z:J.z+ar.z,yaw:Math.atan2(T.nx,T.nz)},msg:null,color:0xdff0ff,door:1,fx:{g:e,cols:[]}});};
+      PORTALS.push({id,x:I.x+S.x,z:I.z+S.z,ry:Math.atan2(S.nx,S.nz),hw:S.hw,minLv:0,label,to:{x:J.x+ar.x,z:J.z+ar.z,yaw:Math.atan2(T.nx,T.nz)},msg:null,color:0xdff0ff,door:1,fx:{g:e,cols:[]},
+        ...(S.hole?{hole:S.hole,down:OR.HCH.fam(zn)==='out'?1:0,hr:OR.HCH.fam(zn)==='out'?S.hole-.55:S.hole}:{})});};   /* 꼭대기 굴 구멍: 들어서면 떨어져 내려가고, 굴 쪽은 밧줄을 잡고 올라간다 (hchHoleGo) */
     mk(IA,g.a,g.A,g.a+'_to_'+g.b,hchRo(ZONES[g.b].name)+' 가기',g.b,g.B);
     mk(IB,g.b,g.B,g.b+'_to_'+g.a,hchRo(ZONES[g.a].name)+' 가기',g.a,g.A);}
 }
+/* ---------- 꼭대기 굴 구멍으로 내려가기·밧줄 타고 올라오기 (2026-11-11 원호: "동굴 들어가는 건 다른 맵 이동과 달리 구멍에 내려가는 걸로") ----------
+   꼭대기: 구멍 턱으로 미끄러져 들어가 떨어진다 → 화면이 어두워졌다가 굴 첫머리 천장 구멍 밑으로 떨어져 눈 무더기에 내려선다.
+   굴: 천장 구멍에서 늘어진 밧줄로 걸어가면 밧줄을 잡고 올라가 → 꼭대기 구멍 옆에 선다 */
+const HOLE={on:false,watch:false};
+function hchHoleGo(p){if(warping||HOLE.on||!player||!P)return;if(!HCHL.done){const d=p.to;warpTo(d.x,d.z,exitYaw(d,p),null);return;}
+  standUp=null;if(P.ride&&typeof rideOff==='function')rideOff(true);if(P.seat!=null){P.seat=null;sitting=false;}if(P.fly&&typeof toggleFly==='function')toggleFly(false);
+  const q=player.position;Object.assign(HOLE,{on:true,t:0,p,down:!!p.down,fx:q.x,fz:q.z,fy:q.y,cx:p.x,cz:p.z,fade:0,watch:false});warping=true;hchHoleSnd(p.down?'slide':'rope');}
+function hchHoleTick(dt){const H=HOLE,pos=player.position;H.t+=dt;pvel.x=pvel.z=0;vy=0;jumpY=1;
+  if(H.down){const k=Math.min(1,H.t/.4),e=k*k*(3-2*k),ft=Math.max(0,H.t-.28);   /* 턱 쪽으로 미끄러지다가 아래로 떨어진다 */
+    pos.set(H.fx+(H.cx-H.fx)*e*.8,H.fy-.5*e-14*ft*ft,H.fz+(H.cz-H.fz)*e*.8);cam.pitch+=(-.55-cam.pitch)*Math.min(1,dt*3);
+    if(H.t>.3&&!H.snd){H.snd=1;hchHoleSnd('fall');}
+    if(H.t>.62&&!H.fade){H.fade=1;$('#fade').classList.add('on');}
+    if(H.t>1.05)hchHoleArrive();}
+  else{const k=Math.min(1,H.t/.35),e=k*k*(3-2*k),up=Math.max(0,H.t-.25);   /* 밧줄 앞으로 다가가 붙잡고 끌어올라간다 */
+    pos.set(H.fx+(H.cx-H.fx)*e*.7,H.fy+up*2.3+Math.abs(Math.sin(up*7))*.12,H.fz+(H.cz-H.fz)*e*.7);cam.pitch+=(.5-cam.pitch)*Math.min(1,dt*2.5);
+    if(H.t>.9&&!H.fade){H.fade=1;$('#fade').classList.add('on');}
+    if(H.t>1.3)hchHoleArrive();}}
+function hchHoleArrive(){const H=HOLE,p=H.p,d=p.to,f=$('#fade');H.on=false;
+  setTimeout(()=>{const gy=heightAt(d.x,d.z);player.position.set(d.x,gy+(H.down?4:0),d.z);pvel.x=pvel.z=0;vy=0;jumpY=H.down?4:0;cam.yaw=exitYaw(d,p);cam.pitch=H.down?-.25:0;
+    H.watch=H.down;if(!H.down){hchHolePuff(d.x,gy,d.z,.6);hchHoleSnd('land',.5);}
+    publishPresence(true);arriveBanner(d.x,d.z);
+    setTimeout(()=>{f.classList.remove('on');warping=false;},200);},260);}
+/* 굴 바닥에 내려선 순간: 눈 무더기에서 눈가루가 튀고 쿵 소리 */
+function hchLandWatch(){if(!player||jumpY>.001)return;HOLE.watch=false;const q=player.position;hchHolePuff(q.x,q.y,q.z,1);hchHoleSnd('land',1);}
+function hchHolePuff(x,y,z,k){try{VFX.burst(new THREE.Vector3(x,y+.15,z),0xeef4fa,Math.round(26*k),3.2*k,.7,{up:.8,grav:5,mix:0xffffff,glow:false,plain:true});}catch(e){}}
+/* 소리 (합성): 미끄러짐·떨어지는 바람 소리·내려서는 쿵·밧줄 삐걱 */
+function hchHoleSnd(kind,v=1){try{const X=SFX.ctx;if(!X||!SFX.master||SFX.vol<=0)return;const t=X.currentTime,sr=X.sampleRate;
+  const noise=(dur,env)=>{const n=Math.floor(sr*dur),b=X.createBuffer(1,n,sr),d=b.getChannelData(0);for(let i=0;i<n;i++){const k=i/n;d[i]=(Math.random()*2-1)*env(k);}const s=X.createBufferSource();s.buffer=b;return s;};
+  const out=(node,gain)=>{const g=X.createGain();g.gain.value=gain*v;node.connect(g);g.connect(SFX.master);return g;};
+  if(kind==='slide'){const s=noise(.5,k=>Math.sin(Math.PI*k)*.8),f=X.createBiquadFilter();f.type='bandpass';f.frequency.setValueAtTime(900,t);f.frequency.exponentialRampToValueAtTime(400,t+.45);f.Q.value=.8;s.connect(f);out(f,.45);s.start(t);}
+  else if(kind==='fall'){const s=noise(1.1,k=>Math.pow(Math.min(1,k*4),1.5)*(1-k)),f=X.createBiquadFilter();f.type='bandpass';f.frequency.setValueAtTime(380,t);f.frequency.exponentialRampToValueAtTime(1400,t+.9);f.Q.value=1.4;s.connect(f);out(f,.5);s.start(t);}
+  else if(kind==='land'){const s=noise(.35,k=>Math.pow(1-k,3)),f=X.createBiquadFilter();f.type='lowpass';f.frequency.value=420;s.connect(f);out(f,.9);s.start(t);
+    const o=X.createOscillator();o.type='sine';o.frequency.setValueAtTime(95,t);o.frequency.exponentialRampToValueAtTime(42,t+.25);const g=out(o,.0);g.gain.setValueAtTime(.55*v,t);g.gain.exponentialRampToValueAtTime(.001,t+.3);o.start(t);o.stop(t+.32);}
+  else if(kind==='rope'){for(let i=0;i<4;i++){const s=noise(.12,k=>Math.sin(Math.PI*k)),f=X.createBiquadFilter();f.type='bandpass';f.frequency.value=520+i*90+Math.random()*80;f.Q.value=6;s.connect(f);out(f,.35);s.start(t+.18+i*.24);}}
+}catch(e){}}
 /* 얼음 호수 (호숫가 맵에 있을 때만): 김·떠 있는 얼음을 움직이고, 얼음 위인지 물속인지 재고, 물에 들어가면 물보라 */
 const e4h=new THREE.Euler(),q4h=new THREE.Quaternion(),s4h=new THREE.Vector3(),v4h=new THREE.Vector3(),M4h=new THREE.Matrix4();
 function hchLakeTick(t,dt){const LF=HMAP.lake,HL=HLAKE,L=LF.L,pl=player.position,lx=pl.x-LF.LX,lz=pl.z-LF.LZ;LF.U.uExp.value=renderer.toneMappingExposure;
@@ -24744,11 +24976,13 @@ function hechTick(t,dt){if(!HCHL.done)return;const p=player.position,at=p.x>=800
   if(HM.fx&&HM.fx.visible!==!!z)HM.fx.visible=!!z;if(!z)return;hchVeilTick(t);
   const c=camera.position,wx=Math.sin(t*.07)*1.2+2.2,wz=Math.cos(t*.05)*.6-.4;HECH.wind={x:wx,z:wz,alt:Math.max(0,c.y-HMAP.Y0.hechil)};
   {const gs=1+(z==='hridge'||z==='htop'?.8:0)+HECH.wind.alt*.004,gu=1+.9*Math.max(0,Math.sin(t*.23)*Math.sin(t*.61+1.3))+.25*Math.sin(t*1.7)*Math.sin(t*.37),R=Math.random;   /* 돌풍: 가끔 세졌다 잦아든다 */
-    for(const S of HM.snow.layers){const pp=S.pp,q=S.q;for(let i=0,o=0;i<pp.length;i+=3,o+=5){const k=q[o+4]*gs*gu,a=t*q[o+1]+q[o+3],am=q[o+2];
+    HM.snow.layers.forEach((S,i)=>{const v=z!=='htop'||i===0;if(S.pts.visible!==v)S.pts.visible=v;});   /* 꼭대기는 구름 위라 맑다: 잔 눈송이만 조금 */
+    for(const S of HM.snow.layers){if(!S.pts.visible)continue;const pp=S.pp,q=S.q;for(let i=0,o=0;i<pp.length;i+=3,o+=5){const k=q[o+4]*gs*gu,a=t*q[o+1]+q[o+3],am=q[o+2];
       pp[i+1]-=dt*q[o]*(1+.35*Math.sin(a*.7+1));pp[i]+=dt*(wx*k+Math.sin(a)*am+Math.sin(a*2.3+pp[i+2]*.11)*am*.4);pp[i+2]+=dt*(wz*k+Math.cos(a*.9)*am*.8);
       const y=pp[i+1]-c.y;if(y<-10){pp[i+1]+=38-R()*6;pp[i]=c.x+R()*80-40;pp[i+2]=c.z+R()*80-40;q[o+3]=R()*6.28;}else if(y>30)pp[i+1]-=38;
       const x=pp[i]-c.x,zz=pp[i+2]-c.z;if(x>40||x<-40)pp[i]=c.x+((x+40)%80+80)%80-40;if(zz>40||zz<-40)pp[i+2]=c.z+((zz+40)%80+80)%80-40;}   /* 멀리 떨어져도 한 번에 둘레로 */
       S.pts.geometry.attributes.position.needsUpdate=true;}}
+  if(z==='htop')hchTopTick(t,dt);
   if(z==='hechil'&&HM.hut){const H2=HM.hut;if(H2.smokeL){const S=H2.smokeL;for(const sp of S.L){const u=sp.userData;u.ph+=dt*.09;if(u.ph>1)u.ph-=1;const k=u.ph;sp.position.set(S.o.x+k*wx*7+Math.sin(t+k*9)*.3,S.o.y+k*9,S.o.z+k*wz*7);const s=1+k*5;sp.scale.set(s,s,1);sp.material.opacity=Math.sin(k*Math.PI)*.4;}}
     const night=typeof DL!=='undefined'?1-Math.min(1,DL.sun):0;if(H2.light)H2.light.intensity=.2+night*1.4;if(H2.glow)H2.glow.emissiveIntensity=.7+night*.9;}}
 /* ---------- 허칠산 동굴 (Lv 110–130): 갈림길 동쪽 벼랑의 굴. 얼어붙은 굴길이 굽이굽이 이어지고, 넓은 방 셋을 지나 가장 깊은 큰 방(늙은 동굴곰의 굴)에서 끝난다 ----------
@@ -24781,6 +25015,7 @@ async function buildHCave(){
     for(let i=0;i<NS;i++)for(let j=0;j<M;j++){const a=i*(M+1)+j,b=a+M+1;idx.push(a,b,a+1,b,b+1,a+1);}
     /* 막힌 끝 */
     {const p=at(C.TL),c0=pos.length/3;pos.push(cx+p.x,H.base(C.TL)+p.c*.5,cz+p.z);col.push(ROCK.r,ROCK.g,ROCK.b);const r0=NS*(M+1);for(let j=0;j<M;j++)idx.push(r0+j,r0+j+1,c0);}
+    {const p=at(0),[ux,uz]=dir(0),c0=pos.length/3;pos.push(cx+p.x-ux*1.6,H.base(0)+p.c*.5,cz+p.z-uz*1.6);tmp.copy(ROCK2).lerp(FROST,.5);col.push(tmp.r,tmp.g,tmp.b);for(let j=0;j<M;j++)idx.push(j+1,j,c0);idx.push(0,M,c0);}   /* 첫머리도 막혔다 (2026-11-11: 들어오는 길은 천장 구멍) */
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();return g;};
   const wallM=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.88,side:THREE.DoubleSide,shadowSide:THREE.BackSide});
   {const m=new THREE.Mesh(await run(wallGen()),wallM);m.castShadow=true;m.receiveShadow=true;root.add(m);}
@@ -24918,12 +25153,33 @@ async function buildHCave(){
     {const c=at((s0+s1)/2),l1=new THREE.PointLight(0xb04a5a,1.25,70,1.5);l1.position.set(cx+c.x,H.base((s0+s1)/2)+9,cz+c.z);root.add(l1);
       const c2=at(s1-14),l2=new THREE.PointLight(0xb8b040,.9,34,1.6);l2.position.set(cx+c2.x,H.base(s1-14)+3,cz+c2.z);root.add(l2);}
   }
-  /* ===== 들어온 굴 입구: 바깥 눈빛이 하얗게 들어온다. 그쪽으로 걸어 나가면 허칠산 ===== */
-  {const p=T[0],[ux,uz]=dir(0),y0=H.base(0),w=p.w*2.2,h=p.c*1.15;
-    const lm=new THREE.MeshBasicMaterial({color:0xf2f8ff,fog:false,transparent:true,opacity:.95,depthWrite:false});const pl=new THREE.Mesh(new THREE.CircleGeometry(1,32),lm);pl.scale.set(w*.55,h*.8,1);
-    pl.position.set(cx+p.x-ux*2.6,y0+h*.35,cz+p.z-uz*2.6);pl.lookAt(cx+p.x+ux*10,y0+h*.35,cz+p.z+uz*10);root.add(pl);
-    const gl=new THREE.Mesh(new THREE.CircleGeometry(1,32),new THREE.MeshBasicMaterial({color:0xcfe4ff,fog:false,transparent:true,opacity:.35,depthWrite:false}));gl.scale.set(w*.8,h*1.05,1);gl.position.copy(pl.position).addScaledVector(new THREE.Vector3(ux,0,uz),.3);gl.quaternion.copy(pl.quaternion);root.add(gl);
-    const g=new THREE.Group();g.position.set(cx+p.x-ux*2,H.fl(p.x-ux*2,p.z-uz*2),cz+p.z-uz*2);root.add(g);}   /* 굴 입구 문은 허칠 문 모음(OR.HCH.GATES)이 단다 */
+  /* ===== 굴 첫머리 천장 구멍 (2026-11-11 원호: 꼭대기 구멍으로 내려온다): 천장에 뚫린 하늘빛 구멍과 둘레 고드름, 비스듬히 내리꽂는 빛기둥,
+     빛 속으로 흩날려 내려오는 눈, 바닥엔 쌓인 눈 무더기와 빛 웅덩이, 구멍에서 늘어진 밧줄 (밧줄로 걸어가면 잡고 올라간다) ===== */
+  {const G=C.GATES.find(g=>g.k==='mouth'),q=G.B,fy=H.fl(q.x,q.z),cy=H.ce(q.x,q.z),hr=1.3,U2={uT:{value:0}};H.shaft={U:U2,snow:null,rope:null};
+    const sh=new THREE.Shape();for(let i=0;i<=40;i++){const a=i/40*Math.PI*2,r=hr*(1+.14*Math.sin(3*a+.7)+.08*Math.sin(5*a+2));i?sh.lineTo(Math.cos(a)*r,Math.sin(a)*r):sh.moveTo(Math.cos(a)*r,Math.sin(a)*r);}
+    const sky=new THREE.Mesh(new THREE.ShapeGeometry(sh,8),new THREE.MeshBasicMaterial({color:0xf4f9ff,fog:false}));sky.rotation.x=Math.PI/2;sky.position.set(cx+q.x,cy-.06,cz+q.z);root.add(sky);   /* 아래에서 올려다보면 하얀 하늘 */
+    {const cg=new THREE.ConeGeometry(1,1,6,1);cg.rotateX(Math.PI);cg.translate(0,-.5,0);const n=22,im=new THREE.InstancedMesh(cg,new THREE.MeshStandardMaterial({color:0xdcefff,roughness:.06,metalness:.3,transparent:true,opacity:.85,emissive:0x2a4a5e}),n),M4=new THREE.Matrix4(),qq=new THREE.Quaternion(),v=new THREE.Vector3(),sc=new THREE.Vector3();
+      for(let i=0;i<n;i++){const a=rr(0,6.28),r=hr*rr(1.02,1.5),L=rr(.25,1.1);v.set(cx+q.x+Math.cos(a)*r,cy-.08,cz+q.z+Math.sin(a)*r);sc.set(rr(.05,.1),L,rr(.05,.1));M4.compose(v,qq,sc);im.setMatrixAt(i,M4);}root.add(im);}
+    /* 빛기둥: 위는 좁고 아래로 퍼지며, 결이 천천히 흐른다 (더하기 빛) */
+    {const h=cy-fy+.2,g=new THREE.CylinderGeometry(hr*.92,hr*1.55,h,28,6,true);g.translate(0,h/2,0);
+      const m=new THREE.ShaderMaterial({uniforms:U2,transparent:true,depthWrite:false,fog:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,
+        vertexShader:'varying vec2 vU;varying vec3 vN,vV;void main(){vU=uv;vec4 w=modelMatrix*vec4(position,1.);vN=normalize(mat3(modelMatrix)*normal);vV=normalize(cameraPosition-w.xyz);gl_Position=projectionMatrix*viewMatrix*w;}',
+        fragmentShader:'uniform float uT;varying vec2 vU;varying vec3 vN,vV;float hs(float x){return fract(sin(x*127.1)*43758.5);}float vn(float x){float i=floor(x),f=fract(x);f=f*f*(3.-2.*f);return mix(hs(i),hs(i+1.),f);}'+
+          'void main(){float edge=pow(1.-abs(dot(vN,vV)),1.6);float st=.55+.45*vn(vU.x*38.+uT*.25)*vn(vU.x*17.-uT*.18+3.);float a=(1.-edge*.85)*st*smoothstep(0.,.35,vU.y)*(.35+.65*vU.y)*.22;gl_FragColor=vec4(vec3(.86,.93,1.)*a,1.);}'});
+      const b=new THREE.Mesh(g,m);b.position.set(cx+q.x,fy-.1,cz+q.z);b.renderOrder=3;root.add(b);}
+    /* 바닥: 빛 웅덩이와 쌓인 눈 무더기 */
+    {const cv=document.createElement('canvas');cv.width=cv.height=64;const x=cv.getContext('2d'),gr=x.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.55,'rgba(255,255,255,.45)');gr.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=gr;x.fillRect(0,0,64,64);
+      const pool=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),color:0xb8cce0,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:false}));pool.rotation.x=-Math.PI/2;pool.scale.set(hr*4.4,hr*4.4,1);pool.position.set(cx+q.x,fy+.06,cz+q.z);pool.renderOrder=2;root.add(pool);}
+    {const g=new THREE.SphereGeometry(1,24,10,0,Math.PI*2,0,Math.PI/2),P2=g.attributes.position;for(let i=0;i<P2.count;i++){const x=P2.getX(i),z=P2.getZ(i),n=HECH.fbm(x*2+5,z*2,2)-.5;P2.setY(i,P2.getY(i)*(1+n*.6));}g.computeVertexNormals();
+      for(const [ox,oz,sx,sy,sz] of [[0,0,2.3,.55,2.0],[.9,-.6,1.2,.35,1.1],[-1.1,.5,1.0,.3,1.2]]){const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0xf1f5fa,roughness:.8,emissive:0x1c2630}));m.scale.set(sx,sy,sz);m.position.set(cx+q.x+ox,H.fl(q.x+ox,q.z+oz)-.12,cz+q.z+oz);m.receiveShadow=true;root.add(m);}}
+    /* 밧줄: 구멍 가장자리에서 늘어져 바닥에 몇 바퀴 사려 있다 */
+    {const ox=q.x+.35,oz=q.z+.15,pts=[new THREE.Vector3(cx+ox,cy+1.2,cz+oz),new THREE.Vector3(cx+ox,cy-.4,cz+oz),new THREE.Vector3(cx+ox+.05,(cy+fy)/2,cz+oz+.04),new THREE.Vector3(cx+ox+.08,fy+.6,cz+oz+.06),new THREE.Vector3(cx+ox+.1,fy+.22,cz+oz+.1)];
+      for(let i=0;i<=14;i++){const a=i/14*Math.PI*4,r=.32+.03*i;pts.push(new THREE.Vector3(cx+ox+.1+Math.cos(a)*r,fy+.2+.12*(1-i/14),cz+oz+.1+Math.sin(a)*r));}
+      const g=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),90,.035,5,false),rp=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0x8a6a40,roughness:.95}));rp.castShadow=true;root.add(rp);H.shaft.rope=rp;}
+    /* 빛 속으로 내려오는 눈 */
+    {const N=110,pp=new Float32Array(N*3),sd=new Float32Array(N*2);for(let i=0;i<N;i++){const a=Math.random()*6.28,r=Math.sqrt(Math.random())*hr*1.3;pp[i*3]=cx+q.x+Math.cos(a)*r;pp[i*3+1]=fy+Math.random()*(cy-fy);pp[i*3+2]=cz+q.z+Math.sin(a)*r;sd[i*2]=.4+Math.random()*.7;sd[i*2+1]=Math.random()*6.28;}
+      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pp,3));const m=new THREE.PointsMaterial({color:0xffffff,size:.07,sizeAttenuation:true,transparent:true,opacity:.9,depthWrite:false,fog:true});
+      const pts=new THREE.Points(g,m);pts.frustumCulled=false;root.add(pts);H.shaft.snow={pts,pp,sd,x:cx+q.x,z:cz+q.z,fy,cy,hr};}}
   /* 굴 안 빛: 걷는 사람 곁을 은은히 비추는 얼음빛 (굴에 있을 때만 켠다) */
   {const L=new THREE.PointLight(0xc4dcff,.5,20,1.4);root.add(L);H.light=L;}
   /* 굴목 사냥터 문: 굴을 가로지른 문틀과 빛 막, 앞뒤 방 이름판 */
@@ -24940,6 +25196,7 @@ hchPortalsAll();
 function hcaveTick(t,dt){const H=HCAVE;if(!H.root||!HCHL.done)return;const p=player.position,I=OR.ISLES.hcave,at=p.x>=800?OR.isleAt(p.x,p.z):null,on=!!at&&OR.HCH.fam(at.id)==='cave';if(H.root.visible!==on)H.root.visible=on;if(!on)return;
   {const ox=at.x-I.x,oz=at.z-I.z;if(H.root.position.x!==ox||H.root.position.z!==oz){H.root.position.set(ox,0,oz);H.root.updateMatrixWorld(true);}}
   hchVeilTick(t);
+  if(H.shaft&&at.id==='hcave'){const S=H.shaft;S.U.uT.value=t;const W=S.snow;if(Math.hypot(p.x-W.x,p.z-W.z)<60){const pp=W.pp,sd=W.sd;for(let i=0;i<sd.length/2;i++){const o=i*3;pp[o+1]-=dt*sd[i*2];pp[o]+=Math.sin(t*1.3+sd[i*2+1])*dt*.12;if(pp[o+1]<W.fy){pp[o+1]=W.cy-.1;const a=Math.random()*6.28,r=Math.sqrt(Math.random())*W.hr*1.1;pp[o]=W.x+Math.cos(a)*r;pp[o+2]=W.z+Math.sin(a)*r;}}W.pts.geometry.attributes.position.needsUpdate=true;}}   /* 천장 구멍: 내려오는 눈 */
   if(H.light){H.light.position.set(p.x,p.y+3.2,p.z);const lr=at.id==='hlair';if(H.light.userData.lr!==lr){H.light.userData.lr=lr;H.light.color.set(lr?0xd8b0a8:0xc4dcff);}}}   /* 어미의 둥지에선 얼음빛이 붉게 물든다 */
 /* ---------- 길드홀 지하 창고: 포탈 방에서 계단을 올라오면 나오는 곳. 통·상자·술병 선반, 작은 탁자.
    북쪽 벽의 짧은 계단을 올라 문을 열면 길드홀 1층 ---------- */
@@ -29311,7 +29568,13 @@ function hechZoneImg(z){const K=hechZoneImg.K||(hechZoneImg.K={});if(K[z])return
       c.beginPath();c.moveTo(-18,0);c.lineTo(18,0);c.moveTo(0,0);c.lineTo(0,8.8);c.stroke();c.fillStyle='#e8ecef';c.fillRect(-2.2,8.8,4.4,4.2);c.strokeRect(-2.2,8.8,4.4,4.2);c.restore();}
     if(M.cairn){const x=X(M.cairn.x),y=Y(M.cairn.z);c.strokeStyle='#3b2a18';c.lineWidth=1.6;c.beginPath();c.moveTo(x-4,y);c.lineTo(x+4,y);c.moveTo(x,y-4);c.lineTo(x,y+4);c.stroke();}}
   /* 문: 길을 가로지른 붉은 막대 */
-  for(const g of C.GATES){const S=g.a===z?g.A:g.b===z?g.B:null;if(!S)continue;const px=-S.nz,pz=S.nx,w=S.hw+1;c.strokeStyle='#a2361f';c.lineWidth=2.4;c.beginPath();c.moveTo(X(S.x+px*w),Y(S.z+pz*w));c.lineTo(X(S.x-px*w),Y(S.z-pz*w));c.stroke();}
+  for(const g of C.GATES){const S=g.a===z?g.A:g.b===z?g.B:null;if(!S)continue;
+    if(S.hole){const x=X(S.x),y=Y(S.z),out=!!M;   /* 굴 구멍 (꼭대기: 땅에 뚫린 검은 구멍과 턱 빗금, 굴: 천장 구멍 밑 밝은 눈 무더기) */
+      if(out){const r=S.hole*ppm,rf=a=>r*(1+.11*Math.sin(3*a+1.3)+.07*Math.sin(5*a+.4));c.fillStyle='#1d1a18';c.beginPath();for(let i=0;i<=36;i++){const a=i/36*Math.PI*2;c.lineTo(x+Math.cos(a)*rf(a),y+Math.sin(a)*rf(a));}c.fill();
+        c.strokeStyle='rgba(60,44,30,.7)';c.lineWidth=.8;c.beginPath();for(let i=0;i<22;i++){const a=i/22*Math.PI*2,r0=rf(a)+.4,r1=r0+2+movRnd(i*3.1)*1.6;c.moveTo(x+Math.cos(a)*r0,y+Math.sin(a)*r0);c.lineTo(x+Math.cos(a)*r1,y+Math.sin(a)*r1);}c.stroke();}
+      else{c.fillStyle='rgba(236,240,244,.95)';c.beginPath();c.arc(x,y,2.6*ppm,0,Math.PI*2);c.fill();c.strokeStyle='rgba(60,50,40,.6)';c.lineWidth=.7;c.stroke();}
+      continue;}
+    const px=-S.nz,pz=S.nx,w=S.hw+1;c.strokeStyle='#a2361f';c.lineWidth=2.4;c.beginPath();c.moveTo(X(S.x+px*w),Y(S.z+pz*w));c.lineTo(X(S.x-px*w),Y(S.z-pz*w));c.stroke();}
   return K[z]={cv,b,ppm};}
 /* 허칠 전체 그림 (왕국 지도 확대용): 맵마다 떨어진 판 + 문끼리 잇는 점선 */
 function hechPlanImg(){if(hechPlanImg.c)return hechPlanImg.c;const E=HECH.R0+70,S=E*2,P=hechPlan(),C=OR.HCH;
@@ -32428,7 +32691,8 @@ function updatePlayer(dt){
     const cur=player.rotation.y,d=Math.atan2(Math.sin(by-cur),Math.cos(by-cur));player.rotation.y=cur+d*Math.min(1,dt*(touchUI?12:60));}
   if(moving&&jumpY===0){const st0=Math.floor(cam.bob/Math.PI);const GS=player.userData.stick&&player.userData.stick.gait;   /* 발소리·흔들림도 실제 걸음 빠르기에 맞춘다 (3인칭이면 발이 땅에 닿을 때 소리) */
     if(cam.third&&GS&&GS.w>.5)cam.bob=GS.ph+GS.be*Math.PI*GS.dir;else cam.bob+=dt*(P.fly?moving*9:pgParams(Math.hypot(pvel.x,pvel.z)/((player.scale.y||1)*((player.userData.stick&&player.userData.stick.body.scale.y)||1))).om);if(Math.floor(cam.bob/Math.PI)!==st0&&!(P.dash||P.leap))sfx('step',null,1,.9+Math.random()*.2);}
-  if(CCAR.ride)ccarSeatPlayer();else if(standUp)standUpTick(dt);else if(P.seat!=null){const s=SEATS[P.seat];if(s){player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;}else P.seat=null;}
+  if(CCAR.ride)ccarSeatPlayer();else if(HOLE.on)hchHoleTick(dt);else if(standUp)standUpTick(dt);else if(P.seat!=null){const s=SEATS[P.seat];if(s){player.position.set(s.x,s.y,s.z);player.rotation.y=s.ry;vy=0;jumpY=0;}else P.seat=null;}
+  if(HOLE.watch&&!HOLE.on)hchLandWatch();
   const bobY=(moving&&jumpY===0?Math.sin(cam.bob)*.06:0)-(cam.land||0);
   camera.rotation.set(cam.pitch,cam.yaw,0);
   cam.dw=(cam.dw??1)+(((sitting||P.seat!=null)?0:1)-(cam.dw??1))*Math.min(1,dt*2.5);   /* 앉아 있으면 취해도 시야가 흔들리지 않는다 (일어서면 서서히 다시) */
@@ -32700,15 +32964,16 @@ function updateWorld(dt){
   /* 하레나 사냥터: 구역 안은 먼 곳이 흐리고, 협곡 문 가까이 가면 짙은 모래 안개로 다음 구역을 가린다 */
   if(hi>=0&&typeof hfogNear==='function'){scene.fog.near=20;scene.fog.far=90;const k=hfogNear(player.position.x,player.position.z);if(k>0){scene.fog.near+=(2-scene.fog.near)*k;scene.fog.far+=(26-scene.fog.far)*k;}}
   if(typeof hfogTick==='function')hfogTick(tAll);
-  if(inHc){scene.fog.near=90;scene.fog.far=420;}   /* 허칠: 작은 맵이라 멀리 볼 것 없다 */
+  if(inHc){scene.fog.near=90;scene.fog.far=420;}
+  if(z==='htop'){scene.fog.near=200;scene.fog.far=1500;}   /* 꼭대기: 구름 바다 너머 먼 설산까지 보인다 */   /* 허칠: 작은 맵이라 멀리 볼 것 없다 */
   gateFogTick(tAll);
-  {const cf=inHc?600:400;if(camera.far!==cf){camera.far=cf;camera.updateProjectionMatrix();}}
+  {const cf=z==='htop'?1700:inHc?600:400;if(camera.far!==cf){camera.far=cf;camera.updateProjectionMatrix();}}
   if(gfxLv()===0&&z!=='dungeon'&&z!=='hall'&&z!=='thouse'&&z!=='myhome'&&z!=='ghouse'&&z!=='bakery'&&z!=='mshop'&&z!=='hinn'&&!OR.DINES[z]&&z!=='library'&&!inCave){scene.fog.near*=.8;scene.fog.far*=.8;}   /* 그래픽 낮음: 시야를 줄여 먼 것을 덜 그린다 */
   /* 땅 끝 가까이 가면 안개가 짙어진다 (멀리 있는 것부터 안개 속으로 사라진다) */
   if(player&&player.position.x>=800){const q=player.position,I=OR.isleAt(q.x,q.z),dd=OR.isleEdge(I,Math.atan2(q.z-I.z,q.x-I.x))-Math.hypot(q.x-I.x,q.z-I.z),k=OR.MHUNT.includes(I.id)||OR.HCH.fam(I.id)?0:1-OR.smooth(6,60,dd);
     if(k>0){scene.fog.near+=(4-scene.fog.near)*k*.9;scene.fog.far+=(48-scene.fog.far)*k*.8;}}
   {const gIn=(z==='guildhall'&&typeof ghInside==='function'&&ghInside())||(z==='khq'&&typeof khqInside==='function'&&khqInside())||z==='hlodge';   /* 길드홀 안: 바깥 햇빛 대신 은은한 실내빛 (밤에도 아주 어둡지 않게, 등불이 돋보이게) */
-    const inH=(z==='hall'||z==='thouse'||z==='myhome'||z==='ghouse'||z==='bakery'||z==='mshop'||z==='hinn'||!!OR.DINES[z]||z==='library')||inCave,inD=z==='dungeon'||inH,inT=z==='town',kk=Math.min(1,dt*3);const inM=inRealm||inMh;const dd=DEEP_DES[z],dh=inD?1:dd?Math.max(DL.hemi,.55):DL.hemi,ds=inD?1:dd?Math.max(DL.sun,.32):DL.sun;   /* 깊은 사막은 밤에도 달빛·모래빛으로 덜 어둡다 */hemi.intensity+=((gIn?(.24+.13*DL.hemi)/Math.max(dh,.01):z==='library'?.66:inHc?.6:z==='hcave'?.2:inH?.36:inD?.28:inHa?.44:inMil?.54:inM?(z==='marcus'?.5:inMh?.52:.6):.54)*dh-hemi.intensity)*kk;sun.intensity+=((gIn?(.04+.12*DL.sun)/Math.max(ds,.01):z==='library'?.3:inHc?1.02:z==='hcave'?.04:inD?.13:inHa?(hi<0?.82:.84-.01*hi):inMil?.9:inM?(z==='marcus'?1.2:inMh?1.1:.94):.8)*ds-sun.intensity)*kk;   /* 사막(하레나)은 모래가 되비쳐 더 밝아 보이므로 더 낮춘다 */
+    const inH=(z==='hall'||z==='thouse'||z==='myhome'||z==='ghouse'||z==='bakery'||z==='mshop'||z==='hinn'||!!OR.DINES[z]||z==='library')||inCave,inD=z==='dungeon'||inH,inT=z==='town',kk=Math.min(1,dt*3);const inM=inRealm||inMh;const dd=DEEP_DES[z],dh=inD?1:dd?Math.max(DL.hemi,.55):DL.hemi,ds=inD?1:dd?Math.max(DL.sun,.32):DL.sun;   /* 깊은 사막은 밤에도 달빛·모래빛으로 덜 어둡다 */hemi.intensity+=((gIn?(.24+.13*DL.hemi)/Math.max(dh,.01):z==='library'?.66:inHc?.6:z==='hcave'?.2:inH?.36:inD?.28:inHa?.44:inMil?.54:inM?(z==='marcus'?.5:inMh?.52:.6):.54)*dh-hemi.intensity)*kk;sun.intensity+=((gIn?(.04+.12*DL.sun)/Math.max(ds,.01):z==='library'?.3:z==='htop'?1.14:inHc?1.02:z==='hcave'?.04:inD?.13:inHa?(hi<0?.82:.84-.01*hi):inMil?.9:inM?(z==='marcus'?1.2:inMh?1.1:.94):.8)*ds-sun.intensity)*kk;   /* 사막(하레나)은 모래가 되비쳐 더 밝아 보이므로 더 낮춘다 */
     ENV.k=Math.max(.15,Math.min(1.15,hemi.intensity/.55));
     /* 밀골: 맑은 하늘빛(위)과 풀빛 되비침(아래), 햇빛은 따뜻하되 주황으로 치우치지 않게 */
     /* 하레나(사막): 따뜻한 햇빛과 파란 하늘빛, 아래에서는 모래가 되비치는 주황빛. 길 끝으로 갈수록 해가 붉어진다 */
@@ -32716,8 +32981,8 @@ function updateWorld(dt){
     else{sun.color.lerp(_sunC.set(gIn?0xffd8a8:inHc?0xfff4ea:inT?0xfff6e4:inMil?0xfff0d6:inM?(z==='marcus'?0xffe8c0:0xffd9a6):0xfff0d4).multiply(inD?DL._c2.set(1,1,1):DL.tint),kk);hemi.color.lerp(_hemC.set(gIn?0xffe0b4:inHc?0xdbe6ff:inMil?0xdfeaff:inM?(z==='marcus'?0xf2ece2:0xffe6c8):0xe4ecf0),kk);hemi.groundColor.lerp(_hemG.set(gIn?0x6a4628:inHc?0xa9b6c8:inMil?0x6e6440:inM?(z==='marcus'?0x7a5a38:0x6a5030):0x4d4128),kk);}
     // 하늘 돔: 지평선은 안개색, 꼭대기는 짙은 하늘색. 사막(하레나)은 구름이 적고 햇무리가 세다
     skyDome.visible=!inD;skyDome.position.copy(camera.position);SKY.t.value=tAll;SKY.hor.value.copy(scene.background);
-    _zenC.copy(scene.background).lerp(_skyBlue.set(inHa?(hi<5?0x2f78d4:hi<7?0x6a6a9a:0x4a3a40):inMil||z==='marcus'||inMh||inHc?0x3f80d0:inM?0x5a8ac8:0x4f86c4),inHa?(hi<5?.74:.5):inMil||z==='marcus'||inMh||inHc?.74:inM?.62:.55);if(!inD)_zenC.multiplyScalar(DEEP_DES[z]?Math.max(DL.bg,.5):DL.bg).multiply(DL.bgTint);SKY.zen.value.lerp(_zenC,kk);
-    SKY.cloud.value+=((inT?.18:/^w/.test(z)||z==='marcus'||inMh||z==='forest'||z==='plains'||z==='swamp'||z==='ruins'?.3:.5)-SKY.cloud.value)*kk*.5;SKY.glow.value+=((inT?1.8:1)-SKY.glow.value)*kk;}
+    _zenC.copy(scene.background).lerp(_skyBlue.set(inHa?(hi<5?0x2f78d4:hi<7?0x6a6a9a:0x4a3a40):z==='htop'?0x2462c8:inMil||z==='marcus'||inMh||inHc?0x3f80d0:inM?0x5a8ac8:0x4f86c4),inHa?(hi<5?.74:.5):z==='htop'?.86:inMil||z==='marcus'||inMh||inHc?.74:inM?.62:.55);if(!inD)_zenC.multiplyScalar(DEEP_DES[z]?Math.max(DL.bg,.5):DL.bg).multiply(DL.bgTint);SKY.zen.value.lerp(_zenC,kk);
+    SKY.cloud.value+=((z==='htop'?.12:inT?.18:/^w/.test(z)||z==='marcus'||inMh||z==='forest'||z==='plains'||z==='swamp'||z==='ruins'?.3:.5)-SKY.cloud.value)*kk*.5;SKY.glow.value+=((inT?1.8:1)-SKY.glow.value)*kk;}
   {const q=player.position,ty=Math.min(q.y,heightAt(q.x,q.z)+6);   /* 높이 날아도 그림자 상자는 땅 위에 */
     /* 그림자 상자를 그림자 그림의 한 칸 단위로만 옮긴다: 걸을 때 땅에 그림자 줄무늬가 흐르듯 움직이지 않게 */
     const B=_sunBasis,T=72/sun.shadow.mapSize.x,px=q.x*B.x.x+ty*B.x.y+q.z*B.x.z,py=q.x*B.y.x+ty*B.y.y+q.z*B.y.z,dx=Math.round(px/T)*T-px,dy=Math.round(py/T)*T-py;
