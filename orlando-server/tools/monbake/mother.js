@@ -36,8 +36,25 @@ function bodyD(x, y, z) {
   const d = bodyRaw(x, y, z); if (d > .05) return d;
   return d - .006 * fbm(x * 1.6, y * 1.6, z * 1.6, 2) + .008 * sore(x, y, z);   /* 잔 울퉁불퉁은 빼고 (줄이면 구겨져 보인다) 큰 물결과 헌데 자국만 */
 }
+/* 몸 겉면 한 점 (t: 몸 길이, th: 등 0 → 옆 ±π/2 → 배 ±π) */
+function surf(t, th, out = 0) { const R = Rf(t), c = Math.cos(th), k = c < 0 ? .78 : 1; return { p: [Math.sin(th) * (R + out), yc(t) + c * (R + out) * k, zOf(t)], n: [Math.sin(th), c, 0] }; }
+/* 살갗에 붙는 것들 자리 (색칠할 때 둘레를 물들인다): 구멍·고름 주머니·찢어진 상처 */
+const HOLES = [], BOILS = [], WOUNDS = [];
+{ let sd = 7; const rr = (a, b) => a + ((sd = (sd * 16807) % 2147483647) / 2147483647) * (b - a);
+  /* 구멍 무리: 옆구리에 벌집처럼 숭숭 뚫린 구멍. 몇 개에선 새끼 머리가 삐죽 나와 있다 */
+  for (const [t0, th0, n] of [[.3, 1.25, 26], [.47, -1.35, 30], [.64, 1.55, 18], [.22, -1.1, 16], [.55, .55, 14], [.78, -1.6, 12]]) {
+    for (let i = 0; i < n; i++) { const a = rr(0, 6.28), d = Math.sqrt(rr(0, 1)), t = t0 + Math.cos(a) * d * .055, th = th0 + Math.sin(a) * d * .42, r = rr(.009, .024) * (1.1 - d * .4);
+      const S = surf(t, th); HOLES.push({ c: [S.p[0] - S.n[0] * r * .25, S.p[1] - S.n[1] * r * .25, S.p[2]], n: S.n, r, t, grub: rr(0, 1) < .22 }); } }
+  /* 고름 주머니: 몸 곳곳에 부풀어 오른 누런 주머니, 몇 개씩 모여 난다 */
+  for (let i = 0; i < 22; i++) { const t = rr(.1, .86), th = rr(-2.2, 2.2), m = rr(0, 1) < .35 ? 1 : 2 + Math.floor(rr(0, 4));
+    for (let j = 0; j < m; j++) { const tt = t + rr(-.02, .02) * (j ? 1 : 0), tj = th + rr(-.18, .18) * (j ? 1 : 0), r = (m === 1 ? rr(.05, .09) : rr(.022, .05)), S = surf(tt, tj, r * .25);
+      BOILS.push({ c: S.p, n: S.n, r, t: tt }); } }
+  /* 찢어진 상처: 마디 사이가 터져 붉은 속살이 드러났다 */
+  for (const [t, th, L] of [[.36, .95, .5], [.58, -.75, .6], [.7, 1.9, .45], [.17, .2, .4]]) WOUNDS.push({ t, th, L }); }
+const near = (L, x, y, z, k) => { let best = 1e9, q = null; for (const h of L) { const d = Math.hypot(x - h.c[0], y - h.c[1], z - h.c[2]) / h.r; if (d < best) { best = d; q = h; } } return [best, q]; };
+const woundD = (x, y, z) => { let d = 1e9; for (const w of WOUNDS) { const t = tOf(z), dz = z - zOf(w.t), Y0 = y - yc(t), Y = Y0 < 0 ? Y0 / .78 : Y0, ang = Math.atan2(x, Y), R = Rf(t), da = Math.abs(Math.atan2(Math.sin(ang - w.th), Math.cos(ang - w.th))), e = Math.max(da - w.L, 0) * R, wd = .032 * Math.max(0, 1 - Math.pow(Math.min(da, w.L) / w.L, 2)) + .003; d = Math.min(d, Math.max(Math.hypot(dz, e) - wd, R - .07 - Math.hypot(x, Y))); } return d; };
 /* 살갗 색 */
-const C_SKIN = rgb(0xd9d0c2), C_SKIN2 = rgb(0xb9c2c8), C_PINK = rgb(0xc99a96), C_VEIN = rgb(0x4e2c52), C_FOLD = rgb(0x6e5a5a), C_BELLY = rgb(0xc9b688), C_FROST = rgb(0xeef5fb), C_SORE = rgb(0x6a1626), C_PUS = rgb(0xd0bc62), C_THROAT = rgb(0x4a0a16), C_GUM = rgb(0x8a2a38), C_DEEP = rgb(0x120206);
+const C_SKIN = rgb(0xd6cbb0), C_SKIN2 = rgb(0xa3ae9c), C_BRUISE = rgb(0x5e3a5c), C_NECRO = rgb(0x2e2018), C_RAW = rgb(0x9a1a26), C_RAW2 = rgb(0x5a0812), C_GUT = rgb(0x4a2e24), C_PINK = rgb(0xc99a96), C_VEIN = rgb(0x4e2c52), C_FOLD = rgb(0x6e5a5a), C_BELLY = rgb(0xc9b688), C_FROST = rgb(0xeef5fb), C_SORE = rgb(0x6a1626), C_PUS = rgb(0xd0bc62), C_THROAT = rgb(0x4a0a16), C_GUM = rgb(0x8a2a38), C_DEEP = rgb(0x120206);
 function skinC(x, y, z) {
   const t = tOf(z), R = R0(t), dy = (y - yc(t)) / R, f = fold(t);
   let c = cmix(C_SKIN, C_SKIN2, sstep(.35, .75, fbm(x * 3 + 2, y * 3, z * 3, 3) + .5) * .7);
@@ -48,6 +65,15 @@ function skinC(x, y, z) {
   c = cmix(c, C_VEIN, vein(x, y, z) * (.42 + .25 * sstep(-.2, -.6, dy)));   /* 살갗 아래 비치는 핏줄 (배 쪽이 더 짙다) */
   const s = sore(x, y, z), s2 = sstep(.62, .78, vnoise(x * 5.5 + 7, y * 5.5, z * 5.5 + 3));
   c = cmix(c, C_PUS, s * (1 - s2) * .85); c = cmix(c, C_SORE, s2);
+  /* 멍든 자리·썩은 자리 */
+  c = cmix(c, C_BRUISE, sstep(.62, .8, fbm(x * 2.6 + 11, y * 2.6, z * 2.6, 3) + .5) * .55);
+  c = cmix(c, C_NECRO, sstep(.7, .86, fbm(x * 4 - 3, y * 4 + 6, z * 4, 3) + .5) * .7);
+  /* 배: 얇은 살갗 밑으로 꼬인 창자와 새끼들이 비친다 */
+  { const b = sstep(-.15, -.6, dy), g1 = 1 - Math.abs(vnoise(x * 6 + vnoise(z * 3, x * 3, 1) * 1.5, z * 6, y * 3)), g2 = sstep(.55, .72, vnoise(x * 9 + 4, y * 9, z * 9)); c = cmix(c, C_GUT, b * (sstep(.8, .93, g1) * .75 + g2 * .4)); }
+  /* 구멍 둘레는 붓고 붉다, 안은 검붉게 젖었다 */
+  { const [d, h] = near(HOLES, x, y, z); if (d < 2.2) { c = cmix(c, rgb(0xb0505a), sstep(2.2, 1.1, d) * .8); if (d < 1.15) c = cmix(rgb(0x5a0c14), rgb(0x120206), sstep(1.1, .4, d)); } }
+  { const [d] = near(BOILS, x, y, z); if (d < 2.4) c = cmix(c, rgb(0x8a2030), sstep(2.4, 1.15, d) * .75); }
+  { const w = woundD(x, y, z); if (w < .05) c = cmix(c, cmix(C_RAW, C_RAW2, sstep(.4, .7, vnoise(x * 40, y * 40, z * 40) + .5)), sstep(.05, .0, w)); }
   c = csc(c, .93 + .14 * fbm(x * 30, y * 30, z * 30, 2));
   return c;
 }
@@ -110,16 +136,16 @@ function hmother() {
     prims.push(F(b, [M[0] - .2, M[1] - .2, M[2] - .2, M[0] + .2, M[1] + .2, M[2] + .2], lipD, { c: lipC, k: .03 }));
     bones.push({ n: b, p: 'head', o: H, tip: T, bw: .03, rad: .2 });
     /* 이빨: 꽃잎 안쪽에 두 줄, 입 가운데 쪽으로 */
-    for (let r = 0; r < 2; r++) for (let i = 0; i < 5; i++) {
-      const s = .22 + i * .15 + r * .07, uu = (i - 2) * .036 * (1 - s * .5) * (r ? .7 : 1), wv = -hl + 2 * hl * s, vb = -.05 * (1 - Math.pow(2 * s - 1, 2)) + .045 * uu * uu / .015 - .018;
+    for (let r = 0; r < 3; r++) for (let i = 0; i < 7; i++) {
+      const s = .18 + i * .11 + r * .05, uu = (i - 3) * .026 * (1 - s * .5) * (r ? .7 : 1), wv = -hl + 2 * hl * s, vb = -.05 * (1 - Math.pow(2 * s - 1, 2)) + .045 * uu * uu / .015 - .018;
       const P = (u, v, w2) => [M[0] + U[0] * u + V[0] * v + W[0] * w2, M[1] + U[1] * u + V[1] * v + W[1] * w2, M[2] + U[2] * u + V[2] * v + W[2] * w2];
-      const L = .05 - r * .012 - Math.abs(i - 2) * .006, base = P(uu, vb, wv), tip = P(uu * .8, vb - L, wv - L * .35);
+      const L = .055 - r * .013 - Math.abs(i - 3) * .005, base = P(uu, vb, wv), tip = P(uu * .8, vb - L, wv - L * .35);
       prims.push(C(b, base, tip, .0085, .0012, { g: 'teeth', c: toothC(base, tip) })); }
   }
   /* 구슬 눈: 머리 위 한쪽으로 몰려 붙은 검은 알 (크기가 제각각) */
   const EYES = [[.07, .2, .09, .034], [.13, .17, .05, .026], [.02, .23, .03, .022], [.15, .21, -.03, .019], [.09, .25, -.02, .017], [-.05, .21, .07, .02], [.19, .13, .08, .016], [-.01, .25, -.07, .014], [.11, .12, .14, .015]];
-  for (const [ex, ey, ez, r] of EYES) { const c = [ex, yH + ey, zH + ez]; prims.push(E('head', c, [r, r * .92, r], { g: 'eye', c: (x, y, z) => cmix(rgb(0x2a0c0c), rgb(0x050203), sstep(r * .2, r * .9, Math.hypot(x - c[0] - r * .3, y - c[1] - r * .4, z - c[2] - r * .3))) }));
-    prims.push(F('head', [c[0] - r * 1.6, c[1] - r * 1.6, c[2] - r * 1.6, c[0] + r * 1.6, c[1] + r * 1.6, c[2] + r * 1.6], (x, y, z) => Math.hypot(x - c[0], y - c[1], z - c[2]) - r * 1.12, { c: C_PINK, k: .03 })); }   /* 눈두덩: 눈 둘레 살이 부풀어 감싼다 */
+  EYES.forEach(([ex, ey, ez, r], ei) => { const c = [ex, yH + ey, zH + ez], milky = ei % 3 === 2; prims.push(E('head', c, [r, r * .92, r], { g: 'eye', c: (x, y, z) => { const dd = Math.hypot(x - c[0] - r * .3, y - c[1] - r * .4, z - c[2] - r * .3); if (milky) { let col = cmix(rgb(0xd8dcd0), rgb(0xa8b0a8), sstep(r * .2, r * .8, dd)); return cmix(col, rgb(0x9a2020), sstep(.9, .97, 1 - Math.abs(vnoise(x * 300, y * 300, z * 300))) * sstep(r * .4, r, dd)); } return cmix(rgb(0x2a0c0c), rgb(0x050203), sstep(r * .2, r * .9, dd)); } }));
+    prims.push(F('head', [c[0] - r * 1.6, c[1] - r * 1.6, c[2] - r * 1.6, c[0] + r * 1.6, c[1] + r * 1.6, c[2] + r * 1.6], (x, y, z) => Math.hypot(x - c[0], y - c[1], z - c[2]) - r * 1.12, { c: rgb(0xa8505a), k: .03 })); });   /* 눈두덩: 눈 둘레 살이 붉게 부풀어 감싼다 */
   /* 더듬이 다리: 입 양옆 아래에서 앞으로 뻗은 마디 다리 (끝은 갈고리) */
   const CHI = rgb(0x3a2a26), CHI2 = rgb(0xa89070);
   const chiC = (x, y, z) => cmix(CHI, CHI2, sstep(.4, .75, fbm(x * 20, y * 20, z * 20, 2) + .5) * .35);
@@ -152,11 +178,33 @@ function hmother() {
       prims.push(E(segOf(t), c, [r, r * .9, r * 1.25], { g: 'eggs', c: eggC, k: .02 }));
       prims.push(F(segOf(t), [c[0] - r * 1.5, c[1] - r * 1.5, c[2] - r * 1.5, c[0] + r * 1.5, c[1] + r * 1.5, c[2] + r * 1.5], (x, y, z) => Math.max(Math.hypot(x - c[0], y - c[1], z - c[2]) - r * 1.08, bodyRaw(x, y, z) - .02), { c: skinC, k: .03 })); }   /* 알을 감싼 살 언저리 */
   }
+  /* 구멍: 살을 파내고, 몇 구멍엔 새끼 머리 */
+  for (const h of HOLES) { const b = segOf(h.t), r = h.r;
+    prims.push(E(b, h.c, [r, r, r * 1.15], { sub: true, k: .006 }));
+    if (h.grub) { const q = [h.c[0] + h.n[0] * r * .55, h.c[1] + h.n[1] * r * .55, h.c[2]], tip = [q[0] + h.n[0] * r * .55, q[1] + h.n[1] * r * .55, q[2]];
+      prims.push(C(b, [h.c[0] - h.n[0] * r * .4, h.c[1] - h.n[1] * r * .4, h.c[2]], q, r * .62, r * .55, { g: 'teeth', c: (x, y, z) => cmix(rgb(0xece4d2), rgb(0x2a0a0a), sstep(r * .5, r * .05, Math.hypot(x - tip[0], y - tip[1], z - tip[2]))), k: .004 })); } }
+  /* 찢어진 상처: 살을 파내고, 상처 위로 끈적한 점액 줄이 걸쳐 있다 */
+  for (const w of WOUNDS) { const b = segOf(w.t), za = zOf(w.t);
+    prims.push(F(b, [-.55, -.1, za - .08, .55, 1, za + .08], (x, y, z) => woundD(x, y, z), { sub: true, k: .012 }));
+    for (let i = 0; i < 5; i++) { const a0 = w.th - w.L * .8 + i * w.L * .4, A = surf(w.t - .012, a0, -.004), B2 = surf(w.t + .012, a0 + .05, -.004), M = [(A.p[0] + B2.p[0]) / 2 - A.n[0] * .018, (A.p[1] + B2.p[1]) / 2 - A.n[1] * .018, (A.p[2] + B2.p[2]) / 2];
+      prims.push(C(b, A.p, M, .0035, .0018, { g: 'legs', c: rgb(0xd8cc8a), k: .004 }), C(b, M, B2.p, .0018, .0035, { g: 'legs', c: rgb(0xd8cc8a), k: .004 })); } }
+  /* 고름 주머니 */
+  for (const q of BOILS) { const b = segOf(q.t), r = q.r, tip = [q.c[0] + q.n[0] * r * .9, q.c[1] + q.n[1] * r * .9, q.c[2]];
+    prims.push(E(b, q.c, [r, r * .95, r * 1.1], { g: 'boils', k: .01, c: (x, y, z) => { const dt = Math.hypot(x - tip[0], y - tip[1], z - tip[2]) / r; let col = cmix(rgb(0xd8d070), rgb(0x9aa040), sstep(.4, 1.3, dt)); col = cmix(col, rgb(0xf4f0d8), sstep(.45, .1, dt)); col = cmix(col, rgb(0x7a2030), sstep(1.1, 1.5, dt)); col = cmix(col, rgb(0x8a2a3a), sstep(.94, .99, 1 - Math.abs(vnoise(x * 60, y * 60, z * 60))) * .7); return col; } })); }
+  /* 억센 털: 마디 주름마다 검은 털이 몇 가닥씩 */
+  { let sd = 333; const rr = (a, b) => a + ((sd = (sd * 16807) % 2147483647) / 2147483647) * (b - a);
+    for (let i = 0; i < 90; i++) { const k = Math.floor(rr(1, NSEG)), t = .05 + (k + .5) * .85 / NSEG + rr(-.006, .006), th = rr(-2.3, 2.3), S = surf(t, th, -.01), L = rr(.035, .075), e = [S.p[0] + S.n[0] * L + rr(-.02, .02), S.p[1] + S.n[1] * L, S.p[2] + rr(-.03, .01)];
+      if (t > .9) continue; prims.push(C(segOf(t), S.p, e, .0045, .0008, { g: 'legs', c: rgb(0x1a1210), k: .002 })); } }
+  /* 목덜미의 작은 눈들: 흐리게 먼 눈과 핏발 선 눈이 살에 박혀 있다 */
+  { let sd = 55; const rr = (a, b) => a + ((sd = (sd * 16807) % 2147483647) / 2147483647) * (b - a);
+    for (let i = 0; i < 12; i++) { const t = rr(.8, .9), th = rr(-.9, .9), r = rr(.008, .016), S = surf(t, th, r * .1), c = S.p, milky = i % 3 === 0;
+      prims.push(E(segOf(t), c, [r, r, r], { g: 'eye', c: (x, y, z) => { const dd = Math.hypot(x - c[0] - S.n[0] * r, y - c[1] - S.n[1] * r, z - c[2]) / r; return milky ? cmix(rgb(0xc8d0c8), rgb(0x8a2a2a), sstep(.6, 1.2, dd)) : cmix(rgb(0x3a0606), rgb(0x080203), sstep(.2, .7, dd)); } }));
+      prims.push(F(segOf(t), [c[0] - r * 1.7, c[1] - r * 1.7, c[2] - r * 1.7, c[0] + r * 1.7, c[1] + r * 1.7, c[2] + r * 1.7], (x, y, z) => Math.hypot(x - c[0], y - c[1], z - c[2]) - r * 1.2, { c: rgb(0xa04048), k: .012 })); } }
   return {
     bones, prims, h: 1.25, size: 4,
     anim: { MZ, MY, zH, yH, BT, Z0, LEN },
-    mats: { body: { r: .38 }, legs: { r: .46 }, teeth: { r: .3 }, eye: { r: .06, m: .25 }, eggs: { r: .12, tr: .93 } },
-    gopt: { body: { tris: 30000, loK: .18 }, legs: { tris: 5200, h: .0045, loK: .25 }, teeth: { tris: 2400, h: .0025, loK: .3 }, eye: { tris: 600, h: .0025, noLo: 1 }, eggs: { tris: 5200, h: .005, loK: .3 } },
+    mats: { body: { r: .34 }, boils: { r: .14, tr: .94 }, legs: { r: .46 }, teeth: { r: .3 }, eye: { r: .06, m: .25 }, eggs: { r: .12, tr: .93 } },
+    gopt: { body: { tris: 34000, loK: .18 }, boils: { tris: 4200, h: .004, loK: .3 }, legs: { tris: 7400, h: .0035, loK: .25 }, teeth: { tris: 3400, h: .0022, loK: .3 }, eye: { tris: 1200, h: .0022, noLo: 1 }, eggs: { tris: 5200, h: .005, loK: .3 } },
   };
 }
 

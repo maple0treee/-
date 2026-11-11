@@ -2679,7 +2679,7 @@ setInterval(tick,400);
     }
     /* 얼음 구더기 어미 (허칠 동굴 끝 어미의 둥지, Lv 100): 방 안쪽 끝에 똬리를 틀고 있다 */
     function spawnMother() {
-      return makeMon('hmother', 'hlair', { x: HLAIR.x - 2, z: HLAIR.z - 12 }, 100, { dragon: true, r: 3.2, ry: 0, cd: { bile: 4, slam: 6, thrash: 8, burrow: 12, eggs: 14, drop: 10, wail: 20 }, gap: 0, sks: [], phase: 1, idleT: 0, mv: null, skSeq: 0, said: 0, burrowT: 0 });
+      return makeMon('hmother', 'hlair', { x: HLAIR.x - 2, z: HLAIR.z - 12 }, 100, { dragon: true, r: 3.2, ry: 0, cd: { bile: 4, slam: 6, thrash: 8, burrow: 12, eggs: 14, drop: 10, wail: 20, pop: 5, suck: 10 }, gap: 0, sks: [], phase: 1, idleT: 0, mv: null, skSeq: 0, said: 0, burrowT: 0 });
     }
     if (OR.huntCounts) OR.huntCounts();   // 사냥터 넓이만큼 (shared.js HUNT)
     for (const z in ZONE_COUNT) for (let k = 0; k < ZONE_COUNT[z]; k++) spawn(z);
@@ -2918,7 +2918,7 @@ setInterval(tick,400);
     // 기술은 용처럼 바닥에 경고(msk)가 먼저 뜨고 잠시 뒤 판정(mskr). 알을 터뜨려 새끼(hgrub)를 낳고, 새끼가 어미 입에 닿으면 어미가 먹고 기운을 차린다
     function mClamp(m) { lairClamp(m, m.r); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(m, m.r * 0.55); }
     function motherTick(m, ts) {
-      const A = HLAIR, tg = ts.filter((t) => inArena(A, t) && zoneAt(t.x, t.z) === 'hlair');
+      const A = HLAIR, hClamp = (p, rad) => { const d = Math.hypot(p.x - A.x, p.z - A.z), mx = A.r - rad; if (d > mx) { p.x = A.x + (p.x - A.x) * mx / d; p.z = A.z + (p.z - A.z) * mx / d; } }, tg = ts.filter((t) => inArena(A, t) && zoneAt(t.x, t.z) === 'hlair');
       for (const sk of [...m.sks]) { sk.t += TICK; if (sk.t >= sk.tele) { dResolve(m, sk, tg); m.sks.splice(m.sks.indexOf(sk), 1); if (sk.k === 'burrow') m.burrowT = 0; } }
       if (m.mv) { m.mv.t += TICK; const k = Math.min(1, m.mv.t / m.mv.dur); m.x = m.mv.fx + (m.mv.tx - m.mv.fx) * k; m.z = m.mv.fz + (m.mv.tz - m.mv.fz) * k; if (k >= 1) m.mv = null; mClamp(m); return; }
       const kids = [...monsters.values()].filter((s) => s.summon && s.zone === 'hlair');
@@ -2937,7 +2937,17 @@ setInterval(tick,400);
       const mouth = { x: m.x + Math.sin(m.ry) * (m.r + 1.2), z: m.z + Math.cos(m.ry) * (m.r + 1.2) };
       for (const s of kids) if (s.feed) { moveToward(s, mouth.x, mouth.z, 2.6); if (Math.hypot(s.x - mouth.x, s.z - mouth.z) < 1.6) { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [], eat: m.i }); m.hp = Math.min(m.mh, m.hp + m.mh * 0.03); m.dirty = true; } }
       const frac = m.hp / m.mh, ph = frac < 0.3 ? 3 : frac < 0.65 ? 2 : 1;
-      if (ph > m.phase) { m.phase = ph; say(ph === 2 ? '어미의 등에 붙은 알들이 꿈틀거린다.' : '어미가 찢어지는 소리로 울부짖으며 미친 듯 몸부림친다.'); C.eggs = Math.min(C.eggs, 1); C.wail = Math.min(C.wail, 2); }
+      if (ph > m.phase) { m.phase = ph; say(ph === 2 ? '어미의 등에 붙은 알들이 꿈틀거린다.' : '어미의 옆구리가 쩍 갈라지며 속에서 새끼들이 쏟아진다.'); C.eggs = Math.min(C.eggs, 1); C.wail = Math.min(C.wail, 2);
+        if (ph === 3) {
+          // 몸이 찢어진다: 갈라진 옆구리에서 새끼가 쏟아지고, 온몸의 고름 주머니가 한꺼번에 터진다
+          nearCast(m, { t: 'mfx', i: m.i, k: 'rupture' });
+          for (let k = 0; k < 4 && kids.length + k < 12; k++) { const aa = m.ry + Math.PI / 2 * (k % 2 ? 1 : -1) + rnd(-0.4, 0.4), p = { x: m.x + Math.sin(aa) * (m.r + 1.5), z: m.z + Math.cos(aa) * (m.r + 1.5) }; hClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
+            const s = makeMon('hgrub', 'hlair', p, 98, { summon: true, aggroOn: pick(tg).id, feed: k === 3 }); broadcast({ t: 'mspawn', m: pub(s), from: m.i }); }
+          for (let k = 0; k < 12; k++) { const aa = k / 12 * 6.283 + rnd(-0.2, 0.2), d = rnd(m.r + 1, A.r - 3), p = { x: m.x + Math.sin(aa) * d, z: m.z + Math.cos(aa) * d }; hClamp(p, 1);
+            dSkill(m, { k: 'pop', sh: 'c', x: p.x, z: p.z, r: 2.2, tele: 1.4 + (k % 4) * 0.25, mul: 1.1, pool: [4, 0.16], col: 4 }); }
+          m.gap = 2.2; C.pop = 8;
+        }
+      }
       const fast = ph === 3 ? 0.68 : ph === 2 ? 0.85 : 1;
       if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - mouth.x, t.z - mouth.z) < 3.4) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); broadcast({ t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.7 * fast; } return; }
       if (m.gap > 0 || m.sks.some((s) => s.block)) { mClamp(m); return; }
@@ -2950,10 +2960,16 @@ setInterval(tick,400);
       if (ph >= 2 && C.eggs <= 0 && kids.length < 8) {
         // 알 터뜨리기: 등의 알이 터지며 새끼가 쏟아진다. 셋째 단계에선 새끼 몇이 어미에게 기어간다
         const n = ph === 3 ? 5 : 3;
-        for (let k = 0; k < n; k++) { const aa = m.ry + Math.PI + (k - (n - 1) / 2) * 0.7, p = { x: m.x + Math.sin(aa) * (m.r + 2.5), z: m.z + Math.cos(aa) * (m.r + 2.5) }; lairClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
+        for (let k = 0; k < n; k++) { const aa = m.ry + Math.PI + (k - (n - 1) / 2) * 0.7, p = { x: m.x + Math.sin(aa) * (m.r + 2.5), z: m.z + Math.cos(aa) * (m.r + 2.5) }; hClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
           const s = makeMon('hgrub', 'hlair', p, 98, { summon: true, aggroOn: pick(tg).id, feed: ph === 3 && k % 2 === 0 }); broadcast({ t: 'mspawn', m: pub(s), from: m.i }); }
         nearCast(m, { t: 'mfx', i: m.i, k: 'eggs' });
         C.eggs = 18 * fast; m.gap = 1.4;
+      } else if (ph >= 2 && C.suck <= 0 && dist < 17) {
+        // 들이마시기: 입을 크게 벌리고 숨을 빨아들여 앞에 선 사람을 입으로 끌어당긴 뒤 삼키듯 문다
+        const len = 17, mouthP = { x: m.x + Math.sin(a) * (m.r + 1.2), z: m.z + Math.cos(a) * (m.r + 1.2) };
+        dSkill(m, { k: 'suck', sh: 'l', x: mouthP.x, z: mouthP.z, a, len, w: 3.4, tele: 2.6, mul: 0.35, block: true });
+        dSkill(m, { k: 'gulp', sh: 'c', x: mouthP.x, z: mouthP.z, r: 3.6, tele: 2.75, mul: 2.8, block: true });
+        m.ry = a; C.suck = rnd(14, 17) * fast;
       } else if (ph >= 3 && C.wail <= 0) {
         dSkill(m, { k: 'wail', sh: 'c', x: m.x, z: m.z, r: 13, tele: 1.7, mul: 0.9, block: true });
         C.wail = 17;
@@ -2963,6 +2979,12 @@ setInterval(tick,400);
         for (let k = 0; k < n; k++) { const q = k < tg.length ? tg[k] : null; const p = q ? { x: q.x + rnd(-1.2, 1.2), z: q.z + rnd(-1.2, 1.2) } : (() => { const aa = rnd(0, 6.28), d = rnd(3, A.r - 4); return { x: A.x + Math.cos(aa) * d, z: A.z + Math.sin(aa) * d }; })();
           dSkill(m, { k: 'drop', sh: 'c', x: p.x, z: p.z, r: 2.2, tele: 1.4 + k * 0.2, mul: 1.0, pool: [3.5, 0.16], col: 4 }); }
         C.drop = 14 * fast; m.gap = 0.8;
+      } else if (C.pop <= 0) {
+        // 고름 주머니 터뜨리기: 몸의 주머니들이 부풀다 터져 둘레에 고름이 튄다 (사람 발밑에도 하나씩)
+        const n = 4 + ph * 2;
+        for (let k = 0; k < n; k++) { const q = k < tg.length && k < 3 ? tg[k] : null; const p = q ? { x: q.x + rnd(-0.8, 0.8), z: q.z + rnd(-0.8, 0.8) } : (() => { const aa = rnd(0, 6.28), d = rnd(m.r + 1, 12); return { x: m.x + Math.sin(aa) * d, z: m.z + Math.cos(aa) * d }; })(); hClamp(p, 1);
+          dSkill(m, { k: 'pop', sh: 'c', x: p.x, z: p.z, r: 2.1, tele: 1.25 + k * 0.08, mul: 1.1, pool: [4, 0.16], col: 4 }); }
+        C.pop = rnd(10, 13) * fast; m.gap = 0.7;
       } else if (C.burrow <= 0 && dist > 7) {
         // 얼음 바닥 밑으로 파고들었다가 노린 사람 발밑에서 솟구친다
         dSkill(m, { k: 'burrow', sh: 'c', x: t.x, z: t.z, r: 5, tele: 2.1, mul: 2.0, block: true });
@@ -2971,6 +2993,9 @@ setInterval(tick,400);
         const len = 15, w = 2.5;
         dSkill(m, { k: 'bile', sh: 'l', x: head.x, z: head.z, a, len, w, tele: 1.25, mul: 1.5, pool: [4.5, 0.2], col: 4, block: true });
         if (ph >= 2) { const s2 = Math.random() < 0.5 ? 1 : -1; dSkill(m, { k: 'bile', sh: 'l', x: head.x, z: head.z, a: a + s2 * 0.6, len: len * 0.8, w, tele: 2.1, mul: 1.5, pool: [4.5, 0.2], col: 4, block: true }); }
+        if (ph >= 3) later(() => { if (!monsters.has(m.i)) return; const n = [...monsters.values()].filter((q) => q.summon && q.zone === 'hlair').length; if (n >= 10) return;   // 셋째 단계: 토사물 속에 산 새끼가 섞여 나온다
+          for (let k = 0; k < 2; k++) { const u = len * (0.55 + k * 0.35), p = { x: head.x + Math.sin(a) * u, z: head.z + Math.cos(a) * u }; hClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
+            const tt = tg.length ? pick(tg) : null; const s = makeMon('hgrub', 'hlair', p, 98, { summon: true, aggroOn: tt ? tt.id : null }); broadcast({ t: 'mspawn', m: pub(s), from: m.i }); } }, 1300);
         m.ry = a; C.bile = rnd(7, 9) * fast;
       } else if (C.slam <= 0 && dist < 9) {
         // 앞몸을 높이 쳐들었다가 내리찍는다
@@ -7846,7 +7871,7 @@ MON2_BUILD.octopus=makeOctopusMesh;
    tools/monbake/mother.js 가 거리 함수로 한 덩어리로 빚어 monbake/hmother.json 에 구워 둔다 (몸 마디 뼈 여덟·입술 넷·더듬이 다리 둘).
    살은 셰이더로 꿈틀거리고(마디를 따라 부풀었다 오그라드는 물결, 비치는 살빛), 배 다리는 저마다 꼼지락, 등의 알은 숨 쉬듯 부푼다.
    움직임: 기어갈 땐 몸이 물결치고, 기술마다 앞몸을 쳐들거나(토하기·내리찍기·울부짖음) 바닥 밑으로 파고든다 */
-const MOTHER={U:{uT:{value:0},uLeg:{value:1}},data:null,req:null};
+const MOTHER={U:{uT:{value:0},uLeg:{value:1},uPop:{value:0}},data:null,req:null};
 const MOTHER_RP=[[0,.045],[.05,.13],[.16,.31],[.33,.415],[.48,.435],[.62,.385],[.76,.305],[.86,.275],[.93,.265]];
 function motherR0(t){t=Math.max(0,Math.min(.93,t));for(let i=0;i+1<MOTHER_RP.length;i++){const [a,ra]=MOTHER_RP[i],[b,rb]=MOTHER_RP[i+1];if(t<=b){const u=Math.max(0,Math.min(1,(t-a)/(b-a)));return ra+(rb-ra)*u*u*(3-2*u);}}return .265;}
 function motherLoad(){return MOTHER.req||(MOTHER.req=fetch(MONB.dir+'hmother.json?v='+MONB.ver).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).then(r=>{
@@ -7857,19 +7882,28 @@ function motherLoad(){return MOTHER.req||(MOTHER.req=fetch(MONB.dir+'hmother.jso
     p.geo.setAttribute('aW',new THREE.BufferAttribute(W,1));}
   MOTHER.data=R;return R;}));}
 function motherMat(g,o){
-  const m=new THREE.MeshStandardMaterial({vertexColors:true,skinning:true,roughness:o.r??.5,metalness:o.m||0,transparent:!!o.tr,opacity:o.tr||1,depthWrite:!o.tr});
-  if(g==='body'||g==='eggs'||g==='legs'){
-    m.onBeforeCompile=s=>{s.uniforms.uT=MOTHER.U.uT;s.uniforms.uLeg=MOTHER.U.uLeg;
-      let v='uniform float uT,uLeg;varying vec3 vMP;\n'+(g==='legs'?'attribute float aW;\n':'')+s.vertexShader;
-      const mv=g==='body'?   /* 마디를 따라 머리 쪽으로 흘러가는 부풂, 잔떨림 */
-        'transformed+=objectNormal*(.012*sin(uT*2.2-position.z*5.2)+.005*sin(uT*6.3+position.x*23.+position.z*17.))*smoothstep(-1.6,-1.2,position.z);'
-        :g==='eggs'?'transformed+=objectNormal*.007*(.5+.5*sin(uT*3.1+position.z*26.+position.x*31.));'
-        :'{float w=aW*uLeg;transformed.z+=w*sin(uT*13.+position.z*57.+sign(position.x)*1.9)*.028;transformed.x+=w*sign(position.x)*cos(uT*10.+position.z*43.)*.014;transformed.y+=w*max(0.,sin(uT*13.+position.z*57.+sign(position.x)*1.9+1.4))*.016;}';
+  /* 몸: 젖어 번들거리는 살 (겉에 끈적한 막이 한 겹 더 있다) */
+  const m=g==='body'?new THREE.MeshPhysicalMaterial({vertexColors:true,skinning:true,roughness:o.r??.4,metalness:0,clearcoat:.85,clearcoatRoughness:.22})
+    :new THREE.MeshStandardMaterial({vertexColors:true,skinning:true,roughness:o.r??.5,metalness:o.m||0,transparent:!!o.tr,opacity:o.tr||1,depthWrite:!o.tr});
+  if(g==='body'||g==='eggs'||g==='legs'||g==='boils'){
+    m.onBeforeCompile=s=>{s.uniforms.uT=MOTHER.U.uT;s.uniforms.uLeg=MOTHER.U.uLeg;s.uniforms.uPop=MOTHER.U.uPop;
+      let v='uniform float uT,uLeg,uPop;varying vec3 vMP;varying float vLump;\n'+(g==='legs'?'attribute float aW;\n':'')+s.vertexShader;
+      const mv=g==='body'?   /* 마디를 따라 머리 쪽으로 흘러가는 부풂과 잔떨림, 살 밑을 기어가는 덩어리 넷 (꼬리에서 머리로, 옆으로 비틀대며) */
+        'transformed+=objectNormal*(.012*sin(uT*2.2-position.z*5.2)+.005*sin(uT*6.3+position.x*23.+position.z*17.))*smoothstep(-1.6,-1.2,position.z);'+
+        '{float ang=atan(position.x,position.y-.36);vLump=0.;for(int i=0;i<4;i++){float fi=float(i);float zc=-1.35+mod(uT*(.16+fi*.03)+fi*.29,1.)*2.3;float ac=sin(uT*(.5+fi*.2)+fi*2.1)*1.5+(fi-1.5)*.5;float dz=position.z-zc,da=ang-ac;float b=exp(-dz*dz/.0035-da*da/.09);vLump+=b;}'+
+        'vLump=min(vLump,1.);transformed+=objectNormal*vLump*(.045+.01*sin(uT*9.));}'
+        :g==='eggs'?'transformed+=objectNormal*.007*(.5+.5*sin(uT*3.1+position.z*26.+position.x*31.));vLump=0.;'
+        :g==='boils'?'{float w=.5+.5*sin(uT*2.6+position.z*31.+position.x*17.);transformed+=objectNormal*(.004+.006*w+.02*uPop*(.6+.4*sin(uT*30.+position.x*80.)));vLump=w;}'
+        :'vLump=0.;{float w=aW*uLeg;transformed.z+=w*sin(uT*13.+position.z*57.+sign(position.x)*1.9)*.028;transformed.x+=w*sign(position.x)*cos(uT*10.+position.z*43.)*.014;transformed.y+=w*max(0.,sin(uT*13.+position.z*57.+sign(position.x)*1.9+1.4))*.016;}';
       v=v.replace('#include <begin_vertex>','#include <begin_vertex>\nvMP=position;\n'+mv);s.vertexShader=v;
-      s.fragmentShader='uniform float uT;varying vec3 vMP;\n'+s.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n'+(g==='body'?
-        /* 비치는 살: 가장자리로 갈수록 붉은 속살빛이 배어 나온다 */
-        '{float rim=1.-abs(dot(normalize(vViewPosition),normal));totalEmissiveRadiance+=vec3(.34,.1,.13)*pow(rim,2.2)*.55;}'
-        :g==='eggs'?'{float rim=1.-abs(dot(normalize(vViewPosition),normal));totalEmissiveRadiance+=vec3(.42,.36,.1)*(.16+.1*sin(uT*3.1+vMP.z*26.+vMP.x*31.)+.35*pow(rim,2.));}':''));};
+      s.fragmentShader='uniform float uT,uPop;varying vec3 vMP;varying float vLump;\n'+s.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n'+(g==='body'?
+        /* 비치는 살: 가장자리로 붉은 속살빛, 핏줄은 맥박마다 붉게 번지고, 살갗 밑엔 무언가 꿈틀대며 지나간다 */
+        '{float rim=1.-abs(dot(normalize(vViewPosition),normal));totalEmissiveRadiance+=vec3(.34,.1,.13)*pow(rim,2.2)*.55;'+
+        'float vein=smoothstep(.02,.12,diffuseColor.b-diffuseColor.g)*smoothstep(.55,.25,diffuseColor.r);float pulse=pow(max(0.,sin(uT*3.4-vMP.z*7.)),5.);totalEmissiveRadiance+=vec3(.55,.02,.1)*vein*(.15+pulse*.9);'+
+        'float wq=sin(vMP.z*34.-uT*1.6+sin(vMP.y*19.+uT*.9)*2.2)*sin(vMP.x*27.+vMP.z*8.-uT*.5);float wm=smoothstep(.72,.95,wq)*smoothstep(.15,.45,abs(vMP.x));diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.45,.3,.32),wm*.7);'+
+        'diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.5,.36,.3),vLump*.45);totalEmissiveRadiance+=vec3(.25,.06,.04)*vLump*(.5+.5*sin(uT*7.));}'
+        :g==='eggs'?'{float rim=1.-abs(dot(normalize(vViewPosition),normal));float emb=smoothstep(.55,.95,sin(vMP.x*90.+sin(uT*2.3+vMP.z*40.)*2.)*sin(vMP.z*80.+uT*1.7));diffuseColor.rgb*=1.-emb*.55;totalEmissiveRadiance+=vec3(.42,.36,.1)*(.16+.1*sin(uT*3.1+vMP.z*26.+vMP.x*31.)+.35*pow(rim,2.));}'
+        :g==='boils'?'{float rim=1.-abs(dot(normalize(vViewPosition),normal));totalEmissiveRadiance+=vec3(.4,.38,.08)*(.12+.18*vLump+.6*uPop*(.5+.5*sin(uT*24.)))+vec3(.3,.32,.05)*pow(rim,1.6)*.6;}':''));};
     m.customProgramCacheKey=()=>'hmother-'+g;}
   return m;}
 function makeMotherMesh(D){
@@ -7966,6 +8000,38 @@ function motherSnd(kind,at,vol=1){try{const X=SFX.ctx;if(!X||!SFX.master||SFX.vo
     const s=noise(L,k=>(Math.random()*2-1)*Math.sin(Math.PI*k)),f=bp(2600,.9),g=gn(.45);s.connect(f);f.connect(g);g.connect(out);s.start(t);}
   else if(kind==='chitter'){/* 딱딱딱: 더듬이 다리 마디가 부딪는 소리 */const n=6+Math.floor(Math.random()*8),gap=.028+Math.random()*.02;
     for(let i=0;i<n;i++){const s=noise(.02,k=>(Math.random()*2-1)*Math.pow(1-k,4)),f=bp(2800+Math.random()*1800,6),g=gn(.6);s.connect(f);f.connect(g);g.connect(out);s.start(t+i*gap*(1+Math.random()*.4));}}
+  else if(kind==='breath'){/* 젖은 숨: 들이쉴 땐 목구멍에서 가래가 끓고, 내쉴 땐 축축한 바람이 덜컥거리며 샌다 */const L=2.6;
+    const s=noise(L,(k,tt)=>{const inh=k<.42?Math.sin(Math.PI*k/.42):0,exh=k>=.45?Math.sin(Math.PI*(k-.45)/.55):0,rat=.5+.5*Math.sign(Math.sin(tt*6.28*(23+9*Math.sin(tt*3))))*Math.random();return (Math.random()*2-1)*(inh*.6*rat+exh*(.5+.5*rat));});
+    const f=X.createBiquadFilter();f.type='lowpass';f.frequency.value=900;f.Q.value=4;f.frequency.setValueAtTime(500,t);f.frequency.linearRampToValueAtTime(1100,t+L*.4);f.frequency.linearRampToValueAtTime(420,t+L);const g=gn(1.2);s.connect(f);f.connect(g);g.connect(out);s.start(t);
+    const o=X.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(48,t);o.frequency.linearRampToValueAtTime(40,t+L);const lp=X.createBiquadFilter();lp.type='lowpass';lp.frequency.value=180;const g2=gn(0);g2.gain.setValueAtTime(0,t+L*.45);g2.gain.linearRampToValueAtTime(.18,t+L*.6);g2.gain.linearRampToValueAtTime(0,t+L);o.connect(lp);lp.connect(g2);g2.connect(out);o.start(t);o.stop(t+L);}
+  else if(kind==='groan'){/* 신음: 목구멍 깊은 데서 끓는 낮은 울음 (모음이 '오'에서 '어'로 뭉개진다) */const L=1.8+Math.random()*.8,f0=55+Math.random()*20;
+    const o=X.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(f0,t);o.frequency.linearRampToValueAtTime(f0*1.25,t+L*.3);o.frequency.linearRampToValueAtTime(f0*.8,t+L);
+    const vib=X.createOscillator(),vg=gn(f0*.08);vib.frequency.value=5.5;vib.connect(vg);vg.connect(o.frequency);vib.start(t);vib.stop(t+L);
+    const env=gn(0);env.gain.setValueAtTime(0,t);env.gain.linearRampToValueAtTime(.55,t+.25);env.gain.setValueAtTime(.55,t+L*.7);env.gain.linearRampToValueAtTime(0,t+L);o.connect(env);
+    for(const [a,b,q,gv] of [[420,620,6,1],[780,1050,8,.6],[2300,2500,10,.25]]){const F=bp(a,q);F.frequency.setValueAtTime(a,t);F.frequency.linearRampToValueAtTime(b,t+L);const G=gn(gv);env.connect(F);F.connect(G);G.connect(out);}
+    const s=noise(L,k=>(Math.random()*2-1)*Math.sin(Math.PI*k)*(Math.random()<.04?3:.3)),f=bp(300,1.5),g=gn(.5);s.connect(f);f.connect(g);g.connect(out);s.start(t);o.start(t);o.stop(t+L);}
+  else if(kind==='chew'){/* 씹기: 뼈가 오도독 부서지고 살이 질척인다 */const n=6+Math.floor(Math.random()*4);
+    for(let i=0;i<n;i++){const t0=t+i*.16+Math.random()*.05;
+      if(i%2===0){const s=noise(.09,k=>(Math.random()<.3?(Math.random()*2-1):0)*Math.pow(1-k,2)),f=X.createBiquadFilter();f.type='highpass';f.frequency.value=1600;const g=gn(1.1);s.connect(f);f.connect(g);g.connect(out);s.start(t0);}
+      const s2=noise(.2,k=>(Math.random()*2-1)*Math.pow(1-k,2.5)),f2=bp(420+Math.random()*300,1.6);f2.frequency.exponentialRampToValueAtTime(150,t0+.18);const g2=gn(.8);s2.connect(f2);f2.connect(g2);g2.connect(out);s2.start(t0+.03);}}
+  else if(kind==='pop'){/* 고름 주머니가 터진다: 눌린 '퍽', 쏟아지는 소리, 늦게 떨어지는 방울 */
+    const o=X.createOscillator();o.frequency.setValueAtTime(260+Math.random()*120,t);o.frequency.exponentialRampToValueAtTime(55,t+.09);const g=gn(.9);g.gain.setValueAtTime(.9,t);g.gain.exponentialRampToValueAtTime(.001,t+.12);o.connect(g);g.connect(out);o.start(t);o.stop(t+.13);
+    const s=noise(.4,k=>(Math.random()*2-1)*Math.pow(1-k,2)*(k<.02?k/.02:1)),f=bp(800,1.2);f.frequency.exponentialRampToValueAtTime(220,t+.35);const g2=gn(1);s.connect(f);f.connect(g2);g2.connect(out);s.start(t);
+    for(let i=0;i<3;i++){const d=X.createOscillator(),dt0=t+.25+i*.13+Math.random()*.1;d.frequency.setValueAtTime(700+Math.random()*500,dt0);d.frequency.exponentialRampToValueAtTime(1800+Math.random()*600,dt0+.05);const dg=gn(.18);dg.gain.setValueAtTime(.18,dt0);dg.gain.exponentialRampToValueAtTime(.001,dt0+.07);d.connect(dg);dg.connect(out);d.start(dt0);d.stop(dt0+.08);}}
+  else if(kind==='swell'){/* 살이 당겨 부풀어 오르며 삐걱댄다, 속에서 거품이 끓는다 */const L=1.3;
+    const o=X.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(34,t);o.frequency.linearRampToValueAtTime(52,t+L);const f=bp(220,7);f.frequency.setValueAtTime(220,t);f.frequency.exponentialRampToValueAtTime(950,t+L);const g=gn(0);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.6,t+L*.9);g.gain.linearRampToValueAtTime(0,t+L);o.connect(f);f.connect(g);g.connect(out);o.start(t);o.stop(t+L);
+    const s=noise(L,(k,tt)=>(Math.random()*2-1)*k*Math.pow(Math.max(0,Math.sin(tt*6.28*(30+k*40))),8)*1.5),f2=bp(600,2),g2=gn(.7);s.connect(f2);f2.connect(g2);g2.connect(out);s.start(t);}
+  else if(kind==='suck'){/* 들이마시기: 바람이 목구멍으로 빨려 들어가며 휘파람처럼 울고, 침이 끓는다 */const L=Math.max(.8,vol>1.5?2.6:2.4);
+    const s=noise(L,k=>(Math.random()*2-1)*Math.pow(k,1.4)),f=bp(300,1.4);f.frequency.setValueAtTime(300,t);f.frequency.exponentialRampToValueAtTime(1900,t+L);const g=gn(1.3);s.connect(f);f.connect(g);g.connect(out);s.start(t);
+    const w=X.createOscillator();w.type='sine';w.frequency.setValueAtTime(380,t);w.frequency.exponentialRampToValueAtTime(1300,t+L);const wg=gn(0);wg.gain.setValueAtTime(0,t);wg.gain.linearRampToValueAtTime(.08,t+L);w.connect(wg);wg.connect(out);w.start(t);w.stop(t+L);
+    const b=noise(L,(k,tt)=>(Math.random()*2-1)*Math.pow(Math.max(0,Math.sin(tt*6.28*44)),10)*(.5+k)),bf=bp(500,2),bg=gn(.6);b.connect(bf);bf.connect(bg);bg.connect(out);b.start(t);}
+  else if(kind==='gulp'){/* 꿀꺽: 닫히는 입, 목구멍으로 내려가는 덩어리 */
+    const o=X.createOscillator();o.frequency.setValueAtTime(140,t);o.frequency.exponentialRampToValueAtTime(38,t+.35);const g=gn(1);g.gain.setValueAtTime(1,t);g.gain.exponentialRampToValueAtTime(.001,t+.4);o.connect(g);g.connect(out);o.start(t);o.stop(t+.42);
+    const s=noise(.7,k=>(Math.random()*2-1)*Math.sin(Math.PI*k)),f=bp(500,3);f.frequency.setValueAtTime(600,t+.1);f.frequency.exponentialRampToValueAtTime(90,t+.7);const g2=gn(1.2);s.connect(f);f.connect(g2);g2.connect(out);s.start(t+.08);}
+  else if(kind==='slither'){/* 기어가는 소리: 배 마디가 젖은 바닥에 쩍쩍 들러붙었다 떨어진다 */for(let i=0;i<3;i++){const t0=t+i*.11+Math.random()*.04,s=noise(.12,k=>(Math.random()*2-1)*Math.pow(1-k,3)*(k<.05?k/.05:1)),f=bp(320+Math.random()*260,2.2),g=gn(.55);s.connect(f);f.connect(g);g.connect(out);s.start(t0);}}
+  else if(kind==='tear'){/* 살이 찢어진다: 질긴 막이 투두둑 뜯기고 속이 쏟아진다 */const L=.9;
+    const s=noise(L,(k,tt)=>(Math.random()<(.15+.5*k)?(Math.random()*2-1):0)*Math.sin(Math.PI*Math.min(1,k*1.3))),f=bp(1500,1.1);f.frequency.setValueAtTime(2400,t);f.frequency.exponentialRampToValueAtTime(600,t+L);const g=gn(1.4);s.connect(f);f.connect(g);g.connect(out);s.start(t);
+    const s2=noise(1.2,k=>(Math.random()*2-1)*Math.pow(1-k,1.5)),f2=bp(300,1.2),g2=gn(0);g2.gain.setValueAtTime(0,t+.5);g2.gain.linearRampToValueAtTime(1.2,t+.6);g2.gain.linearRampToValueAtTime(0,t+1.7);s2.connect(f2);f2.connect(g2);g2.connect(out);s2.start(t+.5);}
   else if(kind==='burst'){/* 알이 터지는 소리: 질척한 터짐 여럿 */for(let i=0;i<5;i++){const s=noise(.18,k=>(Math.random()*2-1)*Math.pow(1-k,3)),f=bp(500+Math.random()*700,2),g=gn(.8);f.frequency.exponentialRampToValueAtTime(160,t+i*.07+.16);s.connect(f);f.connect(g);g.connect(out);s.start(t+i*.07+Math.random()*.03);}}
 }catch(e){}}
 
@@ -7977,6 +8043,8 @@ function motherTele(m,msg,d,T){const k=msg.k;m.mAct={k,t:0,dur:d,x:T.x,z:T.z,a:T
   else if(k==='thrash'){motherSnd('chitter',m.mesh.position,1);motherSnd('squelch',m.mesh.position,.7);}
   else if(k==='burrow'){motherSnd('squelch',m.mesh.position,1);sfx('heavy',m.mesh.position,.8,.6);}
   else if(k==='wail'){motherSnd('shriek',m.mesh.position,1.2);}
+  else if(k==='pop'){if(!(m.popT>0)){m.popT=d;m.mAct={k:'pop',t:0,dur:d};motherSnd('swell',m.mesh.position,1.1);}}   /* 여러 자리에 한꺼번에 오니 몸 연출은 한 번만 */
+  else if(k==='suck'){m.suck={t:0,dur:d,x:T.x,z:T.z,a:T.a,len:T.len,w:T.w};m.mAct={k:'suck',t:0,dur:d};motherSnd('suck',m.mesh.position,1.3);motherSnd('groan',m.mesh.position,.6);}
   else if(k==='drop'){/* 천장에서 새끼가 떨어진다: 몸을 웅크린 하얀 구더기가 거꾸로 떨어지는 그림 */const to=new THREE.Vector3(T.x,heightAt(T.x,T.z)+.25,T.z),top=hallCeil(T.x,T.z);const from=to.clone();from.y=(isFinite(top)&&top<200?top:to.y+14)-.3;
     const ob=makeGrubMesh({});ob.scale.setScalar(.7);ob.rotation.set(Math.PI*.5,Math.random()*6,0);ob.position.copy(from);scene.add(ob);hazards.push({type:'fall',mesh:ob,from,to,t:-(d-.55),d:.55,trail:0xd8d0b8});}
 }
@@ -7993,12 +8061,33 @@ function motherLand(m,msg){const x=num(msg.x),z=num(msg.z),k=msg.k,p=new THREE.V
     VFX.burst(p.clone().setY(p.y+.5),MOTHER_GOO,18,5,.6,{up:1,grav:9,plain:true});motherSnd('squelch',p,1.3);motherSnd('hiss',p,.9);sfx('boom',p,1,.8);if(player&&Math.hypot(player.position.x-x,player.position.z-z)<14)shakeT=.4;}
   else if(k==='wail'){const R=num(msg.r,13);for(let i=0;i<3;i++)setTimeout(()=>VFX.shock(p,i?0xc8b0d0:0xffffff,R*(.45+i*.3),.55),i*120);if(player&&Math.hypot(player.position.x-x,player.position.z-z)<R+4)shakeT=Math.max(shakeT,.3);}
   else if(k==='drop'){VFX.burst(p,MOTHER_GOO,16,4,.5,{up:.7,grav:9,mix:0xe8e0b0,plain:true});spawnRing(0xd8d0a0,p,num(msg.r,2.2),.4);motherSnd('squelch',p,.8);}
+  else if(k==='pop'){/* 몸에서 터진 고름이 포물선으로 날아와 철퍽 */const R=num(msg.r,2.1),q=m.mesh.position.clone();q.y+=2.4+Math.random();
+    VFX.burst(q,0xe8e070,10,4,.5,{up:1.4,grav:10,mix:0xffffff,plain:true});VFX.burst(p,MOTHER_GOO,22,R*2.2,.6,{up:.9,grav:11,mix:0x8a9a30,plain:true});VFX.burst(p,0x8a1a24,8,R*1.4,.5,{up:.6,grav:11,plain:true});spawnRing(0xd8d070,p,R,.45);
+    const tn=performance.now();if(!(m.popSnd>tn-90)){m.popSnd=tn;motherSnd('pop',p,1.1);}m.popT=0;}
+  else if(k==='suck'){m.suck=null;}
+  else if(k==='gulp'){m.mAct={k:'gulp',t:0,dur:.7};m.suck=null;motherSnd('gulp',m.mesh.position,1.3);setTimeout(()=>{if(m.mesh)motherSnd('chew',m.mesh.position,1.1);},380);
+    VFX.burst(p.clone().setY(p.y+1.2),0x9a1a26,18,4,.5,{up:.6,grav:9,plain:true});VFX.burst(p.clone().setY(p.y+1),MOTHER_GOO,14,3.5,.5,{up:.8,grav:9,plain:true});if(player&&Math.hypot(player.position.x-x,player.position.z-z)<8)shakeT=Math.max(shakeT,.3);}
 }
 /* 알 터뜨리기·새끼 삼키기 */
 function motherFx(m,msg){if(!m||!m.mesh)return;const U=m.mesh.userData;
+  if(msg.k==='rupture'){motherRupture(m);return;}
   if(msg.k==='eggs'){m.mAct={k:'eggs',t:0,dur:1};motherSnd('burst',m.mesh.position,1.2);motherSnd('chitter',m.mesh.position,.8);
     const q=m.mesh.position.clone(),yaw=m.mesh.rotation.y;for(let i=0;i<7;i++){const back=-2-Math.random()*5,side=(Math.random()-.5)*3;const p=new THREE.Vector3(q.x+Math.sin(yaw)*back+Math.cos(yaw)*side,q.y+2.6+Math.random()*.6,q.z+Math.cos(yaw)*back-Math.sin(yaw)*side);
       setTimeout(()=>{VFX.burst(p,i%2?MOTHER_GOO:0xe8e0b8,14,4,.6,{up:1.2,grav:10,mix:0xffffff,plain:true});},i*70);}}}
+/* 몸이 찢어진다 (셋째 단계): 옆구리가 갈라지며 피·고름·새끼가 쏟아진다 */
+function motherRupture(m){if(!m||!m.mesh)return;m.mAct={k:'rupture',t:0,dur:1.6};m.torn=1;motherSnd('tear',m.mesh.position,1.4);setTimeout(()=>{if(m.mesh){motherSnd('shriek',m.mesh.position,1.1);motherSnd('burst',m.mesh.position,1.2);}},500);
+  const q=m.mesh.position,yaw=m.mesh.rotation.y;for(let i=0;i<10;i++)setTimeout(()=>{const sd=i%2?1:-1,back=(Math.random()-.5)*6,p=new THREE.Vector3(q.x+Math.cos(yaw)*sd*2.2+Math.sin(yaw)*back,q.y+1.4+Math.random(),q.z-Math.sin(yaw)*sd*2.2+Math.cos(yaw)*back);
+    VFX.burst(p,i%3?0x8a1020:MOTHER_GOO,20,5,.7,{up:.8,grav:10,mix:i%3?0x3a0408:0xffffff,plain:true});},i*90);
+  if(player&&player.position.distanceTo(q)<20)shakeT=Math.max(shakeT,.5);}
+/* 어미의 웅덩이: 누런 토사물에 덩어리·핏물이 섞여 있고, 거품이 부글부글 올라와 터진다. 가장자리는 들쭉날쭉 */
+function motherPoolMat(){const m=new THREE.MeshStandardMaterial({color:0xb8b050,roughness:.1,metalness:.05,transparent:true,opacity:.92,depthWrite:false,emissive:0x1a1804});
+  m.onBeforeCompile=s=>{s.uniforms.uT=MOTHER.U.uT;s.vertexShader='varying vec2 vPU;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvPU=uv;');
+    s.fragmentShader='uniform float uT;varying vec2 vPU;\nfloat ph(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\nfloat vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(ph(i),ph(i+vec2(1,0)),f.x),mix(ph(i+vec2(0,1)),ph(i+vec2(1,1)),f.x),f.y);}\n'+s.fragmentShader
+      .replace('#include <color_fragment>','#include <color_fragment>\n{vec2 q=vPU*2.-1.;float r=length(q),a=atan(q.y,q.x);float edge=.78+.16*vn(vec2(a*2.5,3.))+.06*sin(a*9.);if(r>edge)discard;'+
+        'float ch=smoothstep(.62,.7,vn(q*7.+3.));diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.42,.36,.16),ch);float bl=smoothstep(.6,.72,vn(q*3.-7.));diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.42,.06,.08),bl*.7);'+
+        'vec2 g=q*9.;vec2 id=floor(g);vec2 fq=fract(g)-.5;float life=fract(uT*.5+ph(id)*7.);float br=.12+.25*ph(id+3.);float b=smoothstep(br*life,br*life-.05,length(fq))*step(.55,ph(id+9.));diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.95,.92,.7),b*.55);'+
+        'diffuseColor.a*=smoothstep(edge,edge-.08,r);}');};
+  m.customProgramCacheKey=()=>'hmother-pool';m.userData.op=.92;return m;}
 function motherEat(m){if(!m||!m.mesh)return;m.mAct={k:'eat',t:0,dur:.6};motherSnd('squelch',m.mesh.position,1.2);motherSnd('gurgle',m.mesh.position,.8);}
 /* 매 프레임: 기술마다 자세, 파고들기는 바닥 밑으로 가라앉았다 솟는다, 가끔 꿀렁·딱딱 소리 */
 function updateMotherVisual(m,dt){const U=m.mesh.userData;if(!U.pose){m.mesh.position.y=heightAt(m.mesh.position.x,m.mesh.position.z);return;}const S=U.S,A=m.mAct;
@@ -8012,6 +8101,10 @@ function updateMotherVisual(m,dt){const U=m.mesh.userData;if(!U.pose){m.mesh.pos
     else if(A.k==='eggs')o={rear:.05,open:.4,wave:.35,wf:7,curl:.15};
     else if(A.k==='eat')o={rear:.1,open:k<.4?1.2:.1,wave:.1,nod:.25,openFast:14};
     else if(A.k==='bite')o={rear:.3,open:k<.55?1.1:0,wave:.05,grab:k<.6?1:0,openFast:k<.55?8:22};
+    else if(A.k==='pop')o={rear:.08,open:.45+.2*Math.sin(tAll*23),wave:.18+k*.25,wf:14,curl:.1*Math.sin(tAll*9),fast:6};   /* 부르르 떨며 주머니가 부푼다 */
+    else if(A.k==='suck')o={rear:.55+k*.25,open:1.3,wave:.04,nod:-.12,grab:.5+.5*Math.sin(tAll*11),fast:3,openFast:7};
+    else if(A.k==='gulp')o={rear:k<.3?.2:.35,open:k<.15?1.3:0,wave:.12,nod:.3,openFast:30,fast:10};
+    else if(A.k==='rupture')o={rear:1.1*Math.sin(Math.min(1,k*1.4)*Math.PI),open:1.3,wave:.5,wf:12,curl:.4*Math.sin(tAll*7),fast:5};
     if(A.k==='burrow'){S.sink=Math.min(5.2,S.sink+dt*5.2/Math.max(.4,A.dur*.7));o.wave=.5;o.wf=8;o.rear=-.1;o.open=.8;}
     else if(A.k==='rise'){S.sink=5.2*Math.max(0,1-k*1.25);o={rear:.9*Math.sin(k*Math.PI),open:1.1,wave:.3,wf:6,fast:8};}
     else if(S.sink>0)S.sink=Math.max(0,S.sink-dt*6);
@@ -8027,7 +8120,16 @@ function updateMotherVisual(m,dt){const U=m.mesh.userData;if(!U.pose){m.mesh.pos
   const fl=m.flash>0?m.flash/.18:0;m.flash=Math.max(0,(m.flash||0)-dt);
   U.mats.forEach(mt=>{if(mt.emissive)mt.emissive.setRGB(fl*.5+(m.hp<m.mh*.3?.06+Math.sin(tAll*5)*.04:0),fl*.18,fl*.15);});
   /* 소리: 가까이 있으면 가끔 목구멍이 꿀렁이고 더듬이 다리가 딱딱거린다 */
-  m.sndT=(m.sndT||2)-dt;if(m.sndT<=0){m.sndT=2.5+Math.random()*4;if(player&&player.position.distanceTo(m.mesh.position)<40)motherSnd(Math.random()<.55?'gurgle':'chitter',m.mesh.position,.7);}}
+  /* 고름 주머니: 터뜨리기 앞엔 터질 듯 부풀고, 몸이 찢어진 뒤엔 늘 조금 부어 있다 */
+  {const want=m.popT>0?Math.min(1,.3+(m.mAct&&m.mAct.k==='pop'?m.mAct.t/Math.max(.2,m.mAct.dur):0)):(m.torn?.15:0);if(m.popT>0)m.popT-=dt;MOTHER.U.uPop.value+=(want-MOTHER.U.uPop.value)*Math.min(1,dt*6);}
+  /* 들이마시기: 입 앞 줄 안에 선 사람은 입 쪽으로 끌려간다 (멀리 물러서거나 옆으로 비켜야 한다) */
+  const Sk=m.suck;if(Sk){Sk.t+=dt;if(Sk.t>Sk.dur+.5)m.suck=null;else if(player&&P&&P.hp>0&&mode==='world'){const me=player.position,dx=me.x-Sk.x,dz=me.z-Sk.z,u=dx*Math.sin(Sk.a)+dz*Math.cos(Sk.a),v=dx*Math.cos(Sk.a)-dz*Math.sin(Sk.a);
+      if(u>-1.5&&u<Sk.len+1.5&&Math.abs(v)<Sk.w+1.2){const d=Math.hypot(dx,dz)||1,sp=Math.min(1,Sk.t/.6)*(4.6-Math.min(2,u*.1))*dt,st=Math.min(sp,Math.max(0,d-1.2));me.x-=dx/d*st;me.z-=dz/d*st;pushOut(me,.4);
+        if(Math.random()<dt*20)VFX.burst(new THREE.Vector3(me.x+(Math.random()-.5)*2,me.y+.5+Math.random()*1.5,me.z+(Math.random()-.5)*2),0xd8d0b0,2,1.2,.3,{up:.1,plain:true});}}}
+  /* 소리: 가까이 있으면 젖은 숨·신음·꿀렁임·딱딱 소리가 번갈아 난다. 기어가면 배가 바닥에 쩍쩍 들러붙는다 */
+  const near=player&&player.position.distanceTo(m.mesh.position)<45;
+  m.sndT=(m.sndT||2)-dt;if(m.sndT<=0){m.sndT=2.2+Math.random()*3;if(near){const r=Math.random();motherSnd(r<.3?'breath':r<.5?'groan':r<.78?'gurgle':'chitter',m.mesh.position,.75);}}
+  if((m.mvS||0)>.6&&near){m.slT=(m.slT||0)-dt;if(m.slT<=0){m.slT=.42+Math.random()*.2;motherSnd('slither',m.mesh.position,.7);}}}
 function motherBite(m){m.mAct={k:'bite',t:0,dur:.5};m.biteT=.5;motherSnd('hiss',m.mesh.position,.7);setTimeout(()=>{if(!m.mesh)return;motherSnd('squelch',m.mesh.position,1);const U=m.mesh.userData;if(U.head){const p=new THREE.Vector3();U.head.getWorldPosition(p);VFX.burst(p,MOTHER_GOO,12,4,.4,{grav:8,plain:true});}},260);}
 function motherReward(m,n){
   const D=m.D,gold=D.gold||9000,exp=m.st.exp;
@@ -33383,7 +33485,7 @@ function bossRain(msg){
 }
 
 /* ---------- 일반 몬스터 기술: 바닥 경고 표시와 판정 ---------- */
-const SKILL_NAME={bile:'토하기',slam:'내리찍기',thrash:'몸부림',burrow:'파고들기',drop:'떨어지는 새끼',wail:'울부짖음',breath:'화염 숨결',tail:'꼬리 휩쓸기',stomp:'날개 폭풍',dive:'급강하',meteor:'불덩이',leap:'덮치기',spit:'독 뱉기',throw:'돌 던지기',dash:'돌진',sting:'독침',thrust:'찌르기',spin:'회전베기',smash:'내려찍기',scream:'비명'};
+const SKILL_NAME={bile:'토하기',pop:'고름 터뜨리기',suck:'들이마시기',gulp:'삼키기',slam:'내리찍기',thrash:'몸부림',burrow:'파고들기',drop:'떨어지는 새끼',wail:'울부짖음',breath:'화염 숨결',tail:'꼬리 휩쓸기',stomp:'날개 폭풍',dive:'급강하',meteor:'불덩이',leap:'덮치기',spit:'독 뱉기',throw:'돌 던지기',dash:'돌진',sting:'독침',thrust:'찌르기',spin:'회전베기',smash:'내려찍기',scream:'비명'};
 const POOL_COL=[[0x8ad030,0x4a8a10],[0xff7a20,0xc03a00],[0x9a9080,0x5a5040],[0xc8ecff,0x5a9ac8],[0xc8c060,0x7a7a20]];   /* 4: 어미의 토사물 */   /* 3: 얼음 (허칠산) */
 function teleMat(c,op){return new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:op,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4});}
 // 땅 모양을 따라 붙는 납작한 도형 (원: r0~r1, 직선: 길이 0~len)
@@ -33437,7 +33539,7 @@ function monSkillLand(m,msg,targeted){
     spawnRing(col,p,r,.45);spawnFx(col,p,r*.6,.35);
     if((k==='smash'||k==='leap')&&player&&Math.hypot(player.position.x-x,player.position.z-z)<r+5)shakeT=Math.max(shakeT,.18);}
   if(msg.pool){const c=POOL_COL[clamp(Math.floor(num(msg.col,0)),0,4)];const r=clamp(num(msg.r,2),.5,6)*.9;
-    const pool=new THREE.Mesh(new THREE.CircleGeometry(r,28),new THREE.MeshBasicMaterial({color:c[0],transparent:true,opacity:.5,depthWrite:false}));
+    const pool=new THREE.Mesh(new THREE.CircleGeometry(r,28),m&&m.D.mother?motherPoolMat():new THREE.MeshBasicMaterial({color:c[0],transparent:true,opacity:.5,depthWrite:false}));
     pool.rotation.x=-Math.PI/2;pool.position.set(x,heightAt(x,z)+.08,z);scene.add(pool);
     hazards.push({type:'mpool',mesh:pool,x,z,r,t:0,dur:clamp(num(msg.pool,3),1,8),dps:num(msg.dps,10),acc:0,lv:clamp(num(msg.lv,1),1,100),name:(m?m.D.name:'몬스터')+'의 웅덩이'});}
   // 판정: 서버가 고른 사람 중, 내 화면 위치로도 범위 안이면 맞는다 (마지막 순간에 피할 수 있다)
@@ -33461,7 +33563,7 @@ function updateHazards(dt){
       continue;
     }
     if(h.type==='mpool'){
-      h.mesh.material.opacity=.5*(h.t>h.dur-.8?Math.max(0,(h.dur-h.t)/.8):1)+Math.sin(h.t*6)*.05;
+      h.mesh.material.opacity=(h.mesh.material.userData.op||.5)*(h.t>h.dur-.8?Math.max(0,(h.dur-h.t)/.8):1)+Math.sin(h.t*6)*.05;
       if(me&&jumpY<.3&&Math.hypot(me.x-h.x,me.z-h.z)<h.r){h.acc+=dt;if(h.acc>=.5){h.acc=0;hurtByMonster(h.dps*.5,h.lv,h.name);}}
       if(h.t>=h.dur){scene.remove(h.mesh);hazards.splice(i,1);}
       continue;
