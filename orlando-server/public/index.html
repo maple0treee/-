@@ -6491,11 +6491,11 @@ function makeBipedMonster(D){
    몬스터가 처음 나오면 그 종류 파일을 받고, 받기 전에는 원래 모양이 보이다가 받으면 바꿔 입는다.
    가까이 볼 모양과 멀리서 볼 모양(면이 적은)을 같이 담아 거리에 따라 바꾼다. */
 const MONB={ver:'1',dir:'monbake/',types:new Set(['redgiant','cliffgiant','frostgiant','hillgiant','peakgiant','firegiant','valleyogre','rockogre','fieldogre','gorgeogre','flameogre','woodtroll','pinetroll','hilltroll','oldtroll','cavetroll','lavatroll','treant','yeti','snowyeti','bandit','salamander']),data:{},req:{}};
-function monBakeGeo(p){const ab=s=>{const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u.buffer;};
+function monBakeGeo(p,raw){const ab=s=>{const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u.buffer;};
   const n=p.n,qP=new Uint16Array(ab(p.P)),qN=new Int8Array(ab(p.N)),qC=new Uint8Array(ab(p.C)),qS=p.S?new Uint8Array(ab(p.S)):null,qW=p.W?new Uint8Array(ab(p.W)):null,I=p.i32?new Uint32Array(ab(p.I)):new Uint16Array(ab(p.I));
   const P=new Float32Array(n*3),N=new Float32Array(n*3),C=new Float32Array(n*3),SI=new Uint16Array(n*4),SW=new Float32Array(n*4),lin=new Float32Array(256);
   for(let i=0;i<256;i++){const s=i/255;lin[i]=s<=.04045?s/12.92:Math.pow((s+.055)/1.055,2.4);}
-  for(let i=0;i<n;i++){for(let a=0;a<3;a++){const k=i*3+a;P[k]=p.lo[a]+qP[k]/65535*(p.hi[a]-p.lo[a]);N[k]=qN[k]/127;C[k]=lin[qC[k]];}
+  for(let i=0;i<n;i++){for(let a=0;a<3;a++){const k=i*3+a;P[k]=p.lo[a]+qP[k]/65535*(p.hi[a]-p.lo[a]);N[k]=qN[k]/127;C[k]=raw?qC[k]/255:lin[qC[k]];}
     if(qS){const w=qW[i]/255;SI[i*4]=qS[i*2];SI[i*4+1]=qS[i*2+1];SW[i*4]=w;SW[i*4+1]=1-w;}}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(P,3));g.setAttribute('normal',new THREE.BufferAttribute(N,3));g.setAttribute('color',new THREE.BufferAttribute(C,3));
   if(qS){g.setAttribute('skinIndex',new THREE.BufferAttribute(SI,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(SW,4));}g.setIndex(new THREE.BufferAttribute(I,1));
@@ -22009,7 +22009,7 @@ function horseHarness(H,o={}){const L=new THREE.Color(o.leather||0x3a2418),Br=ne
 HORSE.HP={cr:.25,cy:1.42,cz:.72,ca:-.95,br:.38,by:.98,bz:.18,bk:1,nr:.13,ny:1.74,nz:1.38,na:.9,hr:.17,hy:1.95,hz:1.12,ha:-.5,ex:.15,ey:1.9,ez:1.2};
 /* ---------- 탈것: 말·당나귀·늑대 ----------
    엑시즈 시장의 마구간지기에게 사면 가지게 되고, 타면 이동 속도가 오른다. G 키로 타고 내린다 (마지막에 탄 것).
-   말·당나귀는 마차의 말 모델(horse.js)을 쓰고, 늑대는 직접 만든 네발짐승. 다른 사람이 탄 것도 보인다 (presence mt).
+   말은 빚어 구운 말(HB, monbake/horse.json: 탈것·마차·성 마구간·귀족 말 모두), 당나귀·늑대는 직접 만든 네발짐승(quadInstance). 다른 사람이 탄 것도 보인다 (presence mt).
    탈것은 플레이어 자리를 따라다니고, 막대 인형은 안장 높이만큼 올라앉는다 (stick.js animStick 끝의 rideY). */
 const MOUNTS={horse:{name:'말',price:3000,speed:2.1,h:1.55},donkey:{name:'당나귀',price:1200,speed:1.15,h:1.08},wolf:{name:'늑대',price:5000,speed:1.75,h:.82}};
 const RIDE={g:null,kind:null,H:null,prev:null,others:new Map()};
@@ -22020,8 +22020,97 @@ const QUAD_LOOK={
   donkey:{S:1.6,c:0x8a7a6a,c2:0xcfc4b4,dark:0x3a3028,mane:0x3a3028,saddle:0x6a3a24,ears:'long',muzzle:'long',tail:'tuft'},
   wolf:{S:1.9,c:0x5e5e66,c2:0xc8c6c0,dark:0x1a1612,back:0x3e3e46,saddle:0x4a2a18,ears:'point',muzzle:'sharp',tail:'bushy'}};
 /* 털빛 (마차 말·성 마구간 말에 변화를 주려고) */
-const HORSE_COATS=[{c:0x7a4a2c,c2:0x9a6a44,mane:0x2a1a10},{c:0x9a6236,c2:0xb8845a,mane:0x3a2416},{c:0x5a3a28,c2:0x7a5a44,mane:0x1a120c},{c:0xb8ada0,c2:0xd8d0c4,mane:0x6a625a},{c:0x3a2a22,c2:0x5a4a40,mane:0x141010}];
-function quadInstance(kind,opt={}){const L0=QUAD_LOOK[kind]||QUAD_LOOK.wolf,L=opt.coat!=null&&kind==='horse'?{...L0,...HORSE_COATS[opt.coat%HORSE_COATS.length]}:L0,wolf=kind==='wolf',dk=kind==='donkey',c=L.c,c2=L.c2,dark=L.dark,PI=Math.PI,wagon=!!opt.wagon;
+/* (빚은 말: pt 다리 끝 색, blaze 이마 흰 줄 1·별 2, socks 흰 발목 1 네 발·2 뒷발) */
+const HORSE_COATS=[{c:0x7a4a2c,c2:0x9a6a44,mane:0x2a1a10},{c:0x9a6236,c2:0xb8845a,mane:0x3a2416,pt:0x6a3c20,blaze:1,socks:1},{c:0x5a3a28,c2:0x7a5a44,mane:0x1a120c,socks:2},{c:0xb8ada0,c2:0xd8d0c4,mane:0x6a625a,pt:0x7a7268},{c:0x3a2a22,c2:0x5a4a40,mane:0x141010,blaze:2}];
+/* ---------- 빚은 말 (monbake/horse.json, tools/monbake/horse.js 로 굽는다) ----------
+   털·갈기·발굽·눈을 한 덩어리로 매끈하게 빚고, 탈 때 마구(안장·등자·고삐)와 마차 마구(목사리·눈가리개)를 따로 담았다.
+   털빛은 꼭짓점에 담긴 [그늘, 밝은 털, 어두운 털] 비율로 말마다 칠한다 (HORSE_COATS). 이마 흰 줄·흰 발목도 여기서.
+   뼈로 걷기·속보·달리기를 속도에 맞춰 섞고, 서 있을 땐 고개를 돌리거나 숙이고 꼬리를 흔들고 뒷다리 하나를 쉰다.
+   받기 전에 만든 말은 옛 모양(quadInstance)으로 있다가 받으면 바꿔 입는다. 멀면 면이 적은 모양으로. */
+const HB={ver:'1',d:null,req:null,wait:[],geo:{},mats:{}};
+function hbLoad(){if(HB.d)return Promise.resolve(HB.d);
+  if(!HB.req)HB.req=fetch(MONB.dir+'horse.json?v='+HB.ver).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).then(r=>{
+    HB.d={bones:r.bones,anim:r.anim||{},mats:r.mats||{},lod:r.lod.map(l=>l.map(p=>({g:p.g,geo:monBakeGeo(p,p.g==='body'||p.g==='mane')})))};
+    const w=HB.wait.splice(0);for(const M of w)hbSwap(M);return HB.d;}).catch(e=>{console.warn('horse bake',e);HB.req=null;throw e;});
+  return HB.req;}
+/* 털빛마다 꼭짓점 색을 칠한 모양 (자리·법선·뼈는 같이 쓴다) */
+function hbGeo(li,pi,ci){const k=li+'_'+pi+'_'+ci;if(HB.geo[k])return HB.geo[k];const p=HB.d.lod[li][pi],src=p.geo;
+  if(p.g!=='body'&&p.g!=='mane')return HB.geo[k]=src;
+  const C0=HORSE_COATS[ci],n=src.attributes.position.count,raw=src.attributes.color.array,Pp=src.attributes.position.array,col=new Float32Array(n*3);
+  const cA=new THREE.Color(C0.c),cB=new THREE.Color(C0.c2),cD=new THREE.Color(C0.pt||C0.mane),cM=new THREE.Color(C0.mane),cW=new THREE.Color(0xf0ebe2),t=new THREE.Color();
+  const A=HB.d.anim,H0=A.H0||[0,1.275,.735],ub=Math.cos(A.b||.9),uc=Math.sin(A.b||.9);
+  for(let i=0;i<n;i++){const s=raw[i*3];
+    if(p.g==='mane'){t.copy(cM).multiplyScalar(s*1.1);}
+    else{const sd=Math.max(s,1e-3),L=Math.min(1,raw[i*3+1]/sd),D=Math.min(1,raw[i*3+2]/sd),x=Pp[i*3],y=Pp[i*3+1],z=Pp[i*3+2];
+      t.copy(cA).lerp(cB,L).lerp(cD,D*.9);
+      const head=(y-H0[1])*ub+(z-H0[2])*uc;
+      if(C0.blaze&&Math.abs(x)<(C0.blaze===2?.018:.03)&&z>.79&&head>-.012&&y>(C0.blaze===2?1.12:.9))t.copy(cW);   /* 이마 흰 줄 (2: 별만) */
+      else if(C0.socks&&y<(C0.socks===2?.17:.13)&&(C0.socks===1||z<0))t.copy(cW);   /* 흰 발목 (2: 뒷발만) */
+      t.multiplyScalar(s);}
+    t.convertSRGBToLinear();col[i*3]=t.r;col[i*3+1]=t.g;col[i*3+2]=t.b;}
+  const g=new THREE.BufferGeometry();for(const a of ['position','normal','skinIndex','skinWeight'])g.setAttribute(a,src.attributes[a]);g.setIndex(src.index);g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  g.boundingSphere=src.boundingSphere;return HB.geo[k]=g;}
+function hbMat(gname){if(HB.mats[gname])return HB.mats[gname];const o=HB.d.mats[gname]||{};
+  return HB.mats[gname]=new THREE.MeshStandardMaterial({vertexColors:true,skinning:true,roughness:o.r??.8,metalness:o.m||0});}
+/* 말 한 마리: g(세운 말, 앞이 +Z, 크기는 옛 말과 같게 QUAD_LOOK.horse.S), B(몸이 들썩이는 자리: 탄 사람이 따라간다), set(속도 m/s, dt) */
+function hbInstance(opt={}){const R=HB.d,ci=opt.coat!=null?opt.coat%HORSE_COATS.length:0,skip=opt.wagon?'saddle':'harness';
+  const g=new THREE.Group(),Bd=new THREE.Group();g.add(Bd);
+  const by={},bones=R.bones.map(b=>{const B=new THREE.Bone();B.name=b.n;by[b.n]=B;return B;}),bo={};
+  R.bones.forEach((b,i)=>{bo[b.n]=b.o;const B=bones[i],p=b.p?R.bones.find(q=>q.n===b.p):null;B.position.set(b.o[0]-(p?p.o[0]:0),b.o[1]-(p?p.o[1]:0),b.o[2]-(p?p.o[2]:0));if(p)by[b.p].add(B);});
+  const wrap=new THREE.Group();wrap.add(by.root);Bd.add(wrap);wrap.updateMatrixWorld(true);
+  const sk=new THREE.Skeleton(bones,R.bones.map(b=>new THREE.Matrix4().makeTranslation(-b.o[0],-b.o[1],-b.o[2]))),I=new THREE.Matrix4(),hi=[],lo=[];
+  R.lod.forEach((L,li)=>L.forEach((p,pi)=>{if(p.g===skip)return;const sm=new THREE.SkinnedMesh(hbGeo(li,pi,ci),hbMat(p.g));sm.bind(sk,I);sm.castShadow=li===0&&p.g!=='eye';sm.frustumCulled=false;sm.userData.g=p.g;wrap.add(sm);(li?lo:hi).push(sm);}));
+  const loG=new Set(R.lod[1].map(p=>p.g));lo.forEach(o=>o.visible=false);hi.forEach(o=>{o.userData.lp=loG.has(o.userData.g);});
+  const knob=([bn,pos])=>{const o=new THREE.Object3D(),b=bo[bn];o.position.set(pos[0]-b[0],pos[1]-b[1],pos[2]-b[2]);by[bn].add(o);return o;};
+  const K=R.anim.knobs||{nose:[],collar:[]};
+  g.scale.setScalar(QUAD_LOOK.horse.S);g.userData.horse=1;
+  const S={ph:Math.random(),t:Math.random()*50,wt:0,wg:0,v:0,lo:false,lt:Math.random()*.5,rest:0,look:0,lookT:2+Math.random()*6,graze:0,grazeT:8+Math.random()*20,swish:0,swT:2,id:Math.random()*9};
+  const M={g,B:Bd,H:by.neck,F:by.head,bones:by,S,collarKnobs:K.collar.map(knob),noseKnobs:K.nose.map(knob),quad:true,baked:true,ph:0,
+    set(speed,dt){hbPose(M,S,speed,dt,hi,lo,loG);}};
+  return M;}
+/* 받기 전에 만든 옛 말을 빚은 말로 바꿔 입힌다 (봇줄·고삐 고리는 같은 것을 새 뼈로 옮긴다) */
+function hbSwap(M){if(!M.g)return;const N=hbInstance(M.opt||{});M.g.remove(M.B);M.g.add(N.B);
+  for(const k of ['collarKnobs','noseKnobs'])(M[k]||[]).forEach((o,i)=>{const n=N[k][i];if(!n)return;o.position.copy(n.position);n.parent.add(o);n.parent.remove(n);N[k][i]=o;});
+  Object.assign(M,{B:N.B,H:N.H,F:N.F,bones:N.bones,set:N.set,baked:true});}
+const _hbV=new THREE.Vector3();
+/* 걸음새: 다리 순서 [앞왼, 앞오, 뒤왼, 뒤오]의 박자 어긋남·땅 디딤 비율·보폭(말 크기 1 기준) */
+const HB_GAIT=[{off:[.25,.75,0,.5],duty:.64,L:.85,A:.27,kf:.75,kh:.3,kc:.45},{off:[0,.5,.5,0],duty:.46,L:1.25,A:.34,kf:1.2,kh:.45,kc:.55},{off:[.42,.54,0,.1],duty:.36,L:2.5,A:.5,kf:1.4,kh:.55,kc:.6}];
+function hbPose(M,S,speed,dt,hi,lo,loG){const B=M.bones,sc=M.g.scale.x||2.1;S.t+=dt;
+  /* 멀면 면이 적은 모양 */
+  S.lt-=dt;if(S.lt<=0){S.lt=.5;M.B.getWorldPosition(_hbV);const far=typeof camera!=='undefined'&&camera.position.distanceToSquared(_hbV)>30*30;
+    if(far!==S.lo){S.lo=far;hi.forEach(o=>{if(o.userData.lp)o.visible=!far;});lo.forEach(o=>o.visible=far);}}
+  const v=Math.min(speed,14)/sc;S.v+=(v-S.v)*Math.min(1,dt*6);const V=S.v;
+  const ss=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
+  S.wt+=(ss(.95,1.45,V)-S.wt)*Math.min(1,dt*3);S.wg+=(ss(2.6,3.4,V)-S.wg)*Math.min(1,dt*3);
+  const G=HB_GAIT,mixp=(k,i)=>{const w0=(1-S.wt),a=i==null?G[0][k]*w0+G[1][k]*S.wt:G[0][k][i]*w0+G[1][k][i]*S.wt;return i==null?a*(1-S.wg)+G[2][k]*S.wg:a*(1-S.wg)+G[2][k][i]*S.wg;};
+  const mv=ss(.04,.25,V),duty=mixp('duty'),L=mixp('L'),A=mixp('A')*mv,kf=mixp('kf')*mv,kh=mixp('kh')*mv,kc=mixp('kc')*mv;
+  S.ph=(S.ph+dt*Math.min(2.6,V/L))%1;M.ph=S.ph;const TAU=Math.PI*2;
+  const names=['fL','fR','hL','hR'];
+  for(let i=0;i<4;i++){const p=((S.ph+mixp('off',i))%1+1)%1,fr=i<2;let th,fx;
+    if(p<duty){const u=p/duty;th=A*(2*u-1);fx=0;}else{const u=(p-duty)/(1-duty),e=(1-Math.cos(Math.PI*u))/2;th=A*(1-2*e);fx=Math.sin(Math.PI*u);}
+    const a=B[names[i]+'a'],b=B[names[i]+'b'],c=B[names[i]+'c'];
+    if(fr){a.rotation.x=th-fx*.12*mv;b.rotation.x=fx*kf;c.rotation.x=fx*kc;}
+    else{a.rotation.x=th-fx*.25*mv;b.rotation.x=fx*kh;c.rotation.x=fx*kc;}
+    a.rotation.z=0;}
+  /* 몸: 들썩임·앞뒤 흔들림 */
+  const wg=S.wg*mv,wt=S.wt*mv*(1-S.wg),ww=mv*(1-S.wt)*(1-S.wg);
+  M.B.position.y=(Math.sin(S.ph*TAU*2)*.008*ww+Math.abs(Math.sin(S.ph*TAU*2))*.022*wt+Math.sin(S.ph*TAU)*.03*wg);
+  B.root.rotation.x=Math.sin(S.ph*TAU+1.2)*.05*wg;B.root.rotation.z=Math.sin(S.ph*TAU)*.012*ww;
+  /* 서 있을 때: 가끔 고개를 돌리고, 숙여 냄새 맡고, 꼬리를 휘두르고, 뒷다리 하나를 쉰다 */
+  const idle=1-mv;S.lookT-=dt;if(S.lookT<=0){S.lookT=3+Math.random()*7;S.look=Math.random()<.35?0:(Math.random()-.5)*.9;}
+  S.grazeT-=dt;if(S.grazeT<=0){S.graze=S.graze>0?0:1;S.grazeT=S.graze?3+Math.random()*4:10+Math.random()*20;}
+  S.swT-=dt;if(S.swT<=0){S.swT=1.5+Math.random()*5;S.swish=1;}S.swish=Math.max(0,S.swish-dt*.9);
+  S.rest+=((idle>.9?1:0)-S.rest)*Math.min(1,dt*1.5);
+  B.hRa.rotation.x+=.0;B.hRb.rotation.x+=.18*S.rest;B.hRc.rotation.x+=.55*S.rest;B.hRa.rotation.x+=-.04*S.rest;M.B.position.y-=.006*S.rest;
+  S.gz=(S.gz||0)+(S.graze*idle-(S.gz||0))*Math.min(1,dt*1.2);S.lk=(S.lk||0)+(S.look*idle-(S.lk||0))*Math.min(1,dt*1.5);
+  const br=Math.sin(S.t*1.6+S.id);
+  B.neck.rotation.set(-.04+Math.sin(S.ph*TAU*2)*.045*ww+Math.sin(S.ph*TAU*2+.8)*.03*wt+Math.sin(S.ph*TAU+2.4)*.11*wg+.08*wg+.75*S.gz+br*.01*idle,S.lk*.6,0);
+  B.head.rotation.set(-.04*wg+.05*wt+.25*S.gz+Math.sin(S.t*.8+S.id)*.03*idle,S.lk*.45,S.lk*.12);
+  /* 꼬리 */
+  const sw=S.swish*Math.sin(S.t*9)*.5;
+  B.t1.rotation.set(.12+.15*wt+.55*wg+Math.sin(S.ph*TAU)*.08*wg,0,sw*idle+Math.sin(S.t*1.1+S.id)*.06+Math.sin(S.ph*TAU)*.06*ww);
+  B.t2.rotation.set(-.08-.35*wg+Math.sin(S.ph*TAU+1)*.1*wg,0,sw*.8*idle+Math.sin(S.t*1.1+S.id-.7)*.08);}
+function quadInstance(kind,opt={}){if(kind==='horse'&&HB.d)return hbInstance(opt);const L0=QUAD_LOOK[kind]||QUAD_LOOK.wolf,L=opt.coat!=null&&kind==='horse'?{...L0,...HORSE_COATS[opt.coat%HORSE_COATS.length]}:L0,wolf=kind==='wolf',dk=kind==='donkey',c=L.c,c2=L.c2,dark=L.dark,PI=Math.PI,wagon=!!opt.wagon;
   /* 각진 저폴리: 둥근 공 대신 모난 통(6~8각 기둥)을 이어 붙이고 면 음영을 살린다. 부품은 {geo,m:행렬,c:색}으로 모아 한 덩어리로 합친다 */
   const VC=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.8,flatShading:true});
   const parts=[],_m=new THREE.Matrix4(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0),_d=new THREE.Vector3();
@@ -22084,7 +22173,9 @@ function quadInstance(kind,opt={}){const L0=QUAD_LOOK[kind]||QUAD_LOOK.wolf,L=op
   const collarKnobs=[],noseKnobs=[];for(const sx of [-1,1]){const k=new THREE.Object3D();k.position.set(sx*.2,.72,.56);B.add(k);collarKnobs.push(k);const n=new THREE.Object3D();n.position.set(sx*.1,-.06,.44);F.add(n);noseKnobs.push(n);}
   const M={g,B,H,F,collarKnobs,noseKnobs,quad:true,ph:0,set(speed,dt){const v=speed/S;M.ph+=dt*Math.min(14,v*5.5);const k=Math.min(1,v/1.5),s=Math.sin(M.ph);
       B.position.y=Math.abs(Math.cos(M.ph))*.04*k;legs[0].rotation.x=s*.7*k;legs[3].rotation.x=s*.7*k;legs[1].rotation.x=-s*.7*k;legs[2].rotation.x=-s*.7*k;
-      H.rotation.x=(wolf?.1:.3)+Math.sin(M.ph*.5)*.05*k;T.rotation.z=Math.sin(M.ph*1.3)*.25;T.rotation.x=wolf?.3:-.2;}};return M;}
+      H.rotation.x=(wolf?.1:.3)+Math.sin(M.ph*.5)*.05*k;T.rotation.z=Math.sin(M.ph*1.3)*.25;T.rotation.x=wolf?.3:-.2;}};
+  if(kind==='horse'){M.opt=opt;HB.wait.push(M);hbLoad().catch(()=>{});}   /* 빚은 말을 받으면 바꿔 입는다 */
+  return M;}
 /* 마차를 끄는 말: 같은 모델을 조금 작게(어깨 높이 1.6m쯤), 안장 대신 목사리와 끈. 봇줄·고삐를 이을 자리도 같이 */
 function wagonHorse(ci=0){const M=quadInstance('horse',{wagon:true,coat:ci});M.g.scale.setScalar(1.55);return M;}
 /* 탈것 모양 하나 (세 종 모두 직접 만든 모델) */
