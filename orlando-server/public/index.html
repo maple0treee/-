@@ -8752,6 +8752,44 @@ function sickleBuild(g,o){
   /* 쌍날: 뿌리 뒤쪽의 짧은 갈고리 */
   if(o.back){const b=new THREE.Shape();b.moveTo(-.01,y0+.015);b.quadraticCurveTo(-.08,y0+.05,-.13,y0+.0);b.quadraticCurveTo(-.08,y0+.01,-.01,y0-.025);const bg=new THREE.ExtrudeGeometry(b,{depth:o.th*.3,bevelEnabled:true,bevelThickness:o.th*.35,bevelSize:o.th*.3,bevelSegments:1,curveSegments:10});bg.translate(0,0,-o.th*.15);g.add(new THREE.Mesh(bg,[steel,edge]));}
   g.traverse(q=>{if(q.isMesh)q.castShadow=true;});return g;}
+/* ---------- 등급 새김: 칼날 면·방패 면에 그리는 등급 무늬 (등급 0~9, 갑옷 무늬와 같은 결) ----------
+   칼날 그림은 세로로 긴 캔버스(밑동 → 끝). 무늬는 흰 바탕 위 회색 새김(쇠 색이 물든다) + 빛나는 곳은 emissive 그림.
+   bladeEtch(t,x0,x1,y0,y1,dual): 칼날 모양 좌표(돌출 면 uv = 모양 x·y) 범위에 맞춰 반복·이동을 정한 텍스처. dual이면 가운데 홈 양옆에 한 줄씩 */
+const _ETCH={};
+function _etchCanvas(t){if(_ETCH['c'+t])return _ETCH['c'+t];const W=64,H=512,cv=document.createElement('canvas');cv.width=W;cv.height=H;const x=cv.getContext('2d');
+  let sd=t*131+7;const rnd=()=>{sd=(sd*16807)%2147483647;return sd/2147483647;};
+  x.fillStyle='#ffffff';x.fillRect(0,0,W,H);
+  /* 두드린 결: 아주 옅은 세로 줄과 얼룩 */
+  for(let k=0;k<70;k++){x.globalAlpha=.05;x.fillStyle=rnd()<.5?'#000':'#888';x.fillRect(rnd()*W,rnd()*H,1+rnd()*2,10+rnd()*60);}x.globalAlpha=1;
+  let em=null;const E=()=>{if(em)return em;const c=document.createElement('canvas');c.width=W;c.height=H;em=c.getContext('2d');em.fillStyle='#000';em.fillRect(0,0,W,H);return em;};
+  const Y=v=>H*(1-v),cx=W/2;   /* v: 0 밑동 ~ 1 끝 */
+  const vine=(c,col,w)=>{c.strokeStyle=col;c.lineWidth=w;c.beginPath();for(let k=0;k<=60;k++){const v=.06+k/60*.7;const px=cx+Math.sin(v*34)*W*.14;k?c.lineTo(px,Y(v)):c.moveTo(px,Y(v));}c.stroke();
+    for(let k=0;k<9;k++){const v=.1+k*.075,px=cx+Math.sin(v*34)*W*.14,s=k%2?1:-1;c.beginPath();c.moveTo(px,Y(v));c.quadraticCurveTo(px+s*12,Y(v+.012),px+s*9,Y(v+.03));c.stroke();}};
+  if(t===0){x.strokeStyle='rgba(0,0,0,.18)';for(let k=0;k<14;k++){const v=rnd()*.8+.05,px=rnd()*W;x.lineWidth=1;x.beginPath();x.moveTo(px,Y(v));x.lineTo(px+(rnd()-.5)*14,Y(v+.01+rnd()*.02));x.stroke();}}
+  else if(t===1){x.fillStyle='#6a6a6a';x.font='bold 18px serif';x.textAlign='center';x.fillText('✠',cx,Y(.07));}
+  else if(t===2)vine(x,'#7a8088',1.6);
+  else if(t===3){for(let k=0;k<40;k++){x.globalAlpha=.25;x.fillStyle='#4f8a5c';x.beginPath();x.ellipse(rnd()*W,Y(rnd()*.9),3+rnd()*6,6+rnd()*14,0,0,7);x.fill();}x.globalAlpha=1;
+    x.strokeStyle='#6a5020';x.lineWidth=2;for(let k=0;k<3;k++){const v=.1+k*.08;x.beginPath();x.arc(cx,Y(v),9,0,7);x.stroke();x.beginPath();x.arc(cx,Y(v),4,0,7);x.stroke();}}
+  else if(t===4){const e=E();e.strokeStyle='#9cd0ff';e.lineWidth=2.2;e.shadowColor='#5fa0ff';e.shadowBlur=5;
+    for(let k=0;k<9;k++){const v=.08+k*.075,cy=Y(v),g=(k*5+2)%5;e.beginPath();
+      if(g===0){e.moveTo(cx,cy-9);e.lineTo(cx,cy+9);e.lineTo(cx+7,cy);}else if(g===1){e.moveTo(cx-6,cy-9);e.lineTo(cx+6,cy+9);e.moveTo(cx+6,cy-9);e.lineTo(cx-6,cy+9);}
+      else if(g===2){e.moveTo(cx,cy-9);e.lineTo(cx,cy+9);e.moveTo(cx,cy-3);e.lineTo(cx+7,cy-9);e.moveTo(cx,cy+3);e.lineTo(cx+7,cy-3);}else if(g===3){e.moveTo(cx-7,cy+9);e.lineTo(cx,cy-9);e.lineTo(cx+7,cy+9);}else{e.moveTo(cx,cy-9);e.lineTo(cx+7,cy);e.lineTo(cx,cy+9);e.lineTo(cx-7,cy);e.closePath();}e.stroke();}
+    x.strokeStyle='#8a90a0';x.lineWidth=1;x.strokeRect(cx-14,Y(.78),28,H*.74);}
+  else if(t===5){x.strokeStyle='#a8d8f0';const e=E();e.strokeStyle='#3a88c8';
+    for(let k=0;k<10;k++){let px=cx+(rnd()-.5)*W*.6,v=.05+rnd()*.75;const br=(c,lw)=>{c.lineWidth=lw;c.beginPath();c.moveTo(px,Y(v));c.lineTo(px,Y(v+.06));for(let j=1;j<4;j++){const vv=v+j*.015;c.moveTo(px,Y(vv));c.lineTo(px-6+j,Y(vv+.012));c.moveTo(px,Y(vv));c.lineTo(px+6-j,Y(vv+.012));}c.stroke();};br(x,1.4);br(e,1);}}
+  else if(t===6||t===8){const e=E();e.lineCap='round';
+    for(let k=0;k<(t===6?10:8);k++){let px=cx+(rnd()-.5)*W*.5,v=t===6?rnd()*.35:.05+rnd()*.8;for(let j=0;j<7;j++){const nx=px+(rnd()-.5)*14,nv=v+.02+rnd()*.04;
+      e.strokeStyle=t===6?(j%2?'#ffb040':'#ff5a10'):(j%2?'#9a70ff':'#6030ff');e.lineWidth=(t===6?3:2.2)*(1-j/9);e.beginPath();e.moveTo(px,Y(v));e.lineTo(nx,Y(nv));e.stroke();px=Math.max(6,Math.min(W-6,nx));v=nv;}}
+    if(t===8){e.strokeStyle='#c0a0ff';e.lineWidth=2;e.beginPath();e.ellipse(cx,Y(.12),9,5,0,0,7);e.stroke();e.fillStyle='#e0d0ff';e.beginPath();e.ellipse(cx,Y(.12),2,4,0,0,7);e.fill();}}
+  else if(t===7){for(let k=0;k<30;k++){x.globalAlpha=.16;x.fillStyle='#1a1622';x.beginPath();x.ellipse(rnd()*W,Y(rnd()*.9),4+rnd()*8,8+rnd()*20,0,0,7);x.fill();}x.globalAlpha=1;
+    const e=E();e.strokeStyle='#8a60d0';e.lineWidth=1.6;e.beginPath();for(let k=0;k<=50;k++){const v=.05+k/50*.75,px=cx+Math.sin(v*20)*W*.18*(1-v);k?e.lineTo(px,Y(v)):e.moveTo(px,Y(v));}e.stroke();}
+  else if(t===9){vine(x,'#b88a28',2.4);vine(x,'#ffe090',1);const e=E();e.strokeStyle='#ffe8a0';e.lineWidth=1.4;e.globalAlpha=.6;e.beginPath();e.moveTo(cx,Y(.05));e.lineTo(cx,Y(.82));e.stroke();}
+  return _ETCH['c'+t]={cv,em:em?em.canvas:null};}
+function bladeEtch(t,x0,x1,y0,y1,dual){t=Math.max(0,Math.min(9,t|0));const k=[t,x0,x1,y0,y1,dual?1:0].join(',');if(_ETCH[k])return _ETCH[k];const C=_etchCanvas(t);
+  const mk=cv=>{const tx=new THREE.CanvasTexture(cv);tx.wrapS=dual?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping;tx.wrapT=THREE.ClampToEdgeWrapping;tx.repeat.set((dual?2:1)/(x1-x0),1/(y1-y0));tx.offset.set(dual?.5-(x0+(x1-x0)/4)*2/(x1-x0):-x0/(x1-x0),-y0/(y1-y0));tx.anisotropy=4;if(THREE.sRGBEncoding)tx.encoding=THREE.sRGBEncoding;return tx;};
+  return _ETCH[k]={map:mk(C.cv),em:C.em?mk(C.em):null};}
+/* 칼날 면 재질: 쇠 재질을 복제해 등급 새김을 입힌다 */
+function bladeFace(steel,t,x0,x1,y0,y1,dual){const E=bladeEtch(t,x0,x1,y0,y1,dual),m=steel.clone();m.map=E.map;if(E.em){m.emissive=new THREE.Color(0xffffff);m.emissiveMap=E.em;m.emissiveIntensity=t===6?1.3:t===4?1.2:1;}m.needsUpdate=true;return m;}
 function stickWeapon(kind,job,tier=-1){
   const g=new THREE.Group();
   const mat=(c,o={})=>_mat(c,Object.assign({flatShading:false},o));   // 무기는 매끈하게 (보석·수정처럼 각진 것만 따로 flatShading:true)
@@ -8894,7 +8932,7 @@ function stickWeapon(kind,job,tier=-1){
     for(const s of [-1,1]){add(sph(.019,gold,14,10),s*.118,.141,0).scale.set(1,1.15,1);add(lathe([[0,-.004],[.014,-.004],[.016,0],[.014,.004],[0,.004]],gold,14),s*.104,.134,0,0,0,s*-.45);}
     if(tier>=2&&gemM)for(const sz of [-1,1])add(new THREE.Mesh(new THREE.OctahedronGeometry(.017,0),gemM),0,.122,sz*.027).scale.z=.55;   // 미스릴부터 코등이 보석
     add(rbox(.07,.024,.022,steel,.006),0,.152,0);   // 날 밑동
-    add(bladeMesh(straight(.035,.14,L,.2,.88),.016,[steel,edge]),0,0,0);
+    add(bladeMesh(straight(.035,.14,L,.2,.88),.016,[TL?bladeFace(steel,tier,-.04,.04,.14,1.22,true):steel,edge]),0,0,0);   // 등급 새김 (기본 검)
     add(fuller(.0085,.17,.14+L*.82,.0175,tier>=4&&gemM?gemM:dark),0,0,0);   // 룬 등급부터 홈이 빛난다
     if(tier>=7){for(const s of [-1,1]){add(taper([[s*.1,.135,0],[s*.15,.15,0],[s*.19,.185,0],[s*.205,.235,0]],t=>.011*(1-t)+.002,gold,20,8),0,0,0);
       add(taper([[s*.09,.13,0],[s*.13,.17,.0],[s*.15,.215,0]],t=>.008*(1-t)+.0015,gold,16,6),0,0,0);}}   // 망령부터 날개 코등이
@@ -8996,7 +9034,7 @@ function stickWeapon(kind,job,tier=-1){
     if(tier>=4&&gemM)add(fuller(.0045,.1,.28,.0128,gemM),0,0,0);
     if(tier>=7)[-1,1].forEach(s=>add(taper([[s*.05,.07,0],[s*.07,.09,0],[s*.08,.12,0]],t=>.007*(1-t)+.0015,gold,12,6),0,0,0));
     {const sh=new THREE.Shape();sh.moveTo(-.022,.08);sh.lineTo(.022,.08);sh.quadraticCurveTo(.03,.3,.05,.45);sh.quadraticCurveTo(.02,.38,-.004,.33);sh.quadraticCurveTo(-.014,.2,-.022,.08);
-      add(bladeMesh(sh,.012,[steel,edge]),0,0,0);}
+      add(bladeMesh(sh,.012,[TL?bladeFace(steel,tier,-.03,.055,.08,.45):steel,edge]),0,0,0);}
   }else if(kind==='staff'){
     const cleric=job==='cleric'||job==='monk',wizard=job==='wizard',wizz=job==='wizz',bmage=job==='bmage',priest=job==='priest',top=1.17;
     const tube=(pts,r,m,seg=48,rs=6)=>new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),seg,r,rs,false),m);
@@ -9258,12 +9296,12 @@ function stickWeapon(kind,job,tier=-1){
   return g;
 }
 const GRADE_GLOW=[0,0xcfe4ff,0x7fd8ff,0xb27bff,0xffc24a],GRADE_TINT=[0,0xffffff,0x8fc8ff,0xa888e8,0xfff0c0];
-function wpnGrade(g,gr){const c=GRADE_GLOW[gr],seen=new Set();
+function wpnGrade(g,gr,flat){const c=GRADE_GLOW[gr],seen=new Set();
   g.traverse(o=>{if(!o.isMesh)return;for(const m of [].concat(o.material)){if(seen.has(m)||!m.isMeshStandardMaterial)continue;seen.add(m);
     if(m.metalness>=.5){m.metalness*=1-.06*gr;m.color.lerp(new THREE.Color(GRADE_TINT[gr]),[0,.3,.32,.34,.48][gr]);   /* 등급마다 쇠 빛깔: 2 밝은 은 · 3 푸른 강철 · 4 보랏빛 · 5 흰 금 */
       if(!(m.emissiveIntensity>.3&&m.emissive&&m.emissive.getHex())){m.emissive=new THREE.Color(c);m.emissiveIntensity=[0,.06,.12,.18,.22][gr];}}
     else if(m.emissiveIntensity>.3)m.emissiveIntensity*=1+.15*gr;}});   /* 보석·룬처럼 빛나던 곳은 등급마다 더 밝게 */
-  if(gr<2)return;
+  if(gr<2||flat)return;   /* flat: 방패처럼 넓은 것은 빛 조각을 띄우지 않는다 */
   g.updateMatrixWorld(true);const bx=new THREE.Box3().setFromObject(g),sz=new THREE.Vector3();bx.getSize(sz);
   const ax=sz.y>=sz.x&&sz.y>=sz.z?'y':sz.z>=sz.x?'z':'x',hi=Math.abs(bx.max[ax])>=Math.abs(bx.min[ax]),end=hi?bx.max[ax]:bx.min[ax],L=sz[ax];
   const at=new THREE.Vector3((bx.min.x+bx.max.x)/2,(bx.min.y+bx.max.y)/2,(bx.min.z+bx.max.z)/2);at[ax]=end-(hi?1:-1)*L*.18;
@@ -9271,6 +9309,29 @@ function wpnGrade(g,gr){const c=GRADE_GLOW[gr],seen=new Set();
   const other=['x','y','z'].filter(a=>a!==ax);
   for(let k=0;k<n;k++){const a=k/n*Math.PI*2+.4,sp=new THREE.Mesh(new THREE.OctahedronGeometry(.011+.003*gr,0),sm);sp.position.copy(at);sp.position[other[0]]+=Math.cos(a)*R;sp.position[other[1]]+=Math.sin(a)*R;sp.position[ax]+=Math.sin(a*2)*R*.3;sp.scale[ax]=1.6;g.add(sp);}
   if(gr>=4){const rg=new THREE.Mesh(new THREE.TorusGeometry(R*.9,.004,6,40),sm);rg.position.copy(at);if(ax==='y')rg.rotation.x=Math.PI/2;else if(ax==='x')rg.rotation.y=Math.PI/2;g.add(rg);}}
+/* 작은 방패(버클러) 앞면 그림: 등급마다 칠한 바탕과 문장 (2등급부터). 빛나는 문장은 emissive 그림 */
+function shieldFace(t){t=Math.max(0,Math.min(9,t|0));const k='sf'+t;if(_ETCH[k])return _ETCH[k];const S=256,cv=document.createElement('canvas');cv.width=cv.height=S;const x=cv.getContext('2d');
+  const F=[null,null,['#1f3a6a','#d8e4f0'],['#2e5a3a','#c8a050'],['#2a3040','#8ab0ff'],['#9cc4e0','#ffffff'],['#5a1410','#ffb040'],['#2a2034','#b8a0e0'],['#101018','#9070ff'],['#f0ece0','#d8a838']][t]||['#555','#ddd'];
+  x.fillStyle=F[0];x.fillRect(0,0,S,S);
+  for(let i=0;i<220;i++){x.globalAlpha=.06;x.fillStyle=i%2?'#000':'#fff';x.fillRect(Math.random()*S,Math.random()*S,2+Math.random()*6,2+Math.random()*6);}x.globalAlpha=1;
+  let em=null;const E=()=>{if(em)return em;const c=document.createElement('canvas');c.width=c.height=S;em=c.getContext('2d');em.fillStyle='#000';em.fillRect(0,0,S,S);return em;};
+  const c0=S/2,cy=S*(.36/.62);   /* 혹(방패 가운데) 자리 */
+  x.fillStyle=F[1];x.strokeStyle=F[1];x.lineWidth=5;x.strokeRect(10,10,S-20,S-20);   /* 가장자리 안쪽 테 */
+  const star=(c,X,Y,r,n=5)=>{c.beginPath();for(let k=0;k<n*2;k++){const a=k/(n*2)*Math.PI*2-Math.PI/2,rr=k%2?r*.42:r;k?c.lineTo(X+Math.cos(a)*rr,Y+Math.sin(a)*rr):c.moveTo(X+Math.cos(a)*rr,Y+Math.sin(a)*rr);}c.closePath();c.fill();};
+  const rays=(c,n,r0,r1,w)=>{c.lineWidth=w;for(let k=0;k<n;k++){const a=k/n*Math.PI*2;c.beginPath();c.moveTo(c0+Math.cos(a)*r0,cy+Math.sin(a)*r0);c.lineTo(c0+Math.cos(a)*r1,cy+Math.sin(a)*r1);c.stroke();}};
+  if(t===2){rays(x,8,40,95,4);for(const [X,Y] of [[60,40],[196,40]])star(x,X,Y,16);}
+  else if(t===3){x.lineWidth=6;x.beginPath();x.moveTo(c0,cy+40);x.lineTo(c0,S-20);x.stroke();for(let k=0;k<4;k++){const yy=cy+60+k*25;x.beginPath();x.moveTo(c0,yy);x.quadraticCurveTo(c0-30,yy-10,c0-40,yy-30);x.moveTo(c0,yy);x.quadraticCurveTo(c0+30,yy-10,c0+40,yy-30);x.stroke();}x.beginPath();x.arc(c0,cy,62,0,7);x.stroke();}
+  else if(t===4){const e=E();e.strokeStyle=F[1];e.shadowColor=F[1];e.shadowBlur=6;e.lineWidth=4;e.beginPath();e.arc(c0,cy,70,0,7);e.stroke();e.beginPath();e.arc(c0,cy,52,0,7);e.stroke();
+    for(let k=0;k<10;k++){const a=k/10*Math.PI*2,X=c0+Math.cos(a)*61,Y=cy+Math.sin(a)*61;e.beginPath();e.moveTo(X-4,Y-6);e.lineTo(X+4,Y+6);e.moveTo(X+4,Y-6);e.lineTo(X,Y);e.stroke();}x.strokeStyle='#5a6070';x.lineWidth=3;x.beginPath();x.arc(c0,cy,70,0,7);x.stroke();}
+  else if(t===5){x.lineWidth=7;rays(x,6,40,105,7);x.lineWidth=4;for(let k=0;k<6;k++){const a=k/6*Math.PI*2;for(const r of [65,88]){const X=c0+Math.cos(a)*r,Y=cy+Math.sin(a)*r;x.beginPath();x.moveTo(X,Y);x.lineTo(X+Math.cos(a+.8)*14,Y+Math.sin(a+.8)*14);x.moveTo(X,Y);x.lineTo(X+Math.cos(a-.8)*14,Y+Math.sin(a-.8)*14);x.stroke();}}}
+  else if(t===6){const e=E();for(const [col,sc] of [['#ff5a10',1],['#ffc040',.6]]){e.fillStyle=col;e.beginPath();e.moveTo(c0,cy-110*sc);e.bezierCurveTo(c0+70*sc,cy-40*sc,c0+60*sc,cy+60*sc,c0,cy+90*sc);e.bezierCurveTo(c0-60*sc,cy+60*sc,c0-70*sc,cy-40*sc,c0,cy-110*sc);e.fill();}
+    x.fillStyle='#7a2a10';x.beginPath();x.moveTo(c0,cy-110);x.bezierCurveTo(c0+70,cy-40,c0+60,cy+60,c0,cy+90);x.bezierCurveTo(c0-60,cy+60,c0-70,cy-40,c0,cy-110);x.fill();}
+  else if(t===7){x.beginPath();x.arc(c0,cy,80,0,7);x.fill();x.fillStyle=F[0];x.beginPath();x.arc(c0+28,cy-14,72,0,7);x.fill();x.fillStyle=F[1];for(const [X,Y] of [[60,50],[200,190],[190,60]])star(x,X,Y,8);}
+  else if(t===8){const e=E();e.strokeStyle=F[1];e.lineWidth=5;e.beginPath();e.ellipse(c0,cy,95,48,0,0,7);e.stroke();e.fillStyle='#d8c8ff';e.beginPath();e.ellipse(c0,cy,14,40,0,0,7);e.fill();
+    for(let k=0;k<12;k++){const a=k/12*Math.PI*2;e.lineWidth=2;e.beginPath();e.moveTo(c0+Math.cos(a)*100,cy+Math.sin(a)*55);e.lineTo(c0+Math.cos(a)*125,cy+Math.sin(a)*80);e.stroke();}}
+  else if(t===9){x.lineWidth=5;rays(x,16,48,120,5);x.beginPath();x.arc(c0,cy,58,0,7);x.stroke();const e=E();e.strokeStyle='#ffe090';e.lineWidth=2;e.globalAlpha=.7;rays(e,16,48,120,2);}
+  const mk=c=>{const tx=new THREE.CanvasTexture(c);tx.repeat.set(1/.48,1/.62);tx.offset.set(.5,.36/.62);tx.anisotropy=4;if(THREE.sRGBEncoding)tx.encoding=THREE.sRGBEncoding;return tx;};
+  return _ETCH[k]={map:mk(cv),em:em?mk(em.canvas):null};}
 // 방패: 'buckler' 전사의 나무 방패(판자 + 쇠테 + 가운데 혹), 'tower' 방패병의 큰 방패(강철판 + 금테 + 문장)
 // 앞면이 +z, 손잡이가 원점 근처. tier가 높으면 보석이 빛난다.
 function makeShield(kind='buckler',tier=0){
@@ -9364,17 +9425,22 @@ function makeShield(kind='buckler',tier=0){
     add(new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,.22,8),lea),.05,.02,-.095);
     for(const y of [.11,-.07])add(new THREE.Mesh(new THREE.BoxGeometry(.03,.03,.05),dark),.05,y,-.075);
   }else{
-    const wood=[0x8a5a32,0x7a4e2a,0x946238].map(c=>mat(c,{roughness:.85})),iron=mat(0x5d636b,{metalness:.6,roughness:.4,flatShading:false});
+    /* 등급(tier 0~9): 쇠 테·혹 빛깔이 등급 쇠 색을 따르고, 2등급부터 판자 위에 칠한 바탕과 문장(shieldFace) */
+    const TL=tierLook(tier),painted=tier>=2,wood=[0x8a5a32,0x7a4e2a,0x946238].map(c=>mat(c,{roughness:.85})),
+      iron=mat(new THREE.Color(0x5d636b).lerp(new THREE.Color(TL.metal),tier>=2?.55:.15).getHex(),{metalness:.65,roughness:.35,flatShading:false}),
+      bossM=tier>=2?mat(TL.acc,{metalness:.75,roughness:.28,flatShading:false}):iron;
     const W=.24,H=.62;
-    // 판자 세 장을 방패 모양으로 자른 것처럼: 모양 전체 + 판자 사이 홈
-    add(ext(heater(W,H),.04,wood[0],.008),0,0,-.02);
-    for(const x of [-W/3,W/3])add(new THREE.Mesh(new THREE.BoxGeometry(.012,H*.88,.01),mat(0x4a2e18)),x,-.03,.03);
+    // 판자 세 장을 방패 모양으로 자른 것처럼: 모양 전체 + 판자 사이 홈 (칠한 방패는 앞면 그림)
+    if(painted){const F=shieldFace(tier),fm=mat(0xffffff,{roughness:.55,flatShading:false,map:F.map});if(F.em){fm.emissive=new THREE.Color(0xffffff);fm.emissiveMap=F.em;fm.emissiveIntensity=1.1;}
+      add(new THREE.Mesh(new THREE.ExtrudeGeometry(heater(W,H),{depth:.04,bevelEnabled:true,bevelThickness:.008,bevelSize:.008,bevelSegments:1,curveSegments:10}),[fm,wood[0]]),0,0,-.02);}
+    else{add(ext(heater(W,H),.04,wood[0],.008),0,0,-.02);
+      for(const x of [-W/3,W/3])add(new THREE.Mesh(new THREE.BoxGeometry(.012,H*.88,.01),mat(0x4a2e18)),x,-.03,.03);}
     add(ring(heater(W+.028,H+.05),heater(W-.008,H-.015),.03,iron),0,0,.008);
-    add(new THREE.Mesh(new THREE.BoxGeometry(W*2,.05,.02),iron),0,.12,.035);
-    add(new THREE.Mesh(new THREE.BoxGeometry(W*1.8,.05,.02),iron),0,-.12,.035);
-    add(new THREE.Mesh(new THREE.SphereGeometry(.07,14,10,0,Math.PI*2,0,Math.PI/2),iron),0,0,.03,Math.PI/2,0,0);   // 가운데 혹
-    add(new THREE.Mesh(new THREE.TorusGeometry(.072,.012,5,16),iron),0,0,.035);
-    for(const [x,y] of [[-.18,.12],[.18,.12],[-.16,-.12],[.16,-.12],[0,.22],[0,-.26]])add(new THREE.Mesh(new THREE.SphereGeometry(.014,6,5),iron),x,y,.045);
+    if(!painted){add(new THREE.Mesh(new THREE.BoxGeometry(W*2,.05,.02),iron),0,.12,.035);
+      add(new THREE.Mesh(new THREE.BoxGeometry(W*1.8,.05,.02),iron),0,-.12,.035);}
+    add(new THREE.Mesh(new THREE.SphereGeometry(.07,18,12,0,Math.PI*2,0,Math.PI/2),bossM),0,0,.03,Math.PI/2,0,0);   // 가운데 혹
+    add(new THREE.Mesh(new THREE.TorusGeometry(.072,.012,8,24),iron),0,0,.035);
+    for(const [x,y] of painted?[[-.2,.2],[.2,.2],[0,.22],[-.2,-.04],[.2,-.04],[0,-.31]]:[[-.18,.12],[.18,.12],[-.16,-.12],[.16,-.12],[0,.22],[0,-.26]])add(new THREE.Mesh(new THREE.SphereGeometry(.014,8,6),iron),x,y,painted?.026:.045);
     // 뒷면: 가로 받침목 두 개, 가죽 팔띠, 손잡이 막대
     const lea=mat(0x5a3a22,{roughness:.85});
     for(const y of [.14,-.14])add(new THREE.Mesh(new THREE.BoxGeometry(W*1.7,.05,.025),wood[1]),0,y,-.035);
@@ -9384,6 +9450,8 @@ function makeShield(kind='buckler',tier=0){
     for(const y of [0,-.12])add(new THREE.Mesh(new THREE.BoxGeometry(.025,.025,.07),iron),0,y,-.07);
     if(tier>=4)add(new THREE.Mesh(new THREE.OctahedronGeometry(.03,0),mat(gemC,{emissive:gemC,emissiveIntensity:.8})),0,0,.1);
   }
+  /* 쉴더·방패병 방패의 등급 (2~5등급): 무기와 같이 쇠붙이에 등급 빛이 돈다 */
+  if(kind!=='buckler'){const t0=JW_T0[kind==='tower'?'guardian':'shielder'];if(t0!=null&&tier>=0){const gr=Math.max(0,Math.min(4,tier-t0));if(gr>0)wpnGrade(g,gr,true);}}
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   return g;
 }
