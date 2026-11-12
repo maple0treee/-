@@ -7720,6 +7720,27 @@ MON2_BUILD.mackerel=makeMackerelMesh;
 
 /* ---------- 슬라임: 얼굴 없는 반투명 젤리 덩어리. 안에 삼킨 것들이 떠 있다 (종류마다 다르다) ----------
    몸 겉면은 셰이더로 천천히 출렁이고, 가장자리는 빛을 받아 밝다. 움직일 때는 눌렸다 늘어나며 튀어 오른다 */
+
+/* ---------- 슬라임 꾸밈: 겉에 붙은 것(가시·나무껍질·이끼·얼음·굳은 껍질 …)과 몸 속에 삼킨 것(뼈·해골·동전 …) ----------
+   tools/monbake/slimedeco.js 로 빚어 monbake/slimedeco.json 한 파일에 무리마다 담았다. 받기 전에는 옛 작은 조각이 보이다가 받으면 바꿔 단다 */
+const SLD={ver:'1',d:null,req:null,mats:{},kit:{
+  slime:['bone','coins'],sandslime:['sand','skull','pebbles'],rockslime:['stones','pebbles'],stoneslime:['stones','skull'],
+  emberslime:['crust','crack','coal'],cinderslime:['crust','crack','coal'],lavaslime:['crust','crack'],smokeslime:['puff','coal'],
+  mossslime:['moss','leafin'],leafslime:['leaf','leafin'],rotslime:['rot','bone'],thornslime:['thorn','leafin'],barkslime:['bark','beetle'],
+  resinslime:['amber','beetle'],pollenslime:['flower','leafin'],frostslime:['ice','fishbone'],snowslime:['snow','bone'],crystalslime:['crystal','cryin'],
+  tideslime:['weed','shell','fishbone'],mistslime:['puff','skull'],cloudslime:['puff','coins'],mudslime:['mud','pebbles'],clayslime:['mud','pebbles']},
+  tint:{smokeslime:{puff:0x5a5654},mistslime:{puff:0xd8e0ea},mudslime:{mud:0x6a4c34},clayslime:{mud:0xd0906a}}};
+function sldLoad(){if(SLD.req)return SLD.req;
+  return SLD.req=fetch(MONB.dir+'slimedeco.json?v='+SLD.ver).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).then(r=>{SLD.d={};for(const p of r.lod[0])SLD.d[p.g]={geo:monBakeGeo(p),m:r.mats[p.g]||{}};
+    for(const m of monsters){const U=m.mesh&&m.mesh.userData;if(U&&U.shape&&!U.deco.length&&m.dying===null)sldDress(m.mesh);}}).catch(e=>{SLD.req=null;console.warn('slimedeco',e);});}
+function sldMat(g,tint){const k=g+(tint||'');if(SLD.mats[k])return SLD.mats[k];const o=SLD.d[g].m;
+  const m=o.glow?new THREE.MeshBasicMaterial({vertexColors:true}):new THREE.MeshStandardMaterial({vertexColors:true,roughness:o.r??.8,metalness:o.m||0,transparent:!!o.tr,opacity:o.tr||1});
+  if(tint)m.color.set(tint);return SLD.mats[k]=m;}
+function sldSmoke(){return SLD.mats.smoke||(SLD.mats.smoke=new THREE.MeshStandardMaterial({vertexColors:true,color:0x5a5654,roughness:1,transparent:true,opacity:.55,depthWrite:false}));}
+function sldDress(g){const U=g.userData,ty=U.slTy,kit=SLD.kit[ty];if(!kit||!U.shape)return;if(!SLD.d){sldLoad();return;}
+  for(const o of [...U.shape.children])if(o.userData.prim)U.shape.remove(o);
+  const T=SLD.tint[ty]||{};
+  for(const k of kit){const D=SLD.d[k];if(!D)continue;const me=new THREE.Mesh(D.geo,k==='puff'&&ty==='smokeslime'?sldSmoke():sldMat(k,T[k]));me.castShadow=false;me.renderOrder=D.m.tr?2:0;if(k==='puff')me.userData.puff=1;U.shape.add(me);U.deco.push(me);}}
 function makeJellySlime(D){
   const g=new THREE.Group(),body=new THREE.Group(),shape=new THREE.Group();g.add(body);body.add(shape);shape.scale.y=1/.78;body.scale.y=.78;
   const ty=D.tyKey||'',c=D.color??0x7fd067,mats=[];
@@ -7752,12 +7773,12 @@ function makeJellySlime(D){
     rockslime:[()=>rock(),()=>rock(0x6a645a,.09),()=>rock(0x8a8478,.06)],emberslime:[coal,coal,()=>rock(0x3a2a20)],mossslime:[leaf,leaf,()=>rock(0x5a6a4a)],frostslime:[()=>shard(0xe8f4ff),()=>shard(0xc8e4ff),bone],
     tideslime:[shell,shell,()=>rock(0x6a7a80)],crystalslime:[()=>shard(0xb070ff,0x5a20a0),()=>shard(0xd0a0ff,0x5a20a0),()=>shard(0x9a60e0,0x40107a)]}[ty]||[bone,()=>rock()];
   const SPOT=[[.24,.26,.1],[-.14,.6,-.2],[.02,.3,-.32],[-.26,.24,-.14]];   /* 얼굴처럼 보이지 않게 높이·깊이를 어긋나게 */
-  for(let q=0;q<kit.length;q++){const o=kit[q](),sp=SPOT[q%SPOT.length];o.position.set(sp[0]+(rnd()-.5)*.06,sp[1]+(rnd()-.5)*.06,sp[2]+(rnd()-.5)*.06);o.rotation.set(rnd()*3,rnd()*3,rnd()*3);shape.add(o);}
+  for(let q=0;q<kit.length;q++){const o=kit[q](),sp=SPOT[q%SPOT.length];o.userData.prim=1;o.position.set(sp[0]+(rnd()-.5)*.06,sp[1]+(rnd()-.5)*.06,sp[2]+(rnd()-.5)*.06);o.rotation.set(rnd()*3,rnd()*3,rnd()*3);shape.add(o);}
   /* 바위 슬라임: 겉에 박힌 돌 */
-  if(ty==='rockslime')for(let q=0;q<9;q++){const a=q/9*Math.PI*2+rnd(),el=rnd()*.9,o=rock(q%2?0x8a8478:0x6e685e,.1+rnd()*.06);o.position.set(Math.cos(a)*.62*Math.cos(el),.33+.6*Math.sin(el),Math.sin(a)*.62*Math.cos(el));o.rotation.set(rnd()*3,rnd()*3,0);shape.add(o);}
+  if(ty==='rockslime')for(let q=0;q<9;q++){const a=q/9*Math.PI*2+rnd(),el=rnd()*.9,o=rock(q%2?0x8a8478:0x6e685e,.1+rnd()*.06);o.position.set(Math.cos(a)*.62*Math.cos(el),.33+.6*Math.sin(el),Math.sin(a)*.62*Math.cos(el));o.rotation.set(rnd()*3,rnd()*3,0);o.userData.prim=1;shape.add(o);}
   /* 바닥에 번진 젖은 자국 */
   const pud=new THREE.Mesh(new THREE.CircleGeometry(.95,24),new THREE.MeshBasicMaterial({color:shade(c,.35),transparent:true,opacity:.28,depthWrite:false}));pud.rotation.x=-Math.PI/2;pud.position.y=.015;g.add(pud);
-  const U=g.userData;U.mats=mats;U.body=body;U.h=1.05;U.crown=null;U.flame=null;
+  const U=g.userData;U.mats=mats;U.body=body;U.h=1.05;U.crown=null;U.flame=null;U.shape=shape;U.slTy=ty;U.deco=[];
   if(D.boss){const gold=mat(0xf0c95f,{metalness:.7,roughness:.3}),crown=new THREE.Group();const band=new THREE.Mesh(new THREE.CylinderGeometry(.3,.33,.14,14,1,true),gold);crown.add(band);
     for(let q=0;q<6;q++){const a=q/6*Math.PI*2,sp=new THREE.Mesh(new THREE.ConeGeometry(.06,.18,5),gold);sp.position.set(Math.cos(a)*.3,.15,Math.sin(a)*.3);crown.add(sp);}
     crown.position.y=1.12;crown.rotation.z=.12;g.add(crown);U.crown=crown;}
@@ -7772,8 +7793,14 @@ function makeJellySlime(D){
       else{const k=(u-.8)/.2;sy=1+Math.sin(k*Math.PI*2)*.04*(1-k);}}
     else{S.ph+=dt*.4;sy=1+Math.sin(S.ph*6.28)*.035;sx=1-Math.sin(S.ph*6.28)*.02;}
     if(windup){sy=.72;sx=1.2;hy=0;}else if(m.lunge>0){sy=.9;sx=.92;}
-    body.scale.set(sx,.78*sy,sx*(m.lunge>0?1.25:1));body.position.y=hy;pud.scale.setScalar(1+(sx-1)*.6-hy*.4);pud.material.opacity=.28*(1-hy*1.4);};
+    body.scale.set(sx,.78*sy,sx*(m.lunge>0?1.25:1));body.position.y=hy;pud.scale.setScalar(1+(sx-1)*.6-hy*.4);pud.material.opacity=.28*(1-hy*1.4);
+    for(const o of U.deco)if(o.userData.puff){o.rotation.y+=dt*.25;o.position.y=Math.sin(bm.userData.t.value*1.3)*.02;}};
+  /* 쓰러짐: 녹아 퍼지며 바닥에 스민다 */
+  U.dieLen=1.3;U.die=(m,dt)=>{const k=Math.min(1,m.dying/1.1),e=1-Math.pow(1-k,2);bm.userData.t.value+=dt*3;
+    body.scale.set(1+.45*e,.78*Math.max(.06,1-.92*e),1+.45*e);body.position.y=0;pud.scale.setScalar(1+.9*e);pud.material.opacity=.28+.2*e-.48*Math.max(0,(m.dying-.9)/.4);
+    bm.opacity=(opaque?.9:.7)*(1-.6*e);if(U.flame)U.flame.scale.setScalar(Math.max(.01,1-e));for(const o of U.deco)o.position.y=-.25*e;};
   U.bossAnim=dt=>{bm.userData.t.value+=dt;};
+  sldDress(g);
   return g;}
 
 /* ---------- 낙타: 긴 다리, 혹 하나, 아래로 굽었다 올라가는 긴 목, 늘어진 입술. 같은 쪽 다리를 함께 내딛는다 ---------- */
