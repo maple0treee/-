@@ -14610,7 +14610,9 @@ await BOOT.y();await (async function buildTown(){
 /* CIT_SLABS: 주민이 밟는 돋운 바닥 {x0,x1,z0,z1,y,f}. 주민은 땅 높이(heightAt)로 걷는데, 광장 시청 아치 길처럼 돌판을 0.6m 돋운 곳에서는
    발이 돌판 속에 묻혀 보였다. 여기 넣은 바닥 위에서는 그 높이를 밟고, 앞뒤 계단 폭(f) 안에서는 천천히 오르내린다 */
 const CIT_SLABS=[];
-function citGround(x,z){let h=heightAt(x,z);for(const s of CIT_SLABS){if(x<s.x0||x>s.x1)continue;const dz=Math.max(s.z0-z,z-s.z1,0);if(dz>=s.f)continue;const y=s.y*(1-dz/s.f);if(y>h)h=y;}return h;}
+/* 강 돌다리 윗면 (엑시즈): {x0,x1,z0,z1 (둘레 네모), fn(x,z) → 높이 또는 null}. 다리 밑은 강물이라 땅 높이 대신 이것을 디딘다 (주민·마차·짐승) */
+const BR_WALK=[];function brWalkY(x,z){for(let i=0;i<BR_WALK.length;i++){const b=BR_WALK[i];if(x<b.x0||x>b.x1||z<b.z0||z>b.z1)continue;const h=b.fn(x,z);if(h!=null)return h;}return null;}
+function citGround(x,z){let h=heightAt(x,z);if(BR_WALK.length){const bh=brWalkY(x,z);if(bh!=null&&bh>h)h=bh;}for(const s of CIT_SLABS){if(x<s.x0||x>s.x1)continue;const dz=Math.max(s.z0-z,z-s.z1,0);if(dz>=s.f)continue;const y=s.y*(1-dz/s.f);if(y>h)h=y;}return h;}
 const SURFACES=[];const CEILS=[];const HDOORS=[];const SWINGS=[];const HEARTHS=[];   /* CEILS: 건물 천장 아랫면 (ceilAdd로 넣는다, 3인칭 카메라가 뚫고 나가지 않게) */ // {x0,x1,z0,z1,y} 평평한 바닥, {..., ramp:'x', ya, yb} x0→x1로 높아지는 계단
 const SWAMP_WY=-1.25;
 /* 머리 위 천장 높이 (없으면 null): 건물 천장(CEILS 아랫면)과 위층 바닥·계단(SURFACES, 발보다 2.2m 넘게 위, 두께 0.3m)의 아랫면.
@@ -14620,7 +14622,7 @@ const HEAD_H=1.75;
    전에는 '지금 발 높이'를 기준으로 2.2m 위만 봐서, 한 번 뛰어 천장 바로 밑까지 오르면 그 천장을 못 보고 더블 점프로 뚫었다 */
 function headCeil(x,z,y,g){if(g==null)g=y;let c=null;const ok=v=>v>=g+HEAD_H-.05&&v>y+HEAD_H-.5&&(c==null||v<c);
   for(const s of CEILS){const dx=x-s.cx,dz=z-s.cz,lx=dx*s.cs-dz*s.sn,lz=dx*s.sn+dz*s.cs;if(lx>s.hw||lx<-s.hw||lz>s.hd||lz<-s.hd)continue;if(ok(s.y))c=s.y;}
-  for(const s of SURFACES){if(x<s.x0||x>s.x1||z<s.z0||z>s.z1)continue;let h=s.y;if(s.ramp==='x')h=s.ya+(s.yb-s.ya)*(x-s.x0)/(s.x1-s.x0);else if(s.ramp==='z')h=s.ya+(s.yb-s.ya)*(z-s.z0)/(s.z1-s.z0);if(s.sp){h=surfSp(s,x,z,h);if(h==null)continue;}
+  for(const s of SURFACES){if(x<s.x0||x>s.x1||z<s.z0||z>s.z1)continue;let h=s.y;if(s.ramp==='x')h=s.ya+(s.yb-s.ya)*(x-s.x0)/(s.x1-s.x0);else if(s.ramp==='z')h=s.ya+(s.yb-s.ya)*(z-s.z0)/(s.z1-s.z0);if(s.fn){h=s.fn(x,z);if(h==null)continue;}else if(s.sp){h=surfSp(s,x,z,h);if(h==null)continue;}
     if(ok(h-.3))c=h-.3;}
   const hc=hallCeil(x,z);if(hc!=null&&ok(hc))c=hc;   /* 길드 회관·지하실 천장 */
   return c;}
@@ -14629,7 +14631,7 @@ function floorAt(x,z,y){
   // 늪의 깊은 물에서는 헤엄친다 (머리가 물 밖에 있게)
   if(z>20&&z<108&&Math.abs(x)<44&&Math.hypot(x,z-64)<39.5&&g<SWAMP_WY-1.2)g=SWAMP_WY-1.2;
   for(const s of SURFACES){if(x<s.x0||x>s.x1||z<s.z0||z>s.z1)continue;
-    let h=s.y;if(s.ramp==='x')h=s.ya+(s.yb-s.ya)*(x-s.x0)/(s.x1-s.x0);else if(s.ramp==='z')h=s.ya+(s.yb-s.ya)*(z-s.z0)/(s.z1-s.z0);if(s.sp){h=surfSp(s,x,z,h);if(h==null)continue;}
+    let h=s.y;if(s.ramp==='x')h=s.ya+(s.yb-s.ya)*(x-s.x0)/(s.x1-s.x0);else if(s.ramp==='z')h=s.ya+(s.yb-s.ya)*(z-s.z0)/(s.z1-s.z0);if(s.fn){h=s.fn(x,z);if(h==null)continue;}else if(s.sp){h=surfSp(s,x,z,h);if(h==null)continue;}
     if(h<=y+.6&&h>g)g=h;}
   for(const s of ROOFS){if(s.y<=y+.6&&s.y>g&&(x-s.x)**2+(z-s.z)**2<s.r*s.r)g=s.y;}
   // 높이(h)가 있는 물체(상자·탁자·우물 등)는 위에 올라서면 그 꼭대기를 평평한 바닥으로 쓴다 (전에는 바닥이 없어 미끄러져 내려왔다)
@@ -16361,6 +16363,8 @@ const MARCUS_RIVER_W=20,MARCUS_RIVER_DEEP=2.4;
 const MARCUS_HARBOR_PX=[[905,775],[1250,778],[1310,850],[1250,950],[1000,955],[900,860]];
 /* 안쪽 강 다리 (그림 x 자리) */
 const MARCUS_BRIDGES_PX=[600,763,850,903];
+/* 새 다리 (그림 점 a→b 를 잇는다): st가 있으면 그 길이 다리로 이어진다(길이 강에서 끊기지 않는다). 없으면 다리 끝에서 두 점까지 돌길을 따로 깐다 */
+const MARCUS_BRIDGES_NEW=[{a:[430,420],b:[430,620],w:9,st:'주거 세로 1'},{a:[520,581],b:[550,650],w:8},{a:[905,720],b:[987,700],w:9}];
 /* 왕궁 언덕 (그림 다각형) */
 const MARCUS_HILL_PX=[[600,140],[640,80],[800,40],[930,55],[965,150],[950,260],[880,300],[760,300],[640,285],[585,210]];
 const MARCUS_HILL_H=13;
@@ -16456,7 +16460,21 @@ function marcusPlan(){if(MARCUS.plan)return MARCUS.plan;
     if(inPoly(z.pts,x,y))return true;return m>0&&polyDist(z.pts,x,y)<m;};
   const riverDist=(x,y)=>polyDist(river,x,y,false);
   const riverNear=(x,y)=>{let best=1e9,bx=0,by=0,ux=1,uy=0;for(let i=0;i<river.length-1;i++){const a=river[i],b=river[i+1],vx=b[0]-a[0],vy=b[1]-a[1],L=vx*vx+vy*vy||1,k=Math.max(0,Math.min(1,((x-a[0])*vx+(y-a[1])*vy)/L)),px=a[0]+vx*k,py=a[1]+vy*k,d=Math.hypot(px-x,py-y);if(d<best){best=d;bx=px;by=py;const l=Math.sqrt(L);ux=vx/l;uy=vy/l;}}return {d:best,x:bx,y:by,ux,uy};};
-  const bridgeAt=(x,y)=>{const n=riverNear(x,y);if(n.d>MARCUS_RIVER_W/2+3)return false;return bridges.some(bx=>Math.abs(bx-n.x)<7);};
+  /* 다리 자리: 옛 다리 넷(그림 x)과 새 다리. 다리마다 강 가운데 점(x,y), 강 방향 u, 비스듬함 T(다리 방향이 강에 곧은 쪽에서 강 방향으로 기운 tan), 너비 w, 반길이 XL.
+     다리 좌표: lx = 강을 가로지르는 쪽(강 가운데에서 잰 거리), lz = 강 방향. 다리 몸·난간은 lz = lx*T 줄을 따라 간다 */
+  const BR_XL=12.6,brs=[];
+  const brMake=(c,dx,dy,w,o)=>{const nx=c.uy,ny=-c.ux,L=Math.hypot(dx,dy);dx/=L;dy/=L;if(dx*nx+dy*ny<0){dx=-dx;dy=-dy;}let T=(dx*c.ux+dy*c.uy)/(dx*nx+dy*ny);if(Math.abs(T)>.85)T=Math.sign(T)*.85;return {x:c.x,y:c.y,ux:c.ux,uy:c.uy,T,w,XL:BR_XL,k:Math.sqrt(1+T*T),...o};};
+  const brLocal=(b,x,y)=>{const dx=x-b.x,dy=y-b.y,lx=dx*b.uy-dy*b.ux;return [lx,dx*b.ux+dy*b.uy-lx*b.T];};
+  const bridgeFoot=(x,y,m=0)=>{for(const b of brs){const [lx,lz]=brLocal(b,x,y);if(Math.abs(lx)<b.XL+m&&Math.abs(lz)<(b.w/2+.95)*b.k+m)return b;}return null;};
+  /* 옛 다리 자리는 길 짜기에 예전 그대로 쓴다 (길·집 자리가 바뀌지 않게). 새 다리는 st 길에만 */
+  const bridgeAt=(x,y,st)=>{const n=riverNear(x,y);if(n.d>MARCUS_RIVER_W/2+3)return false;if(bridges.some(bx=>Math.abs(bx-n.x)<7))return true;
+    if(st&&st.name)for(const b of brs){if(b.st!==st.name)continue;const [lx,lz]=brLocal(b,x,y);if(Math.abs(lx)<b.XL&&Math.abs(lz)<(b.w/2+.95)*b.k)return true;}return false;};
+  {const segX=(a,b,p,q)=>{const rx=b[0]-a[0],ry=b[1]-a[1],sx=q[0]-p[0],sy=q[1]-p[1],den=rx*sy-ry*sx;if(Math.abs(den)<1e-9)return null;const t=((p[0]-a[0])*sy-(p[1]-a[1])*sx)/den,u=((p[0]-a[0])*ry-(p[1]-a[1])*rx)/den;return t>=0&&t<=1&&u>=0&&u<=1?{t,u}:null;};
+    const riverHit=(a,b)=>{for(let i=0;i<river.length-1;i++){const p=river[i],q=river[i+1],h=segX(a,b,p,q);if(h){const L=Math.hypot(q[0]-p[0],q[1]-p[1]);return {x:p[0]+(q[0]-p[0])*h.u,y:p[1]+(q[1]-p[1])*h.u,ux:(q[0]-p[0])/L,uy:(q[1]-p[1])/L};}}return null;};
+    for(const bx of bridges){let c=null;for(let i=0;i<river.length-1&&!c;i++){const a=river[i],b=river[i+1];if((a[0]-bx)*(b[0]-bx)>0)continue;const k=Math.abs(b[0]-a[0])<1e-6?0:(bx-a[0])/(b[0]-a[0]),L=Math.hypot(b[0]-a[0],b[1]-a[1]);c={x:a[0]+(b[0]-a[0])*k,y:a[1]+(b[1]-a[1])*k,ux:(b[0]-a[0])/L,uy:(b[1]-a[1])/L};}
+      if(!c)continue;let best=null;for(const st of streets)for(let i=0;i<st.p.length-1;i++){const h=riverHit(st.p[i],st.p[i+1]);if(h&&Math.hypot(h.x-c.x,h.y-c.y)<9&&(!best||st.w>best.w))best={w:st.w,dx:st.p[i+1][0]-st.p[i][0],dy:st.p[i+1][1]-st.p[i][1]};}
+      brs.push(best?brMake(c,best.dx,best.dy,Math.min(best.w,14),{old:1}):brMake(c,c.uy,-c.ux,10,{old:1}));}
+    for(const d of MARCUS_BRIDGES_NEW){const a=G(d.a[0],d.a[1]),b=G(d.b[0],d.b[1]),c=riverHit(a,b);if(c)brs.push(brMake(c,b[0]-a[0],b[1]-a[1],d.w,{st:d.st||null,a,b}));}}
   /* 바다: 동문~남문 쪽(남동)만 성벽 밖 10m 둑 너머가 바다이고, 섬 끝 너머로 그대로 이어진다. 북·서는 해자 없이 들판과 숲.
      남문·동문 앞은 바다 위로 뻗은 돌둑 길(가운데 13m는 뭍, 양옆으로 비스듬히 잠긴다) */
   const SEA_A=.95,SEA_HW=1.32;
@@ -16493,17 +16511,17 @@ function marcusPlan(){if(MARCUS.plan)return MARCUS.plan;
   const zone=id=>zones.find(z=>z.id===id);
   let _wpX=NaN,_wpY=NaN,_wpV=0;const waterDepth=(x,y)=>{if(x===_wpX&&y===_wpY)return _wpV;const v=waterDepth0(x,y);_wpX=x;_wpY=y;return _wpV=v;};
   const waterDepth0=(x,y)=>{if(inHarbor(x,y,0)){if(wallDist(x,y)>-2)return 3.2;const d=polyDist(harbor,x,y);return 3.2*smooth(0,1.8,d);}   /* 부두 바로 아래부터 깊게 (얕은 둔덕이 포석처럼 보이지 않게) */   /* 성벽 밖으로 나간 항구 가장자리는 얕은 둔덕 없이 깊게 */
-    const wd=wallDist(x,y);if(wd<0){const rd=riverDist(x,y);if(rd<MARCUS_RIVER_W/2+2&&!bridgeAt(x,y))return MARCUS_RIVER_DEEP*smooth(MARCUS_RIVER_W/2-1,MARCUS_RIVER_W/2-4.5,rd);   /* 둑 선(W/2+.5) 안쪽에서부터 내려간다: 땅 그물이 성겨도 둑 뒤 땅은 평평하게 */return 0;}
+    const wd=wallDist(x,y);if(wd<0){const rd=riverDist(x,y);if(rd<MARCUS_RIVER_W/2+2)return MARCUS_RIVER_DEEP*smooth(MARCUS_RIVER_W/2-1,MARCUS_RIVER_W/2-4.5,rd);   /* 둑 선(W/2+.5) 안쪽에서부터 내려간다: 땅 그물이 성겨도 둑 뒤 땅은 평평하게 */return 0;}
     /* 성벽 밖으로 나간 항구 물은 해자와 이어 준다 (그 사이에 물 위로 뜬 듯한 땅 띠가 남지 않게) */
     {const rd=riverDist(x,y);if(rd<MARCUS_RIVER_W/2+2)return Math.max(moatDepth(x,y),MARCUS_RIVER_DEEP*smooth(MARCUS_RIVER_W/2-1,MARCUS_RIVER_W/2-4.5,rd));}   /* 서쪽 들판에서 흘러드는 강 */
     return Math.max(moatDepth(x,y),polyDist(harbor,x,y)<26?3.2*smooth(26,14,polyDist(harbor,x,y)):0);};
   /* 길 끝이 물(강·항구) 위에 걸치면 뭍까지 잘라 낸다: 물 위에 떠 있는 길이 생기지 않게 (다리 자리는 그대로) */
-  for(const st of streets){const P=st.p;if(P.length<2)continue;const wet=(x,y)=>waterDepth(x,y)>0||(wallDist(x,y)<0&&riverDist(x,y)<MARCUS_RIVER_W/2+st.w/2+1.5&&!bridgeAt(x,y))||inHarbor(x,y,st.w/2+1.5);
+  for(const st of streets){const P=st.p;if(P.length<2)continue;const wet=(x,y)=>(waterDepth(x,y)>0&&!bridgeAt(x,y,st))||(wallDist(x,y)<0&&riverDist(x,y)<MARCUS_RIVER_W/2+st.w/2+1.5&&!bridgeAt(x,y,st))||inHarbor(x,y,st.w/2+1.5);
     for(let pass=0;pass<2;pass++){const i0=pass?P.length-1:0,i1=pass?P.length-2:1;if(P.length<2)break;let [ax,ay]=P[i0];const [bx,by]=P[i1];if(!wet(ax,ay))continue;
       const L=Math.hypot(bx-ax,by-ay);let t=0,found=false;for(t=1;t<L-1;t+=1){const x=ax+(bx-ax)*t/L,y=ay+(by-ay)*t/L;if(!wet(x,y)){found=true;break;}}
       if(found){P[i0]=[ax+(bx-ax)*(t+1)/L,ay+(by-ay)*(t+1)/L];}else{P.splice(i0,1);}}}
   /* 길 가운데가 물(강·항구)을 다리 없이 건너면 그 토막을 없앤다: 길을 마른 구간들로 쪼갠다 */
-  {const out=[];for(const st of streets){const P=st.p;if(P.length<2){continue;}const wet=(x,y)=>(waterDepth(x,y)>0&&!bridgeAt(x,y))||inHarbor(x,y,st.w/2+1);
+  {const out=[];for(const st of streets){const P=st.p;if(P.length<2){continue;}const wet=(x,y)=>(waterDepth(x,y)>0&&!bridgeAt(x,y,st))||inHarbor(x,y,st.w/2+1);
       const runs=[];let cur=[];const pushPt=(pt)=>{cur.push(pt);};
       for(let i=0;i<P.length-1;i++){const [ax,ay]=P[i],[bx,by]=P[i+1],L=Math.hypot(bx-ax,by-ay);let wasWet=wet(ax,ay);if(!wasWet&&!cur.length)pushPt([ax,ay]);
         for(let t=1;t<=L;t+=1){const x=ax+(bx-ax)*Math.min(t,L)/L,y=ay+(by-ay)*Math.min(t,L)/L,w=wet(x,y);
@@ -16529,7 +16547,7 @@ function marcusPlan(){if(MARCUS.plan)return MARCUS.plan;
       const sx=bx-u1x*cut,sy=by-u1y*cut,ex=bx+u2x*cut,ey=by+u2y*cut;
       for(let k=0;k<=n;k++){const t=k/n,mx=(1-t)*(1-t)*sx+2*(1-t)*t*bx+t*t*ex,my=(1-t)*(1-t)*sy+2*(1-t)*t*by+t*t*ey;out.push([mx,my]);}}   /* 이차 곡선으로 근사 */
     out.push(P[P.length-1]);st.p=out;}
-  return MARCUS.plan={hillStairs,onPlateau,wall,gates,river,harbor,hill,zones,streets,piazze,bridges,inPoly,segDist,polyDist,wallDist,inZone,riverDist,riverNear,bridgeAt,moatDepth,seaW,seaGates,inHarbor,hillH,nearStreet,zone,waterDepth};}
+  return MARCUS.plan={hillStairs,onPlateau,wall,gates,river,harbor,hill,zones,streets,piazze,bridges,brs,brLocal,bridgeFoot,inPoly,segDist,polyDist,wallDist,inZone,riverDist,riverNear,bridgeAt,moatDepth,seaW,seaGates,inHarbor,hillH,nearStreet,zone,waterDepth};}
 /* 땅 높이 보정 (isleHeight가 부른다): 강·해자·항구는 파이고, 왕궁 언덕은 솟는다 */
 function marcusTerrain(mx,my){const PL=marcusPlan();return PL.hillH(mx,my)-PL.waterDepth(mx,my);}
 /* ---------- 엑시즈 왕궁 언덕: 비탈 대신 돌로 쌓은 높은 단 ----------
@@ -16579,9 +16597,9 @@ function marcusStreetProps(){const PL=marcusPlan(),I=OR.ISLES.marcus,cx=I.x,cz=I
   const free=(x,z,r)=>!colliders.some(c=>Math.abs(c.x-x)<c.r+r&&Math.abs(c.z-z)<c.r+r&&Math.hypot(c.x-x,c.z-z)<c.r+r)&&!MAP_HOUSES.some(h=>Math.hypot(h.x-x,h.z-z)<h.r+r*.6);
   const put=(m,x,z,sc,ry,col)=>{L.push({m,x,z,y:heightAt(x,z),s:sc,ry});if(col)colliders.push({x,z,r:col,h:1.6});};
   for(const st of PL.streets)for(let i=0;i<st.p.length-1;i++){const [ax,ay]=st.p[i],[bx,by]=st.p[i+1],Ls=Math.hypot(bx-ax,by-ay),ux=(bx-ax)/Ls,uy=(by-ay)/Ls;
-    for(let t=4;t<Ls-4;t+=7)for(const sd of [-1,1]){const mx=ax+ux*t-uy*sd*(st.w/2+1.1),my=ay+uy*t+ux*sd*(st.w/2+1.1);const k=kindAt(mx,my);if(!k||PL.hillH(mx,my)>.1||PL.waterDepth(mx,my)>0)continue;
+    for(let t=4;t<Ls-4;t+=7)for(const sd of [-1,1]){const mx=ax+ux*t-uy*sd*(st.w/2+1.1),my=ay+uy*t+ux*sd*(st.w/2+1.1);const k=kindAt(mx,my);if(!k||PL.hillH(mx,my)>.1||(PL.waterDepth(mx,my)>0&&!PL.bridgeAt(mx,my)))continue;
       const p=k==='inns'?.3:k==='market'?.45:.32;if(rnd()>p)continue;const x=cx+mx,z=cz+my,ry=Math.atan2(-uy*sd,ux*sd)+(rnd()-.5)*.6;if(!free(x,z,1.2))continue;
-      const u=rnd();
+      const u=rnd();if(PL.bridgeFoot(mx,my,1.5))continue;   /* 다리 위·다리 끝 (rnd 차례는 예전 그대로) */
       if(k==='inns'){if(u<.5){put('keg_decorated',x,z,.72,ry,1.3);}else{put('barrel_large',x,z,.6,ry,.65);put('barrel_small_stack',x+ux*1.5,z+uy*1.5,.68,ry,.75);}}
       else if(k==='docks'||k==='warehouse'){if(u<.4)put('box_stacked',x,z,.7,ry,1.4);else if(u<.7)put('crates_stacked',x,z,.78,ry,1);else{put('barrel_large',x,z,.62,ry,.7);put('barrel_large',x+ux*1.3,z+uy*1.3,.6,ry+1,.7);}}
       else if(k==='artisans'){if(u<.5)put('crates_stacked',x,z,.74,ry,1);else put('barrel_small_stack',x,z,.68,ry,.8);}
@@ -16596,6 +16614,87 @@ function marcusStreetProps(){const PL=marcusPlan(),I=OR.ISLES.marcus,cx=I.x,cz=I
     MARCUS.props.push(plodAdd(FOODK.geo(k),FOODK.geo('Slo:'+K[2]),M,{D}));}}
 /* 왕립 도서관 서가: 가까이 가면 F로 책을 꺼내 읽는다 (책 내용은 LIB_BOOKS) */
 const LIB_SHELVES=[];
+/* 강 돌다리 빚기: 다리 가운데가 원점, x = 강을 가로지르는 쪽(-XL~XL), z = 강물이 흐르는 쪽, y = 위.
+   o: {XL 반길이, hw 다리 위 너비의 반(난간 안쪽까지), T 비스듬함 tan(다리 방향과 강 수직 사이 각), pr 다리 몸 빛깔 등}
+   돌려주는 것: [[geometry, 색, mt]] (geometry는 다리 자리 좌표 그대로). 비스듬한 다리는 마지막에 z += x*T 로 기울인다
+   (교각·물가름 돌은 강물 쪽으로 곧게, 난간·다리 몸은 길 쪽으로) */
+function bridgeKit(THREE){   /* (엑시즈 강 다리) */
+  const PI=Math.PI;
+  const yTop=(o,x)=>o.E+o.H*(.5+.5*Math.cos(PI*Math.max(-1,Math.min(1,x/o.XL))));   /* 다리 윗면: 양 끝은 길 높이, 가운데가 둥글게 솟는다 */
+  /* 세모 모음 → 형상. 안쪽 점(ref)을 주면 그 반대쪽을 보게 감는 방향을 맞춘다 */
+  const Soup=()=>{const v=[];const S={v,
+    tri(a,b,c,ref){const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],wx=c[0]-a[0],wy=c[1]-a[1],wz=c[2]-a[2],nx=uy*wz-uz*wy,ny=uz*wx-ux*wz,nz=ux*wy-uy*wx;
+      if(ref&&nx*(a[0]-ref[0])+ny*(a[1]-ref[1])+nz*(a[2]-ref[2])<0){v.push(...a,...c,...b);}else v.push(...a,...b,...c);},
+    quad(a,b,c,d,ref){S.tri(a,b,c,ref);S.tri(a,c,d,ref);},
+    geo(){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));return g;}};return S;};
+  /* 단면(z,dy 볼록 다각형)을 x0→x1로 다리 윗면 곡선을 따라 훑는다 */
+  const sweep=(o,prof,x0,x1,n,cap=[1,1],yf)=>{const S=Soup(),f=yf||(x=>yTop(o,x)),cz=prof.reduce((s,p)=>s+p[0],0)/prof.length,cy=prof.reduce((s,p)=>s+p[1],0)/prof.length;
+    for(let i=0;i<n;i++){const xa=x0+(x1-x0)*i/n,xb=x0+(x1-x0)*(i+1)/n,ya=f(xa),yb=f(xb),xm=(xa+xb)/2,ref=[xm,(ya+yb)/2+cy,cz];
+      for(let k=0;k<prof.length;k++){const p=prof[k],q=prof[(k+1)%prof.length];S.quad([xa,ya+p[1],p[0]],[xb,yb+p[1],p[0]],[xb,yb+q[1],q[0]],[xa,ya+q[1],q[0]],ref);}}
+    for(const [xe,on,sg] of [[x0,cap[0],-1],[x1,cap[1],1]]){if(!on)continue;const y=f(xe),c=[xe,y+cy,cz],ref=[xe-sg,y+cy,cz];
+      for(let k=0;k<prof.length;k++){const p=prof[k],q=prof[(k+1)%prof.length];S.tri(c,[xe,y+p[1],p[0]],[xe,y+q[1],q[0]],ref);}}
+    return S.geo();};
+  /* 볼록 기둥(밑면 다각형 xz, y0~y1) */
+  const prism=(pts,y0,y1)=>{const S=Soup(),cx=pts.reduce((s,p)=>s+p[0],0)/pts.length,cz=pts.reduce((s,p)=>s+p[1],0)/pts.length,ref=[cx,(y0+y1)/2,cz];
+    for(let k=0;k<pts.length;k++){const p=pts[k],q=pts[(k+1)%pts.length];S.quad([p[0],y0,p[1]],[q[0],y0,q[1]],[q[0],y1,q[1]],[p[0],y1,p[1]],ref);S.tri([cx,y1,cz],[p[0],y1,p[1]],[q[0],y1,q[1]],ref);S.tri([cx,y0,cz],[p[0],y0,p[1]],[q[0],y0,q[1]],ref);}
+    return S.geo();};
+  /* 돌 쐐기 하나(아치 둘레 돌): 바깥면 z=zf에서 dz만큼 튀어나온 납작한 돌 */
+  const wedge=(cx,cy,r0,r1,a0,a1,zf,dz)=>{const S=Soup(),P=(r,a,z)=>[cx+Math.cos(a)*r,cy+Math.sin(a)*r,z],am=(a0+a1)/2,ref=[cx+Math.cos(am)*(r0+r1)/2,cy+Math.sin(am)*(r0+r1)/2,zf+dz/2],z0=zf,z1=zf+dz;
+    const A=[P(r0,a0,z0),P(r1,a0,z0),P(r1,a1,z0),P(r0,a1,z0)],B=[P(r0,a0,z1),P(r1,a0,z1),P(r1,a1,z1),P(r0,a1,z1)];
+    /* 바깥 모서리를 살짝 깎는다(앞면을 조금 작게) */
+    const sh=(p,k)=>[p[0]+(ref[0]-p[0])*k,p[1]+(ref[1]-p[1])*k,p[2]];const Bf=B.map(p=>sh(p,.07));
+    for(let k=0;k<4;k++){S.quad(A[k],A[(k+1)%4],Bf[(k+1)%4],Bf[k],ref);}S.quad(Bf[0],Bf[1],Bf[2],Bf[3],ref);return S.geo();};
+  /* 돌기둥 머리 장식: 받침 → 목 → 둥근 솔방울 → 꼭지 (매끈하게: fd) */
+  const finial=()=>{const pts=[[.0,0],[.27,0],[.27,.05],[.2,.09],[.13,.14],[.11,.2],[.15,.25],[.21,.32],[.235,.4],[.225,.48],[.19,.56],[.13,.63],[.07,.68],[.05,.72],[.06,.75],[.03,.8],[0,.82]].map(p=>new THREE.Vector2(p[0],p[1]));
+    let g=new THREE.LatheGeometry(pts,14);g=g.toNonIndexed();g.computeVertexNormals();const n=g.attributes.position.count;g.setAttribute('color',new THREE.Float32BufferAttribute(new Float32Array(n*3).fill(1),3));g.setAttribute('mt',new THREE.Float32BufferAttribute(new Float32Array(n).fill(2),1));g.userData.fd=1;return g;};
+  /* 아치 하나: 왼쪽 받침 xa, 오른쪽 xb, 돋움 yS, 높이 rise → 원 중심·반지름·각 */
+  const arc=(xa,xb,yS,rise)=>{const s=(xb-xa)/2,R=(s*s+rise*rise)/(2*rise),cx=(xa+xb)/2,cy=yS+rise-R,a0=Math.atan2(yS-cy,xa-cx),a1=Math.atan2(yS-cy,xb-cx);return {cx,cy,R,a0,a1,xa,xb,yS};};
+  function build(o){
+    o={E:.11,H:.7,XL:12.6,hw:4.5,T:0,yS:-1.95,bot:-2.85,...o};const k=Math.sqrt(1+o.T*o.T),hw=o.hw*k,XL=o.XL;   /* z 쪽 너비는 기울인 만큼 넓혀 둔다 (기울이면 길 방향 너비가 1/k로 준다) */
+    const PT=.72,SC=2.4,XP=SC+PT,XA=7.4,TH=.46;   /* 교각 반두께, 가운데 아치 반폭, 교각 가운데, 받침(둑) 면, 아치 돌 두께 */
+    const HZ=(o.hw+.44)*k;   /* 다리 몸 옆면 */
+    const arches=[arc(-XA,-XP-PT,o.yS,1.42),arc(-SC,SC,o.yS,1.76),arc(XP+PT,XA,o.yS,1.42)];
+    const out=[];const C=o.col||{};const BODY=C.body??0xb8a27e,VA=C.va??0xd8c098,VB=C.vb??0xc2aa84,CORN=C.corn??0xa89a80,PAR=C.par??0xc2aa84,COP=C.cop??0xb4ac9e,CUT=C.cut??0x9a948a,DECK=C.deck??0xbeb29e,KERB=C.kerb??0x9a9890;
+    /* 1) 다리 몸: 옆에서 본 모양(위는 윗면 곡선, 아래는 아치 셋을 판 모양)을 다리 너비만큼 밀어 낸다. 아치 안쪽 둥근 천장도 함께 생긴다 */
+    {const sh=new THREE.Shape(),NA=[11,15,11],XB=XL-.03;sh.moveTo(-XB,o.bot);
+      arches.forEach((A,i)=>{sh.lineTo(A.xa,o.bot);sh.lineTo(A.xa,A.yS);const n=NA[i];for(let q=1;q<=n;q++){const a=A.a0+(A.a1-A.a0)*q/n;sh.lineTo(A.cx+Math.cos(a)*A.R,A.cy+Math.sin(a)*A.R);}sh.lineTo(A.xb,o.bot);});
+      sh.lineTo(XB,o.bot);for(let q=0;q<=40;q++){const x=XB-2*XB*q/40;sh.lineTo(x,yTop(o,x)-.15);}
+      const g=new THREE.ExtrudeGeometry(sh,{depth:2*HZ,bevelEnabled:false,curveSegments:1});g.translate(0,0,-HZ);out.push([g,BODY]);}
+    /* 2) 아치 둘레 돌(쐐기): 두 옆면에 5cm 튀어나오게, 두 빛깔 엇갈려. 가운데 머릿돌은 더 크고 더 튀어나온다 */
+    {const A0=[11,15,11];arches.forEach((A,i)=>{const n=A0[i];for(let q=0;q<n;q++){const a0=A.a0+(A.a1-A.a0)*q/n,a1=A.a0+(A.a1-A.a0)*(q+1)/n,key=q===(n-1)/2;
+        for(const sd of [-1,1]){const zf=sd>0?HZ-.03:-HZ+.03,dz=sd>0?(key?.11:.06):-(key?.11:.06);
+          const dg=Math.sign(a1-a0)*.022/A.R;out.push([wedge(A.cx,A.cy,A.R,A.R+TH+(key?.16:(q%2?0:.07)),a0+dg,a1-dg,zf,dz+(sd>0?.03:-.03)),key?VA:(q%2?VB:VA)]);}}});}
+    /* 3) 교각 물가름 돌: 강물 쪽(±z)으로 뾰족, 물밑에서 윗면 아래까지. 위는 세모 지붕 */
+    for(const xs of [-XP,XP])for(const sd of [-1,1]){const zf=sd*(HZ-.05),L=1.35*sd,top=yTop(o,xs)-1.0,w=PT+.06;
+      out.push([prism([[xs-w,zf],[xs,zf+L],[xs+w,zf]],o.bot-.03,top),CUT]);
+      const S=Soup(),P1=[xs-w-.04,top,zf],P2=[xs+w+.04,top,zf],P3=[xs,top,zf+L*1.04],AP=[xs,top+.5,zf+sd*.02],ref=[xs,top+.2,zf+sd*.2];S.tri(P1,P3,AP,ref);S.tri(P3,P2,AP,ref);S.tri(P1,P2,P3,[xs,top+1,zf+sd*.3]);
+      out.push([S.geo(),CORN]);
+      /* 물 닿는 자리 받침 띠 */
+      out.push([prism([[xs-w-.12,zf-sd*.02],[xs,zf+L+sd*.16],[xs+w+.12,zf-sd*.02]],o.bot-.07,-1.55),0x847e74]);}
+    /* 4) 처마 띠(코니스): 다리 몸 위 끝을 따라 바깥으로 내민 돌림띠 */
+    for(const sd of [-1,1]){const z=v=>sd*(HZ+v*k),prof=[[z(-.06),-.46],[z(.13),-.46],[z(.21),-.38],[z(.21),-.26],[z(.14),-.2],[z(.14),-.13],[z(-.06),-.13]];out.push([sweep(o,prof,-XL+.05,XL-.05,40),CORN]);}
+    /* 5) 난간 벽 + 둥근 갓돌 */
+    for(const sd of [-1,1]){const z=v=>sd*v;
+      out.push([sweep(o,[[z(hw),-.3],[z(HZ+.08*k),-.3],[z(HZ+.08*k),.86],[z(hw),.86]],-XL+.3,XL-.3,40),PAR]);
+      out.push([sweep(o,[[z(hw-.08*k),.82],[z(HZ+.14*k),.82],[z(HZ+.15*k),.9],[z(HZ+.1*k),.975],[z(hw-.03*k),.975],[z(hw-.09*k),.9]],-XL+.33,XL-.33,40),COP]);
+      /* 다리 위 가장자리 연석 */
+      out.push([sweep(o,[[z(hw-.36*k),-.05],[z(hw+.04*k),-.05],[z(hw+.04*k),.075],[z(hw-.34*k),.075],[z(hw-.37*k),.05]],-XL+.36,XL-.36,40),KERB]);}
+    /* 5b) 교각 위 난간 기둥(벽기둥): 물가름 돌 바로 위 난간 바깥면에 살짝 내민 네모 기둥과 머리돌 */
+    for(const xs of [-XP,XP])for(const sd of [-1,1]){const y0=yTop(o,xs),zi=sd*(HZ-.1),zo=sd*(HZ+.27*k),zc=sd*(HZ+.33*k),w=.62;
+      const a=Math.min(yTop(o,xs-w),yTop(o,xs+w));out.push([prism([[xs-w,zi],[xs+w,zi],[xs+w,zo],[xs-w,zo]],y0-.58,a+.79),PAR]);
+      out.push([prism([[xs-w-.07,zi],[xs+w+.07,zi],[xs+w+.07,zc],[xs-w-.07,zc]],a+.78,a+.9),COP]);}
+    /* 6) 다리 위 판돌 */
+    out.push([sweep(o,[[-hw-.06*k,-.2],[hw+.06*k,-.2],[hw+.06*k,0],[-hw-.06*k,0]],-XL,XL,40),DECK,9]);
+    /* 7) 네 귀퉁이 돌기둥: 받침·몸·머리판·솔방울 */
+    const posts=[];for(const xs of [-1,1])for(const sd of [-1,1]){const x=xs*(XL-.42),y=yTop(o,x),zc=sd*(hw+.27*k),a=.46,b=.46*k;
+      out.push([prism([[x-a-.06,zc-b-.06],[x+a+.06,zc-b-.06],[x+a+.06,zc+b+.06],[x-a-.06,zc+b+.06]],y-.4,y+.16),CORN]);
+      out.push([prism([[x-a,zc-b],[x+a,zc-b],[x+a,zc+b],[x-a,zc+b]],y,y+1.22),PAR]);
+      out.push([prism([[x-a-.07,zc-b-.07],[x+a+.07,zc-b-.07],[x+a+.07,zc+b+.07],[x-a-.07,zc+b+.07]],y+1.2,y+1.33),COP]);
+      const f=finial();f.translate(x,y+1.325,zc);out.push([f,COP]);posts.push([x,zc,y]);}
+    /* 기울이기 */
+    if(o.T)for(const [g] of out){const p=g.attributes.position;for(let i=0;i<p.count;i++)p.setZ(i,p.getZ(i)+p.getX(i)*o.T);p.needsUpdate=true;}
+    return {parts:out,posts,arches,XP,PT,XA,HZ,hw,k,y:x=>yTop(o,x)};}
+  return {build,yTop};}
 async function buildMarcus(H){
   const I=OR.ISLES.marcus,cx=I.x,cz=I.z,CELL=MARCUS.CELL,PL=marcusPlan(),PI=Math.PI;
   await BOOT.z();let _s=777;await BOOT.z();const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647,rr=(a,b)=>a+rnd()*(b-a);
@@ -16718,7 +16817,7 @@ async function buildMarcus(H){
     await BOOT.z();const S2=2*(SQ+30);await BOOT.z();MARCUS.sea=seaAdd(wm,mt,seaBake(cx-S2/2,cz-S2/2,S2,512,-1.4,heightAt,()=>true,(x,z)=>PL.seaW(x-cx,z-cz)*smooth(-4,14,PL.wallDist(x-cx,z-cz))));}   /* 강·해자는 잔잔한 민물, 남동쪽은 바다 (물거품·너울빛) */
   /* ===== 길: 돌을 깐 바닥 (평지에만; 언덕 위는 땅 색으로) ===== */
   /* 길은 짧은 토막으로 깔고, 토막마다 양옆이 물 위로 나가면 그만큼 폭을 줄인다 (강가 길 가장자리가 물 위에 떠 있지 않게). 꺾이는 마디에는 둥근 판을 깔아 이음매를 메운다 */
-  await BOOT.z();{const dry=(x,y)=>PL.waterDepth(x,y)<=0||PL.bridgeAt(x,y);
+  await BOOT.z();{const dry=(x,y)=>PL.waterDepth(x,y)<=0;   /* 다리 위 판돌은 다리가 깐다 (강물 위에 길 돌판을 띄우지 않는다) */
     await BOOT.z();for(const st of PL.streets){const P=st.p,hw=st.w/2,big=st.w>=10,PV=PAVE2,PY=st.dead?.054:.06;   /* 막다른 골목은 어둡고 낮은 돌판: 큰 길 돌판 밑으로 들어가 이음매가 깜빡이지 않게 */for(let i=0;i<P.length-1;i++){const [ax,ay]=P[i],[bx,by]=P[i+1],L=Math.hypot(bx-ax,by-ay);if(L<.3)continue;if(PL.hillH(ax,ay)>.05||PL.hillH(bx,by)>.05)continue;
       const ux=(bx-ax)/L,uy=(by-ay)/L,nx=-uy,ny=ux,n=Math.max(1,Math.ceil(L/3)),pl=L/n;
       for(let k=0;k<n;k++){const t=(k+.5)*pl,mx=ax+ux*t,my=ay+uy*t;let l=hw,r=hw;
@@ -16756,8 +16855,8 @@ async function buildMarcus(H){
   await BOOT.z();{const EZ=I.entry.z-cz;await BOOT.z();dirt(PL.gates[3].x,PL.gates[3].y+70,0,EZ);}
   /* ===== 강둑 · 항구 부두 · 해자 둑 ===== */
   await BOOT.z();const DEEP=MARCUS_RIVER_DEEP,RVW=MARCUS_RIVER_W;
-  await BOOT.z();const STAIRS=MARCUS.stairs=[];   /* [x,z,ry] 강에서 올라오는 계단 (ry: 계단이 오르는 방향 = 물에서 둑으로) */
-  await BOOT.z();const bankWall=(x,z,ry,len,deep,o={})=>{const F=frame(x,z,ry,0);F.P(BOX,0,-deep/2-.2,0,1,deep+.4,len,STONE[o.k||0]);if(!o.noRail){F.P(BOX,-.1,.5,0,.7,1,len,PIETRA);F.P(BOX,-.1,1.05,0,.85,.12,len+.05,SERENA);}
+  await BOOT.z();const STAIRS=MARCUS.stairs=[],STAIR_GHOST=[];   /* [x,z,ry] 강에서 올라오는 계단 (ry: 계단이 오르는 방향 = 물에서 둑으로) */
+  await BOOT.z();const bankWall=(x,z,ry,len,deep,o={})=>{const F=frame(x,z,ry,0);{const q=o.k||0;F.P(BOX,0,-deep/2-.19+q*.002,0,1+q*.006,deep+.42+q*.004,len,STONE[q]);}   /* 윗면 2cm(땅과 같은 높이면 요동), 이웃 둑과 겹치는 끝은 빛깔마다 3~4mm씩 비킨다 */if(!o.noRail){F.P(BOX,-.1,.5,0,.7,1,len,PIETRA);F.P(BOX,-.1,1.05,0,.85,.12,len+.05,SERENA);}
     F.box(0,0,1.4,len,0,{y0:-8,y1:2.6,h:undefined});};
   /* 계단: 물(앞, +z)에서 둑(뒤)으로 오른다 */
   await BOOT.z();const stair=(x,z,ry,deep)=>{const F=frame(x,z,ry,0),n=8;for(let k=0;k<n;k++){const top=-deep+(k+1)*deep/n;F.P(BOX,0,(top-deep-.3)/2,(n/2-k-.5)*1,2.4,top+deep+.3,1,PIETRA2);}
@@ -16774,17 +16873,38 @@ async function buildMarcus(H){
   /* 안쪽 강 둑: 가운데 선을 따라 4m마다 */
   await BOOT.z();await BOOT.y();await BOOT.z();{const R=PL.river;await BOOT.z();let acc=0,nextStair=28;await BOOT.z();for(let i=0;i<R.length-1;i++){const a=R[i],b=R[i+1],L=Math.hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/L,uy=(b[1]-a[1])/L,nx=-uy,ny=ux;
       for(let t=2;t<L;t+=4){const mx=a[0]+ux*t,my=a[1]+uy*t;if(!inWall(mx,my,2))continue;acc+=4;
-        for(const sd of [-1,1]){const px=mx+nx*sd*(RVW/2+.5),py=my+ny*sd*(RVW/2+.5);if(PL.bridgeAt(mx,my)||PL.inHarbor(px,py,5)||PL.inHarbor(mx+ux*3,my+uy*3,5))continue;
-          if(acc>nextStair&&t<L-12){/* 계단 자리: 둑 틈 */if(sd===1)nextStair=acc+56;stair(cx+px-nx*sd*3.6,cz+py-ny*sd*3.6,Math.atan2(-nx*sd,-ny*sd),DEEP);continue;}   /* 맨 윗단이 둑 선에 딱 닿게 */
+        for(const sd of [-1,1]){const px=mx+nx*sd*(RVW/2+.5),py=my+ny*sd*(RVW/2+.5);if(PL.inHarbor(px,py,5)||PL.inHarbor(mx+ux*3,my+uy*3,5))continue;
+          /* 계단: 예전과 똑같은 자리에 (계단 꼭대기 앞은 집을 못 짓는 땅이라 바뀌면 집이 바뀐다). 새 다리 밑에 들어가는 계단은 짓지 않고 그 빈 땅만 남긴다 */
+          const ob=PL.bridgeAt(mx,my);
+          if(!ob&&acc>nextStair&&t<L-12){const spx=px-nx*sd*3.6,spy=py-ny*sd*3.6,sry=Math.atan2(-nx*sd,-ny*sd);if(sd===1)nextStair=acc+56;   /* 맨 윗단이 둑 선에 딱 닿게 */
+            if(!PL.bridgeFoot(spx,spy,1.5)){stair(cx+spx,cz+spy,sry,DEEP);continue;}STAIR_GHOST.push([cx+spx,cz+spy,sry]);}
+          /* 다리 곁: 다리 몸 속에 묻히는 둑은 짓지 않고, 다리 옆으로 나온 만큼만 짧게 짓는다 */
+          {const b=PL.bridgeFoot(px,py,6);if(b){const e0=[px-ux*2.05,py-uy*2.05],e1=[px+ux*2.05,py+uy*2.05],z0=PL.brLocal(b,e0[0],e0[1])[1],z1=PL.brLocal(b,e1[0],e1[1])[1],HB=(b.w/2+.7)*b.k,lo=Math.min(z0,z1),hi=Math.max(z0,z1);
+            for(const [ga,gb] of [[lo,Math.min(hi,-HB)],[Math.max(lo,HB),hi]]){if(gb-ga<.3)continue;const f0=(ga-z0)/(z1-z0),f1=(gb-z0)/(z1-z0),fm=(f0+f1)/2;bankLater(cx+e0[0]+ux*4.1*fm,cz+e0[1]+uy*4.1*fm,Math.atan2(ux,uy),Math.abs(f1-f0)*4.1+.02,DEEP,{k:(t/4|0)%3});}continue;}}
+          if(ob)continue;
           bankLater(cx+px,cz+py,Math.atan2(ux,uy),4.1,DEEP,{k:(t/4|0)%3});}}}await BOOT.z();bankFlush();}
-  /* 강 다리: 길이 강을 건너는 자리마다 돌 아치 다리 몸통을 둑 사이에 놓는다 (위에서 보면 길, 강에서 보면 아치 셋이 받치는 다리) */
-  await BOOT.z();{const R=PL.river;await BOOT.z();for(const bx of PL.bridges){let best=null;for(let i=0;i<R.length-1;i++){const a=R[i],b=R[i+1];if((a[0]-bx)*(b[0]-bx)>0&&Math.abs(a[0]-bx)>.01)continue;const k=Math.abs(b[0]-a[0])<1e-6?0:(bx-a[0])/(b[0]-a[0]);if(k<0||k>1)continue;const L=Math.hypot(b[0]-a[0],b[1]-a[1]);best={mx:a[0]+(b[0]-a[0])*k,my:a[1]+(b[1]-a[1])*k,ux:(b[0]-a[0])/L,uy:(b[1]-a[1])/L};break;}
-      if(!best||!inWall(best.mx,best.my,0))continue;const F=frame(cx+best.mx,cz+best.my,Math.atan2(best.ux,best.uy),0),BL=14,BW=RVW+3;
-      F.P(BOX,0,-.35,0,BW,.5,BL,PIETRA2);   /* 상판 밑 띠 */
-      for(const sx of [-1,0,1]){F.P(BOX,sx*(RVW/2-1.6),-DEEP/2-.3,0,sx?1.6:2.2,DEEP+.4,BL+.6,STONE[1]);if(sx)F.P(CONE(4),sx*(RVW/2-1.6),-DEEP/2-.3,sx*0+(BL/2+.6),1.6,DEEP+.4,1.2,STONE[1],{ry:PI/4});}   /* 교각 셋 (바깥 둘은 물가름) */
-      for(const sd of [-1,1])for(const sx of [-1,1]){const ax=sx*(RVW/4-.4);F.P(ARCH,ax,-DEEP-.2,sd*(BL/2+.02),RVW/2-2.6,DEEP-.2,1,0x3a3430,{ry:sd>0?0:PI});}   /* 아치 구멍 (어둡게) */
-      for(const sd of [-1,1]){F.P(BOX,0,.5,sd*(BL/2-.35),BW+.4,1,.5,PIETRA);F.P(BOX,0,1.05,sd*(BL/2-.35),BW+.6,.12,.6,SERENA);}
-      for(const sd of [-1,1]){const q0=F.W(-BW/2,sd*(BL/2-.35)),q1=F.W(BW/2,sd*(BL/2-.35));segBox(q0.x,q0.z,q1.x,q1.z,.5,0,{y0:-1,y1:1.6,h:undefined});}}}   /* 난간에 부딪힘 */
+  /* 강 돌다리: 아치 셋 밑으로 강물이 흐르는 돌다리 (bridgeKit이 빚는다). 다리 위는 가운데가 둥글게 솟고, 난간·끝 기둥은 막는 벽.
+     비스듬히 건너는 다리는 다리 몸을 길 쪽으로 기울이고 교각은 강물 쪽으로 곧게 둔다 */
+  await BOOT.z();{const KIT=bridgeKit(THREE);MARCUS.bridges=[];
+    for(const b of PL.brs){if(!inWall(b.x,b.y,0))continue;await BOOT.z();
+      const B=KIT.build({hw:b.w/2,T:b.T,XL:b.XL}),ry=Math.atan2(b.ux,b.uy),F=frame(cx+b.x,cz+b.y,ry,0),T=b.T,XL=b.XL,k=b.k,hw=b.w/2;
+      for(const [g,col,mt] of B.parts)F.P(g,0,0,0,1,1,1,col,mt?{mt}:{});
+      const L=(lx,lz)=>F.W(lx,lz+lx*T);   /* 기울인 다리 좌표 → 땅 */
+      /* 난간·끝 기둥에 부딪힘 (다리 위 높이에서만), 교각·받침은 강물 속에서만 */
+      for(const sd of [-1,1]){const zc=sd*(hw+.27)*k,a=L(-XL+.05,zc),c=L(XL-.05,zc);segBox(a.x,a.z,c.x,c.z,.6,0,{y0:-1,y1:2.9,h:undefined});}
+      for(const [px,pz,py] of B.posts){const q=L(px,pz);boxCol(q.x,q.z,ry,1.04,1.04*k,0,{y0:py-1,y1:py+3,h:undefined});}   /* 끝 기둥 */
+      for(const xs of [-B.XP,B.XP]){const q=L(xs,0);boxCol(q.x,q.z,ry,2*B.PT,2*B.HZ+2.7,0,{y0:-6,y1:-.7,h:undefined});}
+      for(const xs of [-1,1]){const q=L(xs*(B.XA+2.6),0);boxCol(q.x,q.z,ry,5.2,2*B.HZ,0,{y0:-6,y1:-.7,h:undefined});}
+      /* 걷는 윗면 */
+      const wx=cx+b.x,wz=cz+b.y,HWk=(hw+.06)*k,fn=(X,Z)=>{const dx=X-wx,dz=Z-wz,lx=dx*b.uy-dz*b.ux;if(lx<-XL||lx>XL)return null;const lz=dx*b.ux+dz*b.uy-lx*T;if(lz<-HWk||lz>HWk)return null;return B.y(lx);};
+      let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;for(const [p,q] of [[-XL,-HWk],[XL,-HWk],[XL,HWk],[-XL,HWk]]){const w=L(p,q);x0=Math.min(x0,w.x);x1=Math.max(x1,w.x);z0=Math.min(z0,w.z);z1=Math.max(z1,w.z);}
+      const sf={x0,x1,z0,z1,fn};SURFACES.push(sf);BR_WALK.push(sf);
+      /* 길과 이어지지 않은 다리: 다리 끝에서 길 끝까지 돌길 */
+      if(b.a&&b.b)for(const e of [-1,1]){const E=L(e*(XL-.4),0),ex=E.x-cx,ey=E.z-cz,pt=[b.a,b.b].sort((p,q)=>Math.hypot(p[0]-ex,p[1]-ey)-Math.hypot(q[0]-ex,q[1]-ey))[0],D=Math.hypot(pt[0]-ex,pt[1]-ey);if(D<1)continue;
+        const ux=(pt[0]-ex)/D,uy=(pt[1]-ey)/D,n=Math.ceil(D/3),pl=D/n,W=b.w-.4;
+        for(let q=0;q<n;q++){const t=(q+.5)*pl,R=frame(cx+ex+ux*t,cz+ey+uy*t,Math.atan2(ux,uy),0);R.P(BOX,0,.02,0,W+.45,.04,pl+.06,SERENA);R.P(BOX,0,.035,0,W,.04,pl+.04,PAVE,{mt:9});}
+        const R=frame(cx+pt[0],cz+pt[1],0,0);R.P(CYL(1,1,16),0,.035,0,W/2,.04,W/2,PAVE,{mt:9});}
+      MARCUS.bridges.push({x:cx+b.x,z:cz+b.y,ry,T,w:b.w});}}
   /* 항구 부두: 다각형 변을 따라 (바다 쪽으로 트인 동남쪽 변은 빼고) */
   /* 무역 공회 부두 단(물 위 돌 단, 아래 관청들에서 짓는다) 자리: 그 밑으로 들어가는 계단은 놓지 않는다 (계단 아랫단이 돌 단 밑동에 막혀 있었다) */
   await BOOT.z();const onTrade=(mx,my)=>{const t=Z('trade');if(!t)return false;const R=Math.max(t.w,t.h)/2+6;return mx>t.x-R&&mx<t.x+R+9&&my>t.y-R&&my<t.y+R;};   /* 건물은 돌려 지어서 가로세로가 바뀐다: 긴 쪽 기준으로 */
@@ -16860,7 +16980,7 @@ async function buildMarcus(H){
     LAMPM.push(new THREE.Matrix4().compose(new THREE.Vector3(x,F.y,z),new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),ry),new THREE.Vector3(1,1,1)));colliders.push({x,z,r:.25});};
   await BOOT.z();const bigZone=(mx,my,m)=>PL.zones.some(z=>!/residential|artisans|commerce|inns|nobles/.test(z.kind)&&PL.inZone(z,mx,my,m));
   await BOOT.z();await BOOT.y();await BOOT.z();for(const st of PL.streets){if(st.w<10)continue;for(let i=0;i<st.p.length-1;i++){const [ax,ay]=st.p[i],[bx,by]=st.p[i+1],L=Math.hypot(bx-ax,by-ay),ux=(bx-ax)/L,uy=(by-ay)/L;
-      for(let t=10;t<L-6;t+=26)for(const sd of [-1,1]){const mx=ax+ux*t-uy*sd*(st.w/2-.7),my=ay+uy*t+ux*sd*(st.w/2-.7);if(!inWall(mx,my,6)||bigZone(mx,my,1)||PL.waterDepth(mx,my)>0)continue;
+      for(let t=10;t<L-6;t+=26)for(const sd of [-1,1]){const mx=ax+ux*t-uy*sd*(st.w/2-.7),my=ay+uy*t+ux*sd*(st.w/2-.7);if(!inWall(mx,my,6)||bigZone(mx,my,1)||PL.waterDepth(mx,my)>0||PL.bridgeFoot(mx,my,1.5))continue;
         if(PL.streets.some(o=>o!==st&&o.p.some((q,k)=>k<o.p.length-1&&PL.segDist(mx,my,q,o.p[k+1])<o.w/2+.5)))continue;lamp(cx+mx,cz+my,Math.atan2(uy*sd,-ux*sd));}}}
   /* 길가 벤치: 가로등 사이사이, 길 쪽을 보고 놓는다. 주민들은 이 벤치에만 앉는다 */
   /* 벤치 모양: 회청색 돌(피에트라 세레나) 양 끝에 소용돌이 장식 다리와 팔걸이, 그 사이에 나무 널 앉는 판과 등판.
@@ -16888,7 +17008,7 @@ async function buildMarcus(H){
   await BOOT.z();const bench=(x,z,ry)=>{const B=frame(x,z,ry);for(const lx of [-.7,.7]){const q=B.W(lx,0);seatAdd(q.x,q.z,B.y+.54,ry);}benchModel(B);B.box(0,0,2.6,.8,.6);MARCUS.benches.push({x,z,ry});};
   await BOOT.z();MARCUS.benches=[];
   await BOOT.z();for(const st of PL.streets){if(st.w<7)continue;for(let i=0;i<st.p.length-1;i++){const [ax,ay]=st.p[i],[bx,by]=st.p[i+1],L=Math.hypot(bx-ax,by-ay),ux=(bx-ax)/L,uy=(by-ay)/L;
-      for(let t=23;t<L-8;t+=(st.w>=10?26:34)){const sd=Math.round(t/26)%2?-1:1;const mx=ax+ux*t-uy*sd*(st.w/2-.95),my=ay+uy*t+ux*sd*(st.w/2-.95);if(!inWall(mx,my,6)||bigZone(mx,my,1)||PL.waterDepth(mx,my)>0||PL.riverDist(mx,my)<RVW/2+3)continue;
+      for(let t=23;t<L-8;t+=(st.w>=10?26:34)){const sd=Math.round(t/26)%2?-1:1;const mx=ax+ux*t-uy*sd*(st.w/2-.95),my=ay+uy*t+ux*sd*(st.w/2-.95);if(!inWall(mx,my,6)||bigZone(mx,my,1)||PL.waterDepth(mx,my)>0||PL.riverDist(mx,my)<RVW/2+3||PL.bridgeFoot(mx,my,2))continue;
         if(PL.streets.some(o=>o!==st&&o.p.some((q,k)=>k<o.p.length-1&&PL.segDist(mx,my,q,o.p[k+1])<o.w/2+2)))continue;if(colliders.some(c=>!c.bk&&Math.abs(c.x-cx-mx)<2.2&&Math.abs(c.z-cz-my)<2.2))continue;bench(cx+mx,cz+my,Math.atan2(uy*sd,-ux*sd));}}}
   /* ===== 집: 구역마다 다른 피렌체식 집 ===== */
   await BOOT.z();const districtOf=(mx,my)=>{for(const z of PL.zones)if(/residential|artisans|commerce|inns|nobles/.test(z.kind)&&PL.inZone(z,mx,my,0))return z.kind;return 'residential';};
@@ -16923,7 +17043,7 @@ async function buildMarcus(H){
   await BOOT.z();const PALAZZO_AT=[['archive',PI],['chamber',PI],['admin',0],['treasury',0],['library',PI/2],['clinic',0],['trade',-PI/2]];   /* 관청 자리와 돌린 각도 (아래에서 이대로 짓는다). 'admin'은 옛 행정청 자리로, 이제 건물 대신 시민 정원(civicGarden)을 짓지만 집이 들어오지 않게 자리는 그대로 잡아 둔다 */
   await BOOT.z();const HOUSE_RESERVE=PALAZZO_AT.map(([id,ry])=>{const q=Z(id);return q&&{x:cx+q.x,z:cz+q.y,hw:q.w/2+.8,hd:q.h/2+.8,cs:Math.cos(ry),sn:Math.sin(ry)};}).filter(Boolean);   /* 지붕 처마(+0.8)까지 */
   /* 강·부두 계단 꼭대기 앞 땅(맨 윗단에서 뭍 쪽 6m)은 비워 둔다: 집이 계단 바로 위에 서서 계단을 막고 있었다 */
-  await BOOT.z();for(const [x,z,ry] of STAIRS){const s=Math.sin(ry),c=Math.cos(ry);HOUSE_RESERVE.push({x:x-s*7,z:z-c*7,hw:2.2,hd:3.2,cs:c,sn:s});}
+  await BOOT.z();for(const [x,z,ry] of [...STAIRS,...STAIR_GHOST]){const s=Math.sin(ry),c=Math.cos(ry);HOUSE_RESERVE.push({x:x-s*7,z:z-c*7,hw:2.2,hd:3.2,cs:c,sn:s});}
   await BOOT.z();const obbHit=(a,b,m)=>{const ax=[[a.cs,-a.sn],[a.sn,a.cs]],bx=[[b.cs,-b.sn],[b.sn,b.cs]],dx=a.x-b.x,dz=a.z-b.z;
     for(const n of [ax[0],ax[1],bx[0],bx[1]]){const pa=Math.abs(ax[0][0]*n[0]+ax[0][1]*n[1])*a.hw+Math.abs(ax[1][0]*n[0]+ax[1][1]*n[1])*a.hd,pb=Math.abs(bx[0][0]*n[0]+bx[0][1]*n[1])*b.hw+Math.abs(bx[1][0]*n[0]+bx[1][1]*n[1])*b.hd;if(pa+pb-m<=Math.abs(dx*n[0]+dz*n[1]))return false;}return true;};
   await BOOT.z();const houseRoom=(x,z,ry,w,d)=>{const me={x,z,hw:w/2,hd:d/2,cs:Math.cos(ry),sn:Math.sin(ry)},r=Math.hypot(w,d)/2;
@@ -24619,7 +24739,7 @@ function ccarTick(dt){
     const [x,z]=ccarLanePoint(st.s);const W=c.W,d=pp?Math.hypot(x-pp.x,z-pp.z):1e9,vis=inM&&d<230||(CCAR.ride&&CCAR.ride.k===c.k);if(W.g.visible!==vis)W.g.visible=vis;
     c.x=x;c.z=z;if(!vis){c.ry=c.ry||0;W.dist+=st.v*dt;continue;}   /* 안 보이는 마차는 자리만 기억하고 높이·기울기 계산은 하지 않는다 (바닥 찾기가 비싸다) */
     const [xa,za]=ccarLanePoint(st.s+2.2),[xb,zb]=ccarLanePoint(st.s-2.2),tx=xa-xb,tz=za-zb,ry=Math.atan2(tx,tz);
-    const fy=(X,Z)=>floorAt(X,Z,heightAt(X,Z)+2.5),y=fy(x,z),pitch=Math.atan2(fy(xa,za)-fy(xb,zb),4.4);
+    const fy=(X,Z)=>{const b=brWalkY(X,Z);return floorAt(X,Z,(b!=null?b:heightAt(X,Z))+2.5);},y=fy(x,z),pitch=Math.atan2(fy(xa,za)-fy(xb,zb),4.4);
     W.g.position.set(x,y,z);W.g.rotation.set(0,ry,0);W.g.rotateX(-pitch);W.pitch=pitch;c.ry=ry;
     if(d<90)W.update(dt,st.v);else{W.dist+=st.v*dt;}}
   /* 다른 사람이 앉은 자리 */
@@ -29060,6 +29180,9 @@ function movExiz(c,Lo,mini){const {cx,cy,rc,f}=Lo,MP=marcusPlan(),T=movExizT(Lo)
   c.fillStyle=MOV_SEA;poly(MP.harbor);c.fill();c.strokeStyle=MOV_INK2;c.lineWidth=.8*f;c.stroke();   /* 항구 */
   c.strokeStyle='#8fb3b3';c.lineWidth=Math.max(mini?2:3,13*sc);c.lineCap='round';c.lineJoin='round';c.beginPath();MP.river.forEach((q,i)=>{const [x,y]=T(q[0],q[1]);i?c.lineTo(x,y):c.moveTo(x,y);});c.stroke();   /* 강 */
   c.strokeStyle=MOV_INK2;c.lineWidth=.8*f;c.stroke();
+  if(!mini){c.save();for(const b of MP.brs){const ex=b.uy+b.ux*b.T,ey=-b.ux+b.uy*b.T,L=b.XL*1.15,[x0,y0]=T(b.x-ex*L,b.y-ey*L),[x1,y1]=T(b.x+ex*L,b.y+ey*L),w=Math.max(2.2*f,(b.w+2)*sc),qx=-(y1-y0),qy=x1-x0,ql=Math.hypot(qx,qy)||1;   /* 강 다리: 옅은 판에 잉크 두 줄 */
+    c.lineCap='butt';c.strokeStyle='#efe2bf';c.lineWidth=w;c.beginPath();c.moveTo(x0,y0);c.lineTo(x1,y1);c.stroke();c.strokeStyle=MOV_INK2;c.lineWidth=.7*f;
+    for(const sd of [-1,1]){const ox=qx/ql*w/2*sd,oy=qy/ql*w/2*sd;c.beginPath();c.moveTo(x0+ox,y0+oy);c.lineTo(x1+ox,y1+oy);c.stroke();}}c.restore();}
   const pal=MP.zones.find(z=>z.id==='palace');
   const n=mini?20:70,hs=[];for(let q=0;q<n;q++){const a=q*2.399+1,rr=Math.sqrt((q+.5)/n)*370,x=Math.cos(a)*rr,y=Math.sin(a)*rr;
     if(MP.wallDist(x,y)>-14||MP.riverDist(x,y)<18||MP.inPoly(MP.harbor,x,y)||MP.polyDist(MP.harbor,x,y)<12)continue;if(pal&&Math.abs(x-pal.x)<pal.w*.6&&Math.abs(y-pal.y)<pal.h*.7)continue;hs.push(T(x,y));}
@@ -30707,7 +30830,7 @@ function drawIslePlan(c,X,Z,sc,I,skipName){const Zd=ZONES[I.id];
     for(const z of PL.zones)if(!/farm|pasture|lumber|nobles|inns|residential|artisans|commerce|garden|training|harbor/.test(z.kind)){c.fillStyle=FILL[z.kind]||'#b8a27e';shape(z);c.fill();}
     c.fillStyle='#4f7d86';poly(PL.harbor);c.fill();c.save();c.beginPath();for(let i=0;i<=96;i++){const a=i/96*Math.PI*2,r=OR.isleEdge(I,a);i?c.lineTo(X(I.x+Math.cos(a)*r),Z(I.z+Math.sin(a)*r)):c.moveTo(X(I.x+Math.cos(a)*r),Z(I.z+Math.sin(a)*r));}c.closePath();c.clip();   /* 강은 땅 안에서만 */
     c.strokeStyle='#4f7d86';c.lineWidth=MARCUS_RIVER_W*sc;c.lineCap='butt';c.beginPath();PL.river.forEach((p,i)=>i?c.lineTo(mX(p[0]),mZ(p[1])):c.moveTo(mX(p[0]),mZ(p[1])));c.stroke();c.restore();
-    c.strokeStyle='#b3a48a';c.lineWidth=Math.max(2,8*sc);for(const bx of PL.bridges){const n=PL.riverNear(bx,0);let best=null,bd=1e9;for(let t=-40;t<=40;t+=2){const q=PL.riverNear(bx,n.y+t);if(q.d<bd){bd=q.d;best=q;}}if(!best)continue;c.beginPath();c.moveTo(mX(best.x-best.uy*14),mZ(best.y+best.ux*14));c.lineTo(mX(best.x+best.uy*14),mZ(best.y-best.ux*14));c.stroke();}
+    c.strokeStyle='#b3a48a';c.lineCap='butt';for(const b of PL.brs){const ex=b.uy+b.ux*b.T,ey=-b.ux+b.uy*b.T,L=b.XL;c.lineWidth=Math.max(2,(b.w+1.2)*sc/b.k);c.beginPath();c.moveTo(mX(b.x-ex*L),mZ(b.y-ey*L));c.lineTo(mX(b.x+ex*L),mZ(b.y+ey*L));c.stroke();}   /* 강 다리 */
     c.strokeStyle='#6e6860';c.lineWidth=Math.max(2,3*sc);poly(PL.wall);c.stroke();
     c.fillStyle='#8a7c64';for(const g of PL.gates){c.beginPath();c.arc(mX(g.x),mZ(g.y),Math.max(3,5*sc),0,7);c.fill();}
     /* 시내 마차 길: 점선 고리, 정류장 점, 달리는 마차 */
@@ -33769,7 +33892,7 @@ function templeCeil(x,z,d){const HA=OR.HALL,TP=TEMPLE,B=HA.HUB,bx=x-B.x,bz=z-B.z
 function ceilAdd(cx,cz,ry,hw,hd,y){CEILS.push({cx,cz,cs:Math.cos(ry),sn:Math.sin(ry),hw,hd,y});}
 function ceilOver(x,z,y0){let c=Infinity;
   for(const s of CEILS){const dx=x-s.cx,dz=z-s.cz,lx=dx*s.cs-dz*s.sn,lz=dx*s.sn+dz*s.cs;if(lx>s.hw||lx<-s.hw||lz>s.hd||lz<-s.hd)continue;if(s.y>y0+.2&&s.y<c)c=s.y;}
-  for(const s of SURFACES){if(x<s.x0||x>s.x1||z<s.z0||z>s.z1)continue;let h=s.y;if(s.ramp==='x')h=s.ya+(s.yb-s.ya)*(x-s.x0)/(s.x1-s.x0);else if(s.ramp==='z')h=s.ya+(s.yb-s.ya)*(z-s.z0)/(s.z1-s.z0);if(s.sp){h=surfSp(s,x,z,h);if(h==null)continue;}const u=h-.45;if(u>y0+.2&&u<c)c=u;}
+  for(const s of SURFACES){if(x<s.x0||x>s.x1||z<s.z0||z>s.z1)continue;let h=s.y;if(s.ramp==='x')h=s.ya+(s.yb-s.ya)*(x-s.x0)/(s.x1-s.x0);else if(s.ramp==='z')h=s.ya+(s.yb-s.ya)*(z-s.z0)/(s.z1-s.z0);if(s.fn){h=s.fn(x,z);if(h==null)continue;}else if(s.sp){h=surfSp(s,x,z,h);if(h==null)continue;}const u=h-.45;if(u>y0+.2&&u<c)c=u;}
   return c;}
 /* 카메라 길에 벽이 있나: 길쭉한 상자 부딪힘(벽·칸막이·난간)만 본다 (작은 가구에 걸려 카메라가 튀지 않게) */
 function camWallAt(x,y,z){for(const c of colNear(x,z,.3)){if(!c.box||Math.max(c.hw,c.hd)<1.2)continue;if(c.y0!==undefined){if(y<c.y0||y>c.y1)continue;}else if(y>heightAt(c.x,c.z)+(c.h||7))continue;
