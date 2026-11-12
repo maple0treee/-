@@ -36,7 +36,7 @@ const bbOfPts = (pts, r) => { const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9
 const C_BACK = rgb(0x2c4a66), C_BACK2 = rgb(0x1c3048), C_FLANK = rgb(0x6c8eaa), C_FLANK2 = rgb(0x5a7a98), C_BELLY = rgb(0xc4d4de), C_BELLY2 = rgb(0x9ab0c0);
 const C_FROST = rgb(0xeef6fb), C_STRIPE = rgb(0x16243a), C_SCAR = rgb(0x8aa4b8);
 const C_HORN = rgb(0xd8dcd6), C_HORN2 = rgb(0x6a7a88), C_ICE = rgb(0xbfe6fa), C_ICE2 = rgb(0x5aa6d8), C_CLAW = rgb(0x1a2232), C_TOOTH = rgb(0xeef0ea);
-const C_MEM = rgb(0x8ab0cc), C_MEM2 = rgb(0x4a6e90), C_MEMV = rgb(0x22405e), C_GUM = rgb(0x3a2a44), C_THROAT = rgb(0x0a1420);
+const C_MEM = rgb(0x8ab0cc), C_MEM2 = rgb(0x4a6e90), C_MEMV = rgb(0x22405e), C_GUM = rgb(0x3a2a44), C_THROAT = rgb(0x0a1420), C_TONGUE = rgb(0x5a3a5e);
 /* 비늘 몸 색: 등(법선 위)은 짙고, 옆은 옅고, 배는 흰 판비늘. 서리는 위를 보는 면에 엉긴다 */
 function scaleC(x, y, z, nx, ny, nz) {
   ny = ny || 0;
@@ -65,7 +65,7 @@ function hwyrm() {
   bones.push({ n: 'spine', p: 'root', o: [0, .6, -.06], tip: NECK[0], bw: .14 });
   for (let i = 0; i < 3; i++) bones.push({ n: 'n' + (i + 1), p: i ? 'n' + i : 'spine', o: NECK[i], tip: NECK[i + 1], bw: .07 - i * .01 });
   bones.push({ n: 'head', p: 'n3', o: NECK[3], tip: [0, .98, 1.4], bw: .06 });
-  bones.push({ n: 'jaw', p: 'head', o: [0, .975, 1.0], tip: [0, .91, 1.3], bw: .02, rad: .14 });
+  bones.push({ n: 'jaw', p: 'head', o: [0, .975, 1.0], tip: [0, .91, 1.3], bw: .006, rad: .07 });
   for (let i = 0; i < 6; i++) bones.push({ n: 't' + (i + 1), p: i ? 't' + i : 'root', o: TAIL[i], tip: TAIL[i + 1], bw: .09 - i * .012 });
 
   /* ===== 몸통: 가슴·배·엉덩이 덩어리를 매끈하게 잇는다. 배는 가로 판비늘로 살짝 도드라진다 ===== */
@@ -84,14 +84,17 @@ function hwyrm() {
   for (let i = 0; i < 6; i++) prims.push(C('t' + (i + 1), TAIL[i], TAIL[i + 1], TR[i], TR[i + 1], { c: scaleC, k: i ? .05 : .09 }));
 
   /* ===== 머리 ===== */
-  const headC = (x, y, z, nx, ny) => { let c = scaleC(x, y, z, nx, ny); c = cmix(c, C_BACK2, sstep(1.05, 1.1, y) * .4); return c; };
+  const headC = (x, y, z, nx, ny) => { let c = scaleC(x, y, z, nx, ny); c = cmix(c, C_BACK2, sstep(1.05, 1.1, y) * .4);
+    /* 입천장: 위턱 아랫면 안쪽은 짙은 잇몸빛 (가장자리는 비늘빛 그대로) */
+    if (z > .97 && y < .972) c = cmix(c, cmix(C_THROAT, C_GUM, sstep(1.0, 1.25, z)), sstep(-.4, -.8, ny || 0) * sstep(.075, .05, Math.abs(x) / Math.max(.4, 1.6 - (z - 1) * 2.4)));
+    return c; };
   /* 머리뼈: 뒤는 넓고 앞으로 좁아지는 쐐기 (눈 뒤가 가장 넓다) */
   const SK = [[.95, 1.03, .1, .085, .09], [1.07, 1.02, .088, .072, .08], [1.17, 1.005, .07, .058, .07], [1.27, .99, .056, .048, .06], [1.35, .985, .045, .04, .045]];
   const skullD = (x, y, z) => { let d = 1e9; for (const [zc, yc, w, h, l] of SK) d = smin(d, ellD(x, y - yc, z - zc, w, h, l), .06); return d; };
   prims.push(F('head', [-.14, .92, .84, .14, 1.13, 1.42], skullD, { c: headC, k: .04 }));
   prims.push(E('head', [0, 1.02, .97], [.1, .085, .1], { c: headC, k: .05 }));
   /* 위턱 아래쪽은 평평하게 깎는다 (입 틈) */
-  prims.push(F('head', [-.12, .86, 1.0, .12, .955, 1.45], (x, y, z) => .952 - y, { sub: true, k: .008 }));
+  prims.push(F('head', [-.12, .86, 1.0, .12, .962, 1.45], (x, y, z) => y - .962, { sub: true, k: .008 }));
   /* 눈두덩: 눈 위로 툭 튀어나온 뼈 */
   for (const s of [-1, 1]) {
     prims.push(C('head', [s * .055, 1.075, 1.13], [s * .085, 1.085, .99], .026, .03, { c: headC, k: .025 }));
@@ -102,16 +105,16 @@ function hwyrm() {
   /* 아래턱: 따로 된 뼈 (벌어진다). 뒤는 귀 밑에서 경첩 */
   const JW = [[1.0, .945, .082, .036, .07], [1.1, .935, .068, .03, .07], [1.2, .928, .052, .026, .06], [1.28, .925, .038, .022, .04]];
   const jawD = (x, y, z) => { let d = 1e9; for (const [zc, yc, w, h, l] of JW) d = smin(d, ellD(x, y - yc, z - zc, w, h, l), .05); return d; };
-  prims.push(F('jaw', [-.12, .88, .9, .12, .98, 1.33], (x, y, z) => Math.max(jawD(x, y, z), y - .943), { c: (x, y, z, nx, ny) => cmix(headC(x, y, z, nx, ny), C_BELLY, sstep(-.1, -.6, ny) * .7), k: .015 }));
-  /* 입 안: 잇몸·목구멍 색 (입 틈 안쪽) */
-  prims.push(F('jaw', [-.08, .925, .98, .08, .946, 1.27], (x, y, z) => { const t = clamp((z - .98) / .29, 0, 1), w = mix(.06, .024, t); return Math.max(Math.abs(x) - w, Math.abs(y - .936) - .009, Math.abs(z - 1.125) - .145); }, { c: (x, y, z) => cmix(C_THROAT, C_GUM, sstep(1.0, 1.2, z)), k: .01, hard: 1 }));
-  /* 이빨: 위턱 가장자리에서 아래로, 아래턱에서 위로. 송곳니는 길다 */
+  prims.push(F('jaw', [-.12, .88, .9, .12, .98, 1.33], (x, y, z) => Math.min(Math.max(jawD(x, y, z), y - .934), ellD(x, y - .929, z - 1.1, .03, .007, .12)), { c: (x, y, z, nx, ny) => { let c = cmix(scaleC(x, y, z, nx, ny), C_BELLY, sstep(-.1, -.6, ny) * .7);
+    /* 아랫입 안: 혀와 잇몸 (위를 보는 안쪽 면만) */
+    const inner = sstep(.3, .7, ny || 0) * sstep(.065, .045, Math.abs(x) * (1 + (z - 1) * 1.2)); return cmix(c, cmix(cmix(C_THROAT, C_GUM, sstep(1.0, 1.2, z)), C_TONGUE, sstep(.012, .004, Math.abs(x)) * sstep(.99, 1.06, z)), inner); }, k: .015, own: .006 }));   /* own: 머리뼈 거리 함수 속에 든 아래턱 겉면도 아래턱 뼈를 따르게 */
+  /* 이빨: 위턱 가장자리에서 아래로, 아래턱에서 위로. 송곳니는 길다. 아랫니는 윗니 안쪽에 엇갈려 서서 서로 닿지 않는다 (닿으면 한 덩이로 구워져 입을 벌릴 때 늘어난다) */
   const toothC = (base, tip) => (x, y, z) => { const L = Math.hypot(tip[0] - base[0], tip[1] - base[1], tip[2] - base[2]) || 1, k = clamp(Math.hypot(x - base[0], y - base[1], z - base[2]) / L, 0, 1); return cmix(rgb(0xb8c4c8), C_TOOTH, sstep(.1, .6, k)); };
   for (const s of [-1, 1]) for (let i = 0; i < 9; i++) {
     const t = i / 8, z = mix(1.34, 1.02, t), w = mix(.038, .085, Math.pow(t, .9)) - .004, fang = i === 1 || i === 4, L = fang ? .034 : .016 + .008 * Math.sin(i * 2.3);
-    const b1 = [s * w, .956, z], t1 = [s * (w - .004), .956 - L, z + .004];
+    const b1 = [s * w, .965, z], t1 = [s * (w - .004), .965 - L, z + .004];
     prims.push(C('head', b1, t1, fang ? .0075 : .0055, .001, { g: 'teeth', c: toothC(b1, t1) }));
-    const zj = mix(1.29, 1.0, t), wj = mix(.032, .08, Math.pow(t, .9)) - .006, Lj = (i === 2 ? .028 : .013 + .006 * Math.sin(i * 1.7)), b2 = [s * wj, .94, zj], t2 = [s * (wj - .003), .94 + Lj, zj - .003];
+    const zj = mix(1.27, 1.0, t) - .016, wj = mix(.024, .064, Math.pow(t, .9)), Lj = (i === 2 ? .02 : .01 + .004 * Math.sin(i * 1.7)), b2 = [s * wj, .932, zj], t2 = [s * (wj - .003), .932 + Lj, zj - .003];
     prims.push(C('jaw', b2, t2, i === 2 ? .007 : .005, .001, { g: 'teeth', c: toothC(b2, t2) }));
   }
   /* 눈: 차가운 푸른 빛 (눈동자는 세로로 찢어졌다) */
