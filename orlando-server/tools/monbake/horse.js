@@ -23,7 +23,8 @@ const lerp3 = (a, b, t) => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[
 const pitchTo = a => Math.atan2(-a[1], a[2]);
 const bbB0 = (c, h) => [c[0] - h[0], c[1] - h[1], c[2] - h[2], c[0] + h[0], c[1] + h[1], c[2] + h[2]];
 
-function horse() {
+function horse(o = {}) {
+  const DK = !!o.donkey;
   const prims = [];
   const P = p => { prims.push(p); return p; };
 
@@ -33,6 +34,12 @@ function horse() {
     let light = sstep(-.15, -.85, ny) * sstep(.66, .5, y) * .75;   // 배 아래
     light = Math.max(light, sstep(.6, .45, y) * sstep(.02, .09, -Math.abs(x) + .14) * .0);
     let dark = sstep(.36, .2, y);   // 다리 끝 (흑점)
+    if (DK) {
+      const t = (y - H0[1]) * A[1] + (z - H0[2]) * A[2], u = (y - H0[1]) * U[1] + (z - H0[2]) * U[2];
+      if (z > .62 && y > .85) light = Math.max(light, sstep(.26, .34, t), sstep(.03, .0, Math.abs(Math.hypot(t - .118, u - .022) - .03)) * .8);   // 흰 주둥이·눈 둘레
+      light = Math.max(light, sstep(.55, .44, y) * .9);   // 배·다리 안쪽
+      dark = Math.max(dark * .5, sstep(.03, .012, Math.abs(x)) * sstep(.86, .92, y) * (z < .4 ? 1 : 0), sstep(.03, .012, Math.abs(z - .31)) * sstep(.82, .9, y));   // 등줄기·어깨 십자
+    }
     return [s, light * s, dark * s];
   };
   const C_COAT = coatC;
@@ -96,12 +103,12 @@ function horse() {
   P(E('head', pt(.04, -.12), [.07, .07, .09], { k: .06, c: C_COAT, rot: [b + .6, 0, 0] }));
   /* 귀 */
   for (const s of [-1, 1]) {
-    const base = pt(-.005, .045, s * .045), dir = norm([s * .3, .92, -.22]), tip = add(base, scl(dir, .13));
+    const base = pt(-.005, .045, s * .045), dir = norm(DK ? [s * .32, .92, -.12] : [s * .3, .92, -.22]), tip = add(base, scl(dir, DK ? .25 : .13)), ew = DK ? 1.5 : 1;
     const rx = pitchTo(dir);
-    const ear = E('head', lerp3(base, tip, .45), [.027, .019, .068], { k: .025, c: C_COAT, rot: [rx, s * .3, 0], pri: .004 });
+    const ear = E('head', lerp3(base, tip, .45), [.027 * ew, .019 * ew, DK ? .13 : .068], { k: .025, c: DK ? (x, y, z, nx, ny, nz) => { const c = C_COAT(x, y, z, nx, ny, nz); const tp = sstep(.82, .95, dot(sub([x, y, z], base), dir) / .25); return [c[0], c[1] * (1 - tp), Math.max(c[2], tp * c[0])]; } : C_COAT, rot: [rx, s * .3, 0], pri: .004 });
     P(ear);
     /* 귀 안쪽 오목 (앞·바깥을 본다) */
-    P(E('head', add(lerp3(base, tip, .55), [s * .006, 0, .012]), [.016, .01, .05], { k: .01, c: C_COAT, rot: [rx, s * .3, 0], sub: true }));
+    P(E('head', add(lerp3(base, tip, .55), [s * .006 * ew, 0, .012 * ew]), [.016 * ew, .01 * ew, DK ? .1 : .05], { k: .01, c: C_COAT, rot: [rx, s * .3, 0], sub: true }));
   }
   /* ================= 눈 ================= */
   for (const s of [-1, 1]) {
@@ -158,14 +165,17 @@ function horse() {
   /* 목 살갗 위에 얹힌 털 껍질: 목덜미 꼭대기는 두툼하고, +x 쪽으로 넘어가며 얇아져 들쭉날쭉한 끝으로 끝난다 */
   const fNeck = makeField(prims.filter(p => p.g === 'body' && !p.sub));
   const crestAt = (x, y, z) => { let d = 1e9, tt = 0; for (let i = 0; i + 1 < crest.length; i++) { const v = capD(x, y, z, ...crest[i], ...crest[i + 1], 0, 0); if (v < d) { d = v; tt = i + .5; } } return [d, tt / (crest.length - 1)]; };
-  P(F('neck', [-.14, .8, .22, .24, 1.42, .84], (x, y, z) => {
+  if (DK) {
+    /* 당나귀: 목덜미에 짧게 곧추선 솔 갈기 */
+    for (let i = 0; i + 1 < crest.length; i++) P(C('neck', add(crest[i], [0, .018, 0]), add(crest[i + 1], [0, .018, 0]), .03, .03, { g: 'mane', c: maneS, k: .02, disp: (x, y, z) => .006 * Math.sin(dot([x, y, z], crestD) * 260) + .004 * vnoise(x * 90, y * 90, z * 90), amp: .012 }));
+  } else P(F('neck', [-.14, .8, .22, .24, 1.42, .84], (x, y, z) => {
     const [d, t] = crestAt(x, y, z);
     const fall = .085 + .1 * Math.sin(Math.PI * Math.min(1, t * 1.15)) + .02 * vnoise(z * 45, y * 45, 0);
     const reach = x < 0 ? .03 : fall, th = .004 + .016 * clamp(1 - d / reach, 0, 1);
     return Math.max(Math.abs(fNeck(x, y, z) - th) - th + groove(x, y, z) * Math.min(1, th / .012), d - reach);
   }, { g: 'mane', c: maneS }));
   /* 앞머리: 두 귀 사이에서 이마로 */
-  {
+  if (!DK) {
     const fH = makeField(head.filter(p => !p.sub)), a0 = pt(-.03, .06), a1 = pt(.13, .07);
     P(F('head', bbB0(lerp3(a0, a1, .5), [.14, .14, .14]), (x, y, z) => {
       const d = capD(x, y, z, ...a0, ...a1, 0, 0), reach = .032 + .012 * vnoise(x * 60, y * 60, z * 60), th = .003 + .011 * clamp(1 - d / reach, 0, 1);
@@ -174,9 +184,15 @@ function horse() {
   }
   /* 꼬리털: 꼬리 뿌리에서 늘어져 아래로 조금 퍼진다 */
   const tg = (x, y, z) => .008 * Math.sin(x * 240 + 4 * vnoise(x * 20, y * 6, z * 20)) + .004 * vnoise(x * 90, y * 12, z * 90);
+  if (DK) {
+    /* 당나귀: 가는 꼬리 끝에 술 */
+    P(C('t2', [0, .8, -.625], [0, .5, -.66], .028, .02, { k: .02, c: C_COAT }));
+    P(C('t2', [0, .52, -.66], [0, .33, -.665], .03, .045, { g: 'mane', c: maneS, k: .03, disp: tg, amp: .012 }));
+  } else {
   P(C('t1', [0, .975, -.545], [0, .81, -.655], .055, .075, { g: 'mane', c: maneS, k: .03, disp: tg, amp: .012 }));
   P(C('t2', [0, .81, -.655], [0, .55, -.7], .075, .082, { g: 'mane', c: maneS, k: .05, disp: tg, amp: .012 }));
   P(C('t2', [0, .55, -.7], [0, .32, -.69], .082, .045, { g: 'mane', c: maneS, k: .05, disp: tg, amp: .012 }));
+  }
 
   /* ================= 마구 ================= */
   const fBody = makeField(prims.filter(p => p.g === 'body' && (p.b === 'root' || p.lab === 'neck' || p.b === 'neck')));
@@ -245,7 +261,7 @@ function horse() {
   }
 
   /* ---- 마차 마구 (harness) ---- */
-  {
+  if (!DK) {
     const g = 'harness';
     /* 목사리: 목 뿌리를 두르는 두툼한 가죽 고리 (위아래로 긴 달걀꼴), 앞쪽에 놋쇠 멍에 테 */
     const cc = [0, .985, .5], ca = norm([0, .62, .78]), cr = [Math.atan2(ca[2], ca[1]), 0, 0];
@@ -293,4 +309,4 @@ function horse() {
   };
 }
 
-module.exports = { TYPES: { horse } };
+module.exports = { TYPES: { horse: () => horse(), donkey: () => horse({ donkey: true }), mwolf: () => require('./wolf').wolf() } };
