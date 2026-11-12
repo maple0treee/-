@@ -51,7 +51,14 @@
   const DUN = { x: 0, z: 422, R: 14, corZ0: 394, corZ1: 409, corW: 3.2 };
   const BOSS_HOME = { x: 0, z: 421 };
   const LAIR = { x: 470, z: 0, r: 18 };              // 심연 끝 붉은 용의 둥지
-  const HALL = { x: 0, z: -500, R: 24 };             // 동쪽 황야 끝 포탈 너머: 지하실 (둥근 방, 천장이 막혀 있다)
+  const HALL = { x: 0, z: -500, R: 30, T: 3, BW: 4.6 };   // 동쪽 황야 끝 포탈 너머: 길드홀 지하실 = 땅속 깊은 신전 (지름 60m 둥근 방, 돔 천장). T 둥근 벽 두께, BW 갈래 길 입구 반폭
+  /* 신전 벽의 여덟 갈래 길 (북쪽부터 45°씩, a: 방향 = x축에서 z쪽으로). 걸을 수 있는 곳은 입구(R-1.2)부터 r1 까지, 반폭 hw.
+     open 이 없는 길은 청동 문으로 닫힌 현관 (문 앞 r1 까지만). 나중에 길을 열면 open·r1 을 고치고 길을 짓는다 */
+  HALL.WAYS = [['n', 1, HALL.R + HALL.T + 0.2, 3.82], ['ne', 0, HALL.R + 5.4, 3.9], ['e', 0, HALL.R + 5.4, 3.9], ['se', 0, HALL.R + 5.4, 3.9],
+    ['s', 1, HALL.R + 3.0, 3.6], ['sw', 0, HALL.R + 5.4, 3.9], ['w', 1, 70, 3.9], ['nw', 0, HALL.R + 5.4, 3.9]]
+    .map(([id, open, r1, hw], i) => ({ id, a: -Math.PI / 2 + i * Math.PI / 4, open: !!open, r1, hw }));   // 북: 큰 계단 위 층계참 → 길드홀로 오르는 통로, 남: 깊은 사막3 포탈 감실, 서: 기둥 회랑 → 포탈의 방
+  /* 서쪽 회랑 끝: 보스방으로 가는 포탈이 모인 팔각 방 (A = 가운데에서 벽까지). GATES: 걸어 들어가는 포탈 감실 (k*45°, 0 = 회랑 쪽) */
+  HALL.HUB = { x: HALL.x - 84, z: HALL.z, A: 15, u: 84, GATES: [3, 4, 5] };
   const WLAIR = { x: 200, z: -520, r: 22 };
   // 지하실 포탈 너머의 다섯 땅 (동쪽 멀리, 한 줄로)
   const ISLES = {
@@ -295,7 +302,7 @@
   function isleEdge(I, a) { if (I.id !== 'marcus') return I.R; return polyRay(MARCUS_WALL_M, a) + MARCUS_EDGE_GAP + 6 * Math.sin(3 * a + 1.3) + 4 * Math.sin(7 * a + 0.4) + 2 * Math.sin(13 * a + 2.1); }
   function isleAt(x, z) { let b = null, bd = 1e9; for (const k of ISLE_ORDER) { const I = ISLES[k], ax = Math.abs(x - I.x), az = Math.abs(z - I.z); if ((ax > az ? ax : az) - I.R >= bd) continue; const d = Math.hypot(x - I.x, z - I.z) - I.R; if (d < bd) { bd = d; b = I; } } return b; }   // 위와 같이 먼 땅은 건너뛴다
   // 지하실 위층의 작은 방 (계단을 올라가면 나온다)
-  const HALL_ROOM = { x: 0, z0: -500 - 24 - 8.3 - 10, z1: -500 - 24 - 8.3, hw: 4.5, y: 4.5, corHw: 1.8, stHw: 1.5, stLen: 16, stRise: 9, stLand: 3.4 };
+  const HALL_ROOM = (() => { const z1 = HALL.z - HALL.R - HALL.T - 6; return { x: HALL.x, z0: z1 - 10, z1, hw: 4.5, y: 7, rh: 6.4, corHw: 2.6, corSp: 10.2, stHw: 1.5, stLen: 22, stRise: 12, stLand: 3.4 }; })();   // y: 신전 큰 계단 위 층계참과 같은 높이. cor*: 신전에서 오는 통로 (반폭·둥근 천장이 시작하는 높이)
   // 계단 꼭대기 너머: 길드홀 지하 창고 (북쪽 벽의 짧은 계단 위 문으로 길드홀 1층에 오른다)
   const CELLAR = (() => { const H = HALL_ROOM, zS = H.z0 - H.stLen - H.stLand; return { x: H.x, z1: zS, z0: zS - 14, hw: 7, y: H.y + H.stRise, up: 2.0, stL: 4.4, land: 1.8 }; })();   // st*: 방 안쪽(북쪽) 벽에서 위로 오르는 계단           // 포탈을 처음 타면 가는 와이번의 둥지 (잡으면 다음부터는 바로 지하실)                 // 동쪽 황야 끝 포탈
 
@@ -349,7 +356,19 @@
   }
   const inHallAnnex = (p, rad) => { const H = HALL_ROOM; if (Math.abs(p.x - H.x) < H.hw - rad && p.z > H.z0 + rad && p.z < H.z1 - rad) return true;   // 남쪽 벽(z1~z1+1) 안으로는 못 들어간다 (가운데 통로로만)
     if (Math.abs(p.x - H.x) < H.stHw - rad && p.z > H.z0 - H.stLen - H.stLand - 1 && p.z <= H.z0 + rad + 0.01) return true;
-    { const C = CELLAR; if (Math.abs(p.x - C.x) < C.hw - rad && p.z > C.z0 + rad && p.z <= C.z1 - rad) return true; } return Math.abs(p.x - H.x) < H.corHw - rad && p.z > H.z1 - 1 && p.z < HALL.z - HALL.R + 2; };   // 벽에 바짝 붙어도 눈(카메라)이 벽 속으로 들어가지 않게 몸 반지름만큼 띄운다
+    { const C = CELLAR; if (Math.abs(p.x - C.x) < C.hw - rad && p.z > C.z0 + rad && p.z <= C.z1 - rad) return true; } return Math.abs(p.x - H.x) < H.corHw - rad && p.z > H.z1 - 1 && p.z < HALL.z - HALL.R - HALL.T + 0.5; };
+  /* 신전 안 (둥근 방 · 여덟 갈래 입구 · 회랑 · 포탈의 방) */
+  const hallIn = (p, rad) => { const H = HALL, dx = p.x - H.x, dz = p.z - H.z, r = H.R - 0.6 - rad; if (dx * dx + dz * dz < r * r) return true;
+    for (const W of H.WAYS) { const c = Math.cos(W.a), s = Math.sin(W.a), u = dx * c + dz * s, v = -dx * s + dz * c; if (u > H.R - 1.2 && u < W.r1 - rad && Math.abs(v) < W.hw - rad) return true; }
+    const B = H.HUB, bx = p.x - B.x, bz = p.z - B.z, rb = B.A - 0.6 - rad; if (bx * bx + bz * bz < rb * rb) return true;
+    for (const k of B.GATES) { const a = k * Math.PI / 4, c = Math.cos(a), s = Math.sin(a), u = bx * c + bz * s, v = -bx * s + bz * c; if (u > B.A - 1.2 && u < B.A + 1.7 - rad && Math.abs(v) < 2.7 - rad) return true; }
+    return false; };
+  /* 신전 밖으로 나갔을 때 되밀 자리 후보 (가장 가까운 것을 고른다) */
+  const hallNear = (p, rad, K) => { const H = HALL, dx = p.x - H.x, dz = p.z - H.z, d = Math.hypot(dx, dz) || 1e-4, r = H.R - 0.62 - rad; K.push({ x: H.x + dx * r / d, z: H.z + dz * r / d });
+    const rect = (ox, oz, a, u0, u1, hw) => { const c = Math.cos(a), s = Math.sin(a), qx = p.x - ox, qz = p.z - oz, u = clampN(qx * c + qz * s, u0, u1), v = clampN(-qx * s + qz * c, -hw, hw); K.push({ x: ox + c * u - s * v, z: oz + s * u + c * v }); };
+    for (const W of H.WAYS) rect(H.x, H.z, W.a, H.R - 1.15, W.r1 - rad - 0.01, W.hw - rad - 0.01);
+    const B = H.HUB, bx = p.x - B.x, bz = p.z - B.z, db = Math.hypot(bx, bz) || 1e-4, rb = B.A - 0.62 - rad; K.push({ x: B.x + bx * rb / db, z: B.z + bz * rb / db });
+    for (const k of B.GATES) rect(B.x, B.z, k * Math.PI / 4, B.A - 1.15, B.A + 1.69 - rad, 2.69 - rad); };   // 벽에 바짝 붙어도 눈(카메라)이 벽 속으로 들어가지 않게 몸 반지름만큼 띄운다
   function worldClamp(p, rad) {
     if (inTHouse(p.x, p.z)) { const T = THOUSE; p.x = clampN(p.x, T.x - T.hw + rad, T.x + T.hw - rad); p.z = clampN(p.z, T.z - T.hd + rad, T.z + T.hd - rad); return; }
     if (inGHouse(p.x, p.z)) { const T = GHOUSE; p.x = clampN(p.x, T.x - T.hw + rad, T.x + T.hw - rad); p.z = clampN(p.z, T.z - T.hd + rad, T.z + T.hd - rad); return; }
@@ -360,13 +379,13 @@
     if (inMyHome(p.x, p.z)) { const T = MYHOME; p.x = clampN(p.x, T.x - T.hw + rad, T.x + T.hw - rad); p.z = clampN(p.z, T.z - T.hd + rad, T.z + T.hd - rad); return; }
     if (p.x >= 800) { const I = isleAt(p.x, p.z); if (I.line) return mhClamp(p, rad); if (I.clamp && I.clamp(p, rad)) return; const d = Math.hypot(p.x - I.x, p.z - I.z), r = isleEdge(I, Math.atan2(p.z - I.z, p.x - I.x)) - rad; if (d > r) { p.x = I.x + (p.x - I.x) * r / d; p.z = I.z + (p.z - I.z) * r / d; } return; }
     if (p.z > 300) return roomClamp(p, rad);
-    if (p.z < -300 && p.x <= 100 && inHallAnnex(p, rad)) return;
-    /* 지하실 딸린 방·계단·창고 밖으로 나갔으면 (벽을 뚫었으면) 가장 가까운 안쪽 자리로 되민다 — 둥근 방 가장자리로 튕겨 보내지 않는다 */
-    if (p.z < -300 && p.x <= 100 && p.z < HALL.z - HALL.R + 2 && Math.hypot(p.x - HALL.x, p.z - HALL.z) > HALL.R - rad) { const H = HALL_ROOM, C = CELLAR, zS = H.z0 - H.stLen - H.stLand;
-      const R = [[H.x - H.hw + rad, H.x + H.hw - rad, H.z0 + rad, H.z1 - rad], [H.x - H.stHw + rad, H.x + H.stHw - rad, zS - 1, H.z0 + rad], [C.x - C.hw + rad, C.x + C.hw - rad, C.z0 + rad, C.z1 - rad], [H.x - H.corHw + rad, H.x + H.corHw - rad, H.z1 - 1, HALL.z - HALL.R + 2]];
-      let bx = p.x, bz = p.z, bd = 1e9; for (const [x0, x1, z0, z1] of R) { const qx = clampN(p.x, x0, x1), qz = clampN(p.z, z0, z1), d = Math.hypot(qx - p.x, qz - p.z); if (d < bd) { bd = d; bx = qx; bz = qz; } }
-      p.x = bx; p.z = bz; return; }
-    if (p.z < -300) { const A = p.x > 100 ? { x: WLAIR.x, z: WLAIR.z, R: WLAIR.r } : HALL; const d = Math.hypot(p.x - A.x, p.z - A.z), r = A.R - rad - (A === HALL ? 0.45 : 0);   /* 지하실 둥근 벽은 여러 조각이라 안쪽 면이 원보다 조금 안에 있다 */ if (d > r) { p.x = A.x + (p.x - A.x) * r / d; p.z = A.z + (p.z - A.z) * r / d; } return; }
+    /* 길드홀 지하실(신전과 딸린 방·계단·창고): 밖으로 나갔으면 (벽을 뚫었으면) 가장 가까운 안쪽 자리로 되민다 */
+    if (p.z < -300 && p.x <= 100) { if (inHallAnnex(p, rad) || hallIn(p, rad)) return;
+      const H = HALL_ROOM, C = CELLAR, zS = H.z0 - H.stLen - H.stLand, K = [];
+      for (const [x0, x1, z0, z1] of [[H.x - H.hw + rad, H.x + H.hw - rad, H.z0 + rad, H.z1 - rad], [H.x - H.stHw + rad, H.x + H.stHw - rad, zS - 1, H.z0 + rad], [C.x - C.hw + rad, C.x + C.hw - rad, C.z0 + rad, C.z1 - rad], [H.x - H.corHw + rad, H.x + H.corHw - rad, H.z1 - 1, HALL.z - HALL.R - HALL.T + 0.5]]) K.push({ x: clampN(p.x, x0, x1), z: clampN(p.z, z0, z1) });
+      hallNear(p, rad, K);
+      let b = K[0], bd = 1e9; for (const q of K) { const d = Math.hypot(q.x - p.x, q.z - p.z); if (d < bd) { bd = d; b = q; } } p.x = b.x; p.z = b.z; return; }
+    if (p.z < -300) { const A = WLAIR, d = Math.hypot(p.x - A.x, p.z - A.z), r = A.r - rad; if (d > r) { p.x = A.x + (p.x - A.x) * r / d; p.z = A.z + (p.z - A.z) * r / d; } return; }
     // 하레나 둘레: 도시 · 서문 목 · 길 · 석굴 입구 안으로 (가장 가까운 자리로 민다)
     if (hInside(p.x, p.z, rad)) return;
     const c = [], d2 = Math.hypot(p.x - C2.x, p.z - C2.z);
@@ -661,6 +680,6 @@
     return { id, board, zone, lv, goals, ty: goals[0].ty, exp: Math.round(exp * (rare ? 1.9 : 1.4)), gold: Math.round(lv * tot * (rare ? 20 : 11)), rare: rare ? 1 : 0,
       giver: gv.n, role: gv.r, why, at: Date.now() };
   }
-  const api = { HCH, boardTierOf, MHUNT, MLINES, MH, THOUSE, inTHouse, MYHOME, inMyHome, GHOUSE, inGHouse, BAKERY, inBakery, MSHOP, inMShop, HINN, inHInn, DINES, inDine, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, HLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, HUNT, zoneArea, huntCounts, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
+  const api = { HCH, boardTierOf, MHUNT, MLINES, MH, THOUSE, inTHouse, MYHOME, inMyHome, GHOUSE, inGHouse, BAKERY, inBakery, MSHOP, inMShop, HINN, inHInn, DINES, inDine, isleEdge, R1, C2, R2, ROAD, TOWN_R, INNER, SP, spR, spHW, spPos, spNear, hInside, hOutside, ENTRY, TOWN_BLD, PIT, DUN, BOSS_HOME, LAIR, HALL, EPORTAL, WLAIR, HLAIR, ISLES, ISLE_ORDER, isleAt, HALL_ROOM, CELLAR, inHallAnnex, hallIn, zoneAt, SAFE, roomClamp, worldClamp, keepOutOfSafe, MON, monStats, ZONE_MON, ZONE_COUNT, HUNT, zoneArea, huntCounts, levelAt, ZONE_LEVELS, smooth: sm, BOARDS, BOARD_CAP, makePoster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OR = api;
 })(typeof self !== 'undefined' ? self : this);
