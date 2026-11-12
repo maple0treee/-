@@ -36,7 +36,7 @@ function weights(bones, label, P) {
 async function bakeGroup(model, gname, opt) {
   await ready();
   const prims = model.prims.filter(p => p.g === gname);
-  const f = makeField(prims), fAll = model.fAll;
+  const f = makeField(prims), fAll = model.aoSelf ? f : model.fAll;   /* aoSelf: 무리끼리 겹쳐 놓은 꾸밈 모음은 제 무리로만 그늘 */
   const h = opt.h;
   const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
   for (const p of prims) if (!p.sub && !p.inter) for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], p.bb[a]); hi[a] = Math.max(hi[a], p.bb[a + 3]); }
