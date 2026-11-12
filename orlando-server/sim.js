@@ -186,12 +186,12 @@
         if (m.idleT > 10 && m.hp < m.mh) { m.hp = Math.min(m.mh, m.hp + m.mh * 0.04 * TICK); m.dirty = true; if (m.hp >= m.mh) { m.hitBy.clear(); m.phase = 1; m.said = 0; } }
         moveToward(m, m.home.x, m.home.z, 2.5); return;
       }
-      if (m.idleT > 3 || !m.said) { broadcast({ t: 'bsay', m: W ? `${NMi} 날개를 펼쳤다.` : '붉은 용 이그니스가 깨어났다! 바닥의 붉은 표시를 피하세요.', lair: 1, ax: A.x, az: A.z }); m.said = 1; }
+      if (m.idleT > 3 || !m.said) { broadcast({ t: 'bsay', m: W ? `${NM}의 눈이 하나씩 뜨인다.` : '붉은 용 이그니스가 깨어났다! 바닥의 붉은 표시를 피하세요.', lair: 1, ax: A.x, az: A.z }); m.said = 1; }
       m.idleT = 0;
       const C = m.cd; for (const k in C) C[k] -= TICK;
       m.gap -= TICK; m.atkCd -= TICK;
       const frac = m.hp / m.mh, ph = frac < 0.25 ? 3 : frac < 0.55 ? 2 : 1;
-      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? `${NMi} 높이 떠올랐다.` : `${NMi} 울부짖는다.`) : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
+      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? '하늘의 눈이 열렸다.' : `${NM}의 살갗이 찢어지며 별빛이 쏟아진다.`) : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
       const fast = ph === 3 ? 0.65 : ph === 2 ? 0.82 : 1;
       if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 3.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); nearCast(m, { t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.8 * fast; } return; }
       if (m.gap > 0 || m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }
