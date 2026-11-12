@@ -101,14 +101,14 @@
     function spawnWyvern() {
       return makeMon('wyvern', 'wlair', { x: WLAIR.x, z: WLAIR.z - 8 }, 62, { dragon: true, r: 3.4 * (MON.wyvern.scale || 1), ry: 0, cd: { breath: 3, tail: 6, stomp: 9, dive: 11, meteor: 14 }, gap: 0, sks: [], phase: 1, idleT: 0, mv: null, skSeq: 0, said: 0 });
     }
-    /* 얼음 구더기 어미 (허칠 동굴 끝 어미의 둥지, Lv 100): 방 안쪽 끝에 똬리를 틀고 있다 */
-    function spawnMother() {
-      return makeMon('hmother', 'hlair', { x: HLAIR.x - 2, z: HLAIR.z - 12 }, 100, { dragon: true, r: 3.2, ry: 0, cd: { bile: 4, slam: 6, thrash: 8, burrow: 12, eggs: 14, drop: 10, wail: 20, pop: 5, suck: 10 }, gap: 0, sks: [], phase: 1, idleT: 0, mv: null, skSeq: 0, said: 0, burrowT: 0 });
+    /* 서리 용 글라키에스 (허칠 동굴 끝 얼음 용의 잠자리, Lv 100): 방 안쪽 끝에 웅크려 잠들어 있다 */
+    function spawnWyrm() {
+      return makeMon('hwyrm', 'hlair', { x: HLAIR.x - 2, z: HLAIR.z - 12 }, 100, { dragon: true, r: 3.6, ry: 0, cd: { breath: 4, claw: 3, tail: 6, stomp: 10, leap: 12, icicle: 8, spike: 9, gust: 11, nova: 18 }, gap: 0, sks: [], phase: 1, idleT: 0, mv: null, skSeq: 0, said: 0 });
     }
     if (OR.huntCounts) OR.huntCounts();   // 사냥터 넓이만큼 (shared.js HUNT)
     for (const z in ZONE_COUNT) for (let k = 0; k < ZONE_COUNT[z]; k++) spawn(z);
     spawnWyvern();
-    if (HLAIR && MON.hmother) spawnMother();
+    if (HLAIR && MON.hwyrm) spawnWyrm();
     // 용의 둥지는 없앴다 (붉은 용은 나오지 않는다)
 
     function kill(m) {
@@ -116,7 +116,7 @@
       broadcast({ t: 'mdie', i: m.i, by: [...m.hitBy].filter((id) => clients.has(id)) });
       if (m.dragon) {
         if (m.ty === 'wyvern') later(() => broadcast({ t: 'mspawn', m: pub(spawnWyvern()) }), 120000);
-        else if (m.ty === 'hmother') { for (const s of [...monsters.values()]) if (s.summon && s.zone === 'hlair') { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [] }); } later(() => broadcast({ t: 'mspawn', m: pub(spawnMother()) }), 180000); }
+        else if (m.ty === 'hwyrm') later(() => broadcast({ t: 'mspawn', m: pub(spawnWyrm()) }), 180000);
         else later(() => broadcast({ t: 'mspawn', m: pub(spawnDragon()) }), 300000);
       } else if (!m.summon && !m.dragon) later(() => { const n = spawn(m.zone); if (n) broadcast({ t: 'mspawn', m: pub(n) }); }, 9000);
     }
@@ -174,7 +174,7 @@
       if (sk.pool) { out.pool = sk.pool[0]; out.dps = Math.round(m.atk * sk.pool[1]); }
       if (sk.jump) out.jump = 1;
       nearCast(m, out);
-      if (sk.k === 'dive' || sk.k === 'burrow') { m.mv = { fx: m.x, fz: m.z, tx: sk.x, tz: sk.z, t: 0, dur: sk.k === 'burrow' ? 0.12 : 0.25 }; }
+      if (sk.k === 'dive' || sk.k === 'leap') { m.mv = { fx: m.x, fz: m.z, tx: sk.x, tz: sk.z, t: 0, dur: sk.k === 'leap' ? 0.16 : 0.25 }; }
     }
     function dragonTick(m, ts) {
       const A = arenaOf(m), tg = ts.filter((t) => inArena(A, t)), W = m.ty === 'wyvern', NM = m.D.name, NMi = NM + ((NM.charCodeAt(NM.length - 1) - 0xac00) % 28 ? '이' : '가');
@@ -214,7 +214,7 @@
         dSkill(m, { k: 'breath', sh: 'l', x: head.x, z: head.z, a, len, w, tele: 1.3, mul: 1.6, pool: [3, 0.15], col: 1, block: true });
         if (ph === 3) { const s2 = Math.random() < 0.5 ? 1 : -1; dSkill(m, { k: 'breath', sh: 'l', x: head.x, z: head.z, a: a + s2 * 0.55, len, w, tele: 2.2, mul: 1.6, pool: [3, 0.15], col: 1, block: true }); }
         m.ry = a; C.breath = rnd(7, 9) * fast;
-      } else if (C.tail <= 0 && dist < 10) {
+      } else if (C.tail <= 0 && dist < 11.5) {
         dSkill(m, { k: 'tail', sh: 'c', x: m.x, z: m.z, r: 7.5, tele: 1.0, mul: 1.3, jump: 1, block: true });
         C.tail = rnd(6, 8) * fast;
       } else if (C.stomp <= 0) {
@@ -226,100 +226,86 @@
     }
 
 
-    // ---------- 얼음 구더기 어미 (어미의 둥지, Lv 100) ----------
-    // 기술은 용처럼 바닥에 경고(msk)가 먼저 뜨고 잠시 뒤 판정(mskr). 알을 터뜨려 새끼(hgrub)를 낳고, 새끼가 어미 입에 닿으면 어미가 먹고 기운을 차린다
-    function mClamp(m) { lairClamp(m, m.r); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(m, m.r * 0.55); }
-    function motherTick(m, ts) {
-      const A = HLAIR, hClamp = (p, rad) => { const d = Math.hypot(p.x - A.x, p.z - A.z), mx = A.r - rad; if (d > mx) { p.x = A.x + (p.x - A.x) * mx / d; p.z = A.z + (p.z - A.z) * mx / d; } }, tg = ts.filter((t) => inArena(A, t) && zoneAt(t.x, t.z) === 'hlair');
-      for (const sk of [...m.sks]) { sk.t += TICK; if (sk.t >= sk.tele) { dResolve(m, sk, tg); m.sks.splice(m.sks.indexOf(sk), 1); if (sk.k === 'burrow') m.burrowT = 0; } }
-      if (m.mv) { m.mv.t += TICK; const k = Math.min(1, m.mv.t / m.mv.dur); m.x = m.mv.fx + (m.mv.tx - m.mv.fx) * k; m.z = m.mv.fz + (m.mv.tz - m.mv.fz) * k; if (k >= 1) m.mv = null; mClamp(m); return; }
-      const kids = [...monsters.values()].filter((s) => s.summon && s.zone === 'hlair');
+    // ---------- 서리 용 글라키에스 (얼음 용의 잠자리, Lv 100) ----------
+    // 기술은 용처럼 바닥에 경고(msk)가 먼저 뜨고 잠시 뒤 판정(mskr). 둘째 단계부터 천장 고드름·얼음 가시·날갯바람, 셋째 단계엔 눈보라
+    function wClamp(m) { lairClamp(m, m.r); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(m, m.r * 0.55); }
+    function frostTick(m, ts) {
+      const A = HLAIR, hClamp = (p, rad) => { const d = Math.hypot(p.x - A.x, p.z - A.z), mx = A.r - rad; if (d > mx) { p.x = A.x + (p.x - A.x) * mx / d; p.z = A.z + (p.z - A.z) * mx / d; } const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8); }, tg = ts.filter((t) => inArena(A, t) && zoneAt(t.x, t.z) === 'hlair');
+      for (const sk of [...m.sks]) { sk.t += TICK; if (sk.t >= sk.tele) { dResolve(m, sk, tg); m.sks.splice(m.sks.indexOf(sk), 1); } }
+      if (m.mv) { m.mv.t += TICK; const k = Math.min(1, m.mv.t / m.mv.dur); m.x = m.mv.fx + (m.mv.tx - m.mv.fx) * k; m.z = m.mv.fz + (m.mv.tz - m.mv.fz) * k; if (k >= 1) m.mv = null; wClamp(m); return; }
       if (!tg.length) {
         m.idleT += TICK; m.aggroOn = null; m.windup = 0;
         if (m.idleT > 10 && m.hp < m.mh) { m.hp = Math.min(m.mh, m.hp + m.mh * 0.04 * TICK); m.dirty = true; if (m.hp >= m.mh) { m.hitBy.clear(); m.phase = 1; m.said = 0; } }
-        if (m.idleT > 12) for (const s of kids) { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [] }); }
-        moveToward(m, m.home.x, m.home.z, 1.6); mClamp(m); return;
+        moveToward(m, m.home.x, m.home.z, 1.8); wClamp(m); return;
       }
       const say = (t) => broadcast({ t: 'bsay', m: t, lair: 1, ax: A.x, az: A.z });
-      if (m.idleT > 3 || !m.said) { say('얼어붙은 알 무더기 사이에서 얼음 구더기 어미가 몸을 일으켰다.'); m.said = 1; }
+      if (m.idleT > 3 || !m.said) { say('얼어붙은 보물 더미 위에서 서리 용 글라키에스가 눈을 떴다.'); m.said = 1; nearCast(m, { t: 'mfx', i: m.i, k: 'wake' }); }
       m.idleT = 0;
       const C = m.cd; for (const k in C) C[k] -= TICK;
       m.gap -= TICK; m.atkCd -= TICK;
-      // 새끼 먹기: 어미 입에 닿은 새끼는 삼켜진다
-      const mouth = { x: m.x + Math.sin(m.ry) * (m.r + 1.2), z: m.z + Math.cos(m.ry) * (m.r + 1.2) };
-      for (const s of kids) if (s.feed) { moveToward(s, mouth.x, mouth.z, 2.6); if (Math.hypot(s.x - mouth.x, s.z - mouth.z) < 1.6) { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [], eat: m.i }); m.hp = Math.min(m.mh, m.hp + m.mh * 0.03); m.dirty = true; } }
       const frac = m.hp / m.mh, ph = frac < 0.3 ? 3 : frac < 0.65 ? 2 : 1;
-      if (ph > m.phase) { m.phase = ph; say(ph === 2 ? '어미의 등에 붙은 알들이 꿈틀거린다.' : '어미의 옆구리가 쩍 갈라지며 속에서 새끼들이 쏟아진다.'); C.eggs = Math.min(C.eggs, 1); C.wail = Math.min(C.wail, 2);
-        if (ph === 3) {
-          // 몸이 찢어진다: 갈라진 옆구리에서 새끼가 쏟아지고, 온몸의 고름 주머니가 한꺼번에 터진다
-          nearCast(m, { t: 'mfx', i: m.i, k: 'rupture' });
-          for (let k = 0; k < 4 && kids.length + k < 12; k++) { const aa = m.ry + Math.PI / 2 * (k % 2 ? 1 : -1) + rnd(-0.4, 0.4), p = { x: m.x + Math.sin(aa) * (m.r + 1.5), z: m.z + Math.cos(aa) * (m.r + 1.5) }; hClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
-            const s = makeMon('hgrub', 'hlair', p, 98, { summon: true, aggroOn: pick(tg).id, feed: k === 3 }); broadcast({ t: 'mspawn', m: pub(s), from: m.i }); }
-          for (let k = 0; k < 12; k++) { const aa = k / 12 * 6.283 + rnd(-0.2, 0.2), d = rnd(m.r + 1, A.r - 3), p = { x: m.x + Math.sin(aa) * d, z: m.z + Math.cos(aa) * d }; hClamp(p, 1);
-            dSkill(m, { k: 'pop', sh: 'c', x: p.x, z: p.z, r: 2.2, tele: 1.4 + (k % 4) * 0.25, mul: 1.1, pool: [4, 0.16], col: 4 }); }
-          m.gap = 2.2; C.pop = 8;
-        }
+      if (ph > m.phase) { m.phase = ph;
+        if (ph === 2) { say('글라키에스의 비늘마다 서리가 돋는다. 천장의 고드름이 흔들린다.'); C.icicle = Math.min(C.icicle, 1.5); }
+        else { say('글라키에스가 날개를 활짝 펼친다. 굴 안에 눈보라가 휘몰아친다.'); nearCast(m, { t: 'mfx', i: m.i, k: 'rage' }); C.nova = Math.min(C.nova, 1); m.gap = 1.2; }
       }
-      const fast = ph === 3 ? 0.68 : ph === 2 ? 0.85 : 1;
-      if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - mouth.x, t.z - mouth.z) < 3.4) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); broadcast({ t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.7 * fast; } return; }
-      if (m.gap > 0 || m.sks.some((s) => s.block)) { mClamp(m); return; }
+      const fast = ph === 3 ? 0.7 : ph === 2 ? 0.86 : 1;
+      const mouth = { x: m.x + Math.sin(m.ry) * (m.r + 1.4), z: m.z + Math.cos(m.ry) * (m.r + 1.4) };
+      if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - mouth.x, t.z - mouth.z) < 3.6) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); broadcast({ t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.6 * fast; } return; }
+      if (m.gap > 0 || m.sks.some((s) => s.block)) { wClamp(m); return; }
       let t = tg.find((q) => q.id === m.aggroOn);
       if (m.taunt > 0) m.taunt -= TICK;
       if (!t || (!(m.taunt > 0) && Math.random() < 0.015)) { const tn = tg.filter((q) => !q.dc); t = pick(tn.length ? tn : tg); m.aggroOn = t.id; }
       const dx = t.x - m.x, dz = t.z - m.z, dist = Math.hypot(dx, dz), a = Math.atan2(dx, dz);
-      turn(m, a, 0.2);
-      const head = { x: m.x + Math.sin(m.ry) * (m.r + 0.6), z: m.z + Math.cos(m.ry) * (m.r + 0.6) };
-      if (ph >= 2 && C.eggs <= 0 && kids.length < 8) {
-        // 알 터뜨리기: 등의 알이 터지며 새끼가 쏟아진다. 셋째 단계에선 새끼 몇이 어미에게 기어간다
-        const n = ph === 3 ? 5 : 3;
-        for (let k = 0; k < n; k++) { const aa = m.ry + Math.PI + (k - (n - 1) / 2) * 0.7, p = { x: m.x + Math.sin(aa) * (m.r + 2.5), z: m.z + Math.cos(aa) * (m.r + 2.5) }; hClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
-          const s = makeMon('hgrub', 'hlair', p, 98, { summon: true, aggroOn: pick(tg).id, feed: ph === 3 && k % 2 === 0 }); broadcast({ t: 'mspawn', m: pub(s), from: m.i }); }
-        nearCast(m, { t: 'mfx', i: m.i, k: 'eggs' });
-        C.eggs = 18 * fast; m.gap = 1.4;
-      } else if (ph >= 2 && C.suck <= 0 && dist < 17) {
-        // 들이마시기: 입을 크게 벌리고 숨을 빨아들여 앞에 선 사람을 입으로 끌어당긴 뒤 삼키듯 문다
-        const len = 17, mouthP = { x: m.x + Math.sin(a) * (m.r + 1.2), z: m.z + Math.cos(a) * (m.r + 1.2) };
-        dSkill(m, { k: 'suck', sh: 'l', x: mouthP.x, z: mouthP.z, a, len, w: 3.4, tele: 2.6, mul: 0.35, block: true });
-        dSkill(m, { k: 'gulp', sh: 'c', x: mouthP.x, z: mouthP.z, r: 3.6, tele: 2.75, mul: 2.8, block: true });
-        m.ry = a; C.suck = rnd(14, 17) * fast;
-      } else if (ph >= 3 && C.wail <= 0) {
-        dSkill(m, { k: 'wail', sh: 'c', x: m.x, z: m.z, r: 13, tele: 1.7, mul: 0.9, block: true });
-        C.wail = 17;
-      } else if (ph >= 2 && C.drop <= 0) {
-        // 천장에 붙어 있던 새끼들이 떨어진다
-        const n = 3 + ph * 2;
-        for (let k = 0; k < n; k++) { const q = k < tg.length ? tg[k] : null; const p = q ? { x: q.x + rnd(-1.2, 1.2), z: q.z + rnd(-1.2, 1.2) } : (() => { const aa = rnd(0, 6.28), d = rnd(3, A.r - 4); return { x: A.x + Math.cos(aa) * d, z: A.z + Math.sin(aa) * d }; })();
-          dSkill(m, { k: 'drop', sh: 'c', x: p.x, z: p.z, r: 2.2, tele: 1.4 + k * 0.2, mul: 1.0, pool: [3.5, 0.16], col: 4 }); }
-        C.drop = 14 * fast; m.gap = 0.8;
-      } else if (C.pop <= 0) {
-        // 고름 주머니 터뜨리기: 몸의 주머니들이 부풀다 터져 둘레에 고름이 튄다 (사람 발밑에도 하나씩)
+      turn(m, a, 0.22);
+      const head = { x: m.x + Math.sin(m.ry) * (m.r + 1.2), z: m.z + Math.cos(m.ry) * (m.r + 1.2) };
+      if (ph >= 3 && C.nova <= 0) {
+        // 눈보라: 날개를 펼치고 온몸에서 서리를 터뜨린다 (방 대부분을 덮는다, 멀리 달아나야 한다)
+        dSkill(m, { k: 'nova', sh: 'c', x: m.x, z: m.z, r: 15, tele: 2.3, mul: 1.0, block: true });
+        C.nova = 19; m.gap = 0.6;
+      } else if (ph >= 2 && C.icicle <= 0) {
+        // 천장 고드름: 사람 머리 위와 방 곳곳에 고드름이 떨어진다
         const n = 4 + ph * 2;
-        for (let k = 0; k < n; k++) { const q = k < tg.length && k < 3 ? tg[k] : null; const p = q ? { x: q.x + rnd(-0.8, 0.8), z: q.z + rnd(-0.8, 0.8) } : (() => { const aa = rnd(0, 6.28), d = rnd(m.r + 1, 12); return { x: m.x + Math.sin(aa) * d, z: m.z + Math.cos(aa) * d }; })(); hClamp(p, 1);
-          dSkill(m, { k: 'pop', sh: 'c', x: p.x, z: p.z, r: 2.1, tele: 1.25 + k * 0.08, mul: 1.1, pool: [4, 0.16], col: 4 }); }
-        C.pop = rnd(10, 13) * fast; m.gap = 0.7;
-      } else if (C.burrow <= 0 && dist > 7) {
-        // 얼음 바닥 밑으로 파고들었다가 노린 사람 발밑에서 솟구친다
-        dSkill(m, { k: 'burrow', sh: 'c', x: t.x, z: t.z, r: 5, tele: 2.1, mul: 2.0, block: true });
-        m.burrowT = 2.1; C.burrow = 16 * fast;
-      } else if (C.bile <= 0 && dist < 18) {
-        const len = 15, w = 2.5;
-        dSkill(m, { k: 'bile', sh: 'l', x: head.x, z: head.z, a, len, w, tele: 1.25, mul: 1.5, pool: [4.5, 0.2], col: 4, block: true });
-        if (ph >= 2) { const s2 = Math.random() < 0.5 ? 1 : -1; dSkill(m, { k: 'bile', sh: 'l', x: head.x, z: head.z, a: a + s2 * 0.6, len: len * 0.8, w, tele: 2.1, mul: 1.5, pool: [4.5, 0.2], col: 4, block: true }); }
-        if (ph >= 3) later(() => { if (!monsters.has(m.i)) return; const n = [...monsters.values()].filter((q) => q.summon && q.zone === 'hlair').length; if (n >= 10) return;   // 셋째 단계: 토사물 속에 산 새끼가 섞여 나온다
-          for (let k = 0; k < 2; k++) { const u = len * (0.55 + k * 0.35), p = { x: head.x + Math.sin(a) * u, z: head.z + Math.cos(a) * u }; hClamp(p, 1); const I = OR.ISLES.hlair; if (I && I.clamp) I.clamp(p, 0.8);
-            const tt = tg.length ? pick(tg) : null; const s = makeMon('hgrub', 'hlair', p, 98, { summon: true, aggroOn: tt ? tt.id : null }); broadcast({ t: 'mspawn', m: pub(s), from: m.i }); } }, 1300);
-        m.ry = a; C.bile = rnd(7, 9) * fast;
-      } else if (C.slam <= 0 && dist < 9) {
-        // 앞몸을 높이 쳐들었다가 내리찍는다
-        const p = { x: m.x + Math.sin(a) * (m.r + 2.4), z: m.z + Math.cos(a) * (m.r + 2.4) };
-        dSkill(m, { k: 'slam', sh: 'c', x: p.x, z: p.z, r: 4.6, tele: 1.35, mul: 1.9, block: true });
-        m.ry = a; C.slam = rnd(6, 8) * fast;
-      } else if (C.thrash <= 0 && dist < 10) {
-        dSkill(m, { k: 'thrash', sh: 'c', x: m.x, z: m.z, r: 8.5, tele: 1.1, mul: 1.25, jump: 1, block: true });
-        C.thrash = rnd(9, 12) * fast;
-      } else if (dist > m.r + 3.2) moveToward(m, t.x, t.z, ph === 3 ? 3.2 : 2.5);
-      else if (m.atkCd <= 0) { m.windup = 0.65; m.biteTo = t.id; }
-      mClamp(m);
+        for (let k = 0; k < n; k++) { const q = k < tg.length ? tg[k] : null; const p = q ? { x: q.x + rnd(-1.2, 1.2), z: q.z + rnd(-1.2, 1.2) } : (() => { const aa = rnd(0, 6.28), d = rnd(3, A.r - 3); return { x: A.x + Math.cos(aa) * d, z: A.z + Math.sin(aa) * d }; })(); hClamp(p, 1);
+          dSkill(m, { k: 'icicle', sh: 'c', x: p.x, z: p.z, r: 2.3, tele: 1.5 + k * 0.18, mul: 1.15, pool: [3.5, 0.12], col: 3 }); }
+        C.icicle = 14 * fast; m.gap = 0.9;
+      } else if (ph >= 2 && C.spike <= 0 && dist > 5) {
+        // 얼음 가시: 앞발로 바닥을 내리치면 노린 사람 쪽으로 바닥에서 얼음 가시가 줄지어 솟는다
+        const n = 8, st = Math.min(2.6, (dist + 3) / n);
+        for (let k = 0; k < n; k++) { const u = m.r + 1 + st * k, p = { x: m.x + Math.sin(a) * u, z: m.z + Math.cos(a) * u }; hClamp(p, 1);
+          dSkill(m, { k: 'spike', sh: 'c', x: p.x, z: p.z, r: 1.9, tele: 1.0 + k * 0.11, mul: 1.3, block: k === 0 }); }
+        if (ph >= 3) for (const s2 of [-1, 1]) for (let k = 0; k < 6; k++) { const aa = a + s2 * 0.5, u = m.r + 1 + 2.4 * k, p = { x: m.x + Math.sin(aa) * u, z: m.z + Math.cos(aa) * u }; hClamp(p, 1);
+          dSkill(m, { k: 'spike', sh: 'c', x: p.x, z: p.z, r: 1.7, tele: 1.3 + k * 0.11, mul: 1.2 }); }
+        m.ry = a; C.spike = rnd(12, 15) * fast;
+      } else if (ph >= 2 && C.gust <= 0 && dist < 15) {
+        // 날갯바람: 날개를 크게 쳐서 앞에 선 사람을 멀리 밀어낸다
+        dSkill(m, { k: 'gust', sh: 'l', x: m.x, z: m.z, a, len: 17, w: 6.5, tele: 1.35, mul: 0.8, block: true });
+        m.ry = a; C.gust = rnd(13, 16) * fast;
+      } else if (C.leap <= 0 && dist > 9) {
+        // 덮치기: 몸을 웅크렸다가 노린 사람에게 뛰어든다
+        dSkill(m, { k: 'leap', sh: 'c', x: t.x, z: t.z, r: 5.5, tele: 1.8, mul: 2.0, block: true });
+        m.ry = a; C.leap = 14 * fast;
+      } else if (C.breath <= 0 && dist < 20) {
+        // 서리 숨: 목 아래가 푸르게 빛나다가 얼음 숨을 내뿜는다 (지나간 자리는 얼어붙는다)
+        const len = 19, w = 3;
+        dSkill(m, { k: 'breath', sh: 'l', x: head.x, z: head.z, a, len, w, tele: 1.45, mul: 1.7, pool: [4, 0.14], col: 3, block: true });
+        if (ph >= 3) for (const s2 of [-1, 1]) dSkill(m, { k: 'breath', sh: 'l', x: head.x, z: head.z, a: a + s2 * 0.55, len: len * 0.9, w, tele: s2 < 0 ? 2.0 : 2.55, mul: 1.6, pool: [4, 0.14], col: 3, block: true });
+        else if (ph >= 2) { const s2 = Math.random() < 0.5 ? 1 : -1; dSkill(m, { k: 'breath', sh: 'l', x: head.x, z: head.z, a: a + s2 * 0.55, len: len * 0.9, w, tele: 2.2, mul: 1.6, pool: [4, 0.14], col: 3, block: true }); }
+        m.ry = a; C.breath = rnd(7, 9) * fast;
+      } else if (C.stomp <= 0 && dist < 12) {
+        // 일어서서 내리찍기: 뒷발로 일어섰다가 앞발로 바닥을 내리찍는다 (얼음 바닥이 둘레로 갈라진다)
+        dSkill(m, { k: 'stomp', sh: 'c', x: m.x, z: m.z, r: 11, tele: 1.6, mul: 1.1, jump: 1, block: true });
+        C.stomp = rnd(11, 14) * fast;
+      } else if (C.tail <= 0 && dist < 11.5) {
+        dSkill(m, { k: 'tail', sh: 'c', x: m.x, z: m.z, r: 10, tele: 1.05, mul: 1.35, jump: 1, block: true });
+        C.tail = rnd(7, 9) * fast;
+      } else if (C.claw <= 0 && dist < 7.5) {
+        // 앞발 할퀴기
+        const p = { x: m.x + Math.sin(a) * (m.r + 2), z: m.z + Math.cos(a) * (m.r + 2) };
+        dSkill(m, { k: 'claw', sh: 'c', x: p.x, z: p.z, r: 4.2, tele: 1.0, mul: 1.6, block: true });
+        m.ry = a; C.claw = rnd(5, 7) * fast;
+      } else if (dist > m.r + 3.4) moveToward(m, t.x, t.z, ph === 3 ? 3.4 : 2.7);
+      else if (m.atkCd <= 0) { m.windup = 0.6; m.biteTo = t.id; }
+      wClamp(m);
     }
     // ---------- 일반 몬스터의 작은 기술 (바닥에 경고 표시 → 잠시 뒤 판정) ----------
     // sh: 'c' 원, 'l' 직선. at: 'self' 자기 자리, 'front' 바로 앞, 'target' 노린 사람 자리
@@ -445,7 +431,7 @@
           if (m.dot.acc >= 1) { const d = Math.floor(m.dot.acc); m.dot.acc -= d; hurt(m, d, null); if (!monsters.has(m.i)) continue; }
           if (m.dot.t <= 0) m.dot = null;
         }
-        if (m.dragon) { if (m.D.mother) motherTick(m, tsB); else dragonTick(m, tsB); continue; }
+        if (m.dragon) { if (m.D.frost) frostTick(m, tsB); else dragonTick(m, tsB); continue; }
         m.stun = Math.max(0, m.stun - TICK);
         if (m.slowT > 0) m.slowT -= TICK;
         if (m.air > 0) m.air -= TICK;

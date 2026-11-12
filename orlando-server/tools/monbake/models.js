@@ -612,6 +612,7 @@ const TYPES = {
   salamander: () => lizardman({ skin: c(0xb8402a), belly: c(0xf0b060), crest: c(0xffa040), cloth: c(0x4a2a1a), eyeC: [1, .85, .3] }),
 };
 
-TYPES.hmother = require('./mother').hmother;   /* 얼음 구더기 어미 (허칠 동굴 끝 보스) */
+TYPES.hwyrm = require('./frostwyrm').hwyrm;   /* 서리 용 글라키에스 (허칠 동굴 끝 보스) */
+TYPES.hlairgate = require('./lairgate').hlairgate;   /* 얼음 용의 잠자리 문: 옛 용 머리뼈 */
 
 module.exports = { TYPES };

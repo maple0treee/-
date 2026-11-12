@@ -81,7 +81,7 @@
     hlodge: { x: 9500, z: 0, R: 60 },   /* 허칠 산장 안 (2026-11-07): 허칠 산장 맵의 큰 산장 정문으로 들어온다 */
     /* 허칠 사냥터 맵 (땅 좌표는 허칠 산장·동굴과 같다: 같은 산을 옮겨 그린다). hpeak = 눈 비탈, hcave = 박쥐 굴 */
     hwood: { x: 12600, z: 0, R: 120 }, hlake: { x: 13400, z: 0, R: 120 }, hscree: { x: 14200, z: 0, R: 120 }, hridge: { x: 15000, z: 0, R: 120 }, htop: { x: 15800, z: 0, R: 120 },
-    hcrys: { x: 16500, z: 0, R: 240 }, hfall: { x: 17100, z: 0, R: 240 }, hden: { x: 17700, z: 0, R: 240 }, hlair: { x: 18300, z: 0, R: 240 },   /* hlair = 어미의 둥지 (곰 굴 끝 보스방) */       // 기사단 본부: 엑시즈 시내 기사단 본부 정문으로 들어가면 나온다 (2층 회당 건물과 동쪽 훈련 마당)
+    hcrys: { x: 16500, z: 0, R: 240 }, hfall: { x: 17100, z: 0, R: 240 }, hden: { x: 17700, z: 0, R: 240 }, hlair: { x: 18300, z: 0, R: 240 },   /* hlair = 얼음 용의 잠자리 (곰 굴 끝 보스방) */       // 기사단 본부: 엑시즈 시내 기사단 본부 정문으로 들어가면 나온다 (2층 회당 건물과 동쪽 훈련 마당)
     // 엑시즈 남문 밖 사냥터 (모래톱, Lv 60–67). 자리는 아래 MLINES에서 정한다
     mfield: { x: 2700, z: 900, R: 150 },
   };
@@ -134,7 +134,7 @@
       CAVE: [[34, 58], [66, 50], [98, 40], [130, 28], [162, 16], [192, 6], [216, -4], [236, -10]],
       /* 동굴 (동굴 땅 가운데 기준): [x, z, 반폭, 천장 높이]. 들어오는 굴 입구(남)에서 굽이굽이 북쪽 끝 큰 방까지, 중간에 넓은 방 셋 */
       TUN: [[0, 214, 5, 6], [3, 194, 5.5, 6], [-6, 172, 6, 6.5], [-24, 150, 7, 7], [-36, 124, 22, 13], [-30, 98, 7, 7], [-8, 80, 6, 6.5], [18, 62, 6.5, 7], [40, 38, 7, 7.5], [46, 12, 24, 14], [34, -14, 7, 7], [10, -30, 6, 6], [-18, -42, 6, 6.5], [-44, -58, 7, 7], [-58, -84, 7, 7.5], [-56, -112, 25, 15], [-36, -134, 7, 7], [-6, -146, 6, 6.5], [22, -158, 7, 7], [38, -176, 12, 10], [40, -196, 27, 16], [38, -218, 8, 7], [34, -232, 4.6, 5.2],
-        /* 어미의 둥지 (2026-11-11 원호: 동굴 끝 보스방): 곰 굴 끝 좁은 굴목을 지나면 나오는 큰 방 */
+        /* 얼음 용의 잠자리 (2026-11-11 원호: 동굴 끝 보스방, 2026-11-12 서리 용으로 바뀜): 곰 굴 끝 좁은 굴목을 지나면 나오는 큰 방 */
         [30, -246, 7, 8], [26, -264, 19, 13], [20, -290, 23, 15], [16, -316, 19, 13], [14, -334, 9, 9], [14, -342, 2, 4]] };
     const pl = (C) => { let s = 0; return C.map((p, i) => { if (i) s += Math.hypot(p[0] - C[i - 1][0], p[1] - C[i - 1][1]); return { x: p[0], z: p[1], w: p[2] || 0, c: p[3] || 0, s }; }); };
     const chk = (C) => { const o = [C[0]]; for (let i = 0; i + 1 < C.length; i++) { const A = C[i], B = C[i + 1]; o.push(A.map((v, k) => v * 0.75 + B[k] * 0.25), A.map((v, k) => v * 0.25 + B[k] * 0.75)); } o.push(C[C.length - 1]); return o; };   /* 꺾인 굴길을 둥글게 */
@@ -157,12 +157,12 @@
       return Math.round(60 + 10 * Math.max(0, Math.min(1, (H.vt(lx, lz) - H.HUTT) / (1 - H.HUTT)))); };
     /* 사냥터 (2026-11-06 원호: 레벨별로 나눠서 여러 곳): 골짜기 둘, 동굴 넷(방마다 하나, 좁은 굴목에서 나뉨), 봉우리 넷(벼랑 안 둘레 띠) */
     H.AREAS = [
-      /* 2026-11-11 원호: 꼭대기를 지나 동굴로 → 바깥 여섯(60–84) 다음 굴 넷(84–100), 맨 끝 어미의 둥지(보스방 100) */
+      /* 2026-11-11 원호: 꼭대기를 지나 동굴로 → 바깥 여섯(60–84) 다음 굴 넷(84–100), 맨 끝 얼음 용의 잠자리(보스방 100) */
       { id: 'wood', name: '산장 숲길', lv: [60, 64] }, { id: 'lake', name: '호숫가 골짜기', lv: [64, 68] },
       { id: 'bat', name: '박쥐 굴', lv: [84, 88], cave: 1, s: [0, 170] }, { id: 'crys', name: '수정 굴', lv: [88, 92], cave: 1, s: [170, 315] },
       { id: 'fall', name: '얼음 폭포 굴', lv: [92, 96], cave: 1, s: [315, 470] }, { id: 'den', name: '곰 굴', lv: [96, 100], cave: 1, s: [470, H.near(H.T, 34, -232).s] },
       { id: 'slope', name: '눈 비탈', lv: [68, 72] }, { id: 'scree', name: '서리 바위밭', lv: [72, 76] }, { id: 'ridge', name: '바람 능선', lv: [76, 80] }, { id: 'top', name: '꼭대기', lv: [80, 84] },
-      { id: 'lair', name: '어미의 둥지', lv: [100, 100], cave: 1, boss: 1, s: [H.near(H.T, 34, -232).s, H.TL] }];
+      { id: 'lair', name: '얼음 용의 잠자리', lv: [100, 100], cave: 1, boss: 1, s: [H.near(H.T, 34, -232).s, H.TL] }];
     H.areaOfLv = (lv, cave) => { const L = H.AREAS.filter((A) => !!A.cave === !!cave); for (const A of L) if (lv < A.lv[1] || (lv === A.lv[1] && A.id === 'lake')) return A; return L[L.length - 1]; };
     H.caveArea = (s) => { let A = null; for (const B of H.AREAS) if (B.cave) { A = B; if (s < B.s[1]) break; } return A; };
     /* 동굴 적정레벨: 사냥터마다 굴 길이 따라 5씩 */
@@ -255,7 +255,7 @@
       if (f === 'cave') { const zz = H.zoneAtLocal('cave', x - I.x, z - I.z); return zz && zz !== I.id ? H.shift(x, z, I.id, zz) : null; }
       const q = H.omNear(I.hmap, x - I.x, z - I.z); return q.d > q.w + 1 ? { x: I.entry.x, z: I.entry.z } : null; };
   }
-  /* 어미의 둥지 보스가 싸우는 둥근 자리 (방 가운데, 세상 좌표) */
+  /* 얼음 용의 잠자리 보스가 싸우는 둥근 자리 (방 가운데, 세상 좌표) */
   const HLAIR = { x: ISLES.hlair.x + 20, z: ISLES.hlair.z - 290, r: 22 };
   function HCHL() { return HCH.TL; }
   // 고리 위의 자리 (각도 th, 중심에서 거리 r)
@@ -536,9 +536,8 @@
     snowleopard:{ name: '눈표범', lv: 90, build: 'quad', color: 0xd8d4c8, hpM: 1.9, atkM: 1.8 },
     cavebear: { name: '동굴곰', lv: 94, build: 'quad', color: 0x5a4636, hpM: 2.8, atkM: 1.8 },
     elderbear:{ name: '늙은 동굴곰', lv: 98, build: 'quad', color: 0x3e3430, hpM: 3.4, atkM: 1.9, defM: 1.2 },
-    // 어미의 둥지 (허칠 동굴 끝 보스방, 적정레벨 100): 얼어붙은 굴 끝에서 굴의 짐승을 먹고 알을 낳는 거대한 구더기
-    hmother:  { name: '얼음 구더기 어미', lv: 100, fixed: { hp: 140000, atk: 560, def: 52, exp: 32000 }, gold: 9000, build: 'mother', color: 0xd8cfc4, dragon: true, mother: true, arena: 'HLAIR' },
-    hgrub:    { name: '구더기 새끼', lv: 98, build: 'grub', color: 0xe6dccb, hpM: 0.45, atkM: 1.0, scale: 1 },
+    // 얼음 용의 잠자리 (허칠 동굴 끝 보스방, 적정레벨 100): 얼음 굴 가장 깊은 곳에서 오래 잠들어 있던 늙은 서리 용
+    hwyrm:    { name: '서리 용 글라키에스', lv: 100, fixed: { hp: 140000, atk: 560, def: 52, exp: 32000 }, gold: 9000, build: 'wyrm', color: 0x6c8eaa, dragon: true, frost: true, arena: 'HLAIR' },
     reddragon:{ name: '붉은 용 이그니스', lv: 100, fixed: { hp: 450000, atk: 900, def: 60, exp: 80000 }, gold: 80000, build: 'dragon', color: 0xa8231a, scale: 1, dragon: true },
   };
   /* ---------- 몬스터 능력치 (밸런스) ----------
