@@ -14,7 +14,8 @@ const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / 
 const lerp3 = (a, b, t) => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
 const pitchTo = a => Math.atan2(-a[1], a[2]);
 
-function wolf() {
+function wolf(o = {}) {
+  const BE = !!o.beast, HD = !!o.hound;   /* BE: 몬스터 늑대(입 벌림·송곳니, 깔개 없음), HD: 털 짧은 사냥개 */
   const prims = [], P = p => { prims.push(p); return p; };
   /* 머리 틀: 정수리 H0 에서 앞(A)·위(U) */
   const H0 = [0, .86, .52], b = .22, A = [0, -Math.sin(b), Math.cos(b)], U = [0, Math.cos(b), Math.sin(b)];
@@ -33,7 +34,7 @@ function wolf() {
     return [s, light * s, dark * s];
   };
   /* 털 결: 이어지는 잔물결 (끊기지 않게) */
-  const fur = k => (x, y, z) => k * (.7 * vnoise(x * 85, y * 22, z * 85) + .3 * vnoise(x * 190, y * 50, z * 190));   // 아래로 흐르는 털 줄기
+  const fur = k0 => { const k = HD ? k0 * .3 : k0; return (x, y, z) => k * (.7 * vnoise(x * 85, y * 22, z * 85) + .3 * vnoise(x * 190, y * 50, z * 190)); };   // 아래로 흐르는 털 줄기
 
   /* ================= 몸통 ================= */
   const kB = .07;
@@ -57,7 +58,20 @@ function wolf() {
   for (const s of [-1, 1]) HP(E('head', pt(.07, -.04, s * .065), [.06, .06, .07], { k: .05, c: coat, rot: HR, disp: fur(.006), amp: .01 }));   // 볼 털
   HP(C('head', pt(.12, -.015), pt(.29, -.035), .055, .03, { k: .05, c: coat }));          // 주둥이
   HP(E('head', pt(.18, .01), [.04, .03, .07], { k: .04, c: coat, rot: HR }));               // 콧등
-  HP(C('head', pt(.1, -.075), pt(.26, -.07), .038, .022, { k: .04, c: coat }));           // 아래턱
+  if (!BE) HP(C('head', pt(.1, -.075), pt(.26, -.07), .038, .022, { k: .04, c: coat }));           // 아래턱
+  else {
+    /* 몬스터: 아래턱은 따로 움직이는 무리(jaw). 입천장·혀·송곳니(tooth)는 입을 벌리면 보인다 */
+    P(C('jaw', pt(.07, -.075), pt(.26, -.082), .04, .022, { g: 'jaw', k: .04, c: coat }));
+    P(E('jaw', pt(.06, -.07), [.05, .045, .05], { g: 'jaw', k: .04, c: coat, rot: HR }));
+    P(E('head', pt(.19, -.062), [.032, .012, .085], { g: 'mouth', c: rgb(0x5a1a1c), rot: HR }));   // 입천장
+    P(E('jaw', pt(.17, -.056), [.024, .011, .07], { g: 'mouth', c: rgb(0x8a3a3c), rot: HR }));     // 혀
+    const TW = rgb(0xe8e0cc);
+    for (const s of [-1, 1]) {
+      P(C('head', pt(.25, -.05, s * .024), pt(.255, -.098, s * .021), .009, .0015, { g: 'tooth', c: TW }));   // 위 송곳니
+      P(C('jaw', pt(.235, -.075, s * .02), pt(.24, -.04, s * .02), .0075, .0015, { g: 'tooth', c: TW }));    // 아래 송곳니
+      for (let i = 0; i < 3; i++) P(C('head', pt(.21 - i * .03, -.055, s * (.03 + i * .004)), pt(.21 - i * .03, -.075, s * (.03 + i * .004)), .005, .0015, { g: 'tooth', c: TW }));   // 어금니 줄
+    }
+  }
   for (const s of [-1, 1]) HP(E('head', pt(.09, .035, s * .055), [.025, .018, .035], { k: .03, c: coat, rot: HR }));   // 눈두덩
   HP(E('head', pt(.21, -.058), [.05, .005, .08], { k: .005, c: coat, rot: HR, sub: true }));   // 입 선
   /* 코 */
@@ -105,16 +119,16 @@ function wolf() {
 
   /* ================= 꼬리 (북슬한 털, mane 무리) ================= */
   const tS = (x, y, z) => { const v = .88 + .12 * vnoise(x * 40, y * 20, z * 40), tip = sstep(.4, .3, y); return [v * (1 - tip * .55), v * (1 - tip * .55), v * (1 - tip * .55)]; };
-  P(C('t1', [0, .66, -.44], [0, .55, -.56], .035, .06, { g: 'mane', c: tS, k: .03, disp: fur(.006), amp: .01 }));
-  P(C('t2', [0, .55, -.56], [0, .4, -.62], .06, .065, { g: 'mane', c: tS, k: .05, disp: fur(.006), amp: .01 }));
-  P(C('t2', [0, .4, -.62], [0, .27, -.62], .065, .02, { g: 'mane', c: tS, k: .05, disp: fur(.006), amp: .01 }));
+  P(C('t1', [0, .66, -.44], [0, .55, -.56], .035, HD ? .035 : .06, { g: 'mane', c: tS, k: .03, disp: fur(.006), amp: .01 }));
+  P(C('t2', [0, .55, -.56], [0, .4, -.62], HD ? .035 : .06, HD ? .03 : .065, { g: 'mane', c: tS, k: .05, disp: fur(.006), amp: .01 }));
+  P(C('t2', [0, .4, -.62], [0, .27, -.62], HD ? .03 : .065, HD ? .012 : .02, { g: 'mane', c: tS, k: .05, disp: fur(.006), amp: .01 }));
 
   /* ================= 깔개 (탈 때) ================= */
   const fBody = makeField(prims.filter(p => p.g === 'body' && (p.b === 'root' || p.b === 'neck')));
   const shell = (f, off, th) => (x, y, z) => Math.abs(f(x, y, z) - off) - th;
   const boxR = (c, h) => (x, y, z) => { const qx = Math.abs(x - c[0]) - h[0], qy = Math.abs(y - c[1]) - h[1], qz = Math.abs(z - c[2]) - h[2]; return Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0); };
   const bbB = (c, h, m = .05) => [c[0] - h[0] - m, c[1] - h[1] - m, c[2] - h[2] - m, c[0] + h[0] + m, c[1] + h[1] + m, c[2] + h[2] + m];
-  {
+  if (!BE) {
     const g = 'saddle', LEA = rgb(0x4a2a18), LEA2 = rgb(0x2a1a10), RED = rgb(0x6a2a24), BR = rgb(0xb88a44);
     /* 털가죽 깔개: 등에 붙은 두툼한 천, 가장자리 테 */
     const pc = [0, .71, .0], ph = [.18, .14, .2], padR = (x, y, z) => Math.max(boxR(pc, [.3, ph[1] - .04, ph[2] - .04])(x, y, z) - .04, .6 - y), trim = (x, y, z) => y < .625 || Math.abs(z) > .176;
@@ -134,6 +148,7 @@ function wolf() {
     { n: 'root', o: [0, .58, 0], tip: [0, .58, .3] },
     { n: 'neck', p: 'root', o: [0, .66, .3], tip: H0, bw: .07, rad: .26 },
     { n: 'head', p: 'neck', o: H0, tip: pt(.3, 0), bw: .05, rad: .18 },
+    ...(BE ? [{ n: 'jaw', p: 'head', o: pt(.06, -.07), tip: pt(.26, -.08) }] : []),
     { n: 't1', p: 'root', o: [0, .66, -.44], tip: [0, .55, -.56], bw: .03, rad: .09 },
     { n: 't2', p: 't1', o: [0, .55, -.56], tip: [0, .27, -.62], bw: .05, rad: .12 },
   ];
@@ -148,8 +163,8 @@ function wolf() {
   }
   return {
     prims, bones, h: .9, size: 1, anim: { H0, b, knobs: { nose: [], collar: [] }, leg: .66 },
-    mats: { body: { r: .9 }, mane: { r: .9 }, nose: { r: .4 }, eye: { r: .12 }, saddle: { r: .7 } },
-    gopt: { body: { tris: 14000, h: .005 }, mane: { tris: 3500, h: .004, loK: .2 }, nose: { tris: 400, h: .0025, loK: .4 }, eye: { tris: 160, h: .002, noLo: 1 }, saddle: { tris: 3000, h: .0035, loK: .25 } }
+    mats: { body: { r: .9 }, jaw: { r: .9 }, mane: { r: .9 }, nose: { r: .4 }, eye: { r: .12 }, saddle: { r: .7 }, mouth: { r: .5 }, tooth: { r: .35 } },
+    gopt: BE ? { body: { tris: 9000, h: .005, loK: .17 }, jaw: { tris: 900, h: .004, loK: .3 }, mane: { tris: 1800, h: .004, loK: .25 }, nose: { tris: 300, h: .0025, loK: .4 }, eye: { tris: 120, h: .002, noLo: 1 }, mouth: { tris: 200, h: .003, noLo: 1 }, tooth: { tris: 300, h: .0018, noLo: 1 } } : { body: { tris: 14000, h: .005 }, mane: { tris: 3500, h: .004, loK: .2 }, nose: { tris: 400, h: .0025, loK: .4 }, eye: { tris: 160, h: .002, noLo: 1 }, saddle: { tris: 3000, h: .0035, loK: .25 } }
   };
 }
 module.exports = { wolf };
