@@ -9577,8 +9577,11 @@ const AP_HS=[.9,1.1],AP_BW=[.82,1.26],AP_BK=[.4,1.5],AP_BW_OLD=[.86,1,1.1,1.22];
 const _apV=(r,x)=>Math.max(0,Math.min(35,Math.round((x-r[0])/(r[1]-r[0])*35))),_apL=(r,v)=>r[0]+(r[1]-r[0])*v/35;
 function apBody(ap){const hv=ap.hv??_apV(AP_HS,HEIGHTS[ap.t??2]??1),wv=ap.wv??_apV(AP_BW,AP_BW_OLD[ap.b??1]??1),sv=ap.sv??_apV(AP_BK,ap.g==='f'?(BUST_K[Math.min(BUSTS.length-1,ap.d|0)]??1):1);
   return {hv,wv,sv,hs:_apL(AP_HS,hv),bw:_apL(AP_BW,wv),bk:_apBk(sv)};}
-/* 가슴은 23칸까지 예전과 같고, 그 위로는 훨씬 크게 (35칸에서 5.5) */
-const _apBk=v=>v<=23?_apL(AP_BK,v):_apL(AP_BK,23)+(AP_BK[1]-AP_BK[0])/35*(v-23)+.02778*(v-23)*(v-23);
+/* 가슴은 23칸까지 예전과 같고, 그 위로는 훨씬 크게 (35칸에서 5.5). 35칸 넘게(45칸까지) 더 키울 수 있다: 35칸 기울기 그대로 이어 45칸 AP_BK_TOP */
+const AP_SV_MAX=45,AP_BK_TOP=8;
+const _apBk0=v=>v<=23?_apL(AP_BK,v):_apL(AP_BK,23)+(AP_BK[1]-AP_BK[0])/35*(v-23)+.02778*(v-23)*(v-23);
+const _apBk=v=>{if(v<=35)return _apBk0(v);const t=Math.min(1,(v-35)/(AP_SV_MAX-35)),a=_apBk0(35),m0=(_apBk0(35)-_apBk0(34))*(AP_SV_MAX-35),m1=.15*(AP_SV_MAX-35);
+  return (2*t*t*t-3*t*t+1)*a+(t*t*t-2*t*t+t)*m0+(-2*t*t*t+3*t*t)*AP_BK_TOP+(t*t*t-t*t)*m1;};
 const _apNear=(arr,x)=>{let b=0;arr.forEach((v,i)=>{if(Math.abs(v-x)<Math.abs(arr[b]-x))b=i;});return b;};
 const TOPS=['튜닉','셔츠','조끼','로브'];
 const BOTTOMS=['바지','치마','반바지'];
@@ -10862,11 +10865,11 @@ const _hx=v=>(v>>>0).toString(16).padStart(6,'0');
 /* 끝의 여덟 글자(36진수 한 글자씩): 눈 모양·눈썹·얼굴 꾸밈·수염·윗옷·아래·신발·머리 모양(10번째 이후까지) */
 const _b36=(v,n)=>Math.max(0,Math.min(n,v|0)).toString(36);
 function apCode(a){a=a||apDefault();const B=apBody(a);a=Object.assign({},a,{t:_apNear(HEIGHTS,B.hs),b:_apNear(AP_BW_OLD,B.bw)});if(a.g==='f')a.d=[1,0,2][_apNear([BUST_K[1],BUST_K[0],BUST_K[2]],B.bk)];const X=apX(a);return a.g+','+_hx(a.h)+','+_hx(a.e)+','+Math.min(9,a.s|0)+','+Math.min(9,a.k|0)+','+Math.min(9,a.t??2)+','+_hx(a.c|0)+','+_hx(a.p??PANTS_COLORS[0])+','+Math.min(9,a.b??1)
-  +','+_b36(X.y,35)+_b36(X.w,35)+_b36(X.f,35)+_b36(X.d,35)+_b36(X.u,35)+_b36(X.l,35)+_b36(X.o,35)+_b36(a.s,35)+','+_b36(B.hv,35)+_b36(B.wv,35)+_b36(B.sv,35)+(apQDef(a)?'':','+AP_SLK.map(k=>_b36(a.q[k]??17,34)).join('')+AP_OPK.map(k=>_b36(a.q[k]|0,35)).join(''));}
-function apParse(s){const m=/^([mf]),([0-9a-f]{6}),([0-9a-f]{6})(?:,(\d)(?:,(\d),(\d),([0-9a-f]{6}),([0-9a-f]{6})(?:,(\d)(?:,([0-9a-z]{8})(?:,([0-9a-z]{3})(?:,([0-9a-z]{1,64}))?)?)?)?)?)?$/.exec(String(s||''));if(!m)return null;const g=m[1];
+  +','+_b36(X.y,35)+_b36(X.w,35)+_b36(X.f,35)+_b36(X.d,35)+_b36(X.u,35)+_b36(X.l,35)+_b36(X.o,35)+_b36(a.s,35)+','+_b36(B.hv,35)+_b36(B.wv,35)+_b36(B.sv,35)+(B.sv>35?_b36(B.sv-35,AP_SV_MAX-35):'')+(apQDef(a)?'':','+AP_SLK.map(k=>_b36(a.q[k]??17,34)).join('')+AP_OPK.map(k=>_b36(a.q[k]|0,35)).join(''));}
+function apParse(s){const m=/^([mf]),([0-9a-f]{6}),([0-9a-f]{6})(?:,(\d)(?:,(\d),(\d),([0-9a-f]{6}),([0-9a-f]{6})(?:,(\d)(?:,([0-9a-z]{8})(?:,([0-9a-z]{3,4})(?:,([0-9a-z]{1,64}))?)?)?)?)?)?$/.exec(String(s||''));if(!m)return null;const g=m[1];
   const a={g,h:parseInt(m[2],16),e:parseInt(m[3],16),s:Math.min(HAIR_STYLES[g].length-1,+(m[4]||0)),k:Math.min(SKIN_TONES.length-1,+(m[5]||0)),t:m[6]!=null?Math.min(HEIGHTS.length-1,+m[6]):2,c:m[7]?parseInt(m[7],16):0,p:m[8]?parseInt(m[8],16):PANTS_COLORS[0],b:m[9]!=null?Math.min(BUILDS.length-1,+m[9]):1,y:0,w:0,f:1,d:0,u:0,l:0,o:0};
   if(m[10]){const x=[...m[10]].map(c=>parseInt(c,36)),L=[EYE_SHAPES,BROWS,FACE_MARKS,BEARDS,TOPS,BOTTOMS,SHOES];['y','w','f','d','u','l','o'].forEach((k,i)=>a[k]=Math.min(L[i].length-1,x[i]));a.s=Math.min(HAIR_STYLES[g].length-1,x[7]);if(g==='f')a.d=Math.min(BUSTS.length-1,a.d);}
-  if(m[11]){const x=[...m[11]].map(c=>parseInt(c,36));a.hv=x[0];a.wv=x[1];a.sv=x[2];}
+  if(m[11]){const x=[...m[11]].map(c=>parseInt(c,36));a.hv=x[0];a.wv=x[1];a.sv=x[3]!=null?Math.min(AP_SV_MAX,35+x[3]):x[2];}
   if(m[12]){const x=[...m[12]].map(c=>parseInt(c,36)),q={};AP_SLK.forEach((k,i)=>{if(x[i]!=null&&x[i]!==17)q[k]=Math.min(34,x[i]);});
     AP_OPK.forEach((k,i)=>{const v=x[AP_SLK.length+i];if(v)q[k]=Math.min(AP_OPN[k]-1,v);});if(Object.keys(q).length)a.q=q;}
   return a;}
@@ -12445,7 +12448,7 @@ function buildApControls(box,ap,onChange){box.innerHTML='';let cur=box;
   [['눈 크기','ek'],['눈 세로','ev'],['눈 간격','es'],['눈 높이','eh'],['눈꼬리','et']].forEach(([l,k])=>qsl(l)(k));qopt('속눈썹',LASHES,'la');
   grp('눈썹');arrow('눈썹',BROWS,'w');[['눈썹 굵기','bt'],['눈썹 길이','bl'],['눈썹 높이','bh'],['눈썹 기울기','br'],['눈썹 휨','ba'],['눈썹 간격','bx']].forEach(([l,k])=>qsl(l)(k));qsw('눈썹 색',BROW_COLORS,'bc','머리색');
   /* 몸: 밀대로 조금씩 (키·체형·가슴) */
-  const sl=(label,key)=>{const w=row(label,'r'),r=document.createElement('input');r.type='range';r.min=0;r.max=35;r.step=1;r.value=apBody(ap)[key];r.setAttribute('aria-label',label);
+  const sl=(label,key)=>{const w=row(label,'r'),r=document.createElement('input');r.type='range';r.min=0;r.max=key==='sv'?AP_SV_MAX:35;r.step=1;r.value=apBody(ap)[key];r.setAttribute('aria-label',label);
     r.oninput=()=>{const B=apBody(ap);ap.hv=B.hv;ap.wv=B.wv;ap.sv=B.sv;ap[key]=+r.value;onChange();};w.appendChild(r);};
   grp('몸');sl('키','hv');sl('체형','wv');if(ap.g==='f')sl('가슴','sv');
   grp('비율');[['어깨 너비','sh'],['허리','wa'],['골반','hp'],['엉덩이','bu'],['목 길이','nl'],['팔 길이','al'],['다리 길이','ll']].forEach(([l,k])=>qsl(l)(k));
@@ -33282,7 +33285,7 @@ function updateOthers(dt){
 var roomStatus='연결 중…',presErr='',pageViewers=0;
 function setRoomStatus(t){roomStatus=t;renderOnline();}
 // 자체 서버(WebSocket)용 연결: claude room과 같은 모양으로 감싼다
-const SERVER_VER=44;let srvVer=null,monsGot=0;
+const SERVER_VER=45;let srvVer=null,monsGot=0;
 function makeWsRoom(){
   const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
   let ws=null,myId=null,ok=false,retry=1000;const peers=new Map(),peerFns=[],topicFns={},connFns=[];const mine={};
