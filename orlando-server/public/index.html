@@ -9539,16 +9539,17 @@ function scaleTex(){if(_scaleTex)return _scaleTex;const S=64,c=document.createEl
 // 임시 그룹 T의 조각들을 재질별로 합쳐 parent에 붙인다 (T는 parent 좌표계)
 function gearMerge(T,parent){T.updateMatrixWorld(true);const by=new Map();
   T.traverse(o=>{if(!o.isMesh)return;let a=by.get(o.material);if(!a)by.set(o.material,a=[]);a.push(o);});
-  for(const [m,list] of by){const pos=[],nor=[],uv=[],idx=[];
+  for(const [m,list] of by){const pos=[],nor=[],uv=[],idx=[],nw=[];let anyNw=false;
     for(const o of list){const g=o.geometry.clone();g.applyMatrix4(o.matrixWorld);
       const p=g.attributes.position.array,n=g.attributes.normal.array,u=g.attributes.uv?g.attributes.uv.array:null,base=pos.length/3,cnt=p.length/3;
       for(let i=0;i<p.length;i++){pos.push(p[i]);nor.push(n[i]);}
+      for(let i=0;i<cnt;i++)nw.push(o.userData.nw?1:0);if(o.userData.nw)anyNw=true;   /* nw: 몸통이 넓어질 때 늘리지 않고 옮기기만 할 꼭짓점 (어깨받이) */
       for(let i=0;i<cnt;i++)uv.push(u?u[i*2]:0,u?u[i*2+1]:0);
       if(g.index){const ix=g.index.array;for(let i=0;i<ix.length;i++)idx.push(ix[i]+base);}else for(let i=0;i<cnt;i++)idx.push(base+i);
       g.dispose();}
     const bg=new THREE.BufferGeometry();bg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));bg.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));bg.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));bg.setIndex(idx);
-    bg.computeBoundingSphere();const me=new THREE.Mesh(bg,m);me.castShadow=true;me.userData.gear=1;parent.add(me);}
-  T.traverse(o=>{if(o.isMesh)o.geometry.dispose();});}
+    bg.computeBoundingSphere();if(anyNw)bg.userData.nw=Uint8Array.from(nw);const me=new THREE.Mesh(bg,m);me.castShadow=true;me.userData.gear=1;parent.add(me);}
+  T.traverse(o=>{if(o.isMesh&&!o.geometry.userData.keep)o.geometry.dispose();});}
 // 돌림 모양 옆모습은 아래에서 위로 그려야 겉면이 바깥을 본다: 위에서 아래로 그렸으면 뒤집는다
 function latheUp(p){return p.length>1&&p[0][1]>p[p.length-1][1]?p.slice().reverse():p;}
 // 모서리를 둥글게 깎은 상자 모양 (작은 조각은 그냥 상자)
@@ -9560,202 +9561,354 @@ function roundBoxGeo(x,y,z,b){const m=Math.min(x,y,z);if(m<.014)return new THREE
 function latheFront(prof,seg,f){const geo=new THREE.LatheGeometry(latheUp(prof).map(([r,y])=>new THREE.Vector2(Math.max(r,1e-4),y)),seg),p=geo.attributes.position;
   for(let i=0;i<p.count;i++){const z=p.getZ(i);if(z>0)p.setZ(i,z*(1+f(p.getY(i))));}geo.computeVertexNormals();return geo;}
 function stickGear(G,S){
-  const PI=Math.PI;
+  /* 판금을 '빚어서' 만든다: 겉면·안쪽 면·가장자리 두께가 있는 판(plate)을 면 함수로 짓고, 말린 단(roll)·징(rivet)을 판 가장자리를 따라 붙인다.
+     등급마다 몸판에 그린 무늬(새김·룬·불씨 틈·금 덩굴)를 입힌다. 조각은 임시 그룹에 모은 뒤 재질마다 한 덩어리로 합친다 (gearMerge) */
+  const PI=Math.PI,TAU=PI*2,V3=THREE.Vector3;
   const lookOf=t=>ARMOR_LOOK[Math.max(0,Math.min(10,t|0))];
-  const P=(par,geo,m,x=0,y=0,z=0,rx=0,ry=0,rz=0,sx=1,sy=1,sz=1)=>{const o=new THREE.Mesh(geo,m);o.position.set(x,y,z);o.rotation.set(rx,ry,rz);o.scale.set(sx,sy,sz);par.add(o);return o;};
-  const sph=(r,ws=16,hs=10,a=0,b=PI*2,c=0,d=PI)=>new THREE.SphereGeometry(r,Math.max(ws,10),Math.max(hs,8),a,b,c,d);
-  const cyl=(r1,r2,h,s=16,open=false,a=0,b=PI*2)=>new THREE.CylinderGeometry(r1,r2,h,s,1,open,a,b);
-  const box=(x,y,z)=>roundBoxGeo(x,y,z);
-  const cone=(r,h,s=6)=>new THREE.ConeGeometry(r,h,s);
-  const tor=(R,r,arc=PI*2,rs=6,ts=24)=>new THREE.TorusGeometry(R,r,Math.max(rs,8),Math.max(ts,20),arc);
-  const lathe=(prof,s=24)=>new THREE.LatheGeometry(latheUp(prof).map(([r,y])=>new THREE.Vector2(Math.max(r,1e-4),y)),s);
-  const oct=r=>new THREE.OctahedronGeometry(r,0);
-  const tube=(pts,r,seg=16,rs=6)=>new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p))),seg,r,rs,false);
-  const metal=(c,x)=>mat(c,Object.assign({metalness:.6,roughness:.34,flatShading:false},x||{}));
+  const C=stickGear.C||(stickGear.C={tex:{}});
+  const ss=(a,b,x)=>{const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t);};
+  const lin=n=>{const a=[];for(let i=0;i<n;i++)a.push(i/(n-1));return a;};
+  /* 옆모습 점 [[y,r],...]을 부드럽게 잇는 함수 (y는 커지는 차례) */
+  const herm=P=>y=>{if(y<=P[0][0])return P[0][1];const n=P.length;if(y>=P[n-1][0])return P[n-1][1];let i=0;while(y>P[i+1][0])i++;
+    const [y0,r0]=P[i],[y1,r1]=P[i+1],h=y1-y0,t=(y-y0)/h,m=k=>{const a=P[Math.max(0,k-1)],b=P[Math.min(n-1,k+1)];return (b[1]-a[1])/(b[0]-a[0])*h;},m0=m(i),m1=m(i+1),t2=t*t,t3=t2*t;
+    return (2*t3-3*t2+1)*r0+(t3-2*t2+t)*m0+(-2*t3+3*t2)*r1+(t3-t2)*m1;};
+  const mesh=(par,geo,m,x=0,y=0,z=0,rx=0,ry=0,rz=0,sx=1,sy=1,sz=1)=>{const o=new THREE.Mesh(geo,m);o.position.set(x,y,z);o.rotation.set(rx,ry,rz);o.scale.set(sx,sy,sz);par.add(o);return o;};
+  /* 두께 있는 판: fn(u,v,d,out) → d=0 겉면, d=1 안쪽 면. us·vs = 격자 칸 수나 0..1 값 목록. o.cu = u가 한 바퀴 닫힘, o.one = 겉면만 */
+  const plateGeo=(fn,us,vs,o={})=>{us=typeof us==='number'?lin(us):us;vs=typeof vs==='number'?lin(vs):vs;
+    const nu=us.length,nv=vs.length,L=o.one?1:2,pos=[],uv=[],idx=[],q=new V3(),su=o.su||1,sv=o.sv||1;
+    for(let d=0;d<L;d++)for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){fn(us[i],vs[j],d,q);pos.push(q.x,q.y,q.z);uv.push(us[i]*su,vs[j]*sv);}
+    const id=(d,i,j)=>d*nu*nv+j*nu+i,pt=(k,out)=>out.set(pos[k*3],pos[k*3+1],pos[k*3+2]);
+    for(let d=0;d<L;d++)for(let j=0;j<nv-1;j++)for(let i=0;i<nu-1;i++){const a=id(d,i,j),b=id(d,i+1,j),c=id(d,i+1,j+1),e=id(d,i,j+1);if(d)idx.push(a,c,b,a,e,c);else idx.push(a,b,c,a,c,e);}
+    /* 겉면이 바깥을 보게: 가운데 칸의 법선을 (겉 - 안) 또는 o.out 방향과 견준다 */
+    {const A=new V3(),B=new V3(),Cc=new V3(),n=new V3(),w=new V3();let s=0;
+      for(let j=0;j<nv-1;j+=Math.max(1,nv>>2))for(let i=0;i<nu-1;i+=Math.max(1,nu>>2)){pt(id(0,i,j),A);pt(id(0,i+1,j),B);pt(id(0,i+1,j+1),Cc);n.subVectors(B,A).cross(w.subVectors(Cc,A));
+        if(L>1){pt(id(1,i,j),w);w.subVectors(A,w);}else if(o.out)o.out(A,w);else w.set(A.x,0,A.z);s+=n.dot(w);}
+      if(s<0)for(let k=0;k<idx.length;k+=3){const t=idx[k+1];idx[k+1]=idx[k+2];idx[k+2]=t;}}
+    /* 가장자리 두께 (꼭짓점을 따로 두어 모서리가 또렷하다) */
+    if(L>1){const rim=list=>{for(let k=0;k<list.length-1;k++){const [i0,j0,ii0,jj0]=list[k],[i1,j1]=list[k+1],base=pos.length/3;
+        const A=pt(id(0,i0,j0),new V3()),B=pt(id(0,i1,j1),new V3()),Ci=pt(id(1,i1,j1),new V3()),D=pt(id(1,i0,j0),new V3()),In=pt(id(0,ii0,jj0),new V3());
+        for(const p of [A,B,Ci,D])pos.push(p.x,p.y,p.z);uv.push(0,0,1,0,1,.05,0,.05);
+        const n=new V3().subVectors(B,A).cross(new V3().subVectors(D,A));if(n.dot(In.sub(A))>0)idx.push(base,base+3,base+2,base,base+2,base+1);else idx.push(base,base+1,base+2,base,base+2,base+3);}};
+      const row=(j,jj)=>{const a=[];for(let i=0;i<nu;i++)a.push([i,j,i,jj]);return a;},col=(i,ii)=>{const a=[];for(let j=0;j<nv;j++)a.push([i,j,ii,j]);return a;};
+      rim(row(0,1));rim(row(nv-1,nv-2));if(!o.cu){rim(col(0,1));rim(col(nu-1,nu-2));}}
+    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geo.setIndex(idx);geo.computeVertexNormals();
+    if(o.cu){const N=geo.attributes.normal;for(let d=0;d<L;d++)for(let j=0;j<nv;j++){const a=id(d,0,j),b=id(d,nu-1,j),x=N.getX(a)+N.getX(b),y=N.getY(a)+N.getY(b),z=N.getZ(a)+N.getZ(b),l=Math.hypot(x,y,z)||1;N.setXYZ(a,x/l,y/l,z/l);N.setXYZ(b,x/l,y/l,z/l);}}
+    return geo;};
+  /* 판 + 말린 단 + 징. o.roll=[{v|u, r, m}] (그 가장자리를 따라 둥근 관), o.riv=[{v,n,r,m,u0,u1}] */
+  const plate=(par,fn,us,vs,m,o={})=>{const g=plateGeo(fn,us,vs,o);mesh(par,g,m);const q=new V3(),q1=new V3();
+    for(const r of o.roll||[]){const pts=[],N=r.n||40;
+      for(let k=0;k<=N;k++){const t=(r.u0??0)+((r.u1??1)-(r.u0??0))*k/N;if(r.v!=null){fn(t,r.v,0,q);fn(t,r.v,1,q1);}else{fn(r.u,t,0,q);fn(r.u,t,1,q1);}
+        if(o.one)pts.push(q.clone());else pts.push(q.clone().lerp(q1,.5));}
+      if(o.cu&&r.v!=null)pts.pop();
+      mesh(par,new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts,!!(o.cu&&r.v!=null)),N,r.r,r.rs||5,!!(o.cu&&r.v!=null)),r.m||m);}
+    for(const r of o.riv||[]){const n=r.n,u0=r.u0??0,u1=r.u1??1;for(let k=0;k<n;k++){const t=o.cu&&u0===0&&u1===1?k/n:u0+(u1-u0)*(n===1?.5:k/(n-1));fn(t,r.v,0,q);mesh(par,rivG(r.r),r.m||m,q.x,q.y,q.z);}}
+    return g;};
+  const rivG=r=>{const k='riv'+r;if(!C[k]){C[k]=new THREE.SphereGeometry(r,6,4);C[k].userData.keep=1;}return C[k];};
+  const tube=(pts,r,seg=16,rs=6)=>new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p=>p.isVector3?p:new V3(...p))),seg,r,rs,false);
+  /* 굵기가 변하는 관 (뿔·가시): rf(t) 반지름, rib>0 이면 마디 골 */
+  const horn=(par,pts,rf,m,seg=24,rs=8,rib=0)=>{const cv=new THREE.CatmullRomCurve3(pts.map(p=>new V3(...p))),geo=new THREE.TubeGeometry(cv,seg,1,rs,false),ps=geo.attributes.position,c=new V3(),v=new V3();
+    for(let i=0;i<=seg;i++){const t=i/seg;cv.getPointAt(t,c);const r=rf(t)*(rib?1-.12*Math.pow(Math.abs(Math.sin(t*rib*PI)),.5):1);for(let j=0;j<=rs;j++){const n=i*(rs+1)+j;v.fromBufferAttribute(ps,n).sub(c).multiplyScalar(r);v.add(c);ps.setXYZ(n,v.x,v.y,v.z);}}
+    geo.computeVertexNormals();return mesh(par,geo,m);};
+  /* 얇은 잎 모양 판 (깃털·불꽃·날개깃): 길이 L, 폭 w(t), 휘어짐 bend, 두께 th — 아래(뿌리)가 원점, 위(+y)로 뻗는다 */
+  const blade=(par,L,wf,m,bend=0,th=.006,twist=0)=>plate(par,(u,v,d,q)=>{const t=v,w=wf(t),x=(u*2-1)*w,y=t*L,z=bend*t*t*L+(d?-th:0)+(1-(u*2-1)**2)*w*.18;
+      const c=Math.cos(twist*t),s=Math.sin(twist*t);q.set(x*c-z*s,y,x*s+z*c);},5,10,m);
+  const metal=(c,x)=>mat(c,Object.assign({metalness:.62,roughness:.32,flatShading:false},x||{}));
   const soft=(c,x)=>mat(c,Object.assign({roughness:.82,flatShading:false},x||{}));
   const glowM=(c,k=.9)=>mat(c,{emissive:c,emissiveIntensity:k,flatShading:true});
-  const iceM=()=>mat(0xd8f4ff,{emissive:0x6ac8ff,emissiveIntensity:.35,metalness:.1,roughness:.1,transparent:true,opacity:.82,flatShading:true});
-  const flameM=(c)=>mat(c,{emissive:c,emissiveIntensity:1,flatShading:true,transparent:true,opacity:.92});
-  // 머리 둘레 위의 한 점 (투구 테 위에 장식을 둘러 박을 때)
-  const ring=(n,R,y,f,a0=0)=>{for(let k=0;k<n;k++){const a=a0+k/n*PI*2;f(Math.sin(a)*R,y,Math.cos(a)*R,a,k);}};
-  const mer=(par,m,R,y,thick,cov,ry)=>{const th0=PI/2-cov;P(par,tor(R,thick,PI-2*th0,5,20),m,0,y,0,0,ry,th0);};   // 정수리를 넘어가는 띠 (자오선)
+  const iceM=()=>mat(0xd8f4ff,{emissive:0x6ac8ff,emissiveIntensity:.35,metalness:.1,roughness:.1,transparent:true,opacity:.85,flatShading:true});
+  const flameM=c=>mat(c,{emissive:c,emissiveIntensity:1,flatShading:false,transparent:true,opacity:.92,side:THREE.DoubleSide});
+  const hex=c=>'#'+new THREE.Color(c).getHexString(),mix=(a,b,k)=>hex(new THREE.Color(a).lerp(new THREE.Color(b),k));
 
-  /* ===== 투구 ===== (머리 공간: 눈 높이 .03, 위끝 .058 → 아래끝은 .06 위로. 볼가리개·목가리개는 옆과 뒤로만 내려온다) */
+  /* ---- 등급 무늬: 몸판에 그린 색(map)과 빛(emissiveMap). u=한 바퀴(가운데가 앞), v=아래→위 ---- */
+  const etch=t=>{const key='e'+t;if(C.tex[key])return C.tex[key];const A=lookOf(t),W=256,H=128,cv=document.createElement('canvas');cv.width=W;cv.height=H;const x=cv.getContext('2d');
+    let sd=t*977+13;const rnd=()=>{sd=(sd*16807)%2147483647;return sd/2147483647;};
+    const leather=t===0,base=t===1?0xb8bcc2:A.m;
+    x.fillStyle=hex(base);x.fillRect(0,0,W,H);
+    /* 두드린 쇠 / 가죽 결: 옅은 얼룩 */
+    for(let k=0;k<(leather?260:200);k++){const r=1+rnd()*(leather?5:3);x.globalAlpha=leather?.12:.035;x.fillStyle=rnd()<.5?'#000':'#fff';x.beginPath();x.ellipse(rnd()*W,rnd()*H,r*(leather?1.6:1),r,0,0,TAU);x.fill();}
+    x.globalAlpha=1;
+    let em=null;const E=()=>{if(em)return em;const c2=document.createElement('canvas');c2.width=W;c2.height=H;em=c2.getContext('2d');em.fillStyle='#000';em.fillRect(0,0,W,H);return em;};
+    const sym=(f)=>{f(x,1);x.save();x.translate(W,0);x.scale(-1,1);f(x,-1);x.restore();};
+    const line=(c,w,pts)=>{c.strokeStyle=c===x?c.strokeStyle:c.strokeStyle;c.lineWidth=w;c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));c.stroke();};
+    if(leather){   /* 가죽: 앞섶 양옆 바느질, 옆 솔기, 아래·위 단 바느질 */
+      x.strokeStyle='#e8d8b0';x.lineWidth=1.2;x.setLineDash([3,3]);
+      for(const xx of [W*.5-14,W*.5+14,W*.25,W*.75,4,W-4])line(x,1.2,[[xx,4],[xx,H-4]]);
+      for(const yy of [5,H-6])line(x,1.2,[[0,yy],[W,yy]]);x.setLineDash([]);
+      x.globalAlpha=.25;x.fillStyle='#000';x.fillRect(W*.5-10,0,20,H);x.globalAlpha=1;}
+    else if(t===1){}
+    else{  /* 판금: 가장자리를 따라 새긴 두 줄 (아래 단·앞 가운데 둘레) */
+      const ln=mix(base,0x000000,.45),hl=mix(base,0xffffff,.5);
+      for(const [yy,c] of [[H-7,ln],[H-10,hl],[7,ln],[10,hl]]){x.strokeStyle=c;x.lineWidth=1;line(x,1,[[0,yy],[W,yy]]);}
+      if(t===2||t===5){   /* 미스릴·서리: 가운데에서 갈라져 올라가는 가는 새김 덩굴 */
+        x.strokeStyle=t===5?'#9fd8f8':ln;x.lineWidth=1.3;
+        sym((c)=>{c.strokeStyle=t===5?'#9fd8f8':ln;c.lineWidth=1.3;c.beginPath();c.moveTo(W/2,H-14);c.bezierCurveTo(W/2+18,H-40,W/2+30,H-70,W/2+16,H-96);c.stroke();
+          for(let k=0;k<4;k++){const yy=H-30-k*18;c.beginPath();c.moveTo(W/2+10+k*3,yy);c.quadraticCurveTo(W/2+28+k*2,yy-6,W/2+24+k*2,yy-16);c.stroke();}});
+        if(t===5){const e=E();e.strokeStyle='#4aa8e8';e.lineWidth=1;for(let k=0;k<26;k++){let px=rnd()*W,py=rnd()*H;e.beginPath();e.moveTo(px,py);for(let s=0;s<4;s++){px+=(rnd()-.5)*14;py+=(rnd()-.5)*14;e.lineTo(px,py);}e.stroke();}}}
+      if(t===4){   /* 룬: 앞 가운데 둥근 룬 고리, 양옆 세로 룬 줄 (빛남) */
+        const e=E();e.strokeStyle=hex(A.g);e.lineWidth=2;e.shadowColor=hex(A.g);e.shadowBlur=4;
+        e.beginPath();e.arc(W/2,H*.38,12,0,TAU);e.stroke();e.beginPath();e.moveTo(W/2,H*.38-8);e.lineTo(W/2,H*.38+8);e.moveTo(W/2-6,H*.38-3);e.lineTo(W/2+6,H*.38+3);e.stroke();
+        for(const sx of [-1,1])for(let k=0;k<5;k++){const cx=W/2+sx*30,cy=H*.18+k*15;e.beginPath();const g=(k*7+(sx>0?3:0))%5;
+          if(g===0){e.moveTo(cx,cy-5);e.lineTo(cx,cy+5);e.lineTo(cx+4,cy);}else if(g===1){e.moveTo(cx-3,cy-5);e.lineTo(cx+3,cy+5);e.moveTo(cx+3,cy-5);e.lineTo(cx-3,cy+5);}
+          else if(g===2){e.moveTo(cx,cy-5);e.lineTo(cx,cy+5);e.moveTo(cx,cy-2);e.lineTo(cx+4,cy-5);e.moveTo(cx,cy+1);e.lineTo(cx+4,cy-2);}else if(g===3){e.moveTo(cx-4,cy+5);e.lineTo(cx,cy-5);e.lineTo(cx+4,cy+5);}else{e.moveTo(cx,cy-5);e.lineTo(cx+4,cy);e.lineTo(cx,cy+5);e.lineTo(cx-4,cy);e.closePath();}e.stroke();}
+        x.strokeStyle=ln;x.lineWidth=1;for(const sx of [-1,1])line(x,1,[[W/2+sx*22,12],[W/2+sx*22,H-12]]);}
+      if(t===6||t===8){   /* 화염: 판 틈으로 비치는 불씨 금 / 심연: 보랏빛 핏줄 */
+        const e=E();e.lineCap='round';
+        for(let k=0;k<(t===6?14:10);k++){let px=W*(.3+rnd()*.4),py=H*(.1+rnd()*.8);const w0=t===6?2.4:1.8;
+          for(let s=0;s<7;s++){const nx=px+(rnd()-.5)*18,ny=py+(rnd()-.5)*16;e.strokeStyle=t===6?(s%2?'#ffb040':'#ff5a10'):(s%2?'#8a60ff':'#5a2cff');e.lineWidth=w0*(1-s/8);e.beginPath();e.moveTo(px,py);e.lineTo(nx,ny);e.stroke();px=nx;py=ny;}}
+        x.fillStyle=mix(base,0x000000,.35);for(let k=0;k<30;k++){x.globalAlpha=.25;x.beginPath();x.ellipse(rnd()*W,rnd()*H,6,3,rnd()*3,0,TAU);x.fill();}x.globalAlpha=1;
+        if(t===8){e.strokeStyle='#b090ff';e.lineWidth=2;e.beginPath();e.ellipse(W/2,H*.4,14,7,0,0,TAU);e.stroke();e.fillStyle='#d8c8ff';e.beginPath();e.ellipse(W/2,H*.4,3,6,0,0,TAU);e.fill();}}
+      if(t===7){   /* 망령: 검게 녹슨 얼룩과 희미한 보랏빛 새김 */
+        for(let k=0;k<60;k++){x.globalAlpha=.18;x.fillStyle=rnd()<.5?'#1a1622':'#6a5e80';x.beginPath();x.ellipse(rnd()*W,rnd()*H,4+rnd()*10,2+rnd()*6,rnd()*3,0,TAU);x.fill();}x.globalAlpha=1;
+        const e=E();e.strokeStyle='#7a50c8';e.lineWidth=1.4;sym(c=>{});
+        for(const sx of [-1,1]){e.beginPath();e.moveTo(W/2,H*.75);e.bezierCurveTo(W/2+sx*30,H*.6,W/2+sx*8,H*.3,W/2+sx*26,H*.15);e.stroke();}}
+      if(t===9){   /* 전설: 흰 판에 금 덩굴 (가운데에서 양옆으로 말려 나간다), 아래·위 금 띠 */
+        const gd='#e8b848',gd2='#a87818';x.fillStyle=gd;x.fillRect(0,0,W,5);x.fillRect(0,H-5,W,5);
+        sym(c=>{c.lineWidth=2.2;c.strokeStyle=gd2;const curl=(sx,sy,r,a0)=>{c.beginPath();for(let k=0;k<=24;k++){const a=a0+k/24*PI*1.6,rr=r*(1-k/34);const px=sx+Math.cos(a)*rr,py=sy+Math.sin(a)*rr;k?c.lineTo(px,py):c.moveTo(px,py);}c.stroke();};
+          c.beginPath();c.moveTo(W/2,H-12);c.bezierCurveTo(W/2+10,H-40,W/2+40,H-40,W/2+44,H-70);c.bezierCurveTo(W/2+48,H-95,W/2+20,H-105,W/2+8,H-112);c.stroke();
+          curl(W/2+30,H-36,9,PI*.2);curl(W/2+36,H-84,8,-PI*.3);curl(W/2+16,H-100,6,PI*.6);
+          c.strokeStyle=gd;c.lineWidth=1.2;c.beginPath();c.moveTo(W/2,H-12);c.bezierCurveTo(W/2+10,H-40,W/2+40,H-40,W/2+44,H-70);c.bezierCurveTo(W/2+48,H-95,W/2+20,H-105,W/2+8,H-112);c.stroke();});}
+      if(t===3||t===10){}}
+    const mk=c=>{const tx=new THREE.CanvasTexture(c);tx.wrapS=THREE.RepeatWrapping;tx.anisotropy=4;if(THREE.sRGBEncoding)tx.encoding=THREE.sRGBEncoding;return tx;};
+    return C.tex[key]={map:mk(cv),em:em?mk(em.canvas):null};};
+  /* 몸판 재질: 무늬를 그린 색 그림을 쓰므로 재질 색은 흰색 */
+  const bodyMat=t=>{const A=lookOf(t),E=etch(t);
+    if(t===0)return soft(0xffffff,{map:E.map,roughness:.78});
+    if(t===1)return metal(0xb8bcc2,{map:mailTex(),roughness:.5});
+    if(t===3||t===10)return metal(A.m,{map:scaleTex(),roughness:.4});
+    const o={map:E.map};if(E.em){o.emissive=0xffffff;o.emissiveMap=E.em;o.emissiveIntensity=t===4?1.1:t===6?1.2:t===8?1.1:.6;}
+    return metal(0xffffff,o);};
+
+  /* ===== 투구 ===== (머리 공간: 머리 공 반지름 .22, 눈 높이 .03 → 앞 아래끝은 .07 위. 볼가리개·목가리개는 옆과 뒤로만 내려온다) */
   if(G.helm>=0){const t=G.helm,A=lookOf(t),T=new THREE.Group(),HY=.07;
-    const hm=metal(A.m),tm=metal(A.t,{roughness:.45}),am=metal(A.a,{metalness:.7,roughness:.28});
-    const dome=(m,R=.24,cov=.5)=>{P(T,lathe([[0,R*1.07],[R*.22,R*1.04],[R*.48,R*.93],[R*.72,R*.74],[R*.9,R*.47],[R*.985,R*.2],[R*1.0,R*.04],[R*1.012,0],[R*.96,0]],32),m,0,HY,0);};
-    const rim=(m,R=.243,th=.016)=>P(T,tor(R,th,PI*2,6,28),m,0,HY+.004,0,PI/2);
-    const nasal=(m,w=.032)=>{const sh=new THREE.Shape();sh.moveTo(-w*.5,.075);sh.lineTo(w*.5,.075);sh.lineTo(w*.42,-.05);sh.quadraticCurveTo(w*.3,-.078,0,-.082);sh.quadraticCurveTo(-w*.3,-.078,-w*.42,-.05);sh.lineTo(-w*.5,.075);
-      P(T,new THREE.ExtrudeGeometry(sh,{depth:.01,bevelEnabled:true,bevelThickness:.007,bevelSize:.005,bevelSegments:2,curveSegments:6}),m,0,.035,.214,-.08);P(T,box(w*1.7,.034,.03),m,0,.11,.228);};
-    const cheeks=(m,big=false)=>[-1,1].forEach(s=>{const sh=new THREE.Shape();sh.moveTo(0,0);sh.lineTo(.15,0);sh.quadraticCurveTo(big?.15:.13,-.13,big?.07:.05,-.17);sh.quadraticCurveTo(.0,-.12,0,0);
-      const ge=new THREE.ExtrudeGeometry(sh,{depth:.012,bevelEnabled:true,bevelThickness:.006,bevelSize:.006,bevelSegments:1,curveSegments:6});
-      const o=P(T,ge,m,s*.225+(s>0?0:.012),HY+.005,-.06,0,-PI/2,0);o.rotation.order='YXZ';o.rotation.z=s*-.05;});
-    const neckG=(m,R=.245,h=.13)=>P(T,cyl(R,R+.04,h,18,true,PI*.62,PI*.76),m,0,HY-h/2+.01,0);
-    const rivets=(m,n=10,R=.25)=>ring(n,R,HY+.018,(x,y,z)=>P(T,sph(.011,6,5),m,x,y,z));
-    if(t===10){   // 킹 슬라임의 왕관: 금테에 보석, 끝에 구슬 박힌 뾰족한 가지, 안쪽 붉은 벨벳
-      const gold=metal(0xf0c95f,{metalness:.8,roughness:.25}),vel=soft(0x8a1a2a);
-      P(T,cyl(.205,.215,.075,24,true),gold,0,.17,0);P(T,tor(.214,.012,PI*2,5,28),gold,0,.135,0,PI/2);P(T,tor(.207,.01,PI*2,5,28),gold,0,.207,0,PI/2);
-      P(T,sph(.2,16,8,0,PI*2,0,PI*.42),vel,0,.17,0);P(T,sph(.022,8,6),gold,0,.37,0);P(T,oct(.018),glowM(0x8fd0ff,.6),0,.395,0);
+    const hm=metal(A.m),tm=metal(A.t,{roughness:.42}),am=metal(A.a,{metalness:.72,roughness:.26});
+    /* 투구 껍데기: 정수리에서 아래 끝(bot(az))까지. 적도 아래로는 곧게 내려간다(볼가리개·목가리개).
+       o: R 반지름, cy 중심 높이, tall 위로 늘림, peak 꼭지 뾰족, ridge 등줄 높이, flare 아래 끝 벌어짐, back 뒤 늘어짐 */
+    const helmFn=o=>{const R=o.R||.245,cy=o.cy??HY-.005,bot=o.bot;
+      return (u,v,d,q)=>{const az=(u-.5)*TAU,yb=bot(az),cz=Math.cos(az),sx=Math.sin(az);
+        const yE=cy,hE=R,dropMax=Math.max(0,yE-yb);   /* 적도 높이에서 아래로 내려가는 길이 */
+        const arc=PI/2*R*(o.tall||1),L=arc+dropMax,s=v*L;let x,y,z,rr;
+        if(s<=arc){const th=s/arc*PI/2;rr=Math.sin(th);y=yE+Math.cos(th)*R*(o.tall||1);
+          if(o.peak)y+=o.peak*Math.pow(Math.cos(th),3)*R;}
+        else{const k=(s-arc);rr=1-(o.inK||0)*k/R+(o.flare||0)*ss(Math.max(.001,dropMax-.05),dropMax+.001,k);y=yE-k;}
+        let r=R*rr*(1+.05*cz*cz)*(1+(o.back||0)*Math.max(0,-cz)*ss(yE+.05,yE-.12,y));
+        if(o.ridge){const xs=Math.abs(sx)*rr;r+=o.ridge*Math.pow(Math.max(0,1-xs/.16),2)*ss(yE-.02,yE+.06,y);}
+        if(o.brow)r+=o.brow*Math.exp(-Math.pow((y-yb-.012)/.012,2))*ss(-.2,.2,cz);
+        if(o.bands){const a=((az%(TAU/o.bands))+TAU)%(TAU/o.bands)-TAU/o.bands/2;r+=.007*Math.exp(-Math.pow(a*rr*R/.011,2))*ss(yE-.03,yE+.04,y);}
+        r-=d*.008;q.set(sx*r,y,cz*r);};};
+    const hp=(o,m,po={})=>plate(T,helmFn(o),po.nu||44,po.nv||20,m,Object.assign({cu:true,one:true,su:1,sv:1},po));
+    /* 앞은 눈썹 위(.075), 옆(귀)은 w1 너비로 c1까지, 뒤는 c2까지 내려온다 */
+    const botF=(front,cheek,back,w=.75,w2=1.5)=>az=>{const a=Math.abs(az);return front+(cheek-front)*ss(w-.18,w+.12,a)+(back-cheek)*ss(w2,w2+.6,a);};
+    const nasal=(m,w=.03,len=.13)=>plate(T,(u,v,d,q)=>{const y=HY+.045-v*len,ww=w*(1-.35*v)*(1-.5*Math.pow(v,6)),x=(u*2-1)*ww;const z=.252+.01*(1-v)-.012*v*v-(d?.007:0)+Math.cos((u*2-1)*1.2)*.004;q.set(x,y,z);},5,8,m);
+    const gemAt=(m,x,y,z,r=.022,sz=1.3)=>{mesh(T,new THREE.OctahedronGeometry(r,0),m,x,y,z,0,0,0,1,sz,.6);};
+    if(t===10){   /* 왕관: 금 띠 위로 백합 끝 여덟, 띠에 박은 보석(받침 테), 안쪽 붉은 벨벳 모자와 꼭대기 십자 구슬 */
+      const gold=metal(0xf0c95f,{metalness:.82,roughness:.24}),vel=soft(0x8a1a2a,{roughness:.95});
+      const band=(u,v,d,q)=>{const az=u*TAU,r=.212+.006*Math.sin(v*PI)-(d?.008:0),y=.13+v*.075;q.set(Math.sin(az)*r,y,Math.cos(az)*r);};
+      plate(T,band,48,4,gold,{cu:true,one:true,roll:[{v:0,r:.008,n:48},{v:1,r:.006,n:48}]});
+      plate(T,(u,v,d,q)=>{const az=u*TAU,th=v*1.25,r=.205-(d?.006:0);q.set(Math.sin(az)*Math.sin(th)*r,.16+Math.cos(th)*r*.95,Math.cos(az)*Math.sin(th)*r);},32,10,vel,{cu:true,one:true});
       const gems=[0xd0303a,0x3a7ad8,0x3ac87a];
-      ring(8,.21,.17,(x,y,z,a,k)=>{P(T,oct(.017),mat(gems[k%3],{emissive:gems[k%3],emissiveIntensity:.5,flatShading:true}),x*1.05,y,z*1.05,0,a,0,1,1.2,.6);});
-      ring(8,.205,.25,(x,y,z,a,k)=>{const big=k%2===0;P(T,cone(big?.032:.022,big?.13:.08,4),gold,x,y+(big?.025:0),z,0,a+PI/4);P(T,sph(big?.016:.012,6,5),gold,x,y+(big?.1:.045),z);});}
-    else if(t===0){   // 가죽 모자: 바느질 띠가 정수리를 가르고, 접어 올린 챙, 양옆 귀덮개, 꼭지 단추
-      const lm=soft(A.m),dk=soft(A.t),st=soft(0xd8c8a0);
-      P(T,sph(.236,18,10,0,PI*2,0,PI*.42),lm,0,.02,0);
-      [0,PI/2].forEach(ry=>mer(T,dk,.238,.02,.007,PI*.42,ry));
-      P(T,tor(.232,.022,PI*2,6,28),dk,0,.075,0,PI/2);
-      ring(14,.255,.075,(x,y,z,a)=>P(T,box(.004,.012,.018),st,x,y,z,0,a));
-      [-1,1].forEach(s=>{P(T,box(.03,.13,.11),lm,s*.218,.02,-.02,0,0,s*.06);P(T,tor(.012,.005,PI*2,4,8),st,s*.235,-.04,-.02,0,PI/2);});
-      P(T,sph(.022,8,6),dk,0,.262,0);}
+      for(let k=0;k<8;k++){const a=k/8*TAU,x=Math.sin(a),z=Math.cos(a);
+        mesh(T,new THREE.TorusGeometry(.015,.004,6,14),gold,x*.218,.168,z*.218,0,a,0);mesh(T,new THREE.OctahedronGeometry(.014,0),mat(gems[k%3],{emissive:gems[k%3],emissiveIntensity:.5,flatShading:true}),x*.222,.168,z*.222,0,a,0,1,1.2,.55);
+        const big=k%2===0,G2=new THREE.Group();G2.position.set(x*.212,.2,z*.212);G2.rotation.y=a;T.add(G2);
+        if(big){blade(G2,.11,t=>.032*Math.sin(Math.min(1,t*1.3)*PI)*(1-t*.35)+.004,gold,-.04,.006);mesh(G2,new THREE.SphereGeometry(.013,10,8),gold,0,.12,-.006);
+          for(const s of [-1,1])horn(G2,[[0,.03,0],[s*.03,.05,-.004],[s*.042,.085,-.01],[s*.03,.1,-.012]],tt=>.008*(1-tt*.6),gold,10,5);}
+        else{blade(G2,.06,t=>.018*(1-t)+.002,gold,-.03,.006);mesh(G2,new THREE.SphereGeometry(.009,8,6),gold,0,.064,-.004);}}
+      mesh(T,new THREE.SphereGeometry(.024,12,10),gold,0,.39,0);mesh(T,new THREE.BoxGeometry(.01,.05,.01),gold,0,.43,0);mesh(T,new THREE.BoxGeometry(.034,.01,.01),gold,0,.438,0);}
+    else if(t===0){   /* 가죽 모자: 여섯 쪽 이은 둥근 모자(솔기 바느질), 접어 올린 챙, 양옆 귀덮개와 턱끈 */
+      const lm=soft(A.m,{roughness:.86}),dk=soft(A.t,{roughness:.9}),st=soft(0xd8c8a0);
+      hp({R:.236,cy:.025,bot:botF(.075,-.03,.02,.95,1.6),bands:6,tall:.95},lm,{nu:48,nv:18,roll:[{v:1,r:.006,n:48,m:dk}]});
+      plate(T,(u,v,d,q)=>{const az=(u-.5)*TAU,a=Math.abs(az),y=.088+v*.04*(1-.5*ss(.8,1.4,a)),r=.252+v*.02+(d?-.008:0);q.set(Math.sin(az)*r,y-ss(1.2,1.8,a)*.03,Math.cos(az)*r);},40,4,dk,{cu:false,
+        roll:[{v:1,r:.007,n:40}]});
+      for(let k=0;k<6;k++){const a=k/6*TAU+PI/6;for(let j=0;j<5;j++){const th=.25+j*.22,r=.24;mesh(T,new THREE.BoxGeometry(.003,.012,.003),st,Math.sin(a)*Math.sin(th)*r,.025+Math.cos(th)*r*.95,Math.cos(a)*Math.sin(th)*r,th,a,0);}}
+      for(const s of [-1,1])horn(T,[[s*.235,-.02,-.02],[s*.2,-.12,.02],[s*.1,-.2,.07]],tt=>.006,dk,10,5);
+      mesh(T,new THREE.SphereGeometry(.02,10,8),dk,0,.265,0);}
     else{
-      dome(hm);
-      if(t===1){   // 강철 투구: 네 쪽 판을 이은 띠와 징, 코가리개, 꼭지
-        [0,PI/2].forEach(ry=>mer(T,tm,.245,HY,.012,PI*.5,ry));rim(tm);rivets(am,12);nasal(tm);P(T,cone(.02,.06,6),tm,0,HY+.27,0);
-        neckG(soft(0x5a5a60));}   // 뒤에 늘어진 사슬 목가리개
-      else if(t===2){   // 미스릴 투구: 매끈한 이마 턱, 가운데 등줄, 볼가리개, 이마 보석
-        mer(T,am,.245,HY,.014,PI*.5,PI/2);rim(am,.246,.02);cheeks(hm);nasal(am,.028);neckG(hm,.25,.1);
-        P(T,oct(.022),glowM(A.g,.7),0,HY+.06,.235,0,0,0,1,1.3,.6);}
-      else if(t===3){   // 고대 투구: 청동 투구에 녹청 테, 큰 볼가리개와 목가리개, 말총 볏
-        rim(tm,.246,.02);cheeks(hm,true);neckG(hm,.25,.16);nasal(tm);
-        P(T,box(.03,.06,.05),tm,0,HY+.26,0);
-        const sh=new THREE.Shape();sh.moveTo(-.22,0);sh.quadraticCurveTo(-.24,.2,0,.2);sh.quadraticCurveTo(.2,.2,.3,-.12);sh.lineTo(.24,-.1);sh.quadraticCurveTo(.12,.1,0,.08);sh.lineTo(-.18,.02);
-        P(T,new THREE.ExtrudeGeometry(sh,{depth:.04,bevelEnabled:true,bevelThickness:.01,bevelSize:.01,bevelSegments:1,curveSegments:8}),soft(0x9a2a22),-.025,HY+.27,0,0,PI/2,0);
-      }
-      else if(t===4){   // 룬 투구: 빛나는 룬 띠, 볼가리개, 짧은 뿔 꼭지
-        const gl=glowM(A.g);rim(tm,.246,.024);P(T,cyl(.249,.249,.012,28,true),gl,0,HY+.03,0);
-        ring(8,.252,HY+.075,(x,y,z,a,k)=>P(T,box(.012,.045,.006),gl,x,y,z,0,a,k%2?.5:-.5));
-        mer(T,tm,.245,HY,.012,PI*.5,PI/2);cheeks(hm);nasal(tm);P(T,cone(.03,.12,6),tm,0,HY+.29,0);P(T,oct(.02),gl,0,HY+.06,.24);}
-      else if(t===5){   // 서리 투구: 하얀 투구에 얼음 결정 관, 서리 테
-        const ice=iceM();rim(am,.246,.02);nasal(am);cheeks(hm);
-        ring(9,.2,HY+.1,(x,y,z,a,k)=>{const h=k===0?.2:k%2?.09:.14;P(T,cone(.03,h,5),ice,x,y+h/2+.02,z,Math.cos(a)*.35,0,-Math.sin(a)*.35);});
-        P(T,oct(.026),glowM(A.g,.8),0,HY+.06,.24,0,0,0,1,1.4,.6);}
-      else if(t===6){   // 화염 투구: 검붉은 투구에 타오르는 불꽃 볏, 불씨 테
-        const em=glowM(A.g,.8);rim(tm,.246,.022);P(T,cyl(.249,.249,.008,28,true),em,0,HY+.02,0);cheeks(hm);nasal(tm);
-        const f1=flameM(0xff7a20),f2=flameM(0xffd040);
-        for(let k=0;k<7;k++){const zz=.16-k*.055,h=.1+Math.sin(k/6*PI)*.14;P(T,cone(.035,h,5),k%2?f2:f1,0,HY+.2+Math.cos((zz)/.26)*.04+h/2-.02,zz,-.25-k*.06,0,0);}}
-      else if(t===7){   // 망령 투구: 해진 두건을 덮어쓴 어두운 투구, 보랏빛 띠, 뒤로 휜 작은 뿔
+      const wing=(m,s,n=7,sc=1.45)=>{const W2=new THREE.Group();W2.position.set(s*.24,HY+.1,-.04);W2.rotation.set(0,0,-s*.2);T.add(W2);
+        for(let k=0;k<n;k++){const G2=new THREE.Group();G2.rotation.set(-.25-k*.17,s*.25,-s*(.45+k*.12));W2.add(G2);G2.scale.setScalar(sc);
+          blade(G2,.24-k*.022,tt=>.028*Math.sin(Math.min(1,tt*1.1+.08)*PI)+.004,m,.08,.005,s*.3);}};
+      if(t===1){   /* 강철 투구: 네 쪽을 징 박은 띠로 이은 둥근 투구, 이마 테, 코가리개, 뒤와 옆에 늘어진 사슬 목가리개 */
+        hp({R:.243,bot:az=>HY+.005,bands:4,brow:.006,peak:.12},hm,{roll:[{v:1,r:.011,n:48,m:tm}],riv:[{v:.97,n:16,r:.0075,m:am}]});
+        for(let k=0;k<4;k++){const a=k/4*TAU+PI/4;for(let j=1;j<4;j++){const th=j*.33,r=.252;mesh(T,rivG(.0065),am,Math.sin(a)*Math.sin(th)*r,HY+Math.cos(th)*r*1.03,Math.cos(a)*Math.sin(th)*r);}}
+        nasal(tm,.032,.12);mesh(T,new THREE.ConeGeometry(.014,.04,8),am,0,HY+.29,0);
+        plate(T,(u,v,d,q)=>{const az=PI+(u-.5)*1.2*PI,r=.243+v*.05-(d?.004:0),y=HY+.01-v*.17;q.set(Math.sin(az)*r,y,Math.cos(az)*r);},40,8,metal(0xb8bcc2,{map:mailTex(),roughness:.55}),{one:true,su:3,sv:1,out:(p,w)=>w.set(p.x,0,p.z)});}
+      else if(t===2){   /* 미스릴 투구 (살레): 매끈한 둥근 몸에 낮은 등줄, 볼가리개, 뒤로 길게 뻗은 꼬리, 이마 보석 */
+        hp({R:.245,ridge:.012,bot:botF(.078,-.03,-.06,.8,1.7),flare:.06,back:.18,brow:.004},hm,{roll:[{v:1,r:.008,n:44,m:am}]});
+        gemAt(glowM(A.g,.7),0,HY+.05,.262);mesh(T,new THREE.TorusGeometry(.024,.005,6,16),am,0,HY+.05,.252);}
+      else if(t===3){   /* 고대 투구 (청동): 크게 내려온 볼가리개와 목가리개, 녹청 테, 정수리의 붉은 말총 볏 */
+        hp({R:.246,ridge:.008,bot:botF(.078,-.11,-.08,.72,1.6),flare:.03,back:.06,brow:.01},hm,{roll:[{v:1,r:.009,n:44,m:tm}]});
+        const hair=soft(0x9a2a22,{roughness:.95}),hd=soft(0x6a1a14,{roughness:.95});
+        mesh(T,new THREE.BoxGeometry(.03,.05,.12),tm,0,HY+.255,0);
+        plate(T,(u,v,d,q)=>{const a=-1.25+u*2.75,h=(.07+.05*Math.sin(u*PI))*(1-.25*u),r=.25+v*h,y=HY+.0+Math.cos(a)*r,z=Math.sin(a)*r-.0,w=(.016-.008*v)*(1-.3*u);q.set(d?-w:w,y+v*v*.02*u,z-v*v*.03*u);},30,6,hair,{});
+        for(let k=0;k<16;k++){const a=-1.15+k/15*2.6,r=.3+.05*Math.sin(k/15*PI),y=HY+.02+Math.cos(a)*r,z=Math.sin(a)*r;horn(T,[[0,y-.04*Math.cos(a),z-.04*Math.sin(a)],[0,y,z],[0,y+.02*Math.cos(a+.5),z+.02*Math.sin(a+.5)]],tt=>.012*(1-tt*.8),k%2?hair:hd,6,5);}}
+      else if(t===4){   /* 룬 투구: 이마에 빛나는 룬 띠, 볼가리개, 짧고 굵은 꼭지 뿔 */
+        hp({R:.245,ridge:.01,bot:botF(.078,-.05,-.04,.8,1.6),brow:.008},hm,{roll:[{v:1,r:.01,n:44,m:tm}]});
+        const gl=glowM(A.g);plate(T,(u,v,d,q)=>{const az=(u-.5)*1.4*PI,r=.256-(d?.004:0),y=HY+.02+v*.03;q.set(Math.sin(az)*r,y,Math.cos(az)*r);},40,3,tm,{});
+        for(let k=0;k<9;k++){const a=(k-4)*.3,x=Math.sin(a)*.259,z=Math.cos(a)*.259;mesh(T,new THREE.BoxGeometry(.006,.022,.004),gl,x,HY+.035,z,0,a,k%2?.5:-.5);mesh(T,new THREE.BoxGeometry(.012,.004,.004),gl,x,HY+.035+(k%2?.006:-.006),z,0,a,0);}
+        horn(T,[[0,HY+.24,0],[0,HY+.3,-.01],[0,HY+.35,-.03]],tt=>.03*(1-tt)+.003,tm,10,8,3);gemAt(gl,0,HY+.07,.258);}
+      else if(t===5){   /* 서리 투구: 하얀 투구에 얼음 결정 관, 흰 털 테 */
+        hp({R:.245,ridge:.006,bot:botF(.078,-.04,-.03,.8,1.6),brow:.006},hm,{roll:[{v:1,r:.009,n:44,m:am}]});
+        const ice=iceM(),fur=soft(0xf4f4f0,{roughness:1});
+        plate(T,(u,v,d,q)=>{const az=(u-.5)*TAU,a=Math.abs(az),yb=HY-.01-ss(.8,1.4,a)*.1,y=yb+.012+Math.sin(v*PI)*.012*0+(v-.5)*.03,r=.25+.016*Math.sin(v*PI)+.004*Math.sin(az*40)*Math.sin(v*PI)-(d?.01:0);q.set(Math.sin(az)*r,y,Math.cos(az)*r);},64,6,fur,{cu:true,one:true});
+        for(let k=0;k<9;k++){const a=(k-4)*.32,h=k===4?.2:k%2?.09:.14,G2=new THREE.Group();G2.position.set(Math.sin(a)*.2,HY+.17-Math.abs(k-4)*.012,Math.cos(a)*.2);G2.rotation.set(Math.cos(a)*.3,a,0);T.add(G2);
+          const g=new THREE.CylinderGeometry(0,.026,h,6,1);g.translate(0,h/2,0);mesh(G2,g,ice);const g2=new THREE.CylinderGeometry(.026,0,.03,6,1);g2.translate(0,-.015,0);mesh(G2,g2,ice);}
+        gemAt(glowM(A.g,.8),0,HY+.06,.26,.024,1.4);}
+      else if(t===6){   /* 화염 투구: 검붉은 투구, 볼가리개, 정수리에서 뒤로 타오르는 불꽃 볏, 불씨 테 */
+        hp({R:.245,ridge:.012,bot:botF(.078,-.06,-.06,.8,1.6),flare:.03,back:.08},bodyMat(6),{roll:[{v:1,r:.009,n:44,m:tm}]});
+        const f1=flameM(0xff6a18),f2=flameM(0xffc040);
+        for(let k=0;k<7;k++){const a=-.5+k*.32,G2=new THREE.Group();G2.position.set(0,HY+.03+Math.cos(a)*.245,Math.sin(a)*.245);G2.rotation.set(a-.5,0,0);T.add(G2);
+          blade(G2,.12+Math.sin(k/6*PI)*.12,tt=>.04*Math.sin(Math.min(1,tt+.15)*PI)*(1-tt*.5)+.002,k%2?f2:f1,-.1,.004,(k%2?1:-1)*.8);}}
+      else if(t===7){   /* 망령 투구: 해진 두건을 덮어쓴 어두운 투구, 보랏빛 띠, 두건 이마의 보랏빛 돌 */
         const gl=glowM(A.g),cloth=mat(0x2a2234,{side:THREE.DoubleSide,roughness:.95,flatShading:false});
-        rim(tm,.246,.02);P(T,cyl(.249,.249,.012,28,true),gl,0,HY+.035,0);nasal(tm);
-        P(T,sph(.27,18,10,PI*.8,PI*1.4,0,PI*.62),cloth,0,HY-.02,-.01);   // 두건 (앞은 트였다)
-        for(let k=0;k<6;k++){const a=PI*.35+k/5*PI*1.3;P(T,cone(.03,.12,3),cloth,Math.sin(a)*.25,HY-.17,Math.cos(a)*.25,PI,0,0);}
-        [-1,1].forEach(s=>{P(T,tube([[s*.17,HY+.17,.02],[s*.25,HY+.23,-.07],[s*.27,HY+.2,-.18]],.022,10,6),tm);P(T,cone(.022,.06,6),tm,s*.27,HY+.19,-.21,-PI/2-.3,0,0);});}   // 뒤로 휜 뿔
-      else if(t===8){   // 심연 투구: 검은 투구에 크게 휜 뿔, 이마의 눈 보석, 등줄 가시
-        const gl=glowM(A.g,1.1);rim(am,.246,.022);cheeks(hm,true);nasal(tm);
-        [-1,1].forEach(s=>{const pts=[[s*.2,HY+.1,0],[s*.32,HY+.16,.02],[s*.38,HY+.3,-.02],[s*.33,HY+.42,-.06]];P(T,tube(pts,.03,16,6),tm);P(T,cone(.03,.08,6),tm,s*.33,HY+.46,-.06,0,0,s*.2);});
-        P(T,oct(.03),gl,0,HY+.07,.238,0,0,0,1,1.5,.6);
-        for(let k=0;k<4;k++)P(T,cone(.022,.07,4),am,0,HY+.25-k*k*.012,.08-k*.09,-.3-k*.35,0,0);}
-      else if(t===9){   // 전설의 투구: 하얀 금빛 투구, 금테 장식, 양옆의 날개, 이마 보석
-        const gold=am,gl=glowM(A.g,.8),wing=metal(0xfff8e8,{metalness:.3,roughness:.4});
-        rim(gold,.246,.024);mer(T,gold,.245,HY,.014,PI*.5,PI/2);nasal(gold);cheeks(hm);
-        ring(10,.25,HY+.055,(x,y,z)=>P(T,sph(.012,6,5),gold,x,y,z));
-        [-1,1].forEach(s=>{for(let k=0;k<5;k++){const L=.22-k*.03;P(T,box(.012,L,.05),wing,s*(.25+L*.35*Math.cos(.5+k*.22)),HY+.1+L*.35+k*.012,-.04-k*.035,0,0,-s*(.5+k*.22));}});
-        P(T,oct(.03),gl,0,HY+.07,.24,0,0,0,1,1.4,.6);P(T,cone(.018,.06,4),gold,0,HY+.29,0);}
+        hp({R:.243,bot:az=>HY+.005,brow:.006},bodyMat(7),{roll:[{v:1,r:.01,n:48,m:tm}]});
+        /* 두건: 투구 위로 덮어 이마 위에서 접히고, 옆·뒤로는 어깨까지 해진 끝이 늘어진다 */
+        plate(T,helmFn({R:.262,cy:HY+.01,tall:1.05,flare:.12,back:.1,bot:az=>{const a=Math.abs(az);return .12-.36*ss(.55,1.3,a)-.05*ss(1.6,2.6,a)+.035*Math.sin(az*9)*ss(.6,1.2,a)+.02*Math.sin(az*23)*ss(.6,1.2,a);}}),56,20,cloth,{cu:true,one:true});
+        plate(T,(u,v,d,q)=>{const az=(u-.5)*1.3,r=.272+.012*Math.sin(v*PI)-(d?.004:0),y=.12+v*.03-.02*ss(.3,.65,Math.abs(az));q.set(Math.sin(az)*r,y,Math.cos(az)*r);},24,4,cloth,{});
+        mesh(T,new THREE.CylinderGeometry(.252,.252,.012,40,1,true),gl,0,HY+.035,0);
+        gemAt(gl,0,HY+.13,.272,.02,1.4);}
+      else if(t===8){   /* 심연 투구: 검은 투구에 크게 휜 마디 뿔, 이마의 눈 보석, 뒤로 이어진 가시 */
+        hp({R:.245,ridge:.016,bot:botF(.078,-.09,-.07,.75,1.6),flare:.04,back:.08,brow:.01},bodyMat(8),{roll:[{v:1,r:.01,n:44,m:am}]});
+        const gl=glowM(A.g,1.1);
+        for(const s of [-1,1])horn(T,[[s*.19,HY+.12,.02],[s*.31,HY+.17,.03],[s*.39,HY+.3,-.01],[s*.36,HY+.45,-.06],[s*.3,HY+.5,-.06]],tt=>.036*(1-tt*.92),tm,30,8,6);
+        gemAt(gl,0,HY+.065,.262,.028,1.5);mesh(T,new THREE.TorusGeometry(.032,.006,6,18),am,0,HY+.065,.252);
+        for(let k=0;k<4;k++){const a=.4-k*.42;horn(T,[[0,HY+Math.cos(a)*.25,Math.sin(a)*.25],[0,HY+Math.cos(a-.15)*.32,Math.sin(a-.15)*.32]],tt=>.018*(1-tt),am,6,5);}}
+      else if(t===9){   /* 전설의 투구: 하얀 금빛 투구, 금 덩굴 무늬, 양옆 깃털 날개, 이마 보석 */
+        hp({R:.245,ridge:.01,bot:botF(.078,-.05,-.04,.8,1.6),brow:.008},bodyMat(9),{roll:[{v:1,r:.01,n:44,m:am}]});
+        const wm=metal(0xfff8e8,{metalness:.3,roughness:.4});for(const s of [-1,1])wing(wm,s,6);
+        gemAt(glowM(A.g,.8),0,HY+.065,.262,.028,1.4);mesh(T,new THREE.TorusGeometry(.03,.006,6,18),am,0,HY+.065,.252);mesh(T,new THREE.ConeGeometry(.016,.05,8),am,0,HY+.285,0);}
     }
     gearMerge(T,S.head);}
 
-  /* ===== 갑옷 ===== (윗몸 공간: 몸통은 y -.03~.59, 어깨 ±.23 .52, 목 .66) */
-  if(G.armor>=0){const t=G.armor,A=lookOf(t),T=new THREE.Group(),U=T;
-    const leather=t===0,mail=t===1,scale=t===3||t===10;
-    const mm=leather?soft(A.m):mail?metal(0xb8bcc2,{map:mailTex(),roughness:.5}):scale?metal(A.m,{map:scaleTex(),roughness:.4}):metal(A.m);
-    const tm=leather?soft(A.t):metal(A.t,{roughness:.45}),am=metal(A.a,{metalness:.75,roughness:.25}),strap=soft(0x4a2e1c);
+  /* ===== 갑옷 ===== (윗몸 공간: 몸통은 y -.03~.59, 어깨 ±.23 .52, 목 .66)
+     몸통이 넓어지면(stickLook) 몸판은 같이 넓어지고, 어깨받이(userData.nw)는 넓어진 만큼 바깥으로 옮겨진다 */
+  if(G.armor>=0){const t=G.armor,A=lookOf(t),T=new THREE.Group(),SP=new THREE.Group();
+    const leather=t===0,mail=t===1,scale=t===3||t===10,platey=!leather&&!mail;
+    const mm=bodyMat(t),pm=leather?soft(A.m,{roughness:.8}):mail?soft(0x5a3e28,{roughness:.7}):scale?metal(A.m,{map:scaleTex(),roughness:.4}):metal(t===9?0xf2eee2:A.m);
+    const tm=leather?soft(A.t):metal(A.t,{roughness:.42}),am=metal(A.a,{metalness:.75,roughness:.25}),strap=soft(0x4a2e1c,{roughness:.75});
     const gl=A.g?glowM(A.g,t>=6?1:.7):null;
-    // 몸판과 허리 아래 자락
-    P(U,latheFront([[.17,.12],[.184,.13],[.188,.18],[.194,.26],[.202,.34],[.207,.41],[.206,.47],[.2,.53],[.186,.57],[.16,.585],[0,.59]],32,y=>0),mm,0,0,0);
-    if(!leather&&!mail)P(U,tor(.205,.009,PI*2,8,32),tm,0,.545,0,PI/2,0,0,1,1.08,1);   // 흉갑 위 말린 단
-    P(U,tor(.192,.016,PI*2,6,28),tm,0,.13,0,PI/2);   // 허리띠
-    if(leather){for(let k=0;k<8;k++){const a=k/8*PI*2+PI/8;P(U,cyl(.178,.214,.12,6,true,a-PI/8+.03,PI/4-.06),k%2?tm:mm,0,.05,0);}}   // 갈라진 가죽 자락 여덟 장
-    else if(mail||scale){P(U,cyl(.175,.21,.11,24,true),mm,0,.05,0);P(U,cyl(.2,.225,.09,24,true),mm,0,-.04,0);P(U,tor(.224,.007,PI*2,6,32),tm,0,-.085,0,PI/2);}
-    else{for(let k=0;k<3;k++){const y=.075-k*.055,r0=.18+k*.016,r1=.2+k*.016;P(U,cyl(r0,r1,.065,28,true),k===1?mm:tm,0,y,0);P(U,tor(r1,.006,PI*2,6,32),am,0,y-.032,0,PI/2);}
-      ring(8,.205,.07,(x,y,z)=>P(U,sph(.008,8,6),am,x*1.01,y,z*1.01));}   // 겹친 허리 판 세 단과 가장자리 테
-    P(U,cyl(.15,.2,.06,22),leather?tm:am,0,.6,0);   // 목둘레 (목가리개)
-    const pauld=(layers,m,R=.1,trimM=tm)=>[-1,1].forEach(s=>{for(let k=0;k<layers;k++){const r=R+k*.012,top=k===0;
-      const prof=[[0,r*.84],[r*.35,r*.8],[r*.68,r*.62],[r*.9,r*.34],[r,r*.08],[r*1.035,0],[r*.99,-.004]];
-      P(U,lathe(prof,24),m,s*(.235+k*.012),.56-k*.05,0,0,0,-s*(.35+k*.12),1,.85,1);
-      P(U,tor(r*1.02,.0075,PI*2,8,24),trimM,s*(.235+k*.012),.56-k*.05,0,PI/2,0,-s*(.35+k*.12),1,1,.85);
-      if(top)for(let j=0;j<3;j++){const zz=(j-1)*r*.5,h=r*.72;P(U,sph(.0075,8,6),trimM,s*(.235+h*Math.sin(.35)),.56+h*Math.cos(.35)*.85,zz);} }});   // 어깨판 꼭대기 징
-    const ridge=m=>P(U,box(.03,.38,.03),m,0,.37,.198,-.06,PI/4,0);   // 앞판 가운데 세운 등줄 (모서리가 앞을 본다)
-    const buckle=()=>{P(U,box(.05,.045,.02),am,0,.13,.205);};
-    const gem=(m,r=.036)=>P(U,oct(r),m,0,.43,.215,0,0,0,1,1.25,.6);
-    const cape=(m,trimM,len=.95)=>{P(U,cyl(.21,.3,len,14,true,PI*.68,PI*.64),m,0,.58-len/2,-.03);P(U,cyl(.3,.3,.04,14,true,PI*.68,PI*.64),trimM,0,.58-len+.02,-.03);
-      [-1,1].forEach(s=>P(U,sph(.035,8,6),trimM,s*.15,.56,.16));};
-    if(leather){   // 가죽 갑옷: 앞섶 끈, 가장자리 바느질, 작은 어깨받이, 쇠 버클
-      const st=soft(0xd8c8a0);
-      for(let k=0;k<4;k++){const y=.22+k*.08;[-1,1].forEach(s=>P(U,box(.07,.008,.006),st,0,y,.2,0,0,s*.55));}
-      P(U,box(.012,.34,.008),tm,0,.38,.205);
-      [.58,.12].forEach(y=>ring(22,.2,y+(y>.3?-.02:.04),(x,yy,z,a)=>P(U,box(.004,.014,.004),st,x*.98,yy,z*.98,0,a)));
-      [-1,1].forEach(s=>{P(U,sph(.085,12,6,0,PI*2,0,PI*.5),soft(A.m),s*.23,.55,0,0,0,-s*.4,1,.7,1);P(U,box(.04,.02,.21),tm,s*.12,.6,0);});buckle();}
-    else if(mail){   // 사슬 갑옷: 사슬 몸판과 자락, 가죽 띠 어깨받이, 쇠 버클
-      [-1,1].forEach(s=>{P(U,sph(.09,12,6,0,PI*2,0,PI*.5),strap,s*.235,.55,0,0,0,-s*.4,1,.8,1);P(U,tor(.09,.008,PI*2,4,16),am,s*.235,.55,0,PI/2,0,-s*.4);});
-      P(U,box(.035,.5,.012),strap,.09,.36,.19,0,0,.42);P(U,box(.035,.5,.012),strap,-.09,.36,-.19,0,0,.42);buckle();}
-    else if(t===2){   // 판금: 등줄 선 앞판, 세 겹 어깨받이, 징, 이마처럼 빛나는 작은 보석
-      ridge(am);pauld(3,mm,.1,am);ring(12,.209,.53,(x,y,z)=>P(U,sph(.01,6,5),am,x,y,z));
-      [.25,.18].forEach(y=>P(U,tor(.2-(.36-y)*.04,.008,PI*2,4,28),am,0,y,0,PI/2));gem(gl,.026);buckle();}
-    else if(scale){   // 용비늘 갑옷 (고대·붉은 용): 비늘 몸판, 비늘 어깨받이, 뿔 가시
-      const sm=mm,hornM=metal(t===10?0x1c1414:0xe8dcc0,{roughness:.5});
-      pauld(2,sm,.105,tm);P(U,tor(.205,.014,PI*2,6,28),tm,0,.57,0,PI/2);
-      [-1,1].forEach(s=>{for(let k=0;k<3;k++)P(U,cone(.022,.09,5),hornM,s*(.25+k*.03),.63-k*.05,-.03+k*.03,0,0,-s*(.7+k*.15));});
-      if(t===10){P(U,oct(.045),gl,0,.43,.215,0,0,0,1,1.25,.6);P(U,tor(.05,.01,PI*2,5,16),am,0,.43,.21);}
-      else P(U,oct(.03),gl,0,.43,.215,0,0,0,1,1.25,.6);buckle();}
-    else if(t===4){   // 룬 갑옷: 판금 위에 빛나는 룬 줄과 가슴의 룬 고리
-      ridge(tm);pauld(3,mm,.1,tm);
-      P(U,tor(.06,.008,PI*2,5,20),gl,0,.43,.205);P(U,oct(.03),gl,0,.43,.215,0,0,0,1,1.25,.6);
-      [-1,1].forEach(s=>{P(U,box(.01,.24,.006),gl,s*.11,.32,.19,0,s*.55,0);for(let k=0;k<3;k++)P(U,box(.03,.006,.006),gl,s*(.11+.018),.24+k*.08,.185,0,s*.55,k%2?.6:-.6);});
-      [-1,1].forEach(s=>P(U,box(.01,.006,.08),gl,s*.27,.52,0,0,0,-s*.5));buckle();}
-    else if(t===5){   // 서리 갑옷: 하얀 판금, 흰 털 목도리, 어깨의 얼음 결정
-      const ice=iceM(),fur=soft(0xf4f4f0,{roughness:1});ridge(am);pauld(2,mm,.1,tm);
-      P(U,tor(.17,.05,PI*2,8,24),fur,0,.6,0,PI/2,0,0,1,1,.7);
-      [-1,1].forEach(s=>{for(let k=0;k<3;k++){const h=[.14,.1,.08][k];P(U,cone(.028,h,5),ice,s*(.25+k*.035),.62+h/2-.03-k*.02,-.03+k*.04,(k-1)*.3,0,-s*(.35+k*.3));}});
-      gem(gl,.03);buckle();}
-    else if(t===6){   // 화염 갑옷: 검붉은 판금 틈으로 불씨가 비치고, 어깨에서 불꽃이 솟는다
-      const f1=flameM(0xff7a20),f2=flameM(0xffd040);ridge(tm);pauld(2,mm,.105,tm);
-      [[.1,.3,.5],[-.12,.36,-.4],[.05,.2,-.9],[-.06,.47,.8]].forEach(([x,y,r])=>P(U,box(.006,.09,.006),gl,x,y,Math.sqrt(Math.max(0,.2*.2-x*x))-.0,0,0,r));
-      [-1,1].forEach(s=>{for(let k=0;k<4;k++){const h=.08+(k%2)*.05;P(U,cone(.026,h,5),k%2?f2:f1,s*(.22+k*.025),.62+h/2-.02,-.04+k*.03,0,0,-s*(.2+k*.15));}});
-      gem(gl,.034);buckle();}
-    else if(t===7){   // 망령 갑옷: 어두운 판금, 가시 돋은 어깨, 뒤로 드리운 해진 망토
-      const cloth=mat(0x2a2234,{side:THREE.DoubleSide,roughness:.95,flatShading:false});ridge(tm);pauld(2,mm,.105,tm);
-      [-1,1].forEach(s=>{for(let k=0;k<3;k++)P(U,cone(.018,.1,4),am,s*(.24+k*.02),.62-k*.02,-.06+k*.06,0,0,-s*.9);});
-      P(U,cyl(.21,.29,.7,14,true,PI*.68,PI*.64),cloth,0,.23,-.03);
-      for(let k=0;k<6;k++){const a=PI*.72+k/5*PI*.56,L=.12+((k*37)%5)*.03;P(U,cone(.05,L,3),cloth,Math.sin(a)*.29,-.12-L/2+.01,Math.cos(a)*.29-.03,PI,a,0);}
-      gem(gl,.034);[-1,1].forEach(s=>P(U,box(.008,.16,.006),gl,s*.06,.3,.195,0,0,s*.25));buckle();}
-    else if(t===8){   // 심연 갑옷: 검은 판금, 크게 휜 어깨 가시, 배의 마디 띠, 빛나는 눈 보석
-      ridge(am);pauld(3,mm,.1,am);
-      [-1,1].forEach(s=>{for(let k=0;k<3;k++)P(U,cone(.03-k*.004,.15-k*.03,5),tm,s*(.25+k*.035),.62-k*.035,-.04+k*.04,-.2+k*.2,0,-s*(.45+k*.25));});
-      for(let k=0;k<3;k++)P(U,tor(.188+k*.004,.01,PI*2,4,28),tm,0,.18+k*.045,0,PI/2);
-      P(U,oct(.04),gl,0,.43,.215,0,0,0,1,1.25,.6);P(U,tor(.05,.012,PI*2,5,16),am,0,.43,.205);buckle();}
-    else if(t===9){   // 전설의 갑옷: 흰 판금에 금 테두리, 금빛 어깨받이, 큰 보석, 푸른 망토
-      const gold=am;ridge(gold);pauld(3,mm,.1,gold);
-      [.58,.13].forEach(y=>P(U,tor(y>.3?.2:.19,.012,PI*2,6,28),gold,0,y,0,PI/2));
-      [-1,1].forEach(s=>P(U,tube([[s*.03,.52,.205],[s*.1,.47,.2],[s*.12,.36,.195],[s*.07,.26,.19]],.007,12,4),gold));
-      P(U,oct(.045),gl,0,.43,.215,0,0,0,1,1.25,.6);P(U,tor(.055,.012,PI*2,5,16),gold,0,.43,.205);
-      cape(mat(0x24407a,{side:THREE.DoubleSide,roughness:.85,flatShading:false}),gold,.95);buckle();}
+    /* 몸판 옆모습 (y→반지름) */
+    const R=herm([[.06,.19],[.12,.187],[.2,.19],[.28,.2],[.36,.209],[.43,.214],[.49,.211],[.535,.199],[.565,.178],[.59,.142],[.605,.105]]);
+    const keel=platey?(t===2||t===4||t===8||t===9?.013:.008):0;
+    const torso=(az,y)=>{let r=R(y);if(keel)r+=keel*Math.pow(Math.max(0,1-Math.abs(az)/.34),2)*ss(.12,.3,y)*(1-ss(.46,.56,y));
+      r*=1-.035*Math.max(0,-Math.cos(az))*ss(.15,.35,y);return r;};
+    const at=(az,r,y,q)=>q.set(Math.sin(az)*r*1.04,y,Math.cos(az)*r);
+    const yBot=az=>(platey?.1-.03*Math.pow(Math.max(0,Math.cos(az)),8):.1);
+    /* 몸판: 허리에서 목까지 한 장 (가운데 등줄, 배 끝은 살짝 뾰족) */
+    plate(T,(u,v,d,q)=>{const az=(u-.5)*TAU,y0=yBot(az),y=y0+(.605-y0)*v;at(az,torso(az,y)-d*.007,y,q);},48,34,mm,{cu:true,one:true,
+      roll:[{v:0,r:platey?.008:.007,n:44,m:tm}]});
+    /* 목가리개: 두 겹 판이 목을 감싼다 */
+    const gor=(k,r0,r1,y0,y1)=>plate(T,(u,v,d,q)=>{const az=(u-.5)*TAU,y=y0+(y1-y0)*v,r=r0+(r1-r0)*v+.004*Math.exp(-Math.pow(v/.15,2))-d*.006;at(az,r,y,q);},40,5,k?pm:mm,{cu:true,one:true,roll:[{v:1,r:.006,n:44,m:tm}]});
+    if(platey){gor(0,.17,.13,.54,.6);gor(1,.135,.098,.585,.645);}
+    else if(mail){gor(0,.17,.12,.54,.63);}
+    else gor(0,.165,.105,.55,.63);
+    /* 앞 아래 덧판(플래카트): 배를 덮고 위끝이 뾰족한 아치, 테두리 징 */
+    if(platey&&t!==3&&t!==10){const topY=az=>.3+.1*Math.pow(Math.cos(az/1.15*PI/2),1.6);
+      plate(T,(u,v,d,q)=>{const az=(u-.5)*2.3,y0=yBot(az)+.004,y=y0+(topY(az)-y0)*v;at(az,torso(az,y)+.007-d*.006,y,q);},30,12,mm,{
+        roll:[{v:1,r:.006,n:30,m:t===9?am:tm}],riv:[{v:.93,n:7,r:.007,m:am,u0:.12,u1:.88}]});}
+    /* 허리 아래 판 (폴드): 넓어지며 아래로 겹친 세 단 / 사슬 자락 / 가죽 자락 */
+    if(platey){for(let k=0;k<3;k++){const y1=.11-k*.055,y0=y1-.066;
+      plate(T,(u,v,d,q)=>{const az=(u-.5)*TAU,y=y0+(y1-y0)*v,r=R(.12)+.005+k*.009+(y1-y)*.16+.004*Math.exp(-Math.pow(v/.12,2))-d*.006;at(az,r,y,q);},44,6,k===1?pm:mm,{cu:true,one:true,
+        roll:k===2?[{v:0,r:.006,n:48,m:am}]:[]});}
+      /* 허벅지 앞 덧판 (타셋) 두 장씩 */
+      for(const s of [-1,0,1])for(let k=0;k<2;k++){const y1=-.05-k*.085,y0=y1-.1,ac=s*.6;
+        plate(T,(u,v,d,q)=>{const az=ac+(u-.5)*.66,y=y0+(y1-y0)*v,r=.228+k*.008+(s?.007:0)+(y1-y)*.22+(-.05-y1)*.22+.004*Math.exp(-Math.pow(v/.12,2))-d*.006,yy=y-(1-Math.pow((u*2-1),2))*.012*(1-v);at(az,r,yy,q);},9,5,mm,{
+          roll:[{v:0,r:.005,n:9,m:k?am:tm}],riv:k?[]:[{v:.85,n:2,r:.006,m:am,u0:.3,u1:.7}]});}}
+    else if(mail){plate(T,(u,v,d,q)=>{const az=(u-.5)*TAU,y=-.2+.32*v,r=R(.12)+.002+(.12-y)*.1-d*.004,slit=Math.exp(-Math.pow(az/.06,2))*ss(-.05,-.2,y)*.02;at(az,r+slit,y,q);},56,10,mm,{cu:true,one:true,su:1,sv:1});}
+    else{for(let k=0;k<10;k++){const ac=(k+.5)/10*TAU-PI,L=.13+((k*7)%3)*.012;
+      plate(T,(u,v,d,q)=>{const az=ac+(u-.5)*.56,y=.1-L*(1-v),r=R(.12)+.006+(.1-y)*.12+(k%2?.006:0)-d*.006;at(az,r,y,q);},5,5,k%2?tm:pm,{riv:[{v:.82,n:1,r:.006,m:am}]});}}
+    /* 허리띠와 버클 */
+    plate(T,(u,v,d,q)=>{const az=(u-.5)*TAU,y=.085+v*.04,r=(platey?R(.12)+.011:R(.1)+.008)+.002*Math.sin(v*PI)-d*.005;at(az,r,y,q);},48,3,strap,{cu:true,one:true});
+    {const bz=(platey?R(.12)+.017:R(.1)+.014);mesh(T,new THREE.TorusGeometry(.024,.005,6,4),am,0,.105,bz,0,0,PI/4,1,.9,1);mesh(T,new THREE.BoxGeometry(.004,.034,.006),am,0,.105,bz+.002);}
+    /* 어깨받이: 어깨 공 위의 둥근 판(위)과 그 아래로 겹친 판들. 바깥이 길고 목 쪽은 짧다 */
+    const pauld=(s,o)=>{const tilt=o.tilt??.45,ax=new V3(s*Math.sin(tilt),Math.cos(tilt),0),X=new V3(s*Math.cos(tilt),-Math.sin(tilt),0),Z=new V3(0,0,1),O=new V3(s*.232,.535,0);
+      const pt=(th,ph,r,q)=>{const st=Math.sin(th);q.copy(O).addScaledVector(ax,Math.cos(th)*r).addScaledVector(X,Math.cos(ph)*st*r).addScaledVector(Z,Math.sin(ph)*st*r*1.12);return q;};
+      const R0=o.R||.105,th0=ph=>.85+(o.cap||.5)*1.6*Math.pow(.5+.5*Math.cos(ph),1.3);
+      plate(SP,(u,v,d,q)=>{const ph=(u-.5)*TAU,th=v*th0(ph);pt(th,ph,R0*(1+(o.ridge||0)*Math.pow(Math.max(0,1-Math.abs(Math.sin(ph))*Math.sin(th)/.25),2)*Math.sin(th))+.003*Math.exp(-Math.pow((1-v)/.08,2))-d*.007,q);},32,11,o.m,{cu:true,one:!!o.trim,
+        roll:o.trim?[{v:1,r:o.trimR||.007,n:32,m:o.trim}]:[],riv:o.riv?[{v:.86,n:o.riv,r:.0065,m:o.rivM||am,u0:.3,u1:.7}]:[]});
+      for(let k=0;k<(o.lames||0);k++){const Rk=R0*(.97-k*.035);
+        plate(SP,(u,v,d,q)=>{const ph=(u-.5)*3.6,w=.35+.65*(.5+.5*Math.cos(ph)),th=th0(ph)-.1+(k*.22+v*.3)*w;pt(th,ph,Rk+.003*Math.exp(-Math.pow((1-v)/.12,2))-d*.006,q);},20,5,o.lm||o.m,{
+          roll:o.ltrim?[{v:1,r:.005,n:18,m:o.ltrim}]:[]});}};
+    if(leather){for(const s of [-1,1]){pauld(s,{R:.1,cap:.35,m:pm,lames:1,lm:tm});}
+      /* 앞섶을 엮은 끈 */
+      const lace=soft(0xd8c8a0);for(let k=0;k<5;k++){const y=.2+k*.07,z=torso(0,y)+.004;for(const s of [-1,1])horn(T,[[s*.025,y,z],[0,y+.02,z+.004],[-s*.025,y+.04,z]],tt=>.004,lace,6,4);}}
+    else if(mail){for(const s of [-1,1])pauld(s,{R:.1,cap:.35,m:strap,trim:am,trimR:.005,riv:3});
+      plate(T,(u,v,d,q)=>{const a=-.95+v*1.9,y=.34+Math.sin(a)*.21,x=Math.cos(a)*.0+(-.17+v*.34),r=torso(Math.atan2(x,.2),y)+.009-d*.005,az=Math.asin(Math.max(-1,Math.min(1,x/.22)))*(u*.2+.9);at(az,r,y-(u-.5)*.04,q);},4,24,strap,{});}
+    else if(t===2){for(const s of [-1,1])pauld(s,{R:.105,cap:.55,m:pm,lames:2,trim:am,ltrim:am,riv:3,ridge:.06});}
+    else if(scale){const horn2=metal(t===10?0x1c1414:0xe8dcc0,{roughness:.5});for(const s of [-1,1]){pauld(s,{R:.108,cap:.5,m:pm,lames:2,lm:pm,trim:tm});
+      for(let k=0;k<3;k++)horn(SP,[[s*(.27+k*.03),.6-k*.045,-.03+k*.035],[s*(.31+k*.04),.66-k*.05,-.04+k*.035]],tt=>.018*(1-tt),horn2,6,6);}
+      gor(1,.2,.19,.535,.56);}
+    else if(t===4){for(const s of [-1,1]){pauld(s,{R:.105,cap:.55,m:pm,lames:3,trim:tm,ltrim:tm,ridge:.05});
+      mesh(SP,new THREE.BoxGeometry(.012,.005,.07),gl,s*.31,.56,0,0,0,-s*.5);}}
+    else if(t===5){const ice=iceM(),fur=soft(0xf4f4f0,{roughness:1});
+      for(const s of [-1,1]){pauld(s,{R:.105,cap:.5,m:pm,lames:2,trim:am});
+        for(let k=0;k<3;k++){const h=[.12,.09,.07][k],G2=new THREE.Group();G2.position.set(s*(.26+k*.03),.6-k*.03,-.02+k*.035);G2.rotation.set((k-1)*.3,0,-s*(.35+k*.3));SP.add(G2);
+          const g=new THREE.CylinderGeometry(0,.022,h,6,1);g.translate(0,h/2,0);mesh(G2,g,ice);}}
+      plate(T,(u,v,d,q)=>{const az=(u-.5)*TAU,y=.58+(v-.5)*.06,r=.155+.03*Math.sin(v*PI)+.005*Math.sin(az*36)*Math.sin(v*PI)-d*.02;at(az,r,y,q);},64,7,fur,{cu:true,one:true});}
+    else if(t===6){const f1=flameM(0xff6a18),f2=flameM(0xffc040);
+      for(const s of [-1,1]){pauld(s,{R:.108,cap:.5,m:pm,lames:2,trim:tm,ltrim:gl});
+        for(let k=0;k<4;k++){const G2=new THREE.Group();G2.position.set(s*(.22+k*.03),.6-k*.01,-.05+k*.035);G2.rotation.set(-.1,0,-s*(.15+k*.15));SP.add(G2);
+          blade(G2,.08+(k%2)*.05,tt=>.026*Math.sin(Math.min(1,tt+.15)*PI)*(1-tt*.5)+.002,k%2?f2:f1,-.05,.004,s*.7);}}}
+    else if(t===7){const cloth=mat(0x2a2234,{side:THREE.DoubleSide,roughness:.95,flatShading:false});
+      for(const s of [-1,1]){pauld(s,{R:.108,cap:.5,m:pm,lames:2,trim:tm});for(let k=0;k<3;k++)horn(SP,[[s*(.26+k*.02),.6-k*.02,-.06+k*.06],[s*(.33+k*.02),.62-k*.03,-.06+k*.06]],tt=>.016*(1-tt),am,6,5);}
+      /* 해진 망토: 어깨에서 뒤로 드리우고 끝이 들쭉날쭉 */
+      plate(T,(u,v,d,q)=>{const az=PI+(u-.5)*1.9,L=.72+.07*Math.sin(u*31)+.05*Math.sin(u*13+1),y=.58-L*v,r=.205+.11*v+.012*Math.sin(u*PI*9)*v;q.set(Math.sin(az)*r*1.04,y,Math.cos(az)*r-.01);},40,14,cloth,{one:true,out:(p,w)=>w.set(p.x,0,p.z)});}
+    else if(t===8){for(const s of [-1,1]){pauld(s,{R:.105,cap:.55,m:pm,lames:3,trim:am,ltrim:tm,ridge:.08});
+      for(let k=0;k<3;k++)horn(SP,[[s*(.25+k*.035),.6-k*.035,-.04+k*.04],[s*(.31+k*.045),.68-k*.04,-.05+k*.04],[s*(.36+k*.04),.72-k*.05,-.06+k*.04]],tt=>(.03-k*.004)*(1-tt*.95),tm,10,6,3);}}
+    else if(t===9){for(const s of [-1,1])pauld(s,{R:.106,cap:.6,m:pm,lames:3,trim:am,ltrim:am,riv:3,ridge:.05});
+      /* 푸른 망토와 금 고리 */
+      const cl=mat(0x24407a,{side:THREE.DoubleSide,roughness:.85,flatShading:false});
+      plate(T,(u,v,d,q)=>{const az=PI+(u-.5)*2.0,y=.585-.95*v,r=.205+.12*v+.012*Math.sin(u*PI*7)*v*v;q.set(Math.sin(az)*r*1.04,y,Math.cos(az)*r-.012);},40,14,cl,{one:true,out:(p,w)=>w.set(p.x,0,p.z),roll:[{v:1,r:.008,n:40,m:am}]});
+      for(const s of [-1,1])mesh(T,new THREE.TorusGeometry(.026,.007,8,18),am,s*.13,.555,.16,0,0,0);}
+    /* 가슴 보석 (빛나는 등급) */
+    if(gl&&t!==4&&t!==6){const z=torso(0,.43)+.008;mesh(T,new THREE.OctahedronGeometry(t>=8?.032:.025,0),gl,0,.43,z+.006,0,0,0,1,1.25,.55);mesh(T,new THREE.TorusGeometry(t>=8?.036:.029,.006,6,20),am,0,.43,z);}
+    /* 팔 보호대: 아래팔을 감싼 판(바깥이 길다), 손목 쪽은 벌어진다. 판금은 팔꿈치 덮개도 */
+    for(const A2 of [S.AL,S.AR]){if(!A2||!A2.el)continue;const s=A2===S.AL?-1:1,B=new THREE.Group();
+      const br=(u,v,d,q)=>{const az=(u-.5)*TAU,y=-.075-v*.19,r=.057-.006*v+.006*ss(.8,1,v)+.003*Math.exp(-Math.pow((1-v)/.08,2))+.003*Math.exp(-Math.pow(v/.08,2))-d*.006;q.set(Math.sin(az)*r,y,Math.cos(az)*r*.92);};
+      plate(B,br,28,9,leather?pm:mm,{cu:true,one:true,roll:platey?[{v:0,r:.005,n:32,m:tm},{v:1,r:.005,n:32,m:tm}]:[]});
+      if(leather){for(let k=0;k<3;k++)plate(B,(u,v,d,q)=>{const az=(u-.5)*TAU,y=-.11-k*.055+v*.014,r=.0625-.002*k-d*.003;q.set(Math.sin(az)*r,y,Math.cos(az)*r*.92);},28,2,tm,{cu:true,one:true});}
+      if(platey){plate(B,(u,v,d,q)=>{const ph=(u-.5)*2.6,th=v*1.0,r=.062-d*.006;q.set(Math.sin(ph)*Math.sin(th)*r,-Math.cos(th)*r*.6+.01,-Math.cos(ph)*Math.sin(th)*r-.006);},16,8,mm,{roll:[{u:0,r:.004,n:8,m:tm},{u:1,r:.004,n:8,m:tm}]});}
+      gearMerge(B,A2.el);}
+    T.updateMatrixWorld(true);SP.traverse(o=>{if(o.isMesh)o.userData.nw=1;});while(SP.children.length)T.add(SP.children[0]);
     gearMerge(T,S.upper);}
 
   /* ===== 신발 ===== (다리 공간: 무릎 그룹 아래로 정강이 .45, 발은 (0,-.46,.04) 상자 .09×.05×.17) */
   if(G.boots>=0){const t=G.boots,A=lookOf(t);
-    const leather=t===0,bm=leather?soft(A.m):metal(A.m),tm=leather?soft(A.t):metal(A.t,{roughness:.45}),am=metal(A.a,{metalness:.75,roughness:.25});
+    const leather=t===0,bm=leather?soft(A.m,{roughness:.8}):metal(A.m),tm=leather?soft(A.t):metal(A.t,{roughness:.42}),am=metal(A.a,{metalness:.75,roughness:.25}),sole=soft(0x2a1c14,{roughness:.9});
     const gl=A.g&&t>=2?glowM(A.g,t>=6?1:.7):null;
     for(const l of [S.L,S.R]){
-      l.foot.material=bm;l.foot.geometry=roundBoxGeo(.11,.07,.2,.022);l.foot.scale.set(1,1,1);l.foot.position.set(0,-.455,.04);l.foot.userData.boot=1;
+      l.foot.material=sole;l.foot.geometry=roundBoxGeo(.1,.03,.205,.01);l.foot.scale.set(1,1,1);l.foot.position.set(0,-.475,.04);l.foot.userData.boot=1;
       const K=new THREE.Group(),F=new THREE.Group();
-      if(leather){   // 가죽 신발: 발목을 덮는 목, 접어 내린 단, 끈
-        const st=soft(0xd8c8a0);
-        P(K,lathe([[.058,-.07],[.061,-.04],[.064,.02],[.063,.07]],18),bm,0,-.38,0);P(K,tor(.064,.014,PI*2,5,16),tm,0,-.31,0,PI/2);
-        for(let k=0;k<3;k++)P(K,box(.05,.006,.006),st,0,-.42+k*.035,.06,0,0,k%2?.4:-.4);
-        P(F,sph(.058,10,6,0,PI*2,0,PI/2),bm,0,.0,.075,-PI/2,0,0,.95,1.1,.6);P(F,box(.115,.018,.21),tm,0,-.03,0);}
-      else{   // 쇠 장화: 정강이 덮개, 무릎 덮개, 겹친 발등 판, 둥근 코
-        P(K,latheFront([[.064,-.19],[.066,-.15],[.071,-.07],[.075,0],[.075,.07],[.074,.14],[.074,.19]],24,y=>0),bm,0,-.24,.0);P(K,box(.02,.34,.02),tm,0,-.25,.068);
-        P(K,sph(.064,12,8,0,PI,0,PI),bm,0,.0,.012,0,0,0,1,1.05,.85);P(K,tor(.05,.008,PI,4,12),tm,0,.0,.035,0,0,PI);
-        P(K,tor(.07,.01,PI*2,4,18),tm,0,-.43,0,PI/2);P(K,tor(.074,.008,PI*2,4,18),tm,0,-.06,0,PI/2);
-        for(let k=0;k<3;k++)P(F,box(.115,.022,.05),k%2?tm:bm,0,.035,.07-k*.05,.15,0,0);
-        P(F,sph(.058,10,6,0,PI*2,0,PI/2),bm,0,0,.1,PI/2,0,0,1,1.2,.5);P(F,box(.12,.02,.215),tm,0,-.035,0);
-        if(t===3){[-.37,-.23].forEach(y=>P(K,tor(.072,.01,PI*2,4,18),metal(0x4f7a5c),0,y,0,PI/2));}
-        if(t===4&&gl){P(K,box(.012,.2,.008),gl,0,-.29,.074);P(K,oct(.016),gl,0,-.02,.088);}
-        if(t===5){const ice=iceM();P(K,cone(.02,.09,5),ice,0,.03,.08,1.1,0,0);P(K,tor(.076,.02,PI*2,6,16),soft(0xf4f4f0,{roughness:1}),0,-.15,0,PI/2);}
-        if(t===6){const f1=flameM(0xff7a20),f2=flameM(0xffd040);for(let k=0;k<3;k++)P(K,cone(.018,.07+k*.02,5),k%2?f2:f1,0,-.3+k*.07,-.07,-.6,0,0);if(gl)P(K,box(.008,.18,.008),gl,0,-.29,.075);}
-        if(t===7){P(K,cone(.02,.09,4),am,0,.02,.08,1.2,0,0);if(gl)P(K,oct(.016),gl,0,-.1,.075);P(K,cyl(.08,.1,.12,10,true,PI*.6,PI*.8),mat(0x2a2234,{side:THREE.DoubleSide,roughness:.95,flatShading:false}),0,-.2,0);}
-        if(t===8){[-1,1].forEach(s=>P(K,cone(.016,.08,4),tm,s*.07,-.25,-.02,0,0,-s*1.3));P(K,cone(.022,.1,4),tm,0,.03,.08,1.2,0,0);if(gl)P(K,oct(.018),gl,0,-.06,.08);}
-        if(t===9){[-.43,-.16].forEach(y=>P(K,tor(.076,.012,PI*2,5,18),am,0,y,0,PI/2));[-1,1].forEach(s=>{for(let k=0;k<3;k++)P(K,box(.008,.09-k*.02,.03),metal(0xfff8e8,{metalness:.3,roughness:.4}),s*.08,-.38+k*.012,-.03-k*.025,0,0,-s*(.6+k*.25));});if(gl)P(K,oct(.018),gl,0,-.02,.085);}
-        if(t===2&&gl)P(K,oct(.014),gl,0,-.02,.088);}
+      /* 정강이: 뒤는 장딴지로 부풀고 앞은 정강이 등줄, 아래 끝은 발목 위로 벌어진다 */
+      const shin=(y,az)=>{const r=herm([[-.44,.068],[-.4,.062],[-.33,.061],[-.25,.068],[-.16,.072],[-.09,.07],[-.05,.07]])(y);return r*(1+.12*Math.max(0,-Math.cos(az))*Math.exp(-Math.pow((y+.15)/.08,2)))+(leather?0:.006*Math.pow(Math.max(0,1-Math.abs(az)/.4),2));};
+      const y0=leather?-.43:-.43,y1=leather?-.14:-.06;
+      plate(K,(u,v,d,q)=>{const az=(u-.5)*TAU,y=y0+(y1-y0)*v,r=shin(y,az)+.003*Math.exp(-Math.pow(v/.06,2))+(leather?.006*ss(.82,1,v):0)-d*.006;q.set(Math.sin(az)*r,y,Math.cos(az)*r*1.05);},32,14,t>=2?bodyMat(t):bm,{cu:true,one:true,
+        roll:[{v:1,r:leather?.008:.006,n:36,m:tm}]});
+      /* 발등 판: 여러 겹이 겹치며 발끝으로 (가죽은 한 장) */
+      const foot=(u,v,d,q)=>{const a=(u-.5)*PI,z=-.065+v*.175,w=.056*(1-.35*Math.pow(v,3))*(1-.3*ss(.35,0,v)*0),h=.045*(1-.55*Math.pow(v,2.2))+(.0)*0,
+        step=leather?0:.004*((v*4)%1);const r=1+step/.05;q.set(Math.sin(a)*w*r-(d?Math.sin(a)*.005:0),-.462+Math.cos(a)*h*r-(d?Math.cos(a)*.005:0),z);};
+      const vs=leather?lin(12):[0,.12,.249,.251,.37,.499,.501,.62,.749,.751,.87,1];
+      const fg=new THREE.Group();fg.position.copy(l.foot.position).multiplyScalar(-1);F.add(fg);   /* 발 상자 기준 → 무릎 기준 좌표로 */
+      plate(fg,foot,16,vs,bm,{});
+      /* 발끝 덮개 */
+      plate(fg,(u,v,d,q)=>{const a=(u-.5)*PI,ph=v*PI/2,w=.056*.65,h=.045*.45,L=.035,r=1-(d?.1:0);q.set(Math.sin(a)*w*Math.cos(ph)*r,-.462+Math.cos(a)*h*Math.cos(ph)*r,.11+Math.sin(ph)*L*r);},14,6,bm,{one:true,out:(p,w)=>w.set(p.x,p.y+.46,p.z-.08)});
+      if(leather){const st=soft(0xd8c8a0);for(let k=0;k<4;k++){const y=-.4+k*.06;horn(K,[[-.03,y,.064],[0,y+.012,.07],[.03,y,.064]],tt=>.0035,st,6,4);}
+        plate(K,(u,v,d,q)=>{const az=(u-.5)*TAU,y=-.14-v*.045,r=shin(-.14,az)+.012+.006*v-d*.005;q.set(Math.sin(az)*r,y,Math.cos(az)*r*1.05);},32,3,tm,{cu:true,one:true,roll:[{v:1,r:.004,n:36,m:tm}]});}
+      else{
+        /* 무릎 덮개: 둥근 판과 바깥쪽 날개 */
+        const kn=(u,v,d,q)=>{const ph=(u-.5)*TAU,th=v*1.2,r=.062-d*.006;q.set(Math.sin(ph)*Math.sin(th)*r*1.1,Math.cos(ph)*Math.sin(th)*r*1.05-.005,.035+Math.cos(th)*r*.55);};
+        plate(K,kn,24,7,bm,{cu:true,roll:[{v:1,r:.005,n:28,m:tm}],riv:[{v:.5,n:1,r:.008,m:am}]});
+        const side=l===S.L?-1:1;
+        plate(K,(u,v,d,q)=>{const a=(u-.5)*1.6,r=.055*v+.01,x=side*(.05+Math.cos(a)*r*.5),y=Math.sin(a)*r*.9,z=.02-r*.25-(d?.005:0);q.set(x+(d?-side*.002:0),y,z+.02*Math.cos(a)*v);},10,5,bm,{roll:[{v:1,r:.004,n:10,m:tm}]});
+        /* 정강이 띠·징 */
+        if(t===3){[-.37,-.23].forEach(y=>mesh(K,new THREE.TorusGeometry(.071,.006,6,28),metal(0x4f7a5c),0,y,0,PI/2,0,0,1,1.05,1));}
+        if(t===4&&gl){mesh(K,new THREE.BoxGeometry(.008,.18,.006),gl,0,-.27,.078);mesh(K,new THREE.OctahedronGeometry(.014,0),gl,0,-.02,.088);}
+        if(t===5){const ice=iceM();const g=new THREE.CylinderGeometry(0,.018,.08,6,1);g.translate(0,.04,0);mesh(K,g,ice,0,.02,.06,.9,0,0);
+          plate(K,(u,v,d,q)=>{const az=(u-.5)*TAU,y=-.43+(v-.5)*.03,r=.076+.012*Math.sin(v*PI)+.004*Math.sin(az*24)*Math.sin(v*PI)-d*.008;q.set(Math.sin(az)*r,y,Math.cos(az)*r*1.05);},36,5,soft(0xf4f4f0,{roughness:1}),{cu:true,one:true});}
+        if(t===6){const f1=flameM(0xff6a18),f2=flameM(0xffc040);for(let k=0;k<3;k++){const G2=new THREE.Group();G2.position.set(0,-.36+k*.08,-.075);G2.rotation.set(-.7,0,0);K.add(G2);blade(G2,.06+k*.02,tt=>.018*Math.sin(Math.min(1,tt+.15)*PI)+.002,k%2?f2:f1,-.03,.004,.6);}
+          if(gl)mesh(K,new THREE.BoxGeometry(.006,.16,.006),gl,0,-.27,.078);}
+        if(t===7){horn(K,[[0,.02,.07],[0,.06,.1],[0,.08,.14]],tt=>.016*(1-tt),am,8,5);if(gl)mesh(K,new THREE.OctahedronGeometry(.014,0),gl,0,-.1,.08);}
+        if(t===8){for(const s of [-1,1])horn(K,[[s*.068,-.25,-.01],[s*.1,-.22,-.03],[s*.13,-.17,-.05]],tt=>.014*(1-tt),tm,8,5,2);horn(K,[[0,.02,.07],[0,.06,.11],[0,.07,.16]],tt=>.018*(1-tt),tm,8,5);if(gl)mesh(K,new THREE.OctahedronGeometry(.016,0),gl,0,-.06,.085);}
+        if(t===9){const wm=metal(0xfff8e8,{metalness:.3,roughness:.4});for(const s of [-1,1])for(let k=0;k<3;k++){const G2=new THREE.Group();G2.position.set(s*.072,-.36+k*.012,-.02-k*.012);G2.rotation.set(-.6-k*.2,0,-s*(.7+k*.25));K.add(G2);blade(G2,.08-k*.014,tt=>.014*Math.sin(Math.min(1,tt*1.1+.1)*PI)+.002,wm,.03,.004);}
+          if(gl)mesh(K,new THREE.OctahedronGeometry(.016,0),gl,0,-.02,.088);}
+        if(t===2&&gl)mesh(K,new THREE.OctahedronGeometry(.013,0),gl,0,-.02,.088);}
       gearMerge(K,l.knee);gearMerge(F,l.foot);}}
 }
 function makeStickPlayer(job,gear){
@@ -9789,7 +9942,7 @@ function makeStickPlayer(job,gear){
     const hand=new THREE.Group();hand.position.y=-.36;hand.add(ball(.055,skin));el.add(hand);sh.add(el);upper.add(sh);return{sh,el,hand};};
   const AL=mkArm(-.23),AR=mkArm(.23);
   // 장비 모습 (투구·갑옷·신발: stickGear)
-  stickGear(G,{head,upper,L,R});
+  stickGear(G,{head,upper,L,R,AL,AR});
   // 무기
   // 무기가 없으면 어느 직업이든 맨손
   const style=(G.weapon??-1)<0?'fist':J.weapon==='shield'?'shield':J.weapon;
@@ -10306,8 +10459,12 @@ function stickLook(g,ap,G){const u=g.userData,S=u.stick;if(!S||!ap)return;G=G||{
   /* 가슴 위에서는 천이 팽팽해서 다른 주름이 펴진다 (0이면 그대로, 1이면 다 펴짐) */
   const bFlat=(az,y)=>{if(bTen<=0)return 0;let A=0;for(const c of [-bC,bC])A=Math.max(A,Math.exp(-Math.pow((az-c)/(bW*1.3),2)));return bTen*A*Math.exp(-Math.pow((y-bY)/(bUp*1.6),2));};
   /* 갑옷도 가슴 모양을 따라 앞으로 부풀린다 (큰 가슴이 갑옷을 뚫지 않게) */
+  /* 갑옷 몸판은 몸통 너비(bw)를 따라 넓어지고, 어깨받이(nw)는 넓어진 만큼 바깥으로 옮긴다 (넓은 몸이 갑옷을 뚫거나 좁은 몸에 갑옷이 떠 보이지 않게) */
+  if((G.armor??-1)>=0&&Math.abs(bw-1)>1e-3)for(const o of S.upper.children){if(!o.isMesh||!o.userData.gear)continue;const p=o.geometry.attributes.position,nw=o.geometry.userData.nw;
+    const n=o.geometry.attributes.normal;for(let i=0;i<p.count;i++){const x=p.getX(i);if(nw&&nw[i])p.setX(i,x+Math.sign(x)*(bw-1)*.2);else{p.setX(i,x*bw);p.setZ(i,p.getZ(i)*bw);const a=n.getX(i)/bw,b=n.getY(i),c=n.getZ(i)/bw,l=Math.hypot(a,b,c)||1;n.setXYZ(i,a/l,b/l,c/l);}}
+    p.needsUpdate=true;n.needsUpdate=true;o.geometry.computeBoundingSphere();}
   if(f&&(G.armor??-1)>=0)for(const o of S.upper.children){if(!o.isMesh||!o.userData.gear)continue;const p=o.geometry.attributes.position;let mv=0;
-    for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),r=Math.hypot(x,z);if(r<.05||y<.15||y>.62)continue;const d=bustF(Math.atan2(x,z),y)[0]*.8;if(d<1e-4)continue;
+    for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),r=Math.hypot(x,z);if(r<.05||y<.15||y>.62)continue;const d=bustF(Math.atan2(x,z),y)[0]*.85*bw;if(d<1e-4)continue;
       p.setXYZ(i,x+x/r*d,y,z+z/r*d);mv=1;}
     if(mv){p.needsUpdate=true;o.geometry.computeVertexNormals();o.geometry.computeBoundingSphere();}}
   /* 가슴 둘레는 옆모습 점을 촘촘히 (둥근 모양이 각지지 않게) */
