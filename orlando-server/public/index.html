@@ -3779,7 +3779,7 @@ const ITEMS={
   atk_p:{name:'힘의 비약',short:'힘',kind:'use',tier:4,buff:{atk:1.25},dur:60,desc:'60초 동안 공격력 25% 증가'},
   def_p:{name:'수호의 비약',short:'수호',kind:'use',tier:4,buff:{def:1.4},dur:60,desc:'60초 동안 방어력 40% 증가'},
   spd_p:{name:'신속의 비약',short:'신속',kind:'use',tier:4,buff:{speed:1.3},dur:60,desc:'60초 동안 이동 속도 30% 증가'},
-  recall:{name:'귀환 주문서',short:'귀환',kind:'use',tier:2,recall:true,desc:'하레나로 돌아간다'},
+  recall:{name:'귀환 주문서',short:'귀환',kind:'use',tier:2,recall:true,desc:'가장 가까운 마을로 돌아간다'},
   gpouch:{name:'소형 골드 주머니',short:'주머니',kind:'use',tier:1,gold:[10,200],desc:'열면 10~200 골드가 나온다'},
   /* 길드홀 술집 음식과 술 */
   f_bread:{name:'빵과 치즈',short:'빵',kind:'use',tier:0,food:1,price:40,hp:.25,desc:'HP를 25% 회복한다'},
@@ -33099,6 +33099,7 @@ function useItem(id){
   if(I.hp&&!I.mp&&P.hp>=P.maxhp){toast('HP가 가득 차 있어요');return false;}
   if(I.mp&&!I.hp&&P.mp>=P.maxmp){toast('MP가 가득 차 있어요');return false;}
   if(I.recall&&(mode!=='world'||warping)){return false;}
+  if(I.recall&&typeof DUEL!=='undefined'&&DUEL&&(DUEL.state==='on'||DUEL.state==='count')){toast('결투 중에는 쓸 수 없다');return false;}
   if(typeof DUEL!=='undefined'&&DUEL&&(DUEL.state==='on'||DUEL.state==='count')&&(I.hp||I.mp||I.buff)){if((DUEL.pot||0)>=DUEL_POT){toast(`결투에서는 포션을 ${DUEL_POT}번만 쓸 수 있다`);return false;}DUEL.pot=(DUEL.pot||0)+1;duelHud();}   /* 결투: 포션은 두 번까지 */
   removeItem(id);cds.item=1;sfx(I.recall?'holy':'potion');
   if(I.hp)heal(P.maxhp*I.hp);
@@ -33106,7 +33107,7 @@ function useItem(id){
   if(I.buff){for(const [k,v] of Object.entries(I.buff))P.buffs[k]={v,t:I.dur};flash('#f3cf6a',.15);}
   if(I.booze){P.drunk=(P.drunk||0)+I.booze;if(P.drunk>=2.5)log('…머리가 핑 돈다','sys');}
   if(I.gold){const gg=Math.round(rnd(I.gold[0],I.gold[1]));P.gold+=gg;lootShow(null,gg,[]);sfx('coin',null,1);log(`${I.name}을(를) 열었다: ${gg} 골드`,'good');updateHud();invDirty();return true;}
-  if(I.recall){warpTo(OR.C2.x-6,OR.C2.z+4,Math.PI/2,'귀환 주문서를 찢었다. 하레나로 돌아왔다.');}
+  if(I.recall){const R=reviveSpot(true),c=R.name.charCodeAt(R.name.length-1)-0xac00,ro=c>=0&&c<11172&&c%28&&c%28!==8?'으로':'로';warpTo(R.x,R.z,R.yaw,`귀환 주문서를 찢었다. ${R.name}${ro} 돌아왔다.`);updateHud();return true;}   /* 쓴 자리에서 가장 가까운 마을로 */
   log(`${I.name}을(를) 사용했다`);updateHud();return true;
 }
 function useQuick(i){if(mode!=='world'||!P)return;const id=P.quick[i];if(!id){toast(`${i+1}번 칸에 등록된 아이템이 없어요`);return;}useItem(id);}
@@ -33362,17 +33363,19 @@ function damagePlayer(d,src,mon,raw){   /* raw: 이미 방어를 반영한 피�
 }
 /* 쓰러진 곳에서 가까운 마을: 엑시즈 쪽(시내·성·길드홀·시장·투기장·문 밖 사냥터) → 엑시즈 광장, 밀골 → 밀골,
    지하실과 포탈 너머 땅 → 지하실, 그 밖(하레나와 사막·석굴) → 하레나 */
-function reviveSpot(){const q=player?player.position:{x:OR.C2.x,z:OR.C2.z},z=zoneAt(q.x,q.z),H={name:'하레나',x:OR.C2.x-6,z:OR.C2.z+4,yaw:Math.PI/2};
+/* recall: 귀환 주문서. 집이 있어도 집 말고 가까운 마을로, 지하실·포탈 너머 땅에서는 지하실 위 엑시즈로 간다 (2026-11-12 원호: 하레나 말고 가장 가까운 마을로) */
+function reviveSpot(recall){const q=player?player.position:{x:OR.C2.x,z:OR.C2.z},z=zoneAt(q.x,q.z),H={name:'하레나',x:OR.C2.x-6,z:OR.C2.z+4,yaw:Math.PI/2};
   /* 허칠(골짜기·동굴·봉우리)에서 쓰러지면 집이 있어도 산장 문 앞에서 깨어난다 (2026-11-06 원호) */
   if((OR.HCH.ZONES.includes(z)||z==='hlodge')&&HECH.hut&&HECH.hut.revive){const r=HECH.hut.revive;return {name:'산장',x:r.x,z:r.z,yaw:r.yaw};}
   /* 내 집을 얻은 뒤(새 집 퀘스트를 마친 뒤)에는 어디서 쓰러지든 집 안 현관에서 깨어난다 */
-  if(P&&P.mqDone&&P.mqDone.home100&&typeof myHomeRec==='function'&&myHomeRec()&&MYH.doorIn){const t=MYH.doorIn.to;return {name:myHomeName(),x:t.x,z:t.z,y:t.y,yaw:t.yaw,home:1};}
+  if(!recall&&P&&P.mqDone&&P.mqDone.home100&&typeof myHomeRec==='function'&&myHomeRec()&&MYH.doorIn){const t=MYH.doorIn.to;return {name:myHomeName(),x:t.x,z:t.z,y:t.y,yaw:t.yaw,home:1};}
   const ex=()=>{const M=OR.ISLES.marcus;let x=M.x,zz=M.z;try{const pz=marcusPlan().zone('plaza');x=M.x+pz.x;zz=M.z+pz.y+pz.r*.55;}catch(e){}return {name:'엑시즈',x,z:zz,yaw:0};};
   const mil=()=>{const I=OR.ISLES.milgol;return {name:'밀골',x:I.x,z:I.z+50,yaw:0};};
   if(z==='milgol')return mil();
+  if(OR.HCH.ZONES.includes(z)||z==='hlodge')return ex();   /* 허칠인데 산장이 아직 안 지어졌으면 허칠로 가는 길목인 엑시즈 */
   if(OR.MHUNT.includes(z)){const L=OR.MLINES.find(l=>l.zones.some(q=>q[0]===z)),i=L?L.zones.findIndex(q=>q[0]===z):0;return L&&L.end==='milgol'&&i>=L.zones.length-2?mil():ex();}
-  if(['marcus','castle','guildhall','exmarket','arena','coachway','library','khq'].includes(z))return ex();
-  if(z==='hall'||['silva','arbus','kaolis','subcus'].includes(z))return {name:'지하실',x:OR.HALL.x,z:OR.HALL.z+8,yaw:0};
+  if(['marcus','castle','guildhall','exmarket','arena','coachway','library','khq','myhome','ghouse','bakery','mshop','dine_fish','dine_roast','dine_noble'].includes(z))return ex();   /* 엑시즈 시내 가게·집 안도 엑시즈 */
+  if(z==='hall'||['silva','arbus','kaolis','subcus'].includes(z)||(recall&&z==='wlair'))return recall?ex():{name:'지하실',x:OR.HALL.x,z:OR.HALL.z+8,yaw:0};
   return H;}
 function die(src){standUp=null;if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.seat!=null){P.seat=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
   P.hp=0;P.barbLast=null;P.pushPrep=null;P.empShield=false;P.guardT=0;P.guardId=null;P.leap=null;P.lblast=null;P.charge=null;P.reLeap=null;if(P.blk)blkEnd();sfxStop('mg_fire');if(P.fly)toggleFly(false);rayEnd();if(P.angel)angelEnd();const lost=Math.floor(P.exp*.3);P.exp-=lost;
