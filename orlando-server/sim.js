@@ -95,9 +95,6 @@
       return makeMon(ty, zone, p, MON[ty].lv || levelAt(zone, p.x, p.z)); // 같은 종은 늘 같은 레벨
     }
     const pub = (m) => ({ i: m.i, ty: m.ty, zone: m.zone, lv: m.lv, x: r2(m.x), z: r2(m.z), ry: r2(m.ry), hp: Math.max(0, Math.round(m.hp)), mh: m.mh });
-    function spawnBoss() {
-      return makeMon('kingslime', 'dungeon', { ...BOSS_HOME }, 20, { ry: Math.PI, boss: true, cd: { slam: 4, acid: 7, wave: 10, rain: 12, absorb: 20 }, gap: 0, act: null, phase: 0, idleT: 0, vuln: 0, queue: [] });
-    }
     function spawnDragon() {
       return makeMon('reddragon', 'lair', { x: LAIR.x + 4, z: LAIR.z }, 100, { dragon: true, r: 3.4, ry: -Math.PI / 2, cd: { breath: 3, tail: 6, stomp: 9, dive: 13, meteor: 16 }, gap: 0, sks: [], phase: 1, idleT: 0, mv: null, skSeq: 0, said: 0 });
     }
@@ -112,23 +109,18 @@
     for (const z in ZONE_COUNT) for (let k = 0; k < ZONE_COUNT[z]; k++) spawn(z);
     spawnWyvern();
     if (HLAIR && MON.hmother) spawnMother();
-    spawnBoss();
     // 용의 둥지는 없앴다 (붉은 용은 나오지 않는다)
 
     function kill(m) {
       monsters.delete(m.i);
       broadcast({ t: 'mdie', i: m.i, by: [...m.hitBy].filter((id) => clients.has(id)) });
-      if (m.boss) {
-        for (const s of [...monsters.values()]) if (s.summon) { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [] }); }
-        later(() => broadcast({ t: 'mspawn', m: pub(spawnBoss()) }), 90000);
-      } else if (m.dragon) {
+      if (m.dragon) {
         if (m.ty === 'wyvern') later(() => broadcast({ t: 'mspawn', m: pub(spawnWyvern()) }), 120000);
         else if (m.ty === 'hmother') { for (const s of [...monsters.values()]) if (s.summon && s.zone === 'hlair') { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [] }); } later(() => broadcast({ t: 'mspawn', m: pub(spawnMother()) }), 180000); }
         else later(() => broadcast({ t: 'mspawn', m: pub(spawnDragon()) }), 300000);
       } else if (!m.summon && !m.dragon) later(() => { const n = spawn(m.zone); if (n) broadcast({ t: 'mspawn', m: pub(n) }); }, 9000);
     }
     function hurt(m, dmg, from) {
-      if (m.boss && m.vuln > 0) dmg *= 1.6;
       m.hp -= dmg; m.dirty = true; m.lastHit = Date.now();
       // 도발당한 몬스터는 다른 사람이 때려도 노리는 대상을 바꾸지 않는다
       if (from) { m.hitBy.add(from); if (!m.boss && !(m.taunt > 0)) m.aggroOn = from; }
@@ -165,113 +157,6 @@
         if (Array.isArray(p.dc)) { const q = { x: p.dc[0], z: p.dc[1] }; if (!SAFE[zoneAt(q.x, q.z)]) out.push({ id: 'dc:' + id, x: q.x, z: q.z, dun: q.z > 300, rot: inRotunda(q), sd: true, dc: true }); }
       }
       return out;
-    }
-
-    // ---------- 킹 슬라임 ----------
-    function bossSay(text) { broadcast({ t: 'bsay', m: text }); }
-    function bossTick(m, ts) {
-      const tg = ts.filter((t) => t.rot);
-      const C = m.cd;
-      if (!tg.length) {
-        m.idleT += TICK; m.act = null; m.queue = [];
-        if (m.idleT > 8 && (m.hp < m.mh || m.phase > 0)) {
-          m.hp = Math.min(m.mh, m.hp + m.mh * 0.12 * TICK); m.dirty = true;
-          if (m.hp >= m.mh) {
-            m.phase = 0; m.hitBy.clear(); m.vuln = 0;
-            for (const s of [...monsters.values()]) if (s.summon) { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [] }); }
-          }
-        }
-        moveToward(m, BOSS_HOME.x, BOSS_HOME.z, 2);
-        return;
-      }
-      m.idleT = 0;
-      for (const k in C) C[k] -= TICK;
-      m.gap -= TICK; m.vuln = Math.max(0, m.vuln - TICK); m.stun = Math.max(0, m.stun - TICK * 2);
-      const frac = m.hp / m.mh;
-      const ph = frac < 0.33 ? 3 : frac < 0.66 ? 2 : 1;
-      if (ph > (m.phase || 1)) {
-        m.phase = ph;
-        const n = ph === 2 ? 3 : 4;
-        bossSay(ph === 2 ? '킹 슬라임이 몸을 떨며 조각들을 뱉어냈다! 바닥을 타고 퍼지는 충격파는 점프로 넘으세요.' : '킹 슬라임이 분노했다! 하늘에서 점액이 쏟아진다. 조각이 보스에게 닿으면 체력을 회복합니다.');
-        for (let k = 0; k < n; k++) {
-          const a = (k / n) * Math.PI * 2, p = { x: m.x + Math.cos(a) * (m.r + 1.5), z: m.z + Math.sin(a) * (m.r + 1.5) };
-          roomClamp(p, 0.8);
-          const s = makeMon('slimelet', 'dungeon', p, 18, { summon: true, aggroOn: pick(tg).id });
-          broadcast({ t: 'mspawn', m: pub(s) });
-        }
-      }
-      if (!m.phase) m.phase = 1;
-      const rage = m.phase === 3;
-      // 진행 중인 행동
-      if (m.act) {
-        const A = m.act; A.t += TICK;
-        if (A.type === 'slam') {
-          const k = Math.min(1, A.t / A.dur);
-          m.x = A.fx + (A.tx - A.fx) * k; m.z = A.fz + (A.tz - A.fz) * k;
-          if (k >= 1) {
-            broadcast({ t: 'bland', i: m.i, x: r2(A.tx), z: r2(A.tz), r: A.r });
-            for (const t of tg) if (Math.hypot(t.x - A.tx, t.z - A.tz) < A.r + 1) send(t.id, { t: 'bhit', to: t.id, x: r2(A.tx), z: r2(A.tz), r: A.r, dmg: Math.round(m.atk * 1.3) });
-            m.act = null;
-            if (m.queue.length) { const nx = m.queue.shift(); startSlam(m, nx, 0.85, 5); }
-            else if (A.combo) { m.vuln = 3.2; broadcast({ t: 'bvuln', i: m.i, d: 3.2 }); bossSay('킹 슬라임이 지쳐 주저앉았다! 지금이 기회입니다 (받는 피해 증가)'); m.gap = 3.2; }
-            else m.gap = 0.8;
-          }
-        } else if (A.type === 'bump') {
-          if (A.t >= A.dur) {
-            const t = tg.find((q) => q.id === A.to);
-            if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 2.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk });
-            nearCast(m, { t: 'matk', i: m.i, to: null }, A.to);
-            m.act = null; m.gap = 0.6; m.windup = 0;
-          }
-        } else if (A.t >= A.dur) { m.act = null; m.gap = 0.8; }
-        roomClamp(m, m.r * 0.8);
-        return;
-      }
-      if (m.stun > 0 || m.vuln > 0 || m.gap > 0) { roomClamp(m, m.r * 0.8); return; }
-      // 노릴 대상
-      let t = tg.find((q) => q.id === m.aggroOn);
-      if (m.taunt > 0) m.taunt -= TICK;
-      if (!t || (!(m.taunt > 0) && Math.random() < 0.02)) { const tn = tg.filter((q) => !q.dc); t = pick(tn.length ? tn : tg); m.aggroOn = t.id; }
-      const dx = t.x - m.x, dz = t.z - m.z, dist = Math.hypot(dx, dz);
-      turn(m, Math.atan2(dx, dz), 0.35);
-      const cdm = rage ? 0.7 : 1;
-      if (rage && C.rain <= 0) {
-        const pts = tg.map((q) => [r2(q.x), r2(q.z)]);
-        for (let k = 0; k < 7; k++) { const a = rnd(0, 6.28), d = rnd(2, DUN.R - 2); pts.push([r2(DUN.x + Math.cos(a) * d), r2(DUN.z + Math.sin(a) * d)]); }
-        broadcast({ t: 'brain', i: m.i, pts, r: 2.4, d: 1.4, dmg: Math.round(m.atk * 1.2) });
-        C.rain = 13; m.act = { type: 'cast', t: 0, dur: 1.4 };
-      } else if (m.phase >= 2 && C.wave <= 0) {
-        broadcast({ t: 'bwave', i: m.i, x: r2(m.x), z: r2(m.z), r0: r2(m.r), r1: 17, spd: 8.5, w: 1.1, dmg: Math.round(m.atk * 1.0), n: rage ? 2 : 1 });
-        C.wave = 11 * cdm; m.act = { type: 'cast', t: 0, dur: rage ? 2.6 : 1.8 };
-      } else if (C.slam <= 0) {
-        if (rage) {
-          bossSay('킹 슬라임이 연달아 뛰어오른다! 세 번째 착지 뒤에 빈틈이 생깁니다.');
-          const ps = [t, pick(tg), pick(tg)].map((q) => ({ x: q.x + rnd(-1.5, 1.5), z: q.z + rnd(-1.5, 1.5) }));
-          startSlam(m, ps[0], 0.95, 5.8); m.queue = [ps[1], ps[2]]; m.act.combo = true;
-          for (const q of m.queue) q.combo = true;
-        } else startSlam(m, t, 1.3, 5.5);
-        C.slam = rnd(6, 8) * cdm;
-      } else if (C.acid <= 0) {
-        const n = m.phase + 2, pts = [];
-        for (let k = 0; k < n; k++) { const q = k < tg.length ? tg[k] : pick(tg); const p = { x: q.x + rnd(-2.5, 2.5), z: q.z + rnd(-2.5, 2.5) }; roomClamp(p, 1); pts.push([r2(p.x), r2(p.z)]); }
-        broadcast({ t: 'bacid', i: m.i, pts, d: 1.0, r: 2.6, dur: 6, dps: Math.round(m.atk * 0.35) });
-        C.acid = rnd(7, 9) * cdm; m.act = { type: 'cast', t: 0, dur: 0.9 };
-      } else if (rage && C.absorb <= 0 && [...monsters.values()].some((s) => s.summon)) {
-        for (const s of monsters.values()) if (s.summon) s.feed = true;
-        bossSay('킹 슬라임이 조각들을 불러들인다! 닿기 전에 처치하세요.');
-        C.absorb = 22;
-      } else {
-        const reach = 0.9 + m.r + 0.5;
-        if (dist > reach) moveToward(m, t.x, t.z, rage ? 3.4 : 2.4);
-        else if (m.atkCd <= 0) { m.act = { type: 'bump', t: 0, dur: 0.6, to: t.id }; m.windup = 0.6; m.atkCd = 1.6; }
-        m.atkCd -= TICK;
-      }
-      roomClamp(m, m.r * 0.8);
-    }
-    function startSlam(m, p, dur, r) {
-      const q = { x: p.x, z: p.z }; roomClamp(q, m.r * 0.6);
-      m.act = { type: 'slam', t: 0, dur, fx: m.x, fz: m.z, tx: q.x, tz: q.z, r, combo: !!p.combo };
-      broadcast({ t: 'bslam', i: m.i, x: r2(q.x), z: r2(q.z), r, d: dur });
     }
 
     // ---------- 붉은 용 (Lv 100 보스) ----------
@@ -551,7 +436,6 @@
       for (const c of players) { const k = Math.floor(c.pres.x / PG) * 65536 + Math.floor(c.pres.z / PG); const L = pCells.get(k); if (L) L.push(c); else pCells.set(k, [c]); }
       const nearPlayer = (m) => { const cx = Math.floor(m.x / PG), cz = Math.floor(m.z / PG); for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gz = cz - 1; gz <= cz + 1; gz++) { const L = pCells.get(gx * 65536 + gz); if (L) for (const c of L) if (Math.hypot(c.pres.x - m.x, c.pres.z - m.z) < 75) return true; } return false; };
       const active = [];
-      const boss = [...monsters.values()].find((q) => q.boss);
       for (const m of [...monsters.values()]) {
         if (!nearPlayer(m)) continue;
         active.push(m);
@@ -561,17 +445,7 @@
           if (m.dot.acc >= 1) { const d = Math.floor(m.dot.acc); m.dot.acc -= d; hurt(m, d, null); if (!monsters.has(m.i)) continue; }
           if (m.dot.t <= 0) m.dot = null;
         }
-        if (m.boss) { bossTick(m, tsB); continue; }
         if (m.dragon) { if (m.D.mother) motherTick(m, tsB); else dragonTick(m, tsB); continue; }
-        // 보스에게 빨려 들어가는 조각
-        if (m.feed && boss) {
-          moveToward(m, boss.x, boss.z, 3.2);
-          if (Math.hypot(boss.x - m.x, boss.z - m.z) < boss.r + m.r + 0.3) {
-            boss.hp = Math.min(boss.mh, boss.hp + boss.mh * 0.04); boss.dirty = true;
-            monsters.delete(m.i); broadcast({ t: 'mdie', i: m.i, by: [] }); bossSay('조각이 흡수되어 킹 슬라임이 회복했다!');
-          }
-          continue;
-        }
         m.stun = Math.max(0, m.stun - TICK);
         if (m.slowT > 0) m.slowT -= TICK;
         if (m.air > 0) m.air -= TICK;
