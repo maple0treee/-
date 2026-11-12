@@ -1273,7 +1273,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     <div id="mbtns" hidden><button id="mJump" type="button">점프</button><button id="mAtk" type="button">공격</button></div>
     <button id="interact" hidden>F · 상호작용</button>
     <div id="prompt" class="panel" hidden role="alertdialog"><div id="promptText"></div><div class="row"><button id="promptYes" type="button">수락</button><button id="promptNo" type="button">거절</button></div></div>
-    <section id="bossbar" class="panel" hidden aria-label="보스"><div class="bn"><b>킹 슬라임</b><span id="bossNum" class="num">0</span></div><div class="bar hp big"><i id="bossHp"></i></div></section>
+    <section id="bossbar" class="panel" hidden aria-label="보스"><div class="bn"><b>보스</b><span id="bossNum" class="num">0</span></div><div class="bar hp big"><i id="bossHp"></i></div></section>
   </div>
 
   <div id="banner"><div class="t" id="bT"></div><div class="s" id="bS"></div></div>
@@ -1969,7 +1969,7 @@ setInterval(tick,400);
     ['s', 1, HALL.R + 3.0, 3.6], ['sw', 0, HALL.R + 5.4, 3.9], ['w', 1, 70, 3.9], ['nw', 0, HALL.R + 5.4, 3.9]]
     .map(([id, open, r1, hw], i) => ({ id, a: -Math.PI / 2 + i * Math.PI / 4, open: !!open, r1, hw }));   // 북: 큰 계단 위 층계참 → 길드홀로 오르는 통로, 남: 깊은 사막3 포탈 감실, 서: 기둥 회랑 → 포탈의 방
   /* 서쪽 회랑 끝: 보스방으로 가는 포탈이 모인 팔각 방 (A = 가운데에서 벽까지). GATES: 걸어 들어가는 포탈 감실 (k*45°, 0 = 회랑 쪽) */
-  HALL.HUB = { x: HALL.x - 84, z: HALL.z, A: 15, u: 84, GATES: [3, 4, 5] };
+  HALL.HUB = { x: HALL.x - 84, z: HALL.z, A: 15, u: 84, GATES: [4, 5] };
   const WLAIR = { x: 200, z: -520, r: 22 };
   // 지하실 포탈 너머의 다섯 땅 (동쪽 멀리, 한 줄로)
   const ISLES = {
@@ -2350,8 +2350,6 @@ setInterval(tick,400);
     emberslime:{ name: '불씨 슬라임', lv: 56, build: 'slime', color: 0xd8702a, hpM: 1.1, atkM: 1.2, scale: 1.4, glow: 0xff5a10 },
     redgiant: { name: '붉은 바위 거인', lv: 59, build: 'biped', color: 0x7a3a2a, hpM: 1.8, atkM: 1.25, scale: 2.1, club: true },
     // 석굴
-    kingslime:{ name: '킹 슬라임', lv: 15, fixed: { hp: 11100, atk: 56, def: 11, exp: 3400 }, gold: 1100, build: 'slime', color: 0x56c860, scale: 4.2, boss: true },
-    slimelet: { name: '킹 슬라임 조각', lv: 14, build: 'slime', color: 0x7fe07a, hpM: 0.5, atkM: 0.8, scale: 1.1 },
     // 심연 끝
     wyvern:{ name: '와이번', lv: 30, fixed: { hp: 16800, atk: 184, def: 19, exp: 10900 }, gold: 3000, build: 'dragon', wyvern: true, color: 0x2f5a46, scale: 1.3, dragon: true, arena: 'WLAIR' },
     // 실바 (Lv 60–70)
@@ -2693,9 +2691,6 @@ setInterval(tick,400);
       return makeMon(ty, zone, p, MON[ty].lv || levelAt(zone, p.x, p.z)); // 같은 종은 늘 같은 레벨
     }
     const pub = (m) => ({ i: m.i, ty: m.ty, zone: m.zone, lv: m.lv, x: r2(m.x), z: r2(m.z), ry: r2(m.ry), hp: Math.max(0, Math.round(m.hp)), mh: m.mh });
-    function spawnBoss() {
-      return makeMon('kingslime', 'dungeon', { ...BOSS_HOME }, 20, { ry: Math.PI, boss: true, cd: { slam: 4, acid: 7, wave: 10, rain: 12, absorb: 20 }, gap: 0, act: null, phase: 0, idleT: 0, vuln: 0, queue: [] });
-    }
     function spawnDragon() {
       return makeMon('reddragon', 'lair', { x: LAIR.x + 4, z: LAIR.z }, 100, { dragon: true, r: 3.4, ry: -Math.PI / 2, cd: { breath: 3, tail: 6, stomp: 9, dive: 13, meteor: 16 }, gap: 0, sks: [], phase: 1, idleT: 0, mv: null, skSeq: 0, said: 0 });
     }
@@ -2710,23 +2705,18 @@ setInterval(tick,400);
     for (const z in ZONE_COUNT) for (let k = 0; k < ZONE_COUNT[z]; k++) spawn(z);
     spawnWyvern();
     if (HLAIR && MON.hmother) spawnMother();
-    spawnBoss();
     // 용의 둥지는 없앴다 (붉은 용은 나오지 않는다)
 
     function kill(m) {
       monsters.delete(m.i);
       broadcast({ t: 'mdie', i: m.i, by: [...m.hitBy].filter((id) => clients.has(id)) });
-      if (m.boss) {
-        for (const s of [...monsters.values()]) if (s.summon) { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [] }); }
-        later(() => broadcast({ t: 'mspawn', m: pub(spawnBoss()) }), 90000);
-      } else if (m.dragon) {
+      if (m.dragon) {
         if (m.ty === 'wyvern') later(() => broadcast({ t: 'mspawn', m: pub(spawnWyvern()) }), 120000);
         else if (m.ty === 'hmother') { for (const s of [...monsters.values()]) if (s.summon && s.zone === 'hlair') { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [] }); } later(() => broadcast({ t: 'mspawn', m: pub(spawnMother()) }), 180000); }
         else later(() => broadcast({ t: 'mspawn', m: pub(spawnDragon()) }), 300000);
       } else if (!m.summon && !m.dragon) later(() => { const n = spawn(m.zone); if (n) broadcast({ t: 'mspawn', m: pub(n) }); }, 9000);
     }
     function hurt(m, dmg, from) {
-      if (m.boss && m.vuln > 0) dmg *= 1.6;
       m.hp -= dmg; m.dirty = true; m.lastHit = Date.now();
       // 도발당한 몬스터는 다른 사람이 때려도 노리는 대상을 바꾸지 않는다
       if (from) { m.hitBy.add(from); if (!m.boss && !(m.taunt > 0)) m.aggroOn = from; }
@@ -2763,113 +2753,6 @@ setInterval(tick,400);
         if (Array.isArray(p.dc)) { const q = { x: p.dc[0], z: p.dc[1] }; if (!SAFE[zoneAt(q.x, q.z)]) out.push({ id: 'dc:' + id, x: q.x, z: q.z, dun: q.z > 300, rot: inRotunda(q), sd: true, dc: true }); }
       }
       return out;
-    }
-
-    // ---------- 킹 슬라임 ----------
-    function bossSay(text) { broadcast({ t: 'bsay', m: text }); }
-    function bossTick(m, ts) {
-      const tg = ts.filter((t) => t.rot);
-      const C = m.cd;
-      if (!tg.length) {
-        m.idleT += TICK; m.act = null; m.queue = [];
-        if (m.idleT > 8 && (m.hp < m.mh || m.phase > 0)) {
-          m.hp = Math.min(m.mh, m.hp + m.mh * 0.12 * TICK); m.dirty = true;
-          if (m.hp >= m.mh) {
-            m.phase = 0; m.hitBy.clear(); m.vuln = 0;
-            for (const s of [...monsters.values()]) if (s.summon) { monsters.delete(s.i); broadcast({ t: 'mdie', i: s.i, by: [] }); }
-          }
-        }
-        moveToward(m, BOSS_HOME.x, BOSS_HOME.z, 2);
-        return;
-      }
-      m.idleT = 0;
-      for (const k in C) C[k] -= TICK;
-      m.gap -= TICK; m.vuln = Math.max(0, m.vuln - TICK); m.stun = Math.max(0, m.stun - TICK * 2);
-      const frac = m.hp / m.mh;
-      const ph = frac < 0.33 ? 3 : frac < 0.66 ? 2 : 1;
-      if (ph > (m.phase || 1)) {
-        m.phase = ph;
-        const n = ph === 2 ? 3 : 4;
-        bossSay(ph === 2 ? '킹 슬라임이 몸을 떨며 조각들을 뱉어냈다! 바닥을 타고 퍼지는 충격파는 점프로 넘으세요.' : '킹 슬라임이 분노했다! 하늘에서 점액이 쏟아진다. 조각이 보스에게 닿으면 체력을 회복합니다.');
-        for (let k = 0; k < n; k++) {
-          const a = (k / n) * Math.PI * 2, p = { x: m.x + Math.cos(a) * (m.r + 1.5), z: m.z + Math.sin(a) * (m.r + 1.5) };
-          roomClamp(p, 0.8);
-          const s = makeMon('slimelet', 'dungeon', p, 18, { summon: true, aggroOn: pick(tg).id });
-          broadcast({ t: 'mspawn', m: pub(s) });
-        }
-      }
-      if (!m.phase) m.phase = 1;
-      const rage = m.phase === 3;
-      // 진행 중인 행동
-      if (m.act) {
-        const A = m.act; A.t += TICK;
-        if (A.type === 'slam') {
-          const k = Math.min(1, A.t / A.dur);
-          m.x = A.fx + (A.tx - A.fx) * k; m.z = A.fz + (A.tz - A.fz) * k;
-          if (k >= 1) {
-            broadcast({ t: 'bland', i: m.i, x: r2(A.tx), z: r2(A.tz), r: A.r });
-            for (const t of tg) if (Math.hypot(t.x - A.tx, t.z - A.tz) < A.r + 1) send(t.id, { t: 'bhit', to: t.id, x: r2(A.tx), z: r2(A.tz), r: A.r, dmg: Math.round(m.atk * 1.3) });
-            m.act = null;
-            if (m.queue.length) { const nx = m.queue.shift(); startSlam(m, nx, 0.85, 5); }
-            else if (A.combo) { m.vuln = 3.2; broadcast({ t: 'bvuln', i: m.i, d: 3.2 }); bossSay('킹 슬라임이 지쳐 주저앉았다! 지금이 기회입니다 (받는 피해 증가)'); m.gap = 3.2; }
-            else m.gap = 0.8;
-          }
-        } else if (A.type === 'bump') {
-          if (A.t >= A.dur) {
-            const t = tg.find((q) => q.id === A.to);
-            if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 2.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk });
-            nearCast(m, { t: 'matk', i: m.i, to: null }, A.to);
-            m.act = null; m.gap = 0.6; m.windup = 0;
-          }
-        } else if (A.t >= A.dur) { m.act = null; m.gap = 0.8; }
-        roomClamp(m, m.r * 0.8);
-        return;
-      }
-      if (m.stun > 0 || m.vuln > 0 || m.gap > 0) { roomClamp(m, m.r * 0.8); return; }
-      // 노릴 대상
-      let t = tg.find((q) => q.id === m.aggroOn);
-      if (m.taunt > 0) m.taunt -= TICK;
-      if (!t || (!(m.taunt > 0) && Math.random() < 0.02)) { const tn = tg.filter((q) => !q.dc); t = pick(tn.length ? tn : tg); m.aggroOn = t.id; }
-      const dx = t.x - m.x, dz = t.z - m.z, dist = Math.hypot(dx, dz);
-      turn(m, Math.atan2(dx, dz), 0.35);
-      const cdm = rage ? 0.7 : 1;
-      if (rage && C.rain <= 0) {
-        const pts = tg.map((q) => [r2(q.x), r2(q.z)]);
-        for (let k = 0; k < 7; k++) { const a = rnd(0, 6.28), d = rnd(2, DUN.R - 2); pts.push([r2(DUN.x + Math.cos(a) * d), r2(DUN.z + Math.sin(a) * d)]); }
-        broadcast({ t: 'brain', i: m.i, pts, r: 2.4, d: 1.4, dmg: Math.round(m.atk * 1.2) });
-        C.rain = 13; m.act = { type: 'cast', t: 0, dur: 1.4 };
-      } else if (m.phase >= 2 && C.wave <= 0) {
-        broadcast({ t: 'bwave', i: m.i, x: r2(m.x), z: r2(m.z), r0: r2(m.r), r1: 17, spd: 8.5, w: 1.1, dmg: Math.round(m.atk * 1.0), n: rage ? 2 : 1 });
-        C.wave = 11 * cdm; m.act = { type: 'cast', t: 0, dur: rage ? 2.6 : 1.8 };
-      } else if (C.slam <= 0) {
-        if (rage) {
-          bossSay('킹 슬라임이 연달아 뛰어오른다! 세 번째 착지 뒤에 빈틈이 생깁니다.');
-          const ps = [t, pick(tg), pick(tg)].map((q) => ({ x: q.x + rnd(-1.5, 1.5), z: q.z + rnd(-1.5, 1.5) }));
-          startSlam(m, ps[0], 0.95, 5.8); m.queue = [ps[1], ps[2]]; m.act.combo = true;
-          for (const q of m.queue) q.combo = true;
-        } else startSlam(m, t, 1.3, 5.5);
-        C.slam = rnd(6, 8) * cdm;
-      } else if (C.acid <= 0) {
-        const n = m.phase + 2, pts = [];
-        for (let k = 0; k < n; k++) { const q = k < tg.length ? tg[k] : pick(tg); const p = { x: q.x + rnd(-2.5, 2.5), z: q.z + rnd(-2.5, 2.5) }; roomClamp(p, 1); pts.push([r2(p.x), r2(p.z)]); }
-        broadcast({ t: 'bacid', i: m.i, pts, d: 1.0, r: 2.6, dur: 6, dps: Math.round(m.atk * 0.35) });
-        C.acid = rnd(7, 9) * cdm; m.act = { type: 'cast', t: 0, dur: 0.9 };
-      } else if (rage && C.absorb <= 0 && [...monsters.values()].some((s) => s.summon)) {
-        for (const s of monsters.values()) if (s.summon) s.feed = true;
-        bossSay('킹 슬라임이 조각들을 불러들인다! 닿기 전에 처치하세요.');
-        C.absorb = 22;
-      } else {
-        const reach = 0.9 + m.r + 0.5;
-        if (dist > reach) moveToward(m, t.x, t.z, rage ? 3.4 : 2.4);
-        else if (m.atkCd <= 0) { m.act = { type: 'bump', t: 0, dur: 0.6, to: t.id }; m.windup = 0.6; m.atkCd = 1.6; }
-        m.atkCd -= TICK;
-      }
-      roomClamp(m, m.r * 0.8);
-    }
-    function startSlam(m, p, dur, r) {
-      const q = { x: p.x, z: p.z }; roomClamp(q, m.r * 0.6);
-      m.act = { type: 'slam', t: 0, dur, fx: m.x, fz: m.z, tx: q.x, tz: q.z, r, combo: !!p.combo };
-      broadcast({ t: 'bslam', i: m.i, x: r2(q.x), z: r2(q.z), r, d: dur });
     }
 
     // ---------- 붉은 용 (Lv 100 보스) ----------
@@ -3149,7 +3032,6 @@ setInterval(tick,400);
       for (const c of players) { const k = Math.floor(c.pres.x / PG) * 65536 + Math.floor(c.pres.z / PG); const L = pCells.get(k); if (L) L.push(c); else pCells.set(k, [c]); }
       const nearPlayer = (m) => { const cx = Math.floor(m.x / PG), cz = Math.floor(m.z / PG); for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gz = cz - 1; gz <= cz + 1; gz++) { const L = pCells.get(gx * 65536 + gz); if (L) for (const c of L) if (Math.hypot(c.pres.x - m.x, c.pres.z - m.z) < 75) return true; } return false; };
       const active = [];
-      const boss = [...monsters.values()].find((q) => q.boss);
       for (const m of [...monsters.values()]) {
         if (!nearPlayer(m)) continue;
         active.push(m);
@@ -3159,17 +3041,7 @@ setInterval(tick,400);
           if (m.dot.acc >= 1) { const d = Math.floor(m.dot.acc); m.dot.acc -= d; hurt(m, d, null); if (!monsters.has(m.i)) continue; }
           if (m.dot.t <= 0) m.dot = null;
         }
-        if (m.boss) { bossTick(m, tsB); continue; }
         if (m.dragon) { if (m.D.mother) motherTick(m, tsB); else dragonTick(m, tsB); continue; }
-        // 보스에게 빨려 들어가는 조각
-        if (m.feed && boss) {
-          moveToward(m, boss.x, boss.z, 3.2);
-          if (Math.hypot(boss.x - m.x, boss.z - m.z) < boss.r + m.r + 0.3) {
-            boss.hp = Math.min(boss.mh, boss.hp + boss.mh * 0.04); boss.dirty = true;
-            monsters.delete(m.i); broadcast({ t: 'mdie', i: m.i, by: [] }); bossSay('조각이 흡수되어 킹 슬라임이 회복했다!');
-          }
-          continue;
-        }
         m.stun = Math.max(0, m.stun - TICK);
         if (m.slowT > 0) m.slowT -= TICK;
         if (m.air > 0) m.air -= TICK;
@@ -3800,7 +3672,7 @@ const ITEMS={
   ITEMS.mt_donkey={name:'당나귀',slot:'mount',tier:3,req:1,st:{},mount:'donkey',price:1200,noEnh:true,desc:'느리지만 어디든 간다. 타면 이동 속도 45% 증가'};
   ITEMS.mt_horse={name:'말',slot:'mount',tier:5,req:1,st:{},mount:'horse',price:3000,noEnh:true,desc:'왕도의 말. 타면 이동 속도 90% 증가'};
   ITEMS.mt_wolf={name:'늑대',slot:'mount',tier:7,req:1,st:{},mount:'wolf',price:5000,noEnh:true,desc:'길들인 늑대. 타면 이동 속도 75% 증가'};
-  ITEMS.crown={name:'킹 슬라임의 왕관',slot:'helm',tier:10,req:18,st:{def:16,hp:220,atk:8},desc:'석굴의 킹 슬라임에게서만 얻을 수 있다'};
+  ITEMS.crown={name:'킹 슬라임의 왕관',slot:'helm',tier:10,req:18,st:{def:16,hp:220,atk:8},desc:'석굴의 옛 주인이 쓰던 왕관. 이제는 더 얻을 수 없다'};
 })();
 Object.values(ITEMS).forEach(I=>{if(!I.kind)I.kind='gear';if(I.kind==='gear'&&!I.req)I.req=1;});
 /* 무기 등급: 기본 무기도 전직 무기도 5등급. 예전 기본 무기(홀수 번호)는 바로 위 등급으로 바뀐다 */
@@ -7334,7 +7206,7 @@ function makeJellySlime(D){
   const leaf=()=>{const m=new THREE.Mesh(new THREE.CircleGeometry(.06,6),mat(0x3a6a2a,{side:THREE.DoubleSide}));m.scale.y=1.8;return m;};
   const shell=()=>{const m=new THREE.Mesh(new THREE.SphereGeometry(.07,8,6,0,Math.PI*2,0,Math.PI/2),mat(0xe8d0c0,{side:THREE.DoubleSide,flatShading:false}));m.scale.y=.5;return m;};
   const coal=()=>new THREE.Mesh(new THREE.DodecahedronGeometry(.06,0),mat(0x2a1208,{emissive:0xff5010,emissiveIntensity:1.2}));
-  const kit={slime:[bone,()=>rock(),()=>rock(0x8a7a5a,.05)],slimelet:[()=>rock(),bone],kingslime:[bone,bone,()=>rock(),()=>shard(0xd8b040)],sandslime:[bone,()=>rock(0xb89a6a),()=>rock(0xa8885a,.05)],
+  const kit={slime:[bone,()=>rock(),()=>rock(0x8a7a5a,.05)],sandslime:[bone,()=>rock(0xb89a6a),()=>rock(0xa8885a,.05)],
     rockslime:[()=>rock(),()=>rock(0x6a645a,.09),()=>rock(0x8a8478,.06)],emberslime:[coal,coal,()=>rock(0x3a2a20)],mossslime:[leaf,leaf,()=>rock(0x5a6a4a)],frostslime:[()=>shard(0xe8f4ff),()=>shard(0xc8e4ff),bone],
     tideslime:[shell,shell,()=>rock(0x6a7a80)],crystalslime:[()=>shard(0xb070ff,0x5a20a0),()=>shard(0xd0a0ff,0x5a20a0),()=>shard(0x9a60e0,0x40107a)]}[ty]||[bone,()=>rock()];
   const SPOT=[[.24,.26,.1],[-.14,.6,-.2],[.02,.3,-.32],[-.26,.24,-.14]];   /* 얼굴처럼 보이지 않게 높이·깊이를 어긋나게 */
@@ -14620,7 +14492,7 @@ chair(3.6,2.5-.75,0,0);chair(3.6,3.25,0,Math.PI);chair(2.4,3.25,0,Math.PI);
     ['지도는 발로 그리는 거야. 펜은 그다음이고.','잉크 냄새가 좋지 않나? 난 이 냄새 때문에 이 일을 해.'],
     [['오, 손님이군! 지도 보러 왔나? 아니면 지도를 그려 줄 사람인가?','이 책상 위 지도를 보게. 서문 밖 숲, 평원, 늪, 폐허… 그쪽 땅은 내가 거의 다 그렸지.','하레나 밖은 길 하나가 성을 두 바퀴 감고 돌아. 멀리 갈수록 험하지.','이름은 단순하지만 땅은 조금씩 달라. 북쪽은 바위 언덕, 남쪽은 낮고 평평하고, 동쪽은 붉은 바위가 많지.','혹시 황야 끝까지 가 보게 되면, 뭐가 보였는지 꼭 알려 주게. 그게 내 일이니까.'],
      ['재밌는 이야기 하나 해 줄까?','숲 한가운데에 지도에 없는 오솔길이 있다는 소문이 있어. 슬라임들이 그 길로만 다닌다나.','나도 세 번이나 찾아가 봤는데 매번 늑대한테 쫓겨 나왔지. 하하.','자네처럼 튼튼해 보이는 사람이라면 혹시 모르지. 언젠가 말일세.'],
-     ['폐허 아래 석굴 말이야. 킹 슬라임이 사는 그곳.','석굴 벽에 새겨진 무늬를 본 적 있나? 난 그걸 옮겨 그리다가 이상한 걸 발견했어.','그 무늬가 이 기록관 바닥에 깔린 문양이랑 똑같다는 거야.','누가, 왜 같은 문양을 남겼는지는 모르겠어. 오르웬 영감도 모른다더군.','…뭐, 언젠가 알게 되겠지.']]);
+     ['폐허 아래 석굴 말이야. 지금은 텅 빈 그곳.','석굴 벽에 새겨진 무늬를 본 적 있나? 난 그걸 옮겨 그리다가 이상한 걸 발견했어.','그 무늬가 이 기록관 바닥에 깔린 문양이랑 똑같다는 거야.','누가, 왜 같은 문양을 남겼는지는 모르겠어. 오르웬 영감도 모른다더군.','…뭐, 언젠가 알게 되겠지.']]);
   npcAt('stranger','나그네','두건 쓴 여행자',-4.5,1.2,2,{robe:0x2a2a30,robe2:0x3a3a44,hat:'hood',hatC:0x1a1a20,faceX:1,faceZ:.3},
     ['…','이 층은 조용해서 좋군.'],
     [['…누구지?','아, 길을 잃은 건 아니겠지. 이 층까지 올라오는 사람은 드물거든.','나는 이름을 버린 지 오래야. 그냥 나그네라고 불러.','하레나에 머문 지도 꽤 됐군. 기다리는 게 있어서 말이야.','무엇을 기다리느냐고? …때가 되면 알게 될 거야.'],
@@ -14628,7 +14500,7 @@ chair(3.6,2.5-.75,0,0);chair(3.6,3.25,0,Math.PI);chair(2.4,3.25,0,Math.PI);
      ['창밖을 보게. 깊은 사막 너머 하늘이 조금 붉지 않나?','저 빛은 늘 같은 자리에 있어. 해가 져도, 비가 와도.','노을이라고들 하지만, 내 생각은 조금 달라.','…아니, 오늘은 여기까지 하지. 아직 말할 때가 아니야.']]);
   npcAt('knight','이레네','다친 기사',3.7,3.68,-1,{robe:0x2e3a52,robe2:0x3a4a6a,hat:'hair',hatC:0xc89048,long:1,faceX:0,faceZ:-1},
     ['…아, 손님이군. 이런 꼴이라 미안하네.','갑옷은 벗어 두었어. 금이 간 채로 입고 있으면 상처가 더 벌어지거든.','기록관 사람들이 지하 방 하나를 내주었지. 몸이 나을 때까지만.'],
-    [['나는 이레네. 하레나 경비대 출신 기사야. 지금은… 그냥 떠돌이 모험가지.','석굴 깊은 곳에서 킹 슬라임과 맞섰어. 혼자서 이길 수 있을 거라 생각했지.','결과는 보다시피. 동료들이 끌고 나와 주지 않았다면 지금쯤 그 녀석 뱃속이었을 거야.','부끄러운 이야기지만, 기록해 두라고 오르웬 영감에게 직접 말했어. 다음 사람은 나처럼 혼자 가지 않도록.'],
+    [['나는 이레네. 하레나 경비대 출신 기사야. 지금은… 그냥 떠돌이 모험가지.','석굴 깊은 곳에서 그곳에 살던 괴물과 맞섰어. 혼자서 이길 수 있을 거라 생각했지.','결과는 보다시피. 동료들이 끌고 나와 주지 않았다면 지금쯤 그 녀석 뱃속이었을 거야.','부끄러운 이야기지만, 기록해 두라고 오르웬 영감에게 직접 말했어. 다음 사람은 나처럼 혼자 가지 않도록.'],
      ['복도 끝 쇠문 봤나? 이 기록관 사람들도 열쇠가 어디 있는지 모른다더군.','밤에 가끔 그 너머에서 바람 소리가 들려. 지하에 바람이라니, 이상하지 않나?','몸이 나으면 저 문부터 확인해 볼 생각이야. 그때는 함께 가 주겠나?'],
      ['로웬 대장은 내 옛 상관이었어. 지금 모습을 보이기 싫어서 아직 찾아가지 못했지.','…다 나으면 갈 거야. 고개 들고, 제대로.','자네도 다치면 무리하지 말게. 쉬는 것도 싸움의 일부야.']]);
   { const k=NPCS[NPCS.length-1];k.mesh.userData.maxTurn=.45; }
@@ -15387,10 +15259,9 @@ const PORTALS=[
     to:{x:EP_BACK.x,z:EP_BACK.z,yaw:EP_BACK.yaw},msg:'포탈을 지나 깊은 사막3으로 돌아왔다.',color:0xffd23a},
 ];
 for(const p of PORTALS)p.fx=makePortal(p.x,p.z,p.ry,{color:p.color});
-/* 지하 신전 포탈의 방: 보스방으로 바로 가는 포탈 (감실 k: 0 = 회랑 입구, 45°씩 시계 반대. 회랑에서 보면 왼쪽부터 3·4·5).
-   새 보스방이 생기면 비어 있는 감실(1·2·6·7) 하나에 한 줄 더하고 OR.HALL.HUB.GATES 에 그 번호를 넣는다 */
+/* 지하 신전 포탈의 방: 보스방으로 바로 가는 포탈 (감실 k: 0 = 회랑 입구, 45°씩 시계 반대. 회랑에서 보면 왼쪽부터 3·4·5, 3은 비어 있다).
+   새 보스방이 생기면 비어 있는 감실(1·2·3·6·7) 하나에 한 줄 더하고 OR.HALL.HUB.GATES 에 그 번호를 넣는다 */
 const TEMPLE_GATES=[
-  {k:3,id:'tg_slime',name:'킹 슬라임의 석실',lv:13,color:0x7ad870,to:()=>({x:OR.DUN.x,z:OR.DUN.corZ0+4.5,yaw:Math.PI})},
   {k:4,id:'tg_wyvern',name:'와이번 둥지',lv:30,color:0x8fe0c8,to:()=>({x:OR.WLAIR.x,z:OR.WLAIR.z+OR.WLAIR.r-5,yaw:0})},
   {k:5,id:'tg_mother',name:'어미의 둥지',lv:100,color:0xe8b8cc,to:()=>{const I=OR.ISLES.hlair,e=I.entry,H=OR.HCH,s0=H.areaOf('hlair').s[0],q=H.sAt(s0+6);return {x:e.x,z:e.z,yaw:Math.atan2(-(I.x+q.x-e.x),-(I.z+q.z-e.z))};}}];
 const templeGateFront=k=>{const B=OR.HALL.HUB,a=k*Math.PI/4;return {x:B.x+Math.cos(a)*(B.A-3.4),z:B.z+Math.sin(a)*(B.A-3.4)};};
@@ -15398,9 +15269,6 @@ for(const G of TEMPLE_GATES){const B=OR.HALL.HUB,a=G.k*Math.PI/4,x=B.x+Math.cos(
   const p={id:G.id,x,z,ry:Math.PI/2-a,minLv:0,label:G.name,color:G.color,msg:null,get to(){return G.to();},lock:()=>P&&P.lv<G.lv?`Lv ${G.lv}부터 들어갈 수 있다`:null};
   p.fx=makePortal(x,z,p.ry,{color:G.color});PORTALS.push(p);
   const pq=TEMPLE.plaques&&TEMPLE.plaques[G.k];if(pq){pq.material.map=templePlaqueTex(G.name);pq.material.needsUpdate=true;}}
-/* 킹 슬라임의 석실에서 신전으로 돌아오는 포탈 (석실 둥근 방, 들어오는 통로 오른쪽 벽 앞) */
-{const D=OR.DUN,t=-Math.PI/2+1.05,x=D.x+Math.cos(t)*(D.R-2.6),z=D.z+Math.sin(t)*(D.R-2.6),f=templeGateFront(3);
-  const p={id:'tg_slime_back',x,z,ry:Math.PI/2-t,minLv:30,label:'지하 신전으로',color:0xffd23a,msg:null,to:{x:f.x,z:f.z,yaw:0}};p.fx=makePortal(x,z,p.ry,{color:p.color});PORTALS.push(p);}
 function portalNear(){if(!player)return -1;for(let i=0;i<PORTALS.length;i++){const p=PORTALS[i];if(!p.edge&&portalSeen(p)&&Math.hypot(player.position.x-p.x,player.position.z-p.z)<3.2)return i;}return -1;}
 // 와이번을 잡은 뒤의 동쪽 황야 포탈: 둥지로 갈지 지하실로 갈지 고른다
 function openPortalChoice(p){mode='dialog';attackHeld=false;unlockPointer();syncLockTip();$('#portalWin').hidden=false;
@@ -28963,16 +28831,16 @@ const IR_TOPICS=[
    ['패배한 기사 구경하러요',-8,{p:['……','구경거리가 됐군. 좋아, 실컷 봐 두라고.','다 봤으면 나가 줘.']},'mock'],
   ]}}},
  {id:'wound',need:1,t:'상처에 대해 묻기',n:{
-  start:{p:['어깨와 허벅지. 킹 슬라임의 산에 녹은 자국이야.','보기 흉하지? 붕대라도 감아 둬서 다행이군.'],c:[
+  start:{p:['어깨와 허벅지. 석굴 괴물의 산에 녹은 자국이야.','보기 흉하지? 붕대라도 감아 둬서 다행이군.'],c:[
    ['많이 아파요?',3,{p:['…밤에는 좀 쑤셔. 낮에는 참을 만해.','이런 걸 물어보는 사람은 자네가 처음이야. 기록관 사람들은 다들 바쁘거든.']}],
    ['흉터는 싸운 증거죠',5,{p:['…증거.','(붕대를 가만히 내려다본다)','그런 식으로 생각해 본 적은 없었어. …나쁘지 않은 말이군.']}],
    ['기사 체면이 말이 아니네요',-5,{p:['…체면이라. 그래, 지금 내게 그런 게 남아 있긴 한가.','말 조심하게. 다친 짐승도 이빨은 있으니까.']}],
   ]}}},
- {id:'kingslime',need:1,t:'킹 슬라임과의 싸움',n:{
+ {id:'kingslime',need:1,t:'석굴에서의 싸움',n:{
   start:{p:['석굴 가장 깊은 곳. 놈은 생각보다 훨씬 컸어.','혼자 갔지. 동료들은 기다리라고 했는데.'],c:[
    ['왜 혼자 갔어요?',2,'why'],
    ['살아 돌아온 게 이긴 거예요',4,{p:['살아 돌아온 게… 이긴 거라.','동료들도 그렇게 말했지. 그땐 듣기 싫었는데, 자네 입으로 들으니 조금 다르군.']}],
-   ['저라면 이겼을 텐데',-4,{p:['…그래? 그럼 다녀와 보게.','돌아와서도 같은 말을 할 수 있다면 그때 인정해 주지.']}],
+   ['저라면 이겼을 텐데',-4,{p:['…그래? 아쉽게도 놈은 이제 석굴에 없어.','어디로 갔는지는 아무도 몰라. 자네 말이 맞는지 확인할 길도 없군.']}],
   ]},
   why:{p:['…증명하고 싶었어. 경비대를 나온 게 틀린 선택이 아니었다는 걸.','결과는 이 꼴이지만.'],c:[
    ['증명할 필요 없어요',6,{p:['……','그 말, 오래 기억할 것 같군.']}],
@@ -30025,7 +29893,7 @@ function drawWorldMap0(){
   // 중요한 곳
   const mark=(x,z,col,txt,r=5)=>{c.fillStyle=col;c.beginPath();c.arc(X(x),Z(z),r*f,0,7);c.fill();c.strokeStyle='#1b1712';c.lineWidth=1.5*f;c.stroke();
     if(txt){c.font=`${Math.round(10*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.textAlign='left';c.textBaseline='middle';c.lineWidth=3*f;c.strokeStyle='rgba(20,16,12,.85)';c.strokeText(txt,X(x)+r*f+3*f,Z(z));c.fillStyle='#efe4cc';c.fillText(txt,X(x)+r*f+3*f,Z(z));}};
-  mark(PIT.x,PIT.z,'#c9a05a','석굴 입구 (보스)',4);
+  mark(PIT.x,PIT.z,'#c9a05a','석굴 입구',4);
   for(const p of PORTALS)if(p.z>-300&&p.z<300&&p.to.z<-300&&!p.door&&portalSeen(p)){drawPortalIcon(c,X(p.x),Z(p.z),5*f);const t=`포탈 · ${ZONES.hall.name} (Lv ${p.minLv})`;c.font=`${Math.round(10*f)}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.textAlign='right';c.textBaseline='middle';c.lineWidth=3*f;c.strokeStyle='rgba(20,16,12,.85)';c.strokeText(t,X(p.x)-8*f,Z(p.z));c.fillStyle='#ffe27a';c.fillText(t,X(p.x)-8*f,Z(p.z));}
   for(const n of NPCS){c.fillStyle='#f3cf6a';c.beginPath();c.arc(X(n.x),Z(n.z),2*f,0,7);c.fill();}
   // 지역 이름과 레벨
@@ -31468,7 +31336,6 @@ function killMonster(m,mine=true,partyN=1){
   sfx('die',m.mesh.position,1,m.D.build==='slime'?1.4:(m.D.scale||1)>1.4?.6:1);
   m.dying=0;m.tag.hidden=true;
   if(!mine)return;
-  if(m.D.boss){bossReward(m,partyN);return;}
   if(m.D.dragon){dragonReward(m,partyN);return;}
   const exp=Math.max(1,Math.round(m.st.exp*gapExp(m.lv)));
   log(`${m.D.name} 처치 · EXP +${Math.round(exp*expMul())}${partyN>1?` (함께 ${partyN}명)`:''}`,'good');
@@ -34719,14 +34586,6 @@ function updateBossVisual(m,dt){
   m.mesh.userData.mats&&m.mesh.userData.mats.forEach(mt=>{if(mt.emissive)mt.emissive.setRGB(fl*.7+vy,fl*.7+vy*.9+(m.hp<m.mh*.33?.15:0),fl*.7);});
   if(m.mesh.userData.crown)m.mesh.userData.crown.position.y=1.12*(b.scale.y/.78)-.02;
 }
-// 보스 보상: 경험치는 바로, 골드·장비는 쓰러진 자리에 생기는 상자에 (플레이어마다 따로)
-function bossReward(m,n){
-  const D=m.D,gold=D.gold||1000,exp=m.st.exp;
-  const loot=['crown',pick(GEAR_BY_TIER[5]),pick(GEAR_BY_TIER[4])];if(Math.random()>.35)loot.shift();
-  const items=[...loot.map(id=>[id,1]),['elixir',2],['hp_l',5],['atk_p',2]];
-  log(`${D.name||'킹 슬라임'} 처치!${n>1?` (함께 ${n}명)`:''} EXP +${Math.round(exp*expMul())}`,'sys');bigBanner(`${D.name||'킹 슬라임'} 처치`,`EXP +${Math.round(exp*expMul())} · 상자가 나타났다`);
-  gainExp(exp);questKill(m);spawnBossChest(m.mesh.position,gold,items,D.name||'킹 슬라임');save();
-}
 function dragonReward(m,n){
   if(m.D.mother){motherReward(m,n);return;}
   if(m.D.wyvern){wyvernReward(m,n);return;}
@@ -35137,7 +34996,6 @@ const LIB_BOOKS={
     '모래도마뱀: 모래 속에 몸을 숨기고 있다가 발소리에 튀어 오른다. 꼬리를 잘라도 금세 다시 자란다는 소문이 있다.',
     '전갈: 집게보다 꼬리를 조심하라. 독에 찔리면 해독약 없이 오래 버티기 어렵다.',
     '들늑대: 혼자 다니는 법이 없다. 한 마리가 보이면 이미 셋이 그대를 보고 있다고 생각하라.',
-    '킹 슬라임: 폐허 아래 석굴의 주인. 크고 무겁고, 놀랍도록 끈질기다. 혼자 맞선 기사가 동료들 손에 겨우 끌려 나왔다는 기록이 있다.',
     '와이번: 깊은 사막 끝, 포탈 너머의 둥지에 산다. 하늘에서 내리꽂히는 발톱을 피할 자신이 없다면 가까이 가지 말 것.',
     '덧붙임: 옛이야기의 마왕은 이 도감에 없다. 기록된 적이 한 번도 없기 때문이다. 이 땅에 있는 것은 몬스터뿐이다.']},
   lib_harena:{title:'사막의 도시 하레나',sub:'모래와 성벽의 이야기',pages:[

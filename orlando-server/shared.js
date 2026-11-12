@@ -58,7 +58,7 @@
     ['s', 1, HALL.R + 3.0, 3.6], ['sw', 0, HALL.R + 5.4, 3.9], ['w', 1, 70, 3.9], ['nw', 0, HALL.R + 5.4, 3.9]]
     .map(([id, open, r1, hw], i) => ({ id, a: -Math.PI / 2 + i * Math.PI / 4, open: !!open, r1, hw }));   // 북: 큰 계단 위 층계참 → 길드홀로 오르는 통로, 남: 깊은 사막3 포탈 감실, 서: 기둥 회랑 → 포탈의 방
   /* 서쪽 회랑 끝: 보스방으로 가는 포탈이 모인 팔각 방 (A = 가운데에서 벽까지). GATES: 걸어 들어가는 포탈 감실 (k*45°, 0 = 회랑 쪽) */
-  HALL.HUB = { x: HALL.x - 84, z: HALL.z, A: 15, u: 84, GATES: [3, 4, 5] };
+  HALL.HUB = { x: HALL.x - 84, z: HALL.z, A: 15, u: 84, GATES: [4, 5] };
   const WLAIR = { x: 200, z: -520, r: 22 };
   // 지하실 포탈 너머의 다섯 땅 (동쪽 멀리, 한 줄로)
   const ISLES = {
@@ -439,8 +439,6 @@
     emberslime:{ name: '불씨 슬라임', lv: 56, build: 'slime', color: 0xd8702a, hpM: 1.1, atkM: 1.2, scale: 1.4, glow: 0xff5a10 },
     redgiant: { name: '붉은 바위 거인', lv: 59, build: 'biped', color: 0x7a3a2a, hpM: 1.8, atkM: 1.25, scale: 2.1, club: true },
     // 석굴
-    kingslime:{ name: '킹 슬라임', lv: 15, fixed: { hp: 11100, atk: 56, def: 11, exp: 3400 }, gold: 1100, build: 'slime', color: 0x56c860, scale: 4.2, boss: true },
-    slimelet: { name: '킹 슬라임 조각', lv: 14, build: 'slime', color: 0x7fe07a, hpM: 0.5, atkM: 0.8, scale: 1.1 },
     // 심연 끝
     wyvern:{ name: '와이번', lv: 30, fixed: { hp: 16800, atk: 184, def: 19, exp: 10900 }, gold: 3000, build: 'dragon', wyvern: true, color: 0x2f5a46, scale: 1.3, dragon: true, arena: 'WLAIR' },
     // 실바 (Lv 60–70)
