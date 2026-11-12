@@ -19,7 +19,7 @@ const { fork } = require('child_process');
 const OUT = path.join(__dirname, '..', 'public', 'monbake');
 
 if (process.argv[2] === '--one') {
-  const TYPES = Object.assign({}, require('./monbake/models').TYPES, require('./monbake/horse').TYPES);
+  const TYPES = Object.assign({}, require('./monbake/models').TYPES, require('./monbake/horse').TYPES, require('./monbake/beasts').TYPES);
   const { bakeModel } = require('./monbake/bake');
   const t = process.argv[3];
   (async () => {
@@ -32,7 +32,7 @@ if (process.argv[2] === '--one') {
     console.log(t, '면', tri.join(' / '), Math.round(fs.statSync(path.join(OUT, t + '.json')).size / 1024) + 'KB', ((Date.now() - t0) / 1000).toFixed(0) + '초');
   })().catch(e => { console.error(t, e); process.exit(1); });
 } else {
-  const TYPES = Object.assign({}, require('./monbake/models').TYPES, require('./monbake/horse').TYPES);
+  const TYPES = Object.assign({}, require('./monbake/models').TYPES, require('./monbake/horse').TYPES, require('./monbake/beasts').TYPES);
   fs.mkdirSync(OUT, { recursive: true });
   const list = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(TYPES);
   const N = Math.max(1, Math.min(+(process.env.J || require('os').cpus().length), list.length));
