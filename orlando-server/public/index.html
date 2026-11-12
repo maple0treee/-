@@ -1204,7 +1204,11 @@ button,.cta,.ghost,.slot,.slot .k,#interact,#lockTip,#toast,.qsec .qtag,#questBo
 #npc .next{color:#f0cf7a}#npc .tclose{color:#d0bc94}
 #npc .enh{background:linear-gradient(180deg,rgba(58,42,26,.72),rgba(18,12,7,.82));border-color:#0c0703}#npc .enh .stx span{color:#bba98a}
 /* 기타 */
-#interact,#lockTip{border-radius:2px;border:1px solid transparent;border-image:var(--th-small) 26 / 12px / 5px stretch;background:var(--th-noise),linear-gradient(rgba(36,26,16,.95),rgba(14,9,5,.95));color:#f6ecd4;animation:none}
+#tut{position:fixed;left:50%;top:64%;transform:translateX(-50%);padding:8px 16px;font-size:15px;pointer-events:none;white-space:nowrap;opacity:0;transition:opacity .45s}
+#tut.on{opacity:1}
+#tut kbd{display:inline-block;margin:0 5px 0 0;padding:1px 7px;border:1px solid rgba(232,206,150,.6);border-radius:3px;font:inherit;font-size:13px;color:#f3cf6a;background:rgba(0,0,0,.25)}
+#tut i{font-style:normal;margin:0 9px;opacity:.5}
+#interact,#lockTip,#tut{border-radius:2px;border:1px solid transparent;border-image:var(--th-small) 26 / 12px / 5px stretch;background:var(--th-noise),linear-gradient(rgba(36,26,16,.95),rgba(14,9,5,.95));color:#f6ecd4;animation:none}
 #bossbar{border-image:var(--th-small) 26 / 13px / 6px stretch}
 #dead .t{color:#ff8a74;-webkit-text-fill-color:#ff7a62;background:none;text-shadow:0 0 22px rgba(220,40,20,.6),0 2px 0 #000}
 #banner .t{font-size:clamp(44px,9vw,78px)}
@@ -1263,6 +1267,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     <div id="wmap" hidden aria-label="지도"><div class="wmbox panel"><div class="wmhead"><b>오를란도 지도</b><span>M · Esc 닫기</span><button id="wmapX" type="button">✕</button></div><canvas id="wmapC"></canvas><div class="wmleg"><i style="--c:#fff"></i>나 <i style="--c:#9fd3e6"></i>다른 모험가 <i style="--c:#9be39b"></i>파티원 <i style="--c:#f3cf6a"></i>NPC <i style="--c:#ffd060"></i>의뢰 지역 <i style="--c:#ff5a3c"></i>위치 표시</div></div></div>
 
     <div id="cross"></div>
+    <div id="tut" class="panel" hidden></div>
     <div id="lockTip" class="panel">화면을 클릭하면 마우스로 시점을 움직일 수 있어요</div>
     <div id="toast"></div>
     <div id="lootFeed" aria-live="polite"></div>
@@ -12364,7 +12369,7 @@ function homeSelect(id){selId=id;for(const e of $('#homeChars').children)e.class
   const nickOk=()=>{const ok=!!($('#nick').value||'').trim();$('#go').disabled=!ok;return ok;};
   $('#nick').addEventListener('input',()=>{nickOk();$('#nickShow').textContent=$('#nick').value.trim();});nickOk();
   $('#go').onclick=()=>{if(!nickOk()){$('#nick').focus();return;}if(BOOT.on||BOOT.q){BOOT.wait(()=>$('#go').onclick());return;}const name=$('#nick').value.trim(),T=OR.THOUSE;
-    startGame({id:'c'+Date.now().toString(36)+Math.floor(Math.random()*1e4),name,job:chosen,needBook:true,lv:1,exp:0,sp:0,skills:{},slots:Array(NSK).fill(null),x:T.x-2.9,z:T.z-2.5,y:0,ap:apCode(newAp)});};
+    startGame({id:'c'+Date.now().toString(36)+Math.floor(Math.random()*1e4),name,job:chosen,needBook:true,tut:0,lv:1,exp:0,sp:0,skills:{},slots:Array(NSK).fill(null),x:T.x-2.9,z:T.z-2.5,y:0,ap:apCode(newAp)});};
   $('#nick').addEventListener('keydown',e=>{if(e.key==='Enter'){if(newStep<AP_STEPS.length-1)newStepGo(newStep+1);else $('#go').click();}});
   $('#nsPrev').onclick=()=>{if(newStep)newStepShow(newStep-1);else $('#backList').click();};$('#nsNext').onclick=()=>newStepGo(newStep+1);
   document.querySelectorAll('#stepNew .nsBar .st').forEach((e,i)=>e.onclick=()=>newStepGo(i));newStepShow(0);
@@ -29409,6 +29414,24 @@ function lockPointer(){if(mode!=='world'||!canLock()||(typeof wmapOpen!=='undefi
 function unlockPointer(){quietUnlock=!!document.pointerLockElement;try{if(document.pointerLockElement)document.exitPointerLock();}catch(e){}}
 function syncLockTip(){$('#lockTip').hidden=coarse()||lockFailed||isLocked()||mode!=='world'||wantLock;$('#cross').hidden=mode!=='world';}
 let lockFailed=false;
+/* 처음 온 모험가: 조작 표시가 하나씩 떴다가 해 보면 사라진다. 새 캐릭터만 (P.tut = 지금 단계, 다 하면 없어진다) */
+const TUT={el:null,cur:-1,wait:1.6,yaw:null,turn:0,last:null,walk:0,hideT:0};
+const tutSteps=()=>coarse()?[
+  {id:'move',h:'<kbd>왼쪽</kbd>끌어서 이동'},{id:'look',h:'<kbd>오른쪽</kbd>끌어서 시점'},{id:'atk',h:'<kbd>공격</kbd>눌러서 공격'},{id:'skill',h:'<kbd>메뉴</kbd>스킬창'}]:[
+  {id:'move',h:'<kbd>W A S D</kbd>이동'},{id:'look',h:'<kbd>마우스</kbd>시점'},{id:'jump',h:'<kbd>Shift</kbd>달리기<i>·</i><kbd>Space</kbd>점프'},{id:'atk',h:'<kbd>왼쪽 클릭</kbd>공격'},{id:'skill',h:'<kbd>K</kbd>스킬창'}];
+function tutDid(id){if(!P||P.tut==null)return;const L=tutSteps(),S=L[P.tut];if(!S||S.id!==id)return;
+  P.tut++;TUT.cur=-1;TUT.wait=.9;TUT.turn=0;TUT.walk=0;if(TUT.el)TUT.el.classList.remove('on');if(P.tut>=L.length){P.tut=undefined;save();}}
+function tutTick(dt){if(!TUT.el)TUT.el=$('#tut');const el=TUT.el;
+  const L=P&&P.tut!=null?tutSteps():null,S=L&&L[P.tut];
+  const show=!!S&&!P.needBook&&mode==='world'&&P.hp>0&&!P.fly&&(coarse()||isLocked());
+  if(!show){if(el.classList.contains('on'))el.classList.remove('on');TUT.hideT+=dt;if(TUT.hideT>.5&&!el.hidden)el.hidden=true;TUT.cur=-1;if(!S)return;TUT.wait=Math.max(TUT.wait,.6);return;}
+  TUT.hideT=0;
+  const p=player.position;if(TUT.last)TUT.walk+=Math.hypot(p.x-TUT.last.x,p.z-TUT.last.z);TUT.last={x:p.x,z:p.z};
+  if(TUT.yaw!=null)TUT.turn+=Math.abs(cam.yaw-TUT.yaw);TUT.yaw=cam.yaw;
+  if(TUT.cur!==P.tut){TUT.wait-=dt;if(TUT.wait>0)return;TUT.cur=P.tut;TUT.walk=0;TUT.turn=0;el.innerHTML=S.h;el.hidden=false;requestAnimationFrame(()=>el.classList.add('on'));return;}
+  if(S.id==='move'&&TUT.walk>4)tutDid('move');
+  else if(S.id==='look'&&TUT.turn>1.4)tutDid('look');}
+addEventListener('keydown',e=>{if(mode!=='world'||e.repeat)return;const c=codeOf(e);if(c==='Space'||c==='ShiftLeft'||c==='ShiftRight')tutDid('jump');});
 // 한 번이라도 고정된 적이 있으면 실패는 잠깐의 거절(Esc 직후 등)일 뿐: 다음 입력에서 다시 시도한다
 let lockEverOk=false;
 document.addEventListener('pointerlockchange',()=>{if(document.pointerLockElement)lockEverOk=true;});
@@ -30427,7 +30450,7 @@ function spawnRing(color,pos,radius,dur=.5){
   VFX.ringSparks(pos,color,radius);
 }
 
-function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:spAll(),skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mhv:6,mentorReady:P.mentorReady,faith:P.faith|0||undefined,needBook:P.needBook||undefined,mq:P.mq||undefined,mqDone:P.mqDone||undefined,myHome:P.myHome||undefined,gq:P.gq&&Object.keys(P.gq).length?P.gq:undefined,gqDone:P.gqDone||undefined,gqPin:P.gqPin&&Object.keys(P.gqPin).length?P.gqPin:undefined,spc:P.spc&&Object.keys(P.spc).length?P.spc:undefined,poff:P.poff&&Object.keys(P.poff).length?P.poff:undefined,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap),gk:P.gk,guild:P.guild||undefined,gApply:P.gApply||undefined,gApps:P.gApps&&P.gApps.list.length?{gid:P.gApps.gid,list:P.gApps.list.map(a=>({n:a.n,k:a.k,t:a.t,no:a.no?1:undefined}))}:undefined,wbk:P.wbk&&Object.keys(P.wbk).length?P.wbk:undefined,shelf:P.shelf&&P.shelf.length?P.shelf:undefined,lak:P.lak||undefined}:null;}
+function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:spAll(),skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mhv:6,mentorReady:P.mentorReady,faith:P.faith|0||undefined,needBook:P.needBook||undefined,tut:P.tut!=null&&P.tut<tutSteps().length?P.tut:undefined,mq:P.mq||undefined,mqDone:P.mqDone||undefined,myHome:P.myHome||undefined,gq:P.gq&&Object.keys(P.gq).length?P.gq:undefined,gqDone:P.gqDone||undefined,gqPin:P.gqPin&&Object.keys(P.gqPin).length?P.gqPin:undefined,spc:P.spc&&Object.keys(P.spc).length?P.spc:undefined,poff:P.poff&&Object.keys(P.poff).length?P.poff:undefined,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap),gk:P.gk,guild:P.guild||undefined,gApply:P.gApply||undefined,gApps:P.gApps&&P.gApps.list.length?{gid:P.gApps.gid,list:P.gApps.list.map(a=>({n:a.n,k:a.k,t:a.t,no:a.no?1:undefined}))}:undefined,wbk:P.wbk&&Object.keys(P.wbk).length?P.wbk:undefined,shelf:P.shelf&&P.shelf.length?P.shelf:undefined,lak:P.lak||undefined}:null;}
 /* 같은 캐릭터를 창 두 개(또는 휴대폰에 남아 있던 옛 탭)에서 켜 두면, 옛 창이 나중에 저장하면서 새 창의 기록을 덮어썼다.
    만든 길드처럼 옛 창에 없던 것이 통째로 사라졌다. 그래서 저장할 때 이 창의 표(tab)를 남기고,
    이 창이 캐릭터를 불러온 뒤에 다른 창이 같은 캐릭터를 저장했으면 이 창은 더 저장하지 않는다. */
@@ -30575,7 +30598,7 @@ function startGameNow(data){if(JOB_ALIAS[data.job])data={...data,job:JOB_ALIAS[d
 }
 
 /* ---------- 스킬창 ---------- */
-function openSkills(){if(mode!=='world')return;mode='dialog';unlockPointer();syncLockTip();renderSkills();$('#skills').hidden=false;}
+function openSkills(){if(mode!=='world')return;tutDid('skill');mode='dialog';unlockPointer();syncLockTip();renderSkills();$('#skills').hidden=false;}
 function closeSkills(){$('#skills').hidden=true;mode='world';canvas.focus();syncLockTip();relock();}
 $('#skClose').onclick=closeSkills;
 let skTab=null,skCat='job';
@@ -31610,7 +31633,7 @@ function markDuel(sec){const me=player.position,list=alive().filter(m=>m.mesh.po
     VFX.burst(mCenter(m),0xff4a3a,16,4,.5,{up:.6});}
   log(`결투 신청! ${picks.map(m=>m.D.name).join(', ')}에게 표식을 남겼다`,'sys');}
 let fowlN=0,fowlAt=0,asnN=0,asnAt=0,rgN=0,rgAt=0;
-function basicAttack(){const c0=basicCd,r=shared(basicAttackInner);if(c0<=0&&basicCd>0&&hasSpc('chainbolt')&&!pOff('chainbolt'))setTimeout(chainBolt,170);return r;}   /* 일반 공격이 나가면 연쇄번개 (특수 스킬) */
+function basicAttack(){const c0=basicCd,r=shared(basicAttackInner);if(c0<=0&&basicCd>0)tutDid('atk');if(c0<=0&&basicCd>0&&hasSpc('chainbolt')&&!pOff('chainbolt'))setTimeout(chainBolt,170);return r;}   /* 일반 공격이 나가면 연쇄번개 (특수 스킬) */
 // 스킬을 쓰는 동안(동작이 끝날 때까지, 돌진 중)은 평타도 다른 스킬도 못 쓴다
 /* V: 왼팔을 앞으로 뻗고 오른손의 칼날로 그 팔을 긋는다 (칼·단검을 든 직업) */
 function vCut(){if(!P||mode!=='world'||P.fly||P.hp<=0||skillBusy()||(myMo&&swingT<1))return;const st=JOBS[P.job].weapon;if(!(st==='sword'||st==='dagger')||!P.equip.weapon)return;
@@ -34776,6 +34799,7 @@ function loopBody(){if(HCHL.u)return;   /* 허칠을 서둘러 짓는 동안(로
   if(mode!=='title'){ccarTick(dt);nrideTick(dt);}
   if(mode==='title'){const a=tAll*.05;camera.position.set(Math.cos(a)*30,14,Math.sin(a)*30);camera.lookAt(0,2,0);apPreviewTick(dt);}
   else if(mode==='world')updateWorld(dt);
+  if(mode!=='title'&&player)tutTick(dt);
   else if(mode==='dialog'){
     /* 창을 열어도 세상은 멈추지 않는다: 공중에 있으면 떨어진다 */
     if(P&&player&&!P.fly&&P.hp>0&&P.seat==null&&!CCAR.ride){const pos=player.position,ground=floorAt(pos.x,pos.z,pos.y);if(pos.y>ground+.001||vy>0){const y0=pos.y;vy-=26*dt;let py=pos.y+vy*dt;if(py<=ground){py=ground;vy=0;}pos.y=py;jumpY=Math.max(0,py-ground);camera.position.y+=py-y0;}}
