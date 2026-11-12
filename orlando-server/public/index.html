@@ -6684,6 +6684,109 @@ function monBakeHook(t,D,g){if(!MONB.types.has(t))return false;if(MONB.data[t]){
   monBakeLoad(t).then(()=>monBakeSwap(t)).catch(e=>console.warn('monbake',t,e));return false;}
 function monBakeSwap(t){for(const m of monsters){if(m.t!==t||m.mesh.userData.baked||m.dying!==null)continue;const g=m.mesh,s=m.D.scale||1;
   monBakeBuild(t,m.D,g);g.userData.h=MONB.data[t].h*s;m._parts=null;m._lod=-1;}}
+/* ---------- 빚어 구운 네발 몬스터 (늑대·사냥개·곰·멧돼지·들양) ----------
+   tools/monbake/beasts.js·wolf.js 로 빚어 monbake/q*.json 에 구웠다. 털은 [그늘, 밝은 털, 어두운 털] 비율만 담아 두고 종류마다 털빛으로 칠한다.
+   뼈 이름은 빚은 말과 같아 같은 걸음새(HB_GAIT)를 쓰고, 노리기(windup)·덤비기(lunge)·쓰러짐은 짐승마다 따로 움직인다. */
+const MONQ={ver:'1',d:{},req:{},geo:{},K:{
+  /* f: 파일, c 바탕·c2 밝은 털·d 어두운 털·m 갈기, moon 가슴 반달 */
+  wolf:{f:'qwolf',c:0x8d8f92,c2:0xd8d6d0,d:0x3a3a3e,m:0x5a5a5e},silvawolf:{f:'qwolf',c:0xb8bcc4,c2:0xf0f0f2,d:0x5a5e68,m:0x9a9ea8},snowwolf:{f:'qwolf',c:0xe8ecf0,c2:0xffffff,d:0x98a0ac,m:0xc8ced6},
+  fieldwolf:{f:'qwolf',c:0x8a6e4e,c2:0xd8c4a0,d:0x3a2a1c,m:0x5a4430},windwolf:{f:'qwolf',c:0xaab6be,c2:0xeef2f4,d:0x4a5660,m:0x7a868e},pinewolf:{f:'qwolf',c:0x5a4a3a,c2:0xb0a080,d:0x221a12,m:0x3a3024},
+  icewolf:{f:'qwolf',c:0xc4d6e2,c2:0xf4fbff,d:0x6a869a,m:0x9ab4c6},steppewolf:{f:'qwolf',c:0x9a8058,c2:0xe0d0a8,d:0x4a3a24,m:0x6a5638},ashwolf:{f:'qwolf',c:0x6a6866,c2:0xaaa69e,d:0x2a2826,m:0x4a4846},
+  shadewolf:{f:'qwolf',c:0x3a3a3e,c2:0x6e6e74,d:0x141416,m:0x222226},stormwolf:{f:'qwolf',c:0x6e7e8e,c2:0xc8d2dc,d:0x26303c,m:0x4a5664},firewolf:{f:'qwolf',c:0xa84a20,c2:0xe8a058,d:0x3a140a,m:0x5a2410},
+  dog:{f:'qhound',c:0x7a5a3a,c2:0xc8a878,d:0x3a2a1c,m:0x5a4028},jackal:{f:'qhound',c:0xb89460,c2:0xe8d8b0,d:0x4a3a2a,m:0x6a5034},darkhound:{f:'qhound',c:0x2c2832,c2:0x4c4652,d:0x0e0c10,m:0x1c1a20},
+  stonehound:{f:'qhound',c:0x7a756e,c2:0xaaa69e,d:0x3e3a36,m:0x5a5650},cragdog:{f:'qhound',c:0x5e5a54,c2:0x9a948a,d:0x2a2622,m:0x44403a},gorgehound:{f:'qhound',c:0x7a6248,c2:0xb8a080,d:0x3a2a1c,m:0x5a4632},
+  cinderhound:{f:'qhound',c:0x4a4440,c2:0x8a6a50,d:0x1a1410,m:0x2e2a26},flamehound:{f:'qhound',c:0x96401c,c2:0xe08a40,d:0x2a0e06,m:0x5a2410},
+  woodbear:{f:'qbear',c:0x2e2622,c2:0x7a5a40,d:0x14100e},greybear:{f:'qbear',c:0x6a645c,c2:0xa89a88,d:0x2e2a26},brownbear:{f:'qbear',c:0x5e3e24,c2:0x9a7450,d:0x2a1a10},
+  moonbear:{f:'qbear',c:0x201c1c,c2:0x8a7a68,d:0x0c0a0a,moon:0xece4d2},ashbear:{f:'qbear',c:0x5a5250,c2:0x8a7a70,d:0x221e1c},
+  hillboar:{f:'qboar',c:0x5a4030,c2:0x8a6a50,d:0x241810,m:0x2a1e16},hornboar:{f:'qboar',c:0x4a3828,c2:0x7a6048,d:0x1e140c,m:0x1e1610},warboar:{f:'qboar',c:0x5e3e28,c2:0x8a6446,d:0x22140a,m:0x2a1a10},
+  cliffboar:{f:'qboar',c:0x4e4038,c2:0x7e6e60,d:0x221a14,m:0x2a221c},scorchboar:{f:'qboar',c:0x3a2c24,c2:0x6a3a20,d:0x140c08,m:0x1a1410},
+  wildram:{f:'qram',c:0xe0d6bc,c2:0xa88a68,d:0x3a2a1e}}};
+function mqLoad(f){if(MONQ.req[f])return MONQ.req[f];
+  return MONQ.req[f]=fetch(MONB.dir+f+'.json?v='+MONQ.ver).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).then(r=>{
+    MONQ.d[f]={h:r.h,size:r.size||1,bones:r.bones,anim:r.anim||{},mats:r.mats||{},lod:r.lod.map(l=>l.map(p=>({g:p.g,geo:monBakeGeo(p,p.g==='body'||p.g==='jaw'||p.g==='mane')})))};return MONQ.d[f];}).catch(e=>{MONQ.req[f]=null;throw e;});}
+/* 종류마다 털빛을 칠한 모양 (자리·법선·뼈는 같이 쓴다) */
+function mqGeo(t,li,pi){const K=MONQ.K[t],R=MONQ.d[K.f],k=t+li+'_'+pi;if(MONQ.geo[k])return MONQ.geo[k];const p=R.lod[li][pi],src=p.geo;
+  if(p.g!=='body'&&p.g!=='jaw'&&p.g!=='mane')return MONQ.geo[k]=src;
+  const n=src.attributes.position.count,raw=src.attributes.color.array,Pp=src.attributes.position.array,Nn=src.attributes.normal.array,col=new Float32Array(n*3);
+  const cA=new THREE.Color(K.c),cB=new THREE.Color(K.c2),cD=new THREE.Color(K.d),cM=new THREE.Color(K.m||K.d),cW=new THREE.Color(K.moon||0xffffff),c=new THREE.Color();
+  for(let i=0;i<n;i++){const s=raw[i*3];
+    if(p.g==='mane')c.copy(cM).multiplyScalar(s*1.1);
+    else{const sd=Math.max(s,1e-3),L=Math.min(1,raw[i*3+1]/sd),D=Math.min(1,raw[i*3+2]/sd);c.copy(cA).lerp(cB,L).lerp(cD,D*.9);
+      if(K.moon){const x=Pp[i*3],y=Pp[i*3+1],z=Pp[i*3+2],e=y-(.43+3.2*x*x);if(z>.42&&Nn[i*3+2]>.45&&Math.abs(x)<.16&&e>0&&e<.045)c.copy(cW);}   /* 반달가슴곰: 가슴의 흰 반달 */
+      c.multiplyScalar(s);}
+    c.convertSRGBToLinear();col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;}
+  const g=new THREE.BufferGeometry();for(const a of ['position','normal','skinIndex','skinWeight'])g.setAttribute(a,src.attributes[a]);g.setIndex(src.index);g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  g.boundingSphere=src.boundingSphere;return MONQ.geo[k]=g;}
+function mqBuild(t,D,g){const K=MONQ.K[t],R=MONQ.d[K.f],kind=R.anim.kind||'wolf';
+  for(const ch of [...g.children])g.remove(ch);
+  const by={},bones=R.bones.map(b=>{const B=new THREE.Bone();B.name=b.n;by[b.n]=B;return B;});
+  R.bones.forEach((b,i)=>{const B=bones[i],p=b.p?R.bones.find(q=>q.n===b.p):null;B.position.set(b.o[0]-(p?p.o[0]:0),b.o[1]-(p?p.o[1]:0),b.o[2]-(p?p.o[2]:0));if(p)by[b.p].add(B);});
+  const wrap=new THREE.Group();wrap.scale.setScalar(R.size);wrap.add(by.root);g.add(wrap);wrap.updateMatrixWorld(true);
+  const sk=new THREE.Skeleton(bones,R.bones.map(b=>new THREE.Matrix4().makeTranslation(-b.o[0],-b.o[1],-b.o[2]))),I=new THREE.Matrix4(),hi=[],lo=[],mm={},mats=[];
+  const matOf=gn=>{const key=gn==='jaw'?'body':gn;if(mm[key])return mm[key];const o=R.mats[key]||{};const m=new THREE.MeshStandardMaterial({vertexColors:true,skinning:true,roughness:o.r??.85,metalness:o.m||0});if(key==='body')mats.push(m);return mm[key]=m;};
+  R.lod.forEach((L,li)=>L.forEach((p,pi)=>{const sm=new THREE.SkinnedMesh(mqGeo(t,li,pi),matOf(p.g));sm.bind(sk,I);sm.castShadow=li===0&&(p.g==='body'||p.g==='jaw');sm.userData.g=p.g;wrap.add(sm);(li?lo:hi).push(sm);}));
+  const loG=new Set(R.lod[1].map(p=>p.g));lo.forEach(o=>o.visible=false);hi.forEach(o=>{o.userData.lp=loG.has(o.userData.g);});
+  const U=g.userData;U.mats=mats;U.body=wrap;U.legs=null;U.head=null;U.tail=null;U.tailWag=null;U.flame=null;U.crack=null;U.baked=t;U.mq=1;
+  const B=by,lk=R.anim.leg||.6,S={ph:Math.random(),t:Math.random()*50,v:0,wt:0,wg:0,up:0,hit:0,bite:9,lo:false,dead:0,look:0,lookT:2+Math.random()*5,id:Math.random()*9,sn:0};
+  const TAU=Math.PI*2,ss=(a,b,x)=>{const q=Math.max(0,Math.min(1,(x-a)/(b-a)));return q*q*(3-2*q);},names=['fL','fR','hL','hR'];
+  const lod=m=>{const l=(m&&m._lod|0)>=1;if(l!==S.lo){S.lo=l;hi.forEach(o=>{if(o.userData.lp)o.visible=!l;});lo.forEach(o=>o.visible=l);}};
+  const pose=(dt,mv,windup,lunge)=>{const sc=(D.scale||1)*R.size;S.t+=dt;
+    /* 걸음: 빚은 말과 같은 걸음새, 다리 길이로 맞춘 빠르기로 걷기·속보·달리기를 섞는다 */
+    const v=Math.min(mv,16)/sc;S.v+=(v-S.v)*Math.min(1,dt*6);const V=S.v,Vn=V/lk;
+    S.wt+=(ss(.9,1.4,Vn)-S.wt)*Math.min(1,dt*3);S.wg+=(ss(2.2,3.2,Vn)-S.wg)*Math.min(1,dt*3);
+    const G=HB_GAIT,mixp=(k,i)=>{const w0=1-S.wt,a=i==null?G[0][k]*w0+G[1][k]*S.wt:G[0][k][i]*w0+G[1][k][i]*S.wt;return i==null?a*(1-S.wg)+G[2][k]*S.wg:a*(1-S.wg)+G[2][k][i]*S.wg;};
+    const mvk=ss(.04,.25,V),duty=mixp('duty'),L=mixp('L')*lk,A=mixp('A')*mvk,kf=mixp('kf')*mvk,kh=mixp('kh')*mvk,kc=mixp('kc')*mvk;
+    S.ph=(S.ph+dt*Math.min(3,V/L))%1;
+    /* 노리기(up)·덤비기(hit): 덤비면 노리기는 풀린다 */
+    S.up+=((windup?1:0)-S.up)*Math.min(1,dt*7);if(lunge&&S.hit<.05)S.bite=0;S.hit+=((lunge?1:0)-S.hit)*Math.min(1,dt*(lunge?20:4));S.bite+=dt;
+    const up=S.up*(1-S.hit),hit=S.hit,calm=1-Math.max(up,hit),bt=S.bite;
+    for(let i=0;i<4;i++){const q=((S.ph+mixp('off',i))%1+1)%1,fr=i<2;let th,fx;
+      if(q<duty){const u=q/duty;th=A*(2*u-1);fx=0;}else{const u=(q-duty)/(1-duty),e=(1-Math.cos(Math.PI*u))/2;th=A*(1-2*e);fx=Math.sin(Math.PI*u);}
+      const a=B[names[i]+'a'],b=B[names[i]+'b'],c=B[names[i]+'c'];
+      a.rotation.set(th-fx*(fr?.12:.25)*mvk,0,0);b.rotation.x=fx*(fr?kf:kh);c.rotation.x=fx*kc;}
+    const wg=S.wg*mvk,wt=S.wt*mvk*(1-S.wg),ww=mvk*(1-S.wt)*(1-S.wg);
+    let by0=Math.sin(S.ph*TAU*2)*.006*ww+Math.abs(Math.sin(S.ph*TAU*2))*.016*wt+Math.sin(S.ph*TAU)*.022*wg;
+    let rx=Math.sin(S.ph*TAU+1.2)*.05*wg,rz=Math.sin(S.ph*TAU)*.012*ww;
+    /* 서 있을 때: 숨 쉬고 둘레를 둘러본다 */
+    const idle=1-mvk;S.lookT-=dt;if(S.lookT<=0){S.lookT=2+Math.random()*5;S.look=Math.random()<.3?0:(Math.random()-.5)*1.1;}
+    S.lk=(S.lk||0)+(S.look*idle*calm-(S.lk||0))*Math.min(1,dt*2);const br=Math.sin(S.t*(kind==='bear'?1.3:2)+S.id);
+    let nx=-.02+Math.sin(S.ph*TAU*2)*.04*ww+Math.sin(S.ph*TAU+2.4)*.1*wg+.06*wg+br*.012*idle,hx=Math.sin(S.t*.8+S.id)*.03*idle-.04*wg,jaw=0,tail=0;
+    if(kind==='wolf'){jaw=(.06+.05*wg)*(.5+.5*Math.sin(S.t*7))*mvk;}   /* 달릴 땐 숨을 헐떡인다 */
+    /* ----- 노리기 ----- */
+    if(up>.001){const tr=Math.sin(S.t*40)*.02;
+      if(kind==='bear'){rx-=.62*up;by0+=.06*up;B.hLa.rotation.x+=.62*up;B.hRa.rotation.x+=.62*up;B.hLb.rotation.x-=.25*up;B.hRb.rotation.x-=.25*up;B.hLc.rotation.x-=.15*up;B.hRc.rotation.x-=.15*up;
+        B.fLa.rotation.x+=-.5*up+Math.sin(S.t*3)*.08*up;B.fRa.rotation.x+=-.7*up-Math.sin(S.t*3)*.08*up;B.fLb.rotation.x+=.9*up;B.fRb.rotation.x+=1*up;B.fLc.rotation.x+=.4*up;B.fRc.rotation.x+=.4*up;nx+=.35*up;hx-=.3*up;jaw+=(.45+tr*3)*up;}
+      else if(kind==='boar'){rx+=.08*up;by0-=.015*up;nx+=.32*up;hx+=.05*up;B.fRa.rotation.x+=(Math.max(0,Math.sin(S.t*9))*-.55+.15)*up;B.fRb.rotation.x+=Math.max(0,Math.sin(S.t*9+1))*.7*up;tail+=.7*up;jaw+=.12*up;}
+      else if(kind==='ram'){rx-=.4*up;by0+=.035*up;B.hLa.rotation.x+=.4*up;B.hRa.rotation.x+=.4*up;B.hLb.rotation.x-=.15*up;B.hRb.rotation.x-=.15*up;B.fLa.rotation.x-=.55*up;B.fRa.rotation.x-=.45*up;B.fLb.rotation.x+=1.1*up;B.fRb.rotation.x+=1*up;nx+=.15*up;hx+=.55*up;}
+      else{rx+=.06*up;by0-=.03*up;for(const q of ['hL','hR']){B[q+'a'].rotation.x+=.25*up;B[q+'b'].rotation.x-=.5*up;B[q+'c'].rotation.x+=.25*up;}for(const q of ['fL','fR']){B[q+'a'].rotation.x-=.22*up;B[q+'b'].rotation.x+=.15*up;}
+        nx+=.42*up;hx-=.38*up;jaw+=(.22+tr)*up;tail+=.25*up;}}
+    /* ----- 덤비기 ----- */
+    if(hit>.001){const o=Math.min(1,bt/.12),cl=bt<.22?0:Math.min(1,(bt-.22)/.08),bite=o*(1-cl*.85);
+      if(kind==='bear'){const sl=Math.min(1,bt/.18);rx+=(.12*sl-.25*(1-sl))*hit;B.fLa.rotation.x+=(-1.1*(1-sl)-.25*sl)*hit;B.fLb.rotation.x+=.6*(1-sl)*hit;B.fRa.rotation.x+=(-.5*(1-sl)+.15*sl)*hit;jaw+=.55*o*hit;nx+=.2*hit;hx-=.15*hit;by0-=.02*sl*hit;}
+      else if(kind==='boar'){const ts=Math.sin(Math.min(1,bt/.3)*Math.PI);rx-=.1*hit;nx+=(.35-.85*ts)*hit;hx-=.25*ts*hit;jaw+=.2*o*hit;
+        for(const q of ['hL','hR'])B[q+'a'].rotation.x+=.45*hit;for(const q of ['fL','fR'])B[q+'a'].rotation.x-=.45*hit;}
+      else if(kind==='ram'){const ts=Math.min(1,bt/.15);rx+=.18*ts*hit;nx+=.55*ts*hit;hx+=.35*ts*hit;for(const q of ['hL','hR'])B[q+'a'].rotation.x+=.5*hit;for(const q of ['fL','fR'])B[q+'a'].rotation.x-=.3*hit;}
+      else{rx-=.16*hit;by0+=.05*hit*(1-cl);nx-=.2*hit;hx-=.25*hit;jaw+=.85*bite*hit;tail+=.35*hit;
+        for(const q of ['fL','fR']){B[q+'a'].rotation.x-=.75*hit;B[q+'b'].rotation.x+=.7*hit;B[q+'c'].rotation.x+=.5*hit;}for(const q of ['hL','hR']){B[q+'a'].rotation.x+=.55*hit;B[q+'c'].rotation.x-=.3*hit;}}}
+    wrap.position.y=by0*R.size;B.root.rotation.set(rx,0,rz);
+    B.neck.rotation.set(nx,S.lk*.6,0);B.head.rotation.set(hx,S.lk*.4,S.lk*.1);if(B.jaw)B.jaw.rotation.x=Math.max(0,jaw)*(kind==='ram'?.5:1);
+    /* 꼬리: 걸을 땐 흔들고 노리면 뻣뻣이 든다 */
+    B.t1.rotation.set((kind==='wolf'?.1:.2)+.15*wt+.4*wg+tail+Math.sin(S.ph*TAU)*.07*wg,0,Math.sin(S.t*(kind==='boar'?6:1.3)+S.id)*(kind==='boar'?.25:.07)*calm+Math.sin(S.ph*TAU)*.06*ww);
+    B.t2.rotation.set(-.06-.3*wg+Math.sin(S.ph*TAU+1)*.1*wg,0,Math.sin(S.t*1.3+S.id-.7)*.08*calm);};
+  U.anim=(m,mv,windup,dt)=>{lod(m);pose(dt,mv,windup,m.lunge>0);};
+  /* 쓰러짐: 옆으로 털썩 눕고 다리가 늘어진다 */
+  U.dieLen=1.5;
+  U.die=(m,dt)=>{S.dead=Math.min(1,S.dead+dt/.7);const k=1-Math.pow(1-S.dead,2.4);pose(dt,0,0,0);
+    const sd=S.id>4.5?1:-1,w=kind==='bear'?.27:kind==='boar'?.22:kind==='ram'?.22:.15;
+    wrap.rotation.z=sd*1.42*k;wrap.position.y=(w*k*(1-.1*k)-Math.max(0,(m.dying-1.05)/.45)*.25)*R.size;
+    for(const q of ['fL','fR','hL','hR']){B[q+'a'].rotation.x+=(q[0]==='f'?-.35:.35)*k;B[q+'b'].rotation.x+=.25*k;B[q+'a'].rotation.z=-sd*(q[1]==='L'?.15:-.1)*k;}
+    B.neck.rotation.x+=-.25*k;B.head.rotation.x+=.1*k;if(B.jaw)B.jaw.rotation.x=.3*k;B.t1.rotation.x=-.2*k;};
+  U.pose=pose;U.bones=B;U.h=R.h*R.size;
+  return g;}
+function mqHook(t,D,g){const K=MONQ.K[t];if(!K)return false;if(MONQ.d[K.f]){mqBuild(t,D,g);return true;}
+  mqLoad(K.f).then(()=>mqSwap(K.f)).catch(e=>console.warn('monq',t,e));return false;}
+function mqSwap(f){for(const m of monsters){const K=MONQ.K[m.t];if(!K||K.f!==f||m.mesh.userData.mq||m.dying!==null)continue;const g=m.mesh,s=m.D.scale||1;
+  mqBuild(m.t,m.D,g);g.userData.h=MONQ.d[f].h*MONQ.d[f].size*s;m._parts=null;m._lod=-1;}}
 function makeMonsterMesh(t){
   const D=Object.assign({tyKey:t},MON[t]);let g;
   if(MON2_BUILD[t])g=MON2_BUILD[t](D);
@@ -6694,6 +6797,7 @@ function makeMonsterMesh(t){
   if(g.userData.mats)g.userData.mats=g.userData.mats.filter(m=>!m.emissive||m.emissive.getHex()===0);
   if(typeof monGlbHook==='function')monGlbHook(t,D,g);
   monBakeHook(t,D,g);
+  mqHook(t,D,g);
   if(D.glow&&g.userData.mats)g.userData.mats.forEach(m=>{if(m.emissive&&m.emissive.getHex()===0)m.emissive.set(D.glow).multiplyScalar(.5);});
   const s=D.scale||1;g.scale.setScalar(s);
   g.traverse(o=>{if(o.isMesh){if(!o.geometry.boundingSphere)o.geometry.computeBoundingSphere();o.castShadow=o.geometry.boundingSphere.radius>.14;}});
