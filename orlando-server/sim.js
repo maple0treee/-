@@ -256,55 +256,81 @@
       if (m.taunt > 0) m.taunt -= TICK;
       if (!t || (!(m.taunt > 0) && Math.random() < 0.015)) { const tn = tg.filter((q) => !q.dc); t = pick(tn.length ? tn : tg); m.aggroOn = t.id; }
       const dx = t.x - m.x, dz = t.z - m.z, dist = Math.hypot(dx, dz), a = Math.atan2(dx, dz);
-      turn(m, a, 0.22);
+      /* 큰 몸이라 제자리에서 천천히 돈다 (한 번에 휙 돌지 않는다). rel: 노린 사람이 머리 방향에서 얼마나 벗어났나 */
+      const turnTo = (want, rad) => { let d = want - m.ry; d = Math.atan2(Math.sin(d), Math.cos(d)); m.ry += Math.max(-rad, Math.min(rad, d)); };
+      let rel = Math.abs(Math.atan2(Math.sin(a - m.ry), Math.cos(a - m.ry)));
+      const front = rel < 0.45, side = rel < 1.9, behind = !side;
       const head = { x: m.x + Math.sin(m.ry) * (m.r + 1.2), z: m.z + Math.cos(m.ry) * (m.r + 1.2) };
-      if (ph >= 3 && C.nova <= 0) {
+      const near = tg.filter((q) => Math.hypot(q.x - m.x, q.z - m.z) < 11).length;
+      /* 쓸 수 있는 기술을 모아 상황에 맞춰 무게를 두고 하나를 고른다 (늘 같은 순서로 나오지 않게) */
+      const opts = [], add = (w, f) => { if (w > 0) opts.push([w, f]); };
+      const rec = (r) => { m.gap = r * fast; };   /* 기술 뒤 숨 고르기 */
+      if (ph >= 3 && C.nova <= 0) add(6, () => {
         // 눈보라: 날개를 펼치고 온몸에서 서리를 터뜨린다 (방 대부분을 덮는다, 멀리 달아나야 한다)
         dSkill(m, { k: 'nova', sh: 'c', x: m.x, z: m.z, r: 15, tele: 2.3, mul: 1.0, block: true });
-        C.nova = 19; m.gap = 0.6;
-      } else if (ph >= 2 && C.icicle <= 0) {
-        // 천장 고드름: 사람 머리 위와 방 곳곳에 고드름이 떨어진다
+        C.nova = 19; rec(1.6);
+      });
+      if (ph >= 2 && C.icicle <= 0) add(2.5, () => {
+        // 천장 고드름: 고개를 들어 천장에 포효하면 사람 머리 위와 방 곳곳에 고드름이 떨어진다
         const n = 4 + ph * 2;
         for (let k = 0; k < n; k++) { const q = k < tg.length ? tg[k] : null; const p = q ? { x: q.x + rnd(-1.2, 1.2), z: q.z + rnd(-1.2, 1.2) } : (() => { const aa = rnd(0, 6.28), d = rnd(3, A.r - 3); return { x: A.x + Math.cos(aa) * d, z: A.z + Math.sin(aa) * d }; })(); hClamp(p, 1);
           dSkill(m, { k: 'icicle', sh: 'c', x: p.x, z: p.z, r: 2.3, tele: 1.5 + k * 0.18, mul: 1.15, pool: [3.5, 0.12], col: 3 }); }
-        C.icicle = 14 * fast; m.gap = 0.9;
-      } else if (ph >= 2 && C.spike <= 0 && dist > 5) {
+        C.icicle = 14 * fast; rec(1.4);
+      });
+      if (ph >= 2 && C.spike <= 0 && dist > 6 && front) add(2, () => {
         // 얼음 가시: 앞발로 바닥을 내리치면 노린 사람 쪽으로 바닥에서 얼음 가시가 줄지어 솟는다
         const n = 8, st = Math.min(2.6, (dist + 3) / n);
-        for (let k = 0; k < n; k++) { const u = m.r + 1 + st * k, p = { x: m.x + Math.sin(a) * u, z: m.z + Math.cos(a) * u }; hClamp(p, 1);
+        for (let k = 0; k < n; k++) { const u = m.r + 1 + st * k, p = { x: m.x + Math.sin(m.ry) * u, z: m.z + Math.cos(m.ry) * u }; hClamp(p, 1);
           dSkill(m, { k: 'spike', sh: 'c', x: p.x, z: p.z, r: 1.9, tele: 1.0 + k * 0.11, mul: 1.3, block: k === 0 }); }
-        if (ph >= 3) for (const s2 of [-1, 1]) for (let k = 0; k < 6; k++) { const aa = a + s2 * 0.5, u = m.r + 1 + 2.4 * k, p = { x: m.x + Math.sin(aa) * u, z: m.z + Math.cos(aa) * u }; hClamp(p, 1);
+        if (ph >= 3) for (const s2 of [-1, 1]) for (let k = 0; k < 6; k++) { const aa = m.ry + s2 * 0.5, u = m.r + 1 + 2.4 * k, p = { x: m.x + Math.sin(aa) * u, z: m.z + Math.cos(aa) * u }; hClamp(p, 1);
           dSkill(m, { k: 'spike', sh: 'c', x: p.x, z: p.z, r: 1.7, tele: 1.3 + k * 0.11, mul: 1.2 }); }
-        m.ry = a; C.spike = rnd(12, 15) * fast;
-      } else if (ph >= 2 && C.gust <= 0 && dist < 15) {
-        // 날갯바람: 날개를 크게 쳐서 앞에 선 사람을 멀리 밀어낸다
-        dSkill(m, { k: 'gust', sh: 'l', x: m.x, z: m.z, a, len: 17, w: 6.5, tele: 1.35, mul: 0.8, block: true });
-        m.ry = a; C.gust = rnd(13, 16) * fast;
-      } else if (C.leap <= 0 && dist > 9) {
-        // 덮치기: 몸을 웅크렸다가 노린 사람에게 뛰어든다
-        dSkill(m, { k: 'leap', sh: 'c', x: t.x, z: t.z, r: 5.5, tele: 1.8, mul: 2.0, block: true });
-        m.ry = a; C.leap = 14 * fast;
-      } else if (C.breath <= 0 && dist < 20) {
-        // 서리 숨: 목 아래가 푸르게 빛나다가 얼음 숨을 내뿜는다 (지나간 자리는 얼어붙는다)
-        const len = 19, w = 3;
-        dSkill(m, { k: 'breath', sh: 'l', x: head.x, z: head.z, a, len, w, tele: 1.45, mul: 1.7, pool: [4, 0.14], col: 3, block: true });
-        if (ph >= 3) for (const s2 of [-1, 1]) dSkill(m, { k: 'breath', sh: 'l', x: head.x, z: head.z, a: a + s2 * 0.55, len: len * 0.9, w, tele: s2 < 0 ? 2.0 : 2.55, mul: 1.6, pool: [4, 0.14], col: 3, block: true });
-        else if (ph >= 2) { const s2 = Math.random() < 0.5 ? 1 : -1; dSkill(m, { k: 'breath', sh: 'l', x: head.x, z: head.z, a: a + s2 * 0.55, len: len * 0.9, w, tele: 2.2, mul: 1.6, pool: [4, 0.14], col: 3, block: true }); }
-        m.ry = a; C.breath = rnd(7, 9) * fast;
-      } else if (C.stomp <= 0 && dist < 12) {
-        // 일어서서 내리찍기: 뒷발로 일어섰다가 앞발로 바닥을 내리찍는다 (얼음 바닥이 둘레로 갈라진다)
+        C.spike = rnd(12, 15) * fast; rec(1.2);
+      });
+      if (ph >= 2 && C.gust <= 0 && dist < 13 && front) add(1.5 + (dist < 7 ? 1.5 : 0), () => {
+        // 날갯바람: 너무 가까이 붙은 사람을 날개를 크게 쳐서 밀어낸다
+        dSkill(m, { k: 'gust', sh: 'l', x: m.x, z: m.z, a: m.ry, len: 17, w: 6.5, tele: 1.35, mul: 0.8, block: true });
+        C.gust = rnd(13, 16) * fast; rec(1.3);
+      });
+      if (C.leap <= 0 && dist > 11 && rel < 0.8) add(3, () => {
+        // 덮치기: 몸을 웅크렸다가 멀리 떨어진 사람에게 뛰어든다
+        m.ry = a; dSkill(m, { k: 'leap', sh: 'c', x: t.x, z: t.z, r: 5.5, tele: 1.8, mul: 2.0, block: true });
+        C.leap = 14 * fast; rec(1.5);
+      });
+      if (C.breath <= 0 && dist > 5 && dist < 20 && front) add(3.5, () => {
+        // 서리 숨: 목 아래가 푸르게 빛나다가 얼음 숨을 내뿜는다 (단계가 오르면 고개를 돌리며 옆으로도 쓴다)
+        const len = 19, w = 3, a0 = m.ry;
+        dSkill(m, { k: 'breath', sh: 'l', x: head.x, z: head.z, a: a0, len, w, tele: 1.45, mul: 1.7, pool: [4, 0.14], col: 3, block: true });
+        if (ph >= 3) for (const s2 of [-1, 1]) dSkill(m, { k: 'breath', sh: 'l', x: head.x, z: head.z, a: a0 + s2 * 0.55, len: len * 0.9, w, tele: s2 < 0 ? 2.0 : 2.55, mul: 1.6, pool: [4, 0.14], col: 3, block: true });
+        else if (ph >= 2) { const s2 = Math.random() < 0.5 ? 1 : -1; dSkill(m, { k: 'breath', sh: 'l', x: head.x, z: head.z, a: a0 + s2 * 0.55, len: len * 0.9, w, tele: 2.2, mul: 1.6, pool: [4, 0.14], col: 3, block: true }); }
+        C.breath = rnd(8, 10) * fast; rec(1.5);
+      });
+      if (C.stomp <= 0 && dist < 10) add(near >= 2 ? 3 : 1.2, () => {
+        // 일어서서 내리찍기: 둘레에 여럿이 붙었을 때 뒷발로 일어섰다가 앞발로 바닥을 내리찍는다
         dSkill(m, { k: 'stomp', sh: 'c', x: m.x, z: m.z, r: 11, tele: 1.6, mul: 1.1, jump: 1, block: true });
-        C.stomp = rnd(11, 14) * fast;
-      } else if (C.tail <= 0 && dist < 11.5) {
+        C.stomp = rnd(11, 14) * fast; rec(1.6);
+      });
+      if (C.tail <= 0 && dist < 11.5 && !front) add(behind ? 5 : 2, () => {
+        // 꼬리 휩쓸기: 옆이나 뒤에 선 사람을 몸을 돌리며 꼬리로 쓸어낸다
         dSkill(m, { k: 'tail', sh: 'c', x: m.x, z: m.z, r: 10, tele: 1.05, mul: 1.35, jump: 1, block: true });
-        C.tail = rnd(7, 9) * fast;
-      } else if (C.claw <= 0 && dist < 7.5) {
-        // 앞발 할퀴기
-        const p = { x: m.x + Math.sin(a) * (m.r + 2), z: m.z + Math.cos(a) * (m.r + 2) };
+        C.tail = rnd(6, 8) * fast; rec(1.1);
+      });
+      if (C.claw <= 0 && dist < m.r + 4.5 && rel < 0.7) add(3, () => {
+        // 앞발 할퀴기: 코앞에 선 사람을
+        const p = { x: m.x + Math.sin(m.ry) * (m.r + 2), z: m.z + Math.cos(m.ry) * (m.r + 2) };
         dSkill(m, { k: 'claw', sh: 'c', x: p.x, z: p.z, r: 4.2, tele: 1.0, mul: 1.6, block: true });
-        m.ry = a; C.claw = rnd(5, 7) * fast;
-      } else if (dist > m.r + 3.4) moveToward(m, t.x, t.z, ph === 3 ? 3.4 : 2.7);
-      else if (m.atkCd <= 0) { m.windup = 0.6; m.biteTo = t.id; }
+        C.claw = rnd(4.5, 6.5) * fast; rec(.9);
+      });
+      if (m.atkCd <= 0 && dist < m.r + 3.6 && front) add(2, () => { m.windup = 0.6; m.biteTo = t.id; m.atkCd = 2.2 * fast; });
+      /* 막 싸움을 시작했거나 기술을 막 썼으면 조금 쉬고, 아니면 고른다 (가끔은 바로 안 쓰고 노려보며 다가온다) */
+      if (opts.length && (m.atkCd2 || 0) <= 0) {
+        let sum = 0; for (const o of opts) sum += o[0]; let r = Math.random() * sum; for (const o of opts) { r -= o[0]; if (r <= 0) { o[1](); break; } }
+        m.atkCd2 = rnd(0.2, 0.9) * fast; wClamp(m); return;
+      }
+      m.atkCd2 = (m.atkCd2 || 0) - TICK;
+      /* 걷기: 먼저 몸을 돌리고, 머리가 사람 쪽을 볼 때만 앞으로 걷는다 (옆걸음·뒷걸음 없음) */
+      turnTo(a, (ph === 3 ? 0.17 : 0.13));
+      rel = Math.abs(Math.atan2(Math.sin(a - m.ry), Math.cos(a - m.ry)));
+      if (dist > m.r + 3.2 && rel < 0.9) { const sp = (ph === 3 ? 3.4 : 2.7) * Math.cos(rel) * (m.slowT > 0 ? 0.35 : 1) * TICK, u = Math.min(sp, dist - m.r - 3); m.x += Math.sin(m.ry) * u; m.z += Math.cos(m.ry) * u; }
       wClamp(m);
     }
     // ---------- 일반 몬스터의 작은 기술 (바닥에 경고 표시 → 잠시 뒤 판정) ----------
