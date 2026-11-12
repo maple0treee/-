@@ -91,6 +91,8 @@ for (const f of Object.values(files)) {
   f.etag = '"' + require('crypto').createHash('sha1').update(f.body).digest('base64').slice(0, 20) + '"';   // 바뀌지 않았으면 304로 끝낸다
 }
 
+let NOT_FOUND = null; try { NOT_FOUND = fs.readFileSync(path.join(PUBLIC, 'site', '404.html')); } catch (e) {}
+
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
   if (url === '/health') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('ok v' + VERSION + ' monsters ' + sim.count()); }
@@ -98,7 +100,8 @@ const server = http.createServer((req, res) => {
   if (url === '/index.html') { res.writeHead(301, { Location: '/' }); return res.end(); }   // 같은 페이지는 주소 하나로 (검색 노출)
   const f = files[url];
   if (f && req.headers['if-none-match'] === f.etag) { res.writeHead(304, { ETag: f.etag, 'Cache-Control': f.cache }); return res.end(); }
-  if (!f) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('없는 페이지'); }
+  if (!f && url.length > 1 && url.endsWith('/') && files[url.slice(0, -1)]) { res.writeHead(301, { Location: url.slice(0, -1) }); return res.end(); }   // /about/ → /about
+  if (!f) { const html = /^\/[a-z0-9_-]*$/.test(url) && NOT_FOUND; res.writeHead(404, { 'Content-Type': html ? 'text/html; charset=utf-8' : 'text/plain; charset=utf-8' }); return res.end(html || '없는 페이지'); }   // 페이지 주소처럼 생긴 것은 글 목록이 있는 안내 페이지로
   if (f.raw) {
     const L = f.body.length, m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
     if (m && (m[1] || m[2])) {
