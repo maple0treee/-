@@ -18325,7 +18325,7 @@ function makeCitizens(cx,cz){
   const free=(mx,my,allow)=>PL.wallDist(mx,my)<-6&&PL.waterDepth(mx,my)<=0&&PL.riverDist(mx,my)>MARCUS_RIVER_W/2+2&&!nearHouse(mx,my,1.2)&&!big(mx,my,1,allow)&&PL.hillH(mx,my)<.3;
   /* 한 명 추가. k: 'pl'(길 왕복) 'circ'(원) 'st'(제자리) */
   const add=o=>{o.mode=citFitMode(o.id,o.mode);if(o.sch)for(const q of o.sch)if(q.mode)q.mode=citFitMode(o.id,q.mode);o.type=ti(o.id);delete o.id;o.ph=rnd()*6.28;o.off=rnd()*1000;o.sc=rr(.94,1.08);o.pause=o.pause??(1.5+rnd()*3);o.mode=o.mode||'walk';if(o.mode==='stand'&&rnd()<.7)o.mode=pick(['cross','hips','think','drink','read','point','stretch','pray','shrug','crouch','talk','wave']);o.sp=o.sp??(1.05+rnd()*.5);o.I=null;o.d=1e9;L.push(o);
-    if(typeof chatterAdd==='function'){const tp=CITM.ids[o.type]||'';o.chat=chatterAdd({kind:chatKind(tp),seed:L.length,pos:()=>{const q=o.k==='st'?o:o.q;return q?{x:q.x,y:citGround(q.x,q.z)+(o.y||0),z:q.z}:null;},visible:()=>!!o.I,look:(typeof citStickLook==='function'?citStickLook(tp):{}),pose:'idle',cit:o});
+    if(typeof chatterAdd==='function'){const tp=CITM.ids[o.type]||'';o.chat=chatterAdd({kind:chatKind(tp),seed:L.length,pos:()=>{const q=o.k==='st'?o:o.q;return q?{x:q.x,y:citGround(q.x,q.z)+(o.y||0),z:q.z}:null;},xz:()=>o.k==='st'?o:o.q,visible:()=>!!o.I,look:(typeof citStickLook==='function'?citStickLook(tp):{}),pose:'idle',cit:o});
       /* 성격에 따라 걸음 빠르기·쉬는 시간이 다르다 (길 위 일정도 그에 맞춰 다시 잰다) */
       const pp=o.pp=CHATTER[o.chat].pp;if(pp){o.sp*=pp.sp;o.pause*=pp.pause;
         if(o.k==='rt'){let P=0;for(const it of o.sch){if(it.t==='w')it.dur=it.L/o.sp;else it.dur*=pp.pause;it.st=P;P+=it.dur;}o.P=P;}}}   /* 말 걸 수 있는 사람으로 */
@@ -18792,6 +18792,9 @@ function crowdYield(c,G,dt){let ox=0,oz=0;if(typeof CCAR!=='undefined'&&CCAR.rea
   c.yx=(c.yx||0)+(ox-(c.yx||0))*Math.min(1,dt*6);c.yz=(c.yz||0)+(oz-(c.yz||0))*Math.min(1,dt*6);G.position.x+=c.yx;G.position.z+=c.yz;}
 /* 매 프레임: 가까운 사람은 모델, 중간은 스프라이트 */
 let _cwT=0;
+/* 지금 카메라에 보이는 범위 (화면 밖 주민은 팔다리 자세를 계산하지 않는다. 다시 보이면 그 프레임에 자세를 새로 잡는다) */
+const _cFr=new THREE.Frustum(),_cFrM=new THREE.Matrix4(),_cSph=new THREE.Sphere(),_cSphV=new THREE.Vector3();
+function crowdFrustum(){if(typeof camera==='undefined'||!camera)return null;camera.updateMatrixWorld();_cFrM.copy(camera.matrixWorld).invert().premultiply(camera.projectionMatrix);return _cFr.setFromProjectionMatrix(_cFrM);}
 function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()/1000-CIT_T0;crowdHoldTick(dt,t);
   const OLD=CIT_OLD(),back=I=>{scene.remove(I.g);(I.stick?M.spool:CITM.pool)[I.id].push(I);};
   if(!inM){if(M.mesh.visible)M.mesh.visible=false;for(const c of M.list)if(c.I){back(c.I);c.I=null;}return;}
@@ -18820,6 +18823,7 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
     M.aPos.needsUpdate=M.aInf.needsUpdate=M.aF.needsUpdate=true;M.mesh.geometry.instanceCount=n;M.drawn=n;}}
   if(OLD&&M.fU){M.fU.uT.value=t%1000;   /* 셰이더는 float32라 큰 시각을 그대로 주면 걸음 위상이 몇 초씩 뚝뚝 끊긴다 */
   M.fU.uDT.value=Math.min(.5,t-(M.fT||t));}
+  const FR=crowdFrustum();
   for(const c of M.list){if(!c.I)continue;const q=refresh?c.q:citQ(c,t);const G=c.I.g;G.position.set(q.x,citGround(q.x,q.z)+(c.y||0)+((q.mode||c.mode)==='sit'?-.53:0),q.z);   /* 앉은 막대 주민: 엉덩이가 벤치 앉는 면(0.6m)에 닿게 */
     const mode=q.mode||c.mode,walking=!q.mode&&(c.mode==='walk'||c.mode==='carry'||c.mode==='shoulder');const vk=q.v??1;
     /* 실제로 움직인 속도(지난 프레임 자리에서 잼): 다리 걸음은 이 속도에 맞춘다 */
@@ -18828,7 +18832,7 @@ function crowdTick(dt,p,inM){const M=CROWD;if(!M.ready)return;const t=Date.now()
     const tr=mv>.05?Math.abs(dr)*7+2.2:Math.abs(dr)*4.5+1.2;G.rotation.y+=Math.sign(dr)*Math.min(Math.abs(dr),dt*tr);   /* 사람처럼 천천히 돌아선다 (걷는 중엔 길을 따라 얼른 몸을 튼다) */
     const scl=c._scl||(c._scl=c.sc*(CIT_SMALL(c.type)?.7:1)),turnIn=walking&&mv<.05&&Math.abs(dr)>.35;   /* 제자리에서 돌아설 땐 잔걸음 */
     c.w=(c.w??0)+((mv>.01?stickStride(mv,scl):turnIn?.16:0)-(c.w??0))*Math.min(1,dt*6);
-    if(c.I.stick){crowdYield(c,G,dt);if(walking||c.w>.05){const st=c.pp?c.pp.st:1;if(mv>.01)c.ph+=dt*Math.min(14,stickCadence(mv,Math.max(.05,c.w),st,scl));else if(turnIn)c.ph+=dt*Math.min(9,Math.abs(dr)*6+3);stickWalkPose(G,c.ph,c.w,t+c.off,c.pp);}else{const nr=c.nearY!=null?c.pp.near:null,pm=c.hold?mode:nr||citPersonaMode(c,mode,q,t),sp2=CIT_STICK_POSE[pm]||'idle';stickNpcPose(G,sp2,t+c.off);citPersonaIdle(G,c.pp,t+c.off,sp2);}const hu=G.userData.hunch;if(hu){const S=G.userData.stick;S.upper.rotation.x+=hu;S.head.rotation.x-=hu*.7;}if(CIT_SMALL(c.type)&&G.scale.x>.8)G.scale.setScalar(c.sc*.7);continue;}
+    if(c.I.stick){crowdYield(c,G,dt);const see=c.I.sh||!FR||FR.intersectsSphere(_cSph.set(_cSphV.set(G.position.x,G.position.y+1,G.position.z),1.8));if(walking||c.w>.05){const st=c.pp?c.pp.st:1;if(mv>.01)c.ph+=dt*Math.min(14,stickCadence(mv,Math.max(.05,c.w),st,scl));else if(turnIn)c.ph+=dt*Math.min(9,Math.abs(dr)*6+3);if(see)stickWalkPose(G,c.ph,c.w,t+c.off,c.pp);}else if(see){const nr=c.nearY!=null?c.pp.near:null,pm=c.hold?mode:nr||citPersonaMode(c,mode,q,t),sp2=CIT_STICK_POSE[pm]||'idle';stickNpcPose(G,sp2,t+c.off);citPersonaIdle(G,c.pp,t+c.off,sp2);}const hu=see&&G.userData.hunch;if(hu){const S=G.userData.stick;S.upper.rotation.x+=hu;S.head.rotation.x-=hu*.7;}if(CIT_SMALL(c.type)&&G.scale.x>.8)G.scale.setScalar(c.sc*.7);continue;}
     if(walking||c.w>.05){if(q.walk)c.ph+=dt*c.sp*4.2*Math.max(.3,vk);citPoseBones(c.I,c.ph,c.w,t+c.off,c.mode==='walk'||c.w<.05&&c.mode!=='carry'?'walk':c.mode);}
     else{c.ph+=dt*(mode==='hoe'?3.2:mode==='hammer'?4.5:mode==='reap'?2:1.5)*(c.v?c.v.tempo:1);citPoseBones(c.I,c.ph,0,t+c.off,mode);}}}
 let _mcT=0;
@@ -19442,7 +19446,7 @@ function drawRealmPlan(c,X,Z,sc,I){const R=REALM[I.id];if(!R)return;const PL=R.p
   c.strokeStyle='#8a7a5a';c.lineWidth=Math.max(1,1.2*sc);for(const [ax,az,bx,bz] of PL.fences){c.beginPath();c.moveTo(mX(ax),mZ(az));c.lineTo(mX(bx),mZ(bz));c.stroke();}
   c.strokeStyle='#6e6860';c.lineWidth=Math.max(2,3*sc);for(const [ax,az,bx,bz] of PL.walls){c.beginPath();c.moveTo(mX(ax),mZ(az));c.lineTo(mX(bx),mZ(bz));c.stroke();}}
 function drawRealmLabels(c,X,Z,sc,I){const R=REALM[I.id];if(!R)return;c.save();c.textAlign='center';c.textBaseline='middle';c.lineJoin='round';
-  const bw=c.canvas.getBoundingClientRect?c.canvas.getBoundingClientRect().width:0,k=bw>0?c.canvas.width/bw:1;
+  const bw=cvBW(c.canvas),k=bw>0?c.canvas.width/bw:1;
   for(const z of R.plan.zones){const fs=Math.round((z.kind==='village'||z.kind==='fort'?13:11)*k);c.font=`700 ${fs}px "KMUSunggokSemiSerif","Gowun Batang","Nanum Myeongjo",serif`;const px=Math.round(X(I.x+z.x)),py=Math.round(Z(I.z+z.y));
     c.lineWidth=3.2*k;c.strokeStyle='rgba(28,20,12,.88)';c.strokeText(z.name,px,py);c.fillStyle='#fff3dc';c.fillText(z.name,px,py);}
   c.restore();}
@@ -21242,7 +21246,7 @@ function drawKhqPlan(c,X,Z,sc,I,fl){const cx=I.x,cz=I.z,{HW,HD,T,NX,CZ,YX}=KHQ,I
   c.strokeStyle='#4a4038';c.lineWidth=lw(T);c.strokeRect(x(-HW+T/2),z(-HD+T/2),(HW*2-T)*sc,(HD*2-T)*sc);
   if(fl===1){R(-1.7,HD-T-.1,1.7,HD+.1,'#ddd5c4');R(HW-T-.1,7.7,HW+.1,10.3,'#c4ae7e');}}
 function drawKhqLabels(c,X,Z,sc,I,fl,mini){c.save();c.textAlign='center';c.textBaseline='middle';c.lineJoin='round';
-  const bw=c.canvas.getBoundingClientRect?c.canvas.getBoundingClientRect().width:0,k=bw>0?c.canvas.width/bw:1,fs=Math.round((mini?8.5:11)*k),cx=I.x,cz=I.z,HD=KHQ.HD;
+  const bw=cvBW(c.canvas),k=bw>0?c.canvas.width/bw:1,fs=Math.round((mini?8.5:11)*k),cx=I.x,cz=I.z,HD=KHQ.HD;
   const T=(t,a,b,col)=>{const px=X(cx+a),py=Z(cz+b);c.font=`700 ${fs}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*k;c.strokeStyle='rgba(28,20,12,.9)';c.strokeText(t,px,py);c.fillStyle=col||'#fff3dc';c.fillText(t,px,py);};
   const S=fl===1?[['대회당',0,-4],['원탁',0,6.6],['단',0,-14.2],['무기고',-15,-13.2],['작전실',15,-14.4],['명예의 벽',15.4,6.6],['계단',-19.8,9.2],['정문',0,HD+2.6,'#ffe08a']]
     :[['기록실',-15,-8],['악대석',0,14.6],['기도실',15,6.4],['단장실',15.2,-10],['계단',-19.8,9.2]];
@@ -22196,7 +22200,7 @@ function drawHLodgePlan(c,X,Z,sc,I,fl){const cx=I.x,cz=I.z,{IW,ZB,ZF,LX,ZP,SA,SB
   for(const sd of [-1,1]){Ln(sd*LX,ZB,sd*LX,fl===1?4.35:-5.5,WALL,.3);Ln(sd*LX,fl===1?5.65:-4.3,sd*LX,ZF,WALL,.3);}
   if(fl===1)R(-1.2,ZP-.3,1.2,ZP+.3,'#e8d0a0');}
 function drawHLodgeLabels(c,X,Z,sc,I,fl,mini){c.save();c.textAlign='center';c.textBaseline='middle';c.lineJoin='round';
-  const bw=c.canvas.getBoundingClientRect?c.canvas.getBoundingClientRect().width:0,k=bw>0?c.canvas.width/bw:1,fs=Math.round((mini?8.5:11)*k),cx=I.x,cz=I.z,ZP=HLODGE.ZP;
+  const bw=cvBW(c.canvas),k=bw>0?c.canvas.width/bw:1,fs=Math.round((mini?8.5:11)*k),cx=I.x,cz=I.z,ZP=HLODGE.ZP;
   const T=(t,a,b,col)=>{const px=X(cx+a),py=Z(cz+b);c.font=`700 ${fs}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*k;c.strokeStyle='rgba(28,20,12,.9)';c.strokeText(t,px,py);c.fillStyle=col||'#fff3dc';c.fillText(t,px,py);};
   const S=fl===1?[['로비',0,1],['벽난로',0,-3.8],['접수대',-4.9,2.6],['식당',13,.95],['서재',-13,-2.6],['계단',6.6,0],['정문',0,ZP+1.6,'#ffe08a']]
     :fl===2?[['회랑',0,-4.4],['복도',13,-4.9],['복도',-13,-4.9],['203호',10.2,1],['계단',-6.6,0]]
@@ -23200,7 +23204,12 @@ function chatKind(type){if(!type)return 'common';
     ['worker','worker'],['bard','bard'],['beggar','beggar'],['granny','elder'],['elder','elder'],['boy','kid'],['girl','kid'],['youth','youth']];
   for(const [k,v] of T)if(type.includes(k))return v;return 'common';}
 function poseKind(pose){const P=String(pose||'');const T=[['hammer','smith'],['chess','chess'],['chin','chess'],['paint','painter'],['canvas','painter'],['lute','musician'],['flute','musician'],['juggle','juggler'],['sculpt','sculptor'],['chisel','sculptor'],['chalk','chalk'],['carry','worker'],['chop','worker'],['dig','worker'],['saw','worker']];for(const [k,v] of T)if(P.includes(k))return v;return 'common';}
-function chatterNear(){if(!player)return -1;const q=player.position;let b=-1,bd=2.6;for(let i=0;i<CHATTER.length;i++){const c=CHATTER[i];if(c.visible&&!c.visible())continue;const p=c.pos();if(!p||Math.abs(p.y-q.y)>2.5)continue;const d=Math.hypot(p.x-q.x,p.z-q.z);if(d<bd){bd=d;b=i;}}return b;}
+/* 말 걸 사람 찾기: 0.25초마다 12m 안의 사람만 추려 두고, 프레임마다 그 사람들만 잰다 (엑시즈에는 2,500명이 넘어 매 프레임 다 돌았다) */
+const _chC={t:-9,x:0,z:0,L:[]};
+function chatterNear(){if(!player)return -1;const q=player.position;let b=-1,bd=2.6;
+  if(tAll-_chC.t>=.25||Math.abs(q.x-_chC.x)>4||Math.abs(q.z-_chC.z)>4){_chC.t=tAll;_chC.x=q.x;_chC.z=q.z;const L=_chC.L;L.length=0;
+    for(let i=0;i<CHATTER.length;i++){const c=CHATTER[i];const w=c.xz?c.xz():c.pos();if(w&&Math.abs(w.x-q.x)<12&&Math.abs(w.z-q.z)<12)L.push(i);}}
+  for(const i of _chC.L){const c=CHATTER[i];if(c.visible&&!c.visible())continue;const p=c.pos();if(!p||Math.abs(p.y-q.y)>2.5)continue;const d=Math.hypot(p.x-q.x,p.z-q.z);if(d<bd){bd=d;b=i;}}return b;}
 const CHAT_ROLE={server:'서빙 직원',guild:'길드 손님',merchant:'상인',vendor:'장사꾼',baker:'빵집 주인',flower:'꽃 파는 이',weaver:'직조공',apothecary:'약사',herbalist:'약초꾼',innkeeper:'여관 주인',cook:'요리사',butcher:'정육점 주인',guard:'경비병',knight:'기사',merc:'용병',archer:'궁수',squire:'종자',hunter:'사냥꾼',noble:'귀족',lady:'귀부인',rich:'부자',clerk:'서기',scribe:'필경사',scholar:'학자',nurse:'간호사',maid:'하녀',laundress:'세탁부',wife:'아낙',fishwife:'생선 장수',milkmaid:'우유 짜는 처녀',seamstress:'재봉사',tailor:'재단사',cooper:'통장이',mason:'석공',carpenter:'목수',smith:'대장장이',stablehand:'마부',farmer:'농부',shepherd:'양치기',sailor:'뱃사람',fisher:'어부',dock:'부두 일꾼',porter:'짐꾼',courier:'전령',lamplighter:'등불지기',worker:'일꾼',bard:'음유시인',beggar:'거지',elder:'노인',oldknight:'늙은 기사',kid:'아이',youth:'젊은이',common:'주민',chess:'체스 두는 노인',painter:'화가',musician:'악사',juggler:'곡예사',sculptor:'조각가',chalk:'분필 화가'};
 /* 대화창에 쓸 임시 인물: 이름은 역할, 초상화는 그 사람의 막대 인형 */
 function chatPerson(c,k){const p=c.pos();return {id:'chat'+k,voice:citVoice(c),name:c.name||CHAT_ROLE[c.kind]||'주민',role:c.role||'',x:p.x,z:p.z,look:c.look||{},lines:[],acts:[],noTalk:true,stickPortrait:true,pose:c.pose,fem:typeof citFem==='function'&&citFem(c)};}
@@ -24801,7 +24810,7 @@ function makeWagon(o={}){
     update(dt,speed){W.t+=dt;W.speed=speed;W.dist+=speed*dt;
       for(const q of W.wheels)q.w.rotation.x=W.dist/q.r;
       const trot=Math.min(1,speed/4),gait=W.dist*1.55;
-      if(W.mh){W.g.updateMatrixWorld(true);const wp=W.pitch||0;if(!_hv)_hv=new THREE.Vector3();
+      if(W.mh){W.g.updateWorldMatrix(true,false);const wp=W.pitch||0;if(!_hv)_hv=new THREE.Vector3();
         for(const Hh of W.mh){Hh.set(speed,dt);
           /* 땅 높이를 따라간다: 말 앞발·뒷발 자리의 땅 높이로 높이와 기울기를 맞춘다 */
           const hx=Hh.g.position.x,hz=Hh.g.position.z;_hv.set(hx,0,hz+1.0);W.g.localToWorld(_hv);const hf=heightAt(_hv.x,_hv.z);_hv.set(hx,0,hz-.9);W.g.localToWorld(_hv);const hb=heightAt(_hv.x,_hv.z);
@@ -24812,7 +24821,7 @@ function makeWagon(o={}){
           const s=Math.sin(p+off);L.hip.rotation.x=s*.42*trot;L.knee.rotation.x=Math.max(0,Math.sin(p+off+(L.fr?1.2:-1.2)))*(L.fr?.9:-.7)*trot*(L.fr?1:1);}
         H.torso.position.y=Math.abs(Math.sin(p))*.05*trot;H.neck.rotation.x=Math.sin(p*2)*.06*trot+Math.sin(W.t*.7+H.ph)*.05*(1-trot);
         H.head.rotation.x=Math.sin(W.t*.9+H.ph*2)*.08*(1-trot)+.05;H.tail.rotation.z=Math.sin(W.t*1.3+H.ph)*.25;H.tail.rotation.x=.2+Math.sin(W.t*.8)*.1+trot*.35;}
-      if(W.ropes&&W.g.visible){W.g.updateMatrixWorld(true);const a=_rv1||(_rv1=new THREE.Vector3()),b=_rv2||(_rv2=new THREE.Vector3()),up=_rv3||(_rv3=new THREE.Vector3(0,1,0));
+      if(W.ropes&&W.g.visible){W.g.updateWorldMatrix(true,false);const a=_rv1||(_rv1=new THREE.Vector3()),b=_rv2||(_rv2=new THREE.Vector3()),up=_rv3||(_rv3=new THREE.Vector3(0,1,0));
         for(const R of W.ropes){R.a.getWorldPosition(a);W.g.worldToLocal(a);b.copy(R.b);const L=a.distanceTo(b);R.m.position.copy(a).add(b).multiplyScalar(.5);R.m.scale.set(1,L,1);R.m.quaternion.setFromUnitVectors(up,b.sub(a).normalize());}}
       W.body.position.y=Math.abs(Math.sin(W.dist*1.7))*.03*trot;W.body.rotation.z=Math.sin(W.dist*.9)*.012*trot;
       if(W.driver&&W.driver.stick){stickNpcPose(W.driver.g,'drive',W.t);W.driver.g.position.y=W.driverSeat.y-.5;}
@@ -30395,6 +30404,7 @@ function updateBuffBar(){
       el.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true">${ic[1]}</svg><i></i><b></b>`;el.title=BUFF_NAME[k]||k;bar.appendChild(el);buffEls[k]=el;}
     const f=Math.max(0,Math.min(1,1-b.t/b.max));el.querySelector('i').style.height=(f*100)+'%';
     el.querySelector('b').textContent=k==='fam'?'×'+(P.famN||0):k==='vet'?'×'+(P.vetN||0):b.t>=10?Math.ceil(b.t):b.t.toFixed(0);el.classList.toggle('end',b.t<3);}
+  if(!keys.length)return;const now=performance.now();if(now-(updateBuffBar.t||-1e9)<500&&updateBuffBar.n===keys.length)return;updateBuffBar.t=now;updateBuffBar.n=keys.length;   /* 단축바 자리는 0.5초마다만 잰다 (잴 때마다 화면 배치를 다시 계산한다) */
   const hb=$('#hotbar').getBoundingClientRect();
   bar.style.left=Math.round(hb.left)+'px';bar.style.bottom=Math.round(innerHeight-hb.top+6)+'px';
 }
@@ -31082,7 +31092,8 @@ function drawHechilPlan(c,X,Z,sc,I){const Q=hechZoneImg(I.id),raw=c.__raw||c,M=O
   if(M&&M.lake)lab('얼음 호수',M.lake.x,M.lake.z,10);if(M&&M.hut)lab('산장',M.hut.x-1,M.hut.z,10);
   raw.restore();}
 const drawHCavePlan=drawHechilPlan;
-function drawIslePlan(c,X,Z,sc,I,skipName){const Zd=ZONES[I.id];
+/* part: 'base' 바뀌지 않는 바탕만(미니맵 조각 그림용), 'live' 그 위에 움직이는 것·이름만, 없으면 전부 */
+function drawIslePlan(c,X,Z,sc,I,skipName,part){const Zd=ZONES[I.id],pB=part!=='live',pL=part!=='base';if(pB){
   c.fillStyle=I.id==='kaolis'?'#1f4e6e':I.id==='subcus'?'#0e0c12':OR.HCH.fam(I.id)==='cave'?'#1c222a':'#d6c49a';c.fillRect(-9999,-9999,99999,99999);
   c.fillStyle=Zd.mm;c.beginPath();if(I.id==='marcus'){for(let i=0;i<=96;i++){const a=i/96*Math.PI*2,r=OR.isleEdge(I,a);i?c.lineTo(X(I.x+Math.cos(a)*r),Z(I.z+Math.sin(a)*r)):c.moveTo(X(I.x+Math.cos(a)*r),Z(I.z+Math.sin(a)*r));}c.closePath();}else c.arc(X(I.x),Z(I.z),I.R*sc,0,7);c.fill();   /* 엑시즈 땅은 성벽을 따라 들쭉날쭉 */
   if(I.id==='marcus'){const PL=marcusPlan(),ox=I.x,oz=I.z,mX=v=>X(ox+v),mZ=v=>Z(oz+v);
@@ -31111,7 +31122,7 @@ function drawIslePlan(c,X,Z,sc,I,skipName){const Zd=ZONES[I.id];
     /* 시내 마차 길: 점선 고리, 정류장 점, 달리는 마차 */
     if(typeof CCAR!=='undefined'&&CCAR.ready&&CCAR.pts){c.save();c.strokeStyle='#f0c860';c.lineWidth=Math.max(1.5,2.2*sc);c.setLineDash([Math.max(3,6*sc),Math.max(2,4*sc)]);c.beginPath();for(let i=0;i<CCAR.pts.length;i+=4){const q=CCAR.pts[i];i?c.lineTo(X(q[0]),Z(q[1])):c.moveTo(X(q[0]),Z(q[1]));}c.closePath();c.stroke();c.setLineDash([]);
       c.fillStyle='#f0c860';c.strokeStyle='#3a2a12';c.lineWidth=1.2;for(const st of CCAR.stops){const [qx,qz]=ccarLanePoint(st.s);c.beginPath();c.arc(X(qx),Z(qz),Math.max(2.6,.9*sc),0,7);c.fill();c.stroke();}
-      c.fillStyle='#fff0c0';for(const car of CCAR.cars){if(car.x==null)continue;c.save();c.translate(X(car.x),Z(car.z));c.rotate(-car.ry);const w=Math.max(3,1.1*sc),h=Math.max(5,2.2*sc);c.fillRect(-w/2,-h/2,w,h);c.strokeRect(-w/2,-h/2,w,h);c.restore();}c.restore();}}
+      if(pL){c.fillStyle='#fff0c0';for(const car of CCAR.cars){if(car.x==null)continue;c.save();c.translate(X(car.x),Z(car.z));c.rotate(-car.ry);const w=Math.max(3,1.1*sc),h=Math.max(5,2.2*sc);c.fillRect(-w/2,-h/2,w,h);c.strokeRect(-w/2,-h/2,w,h);c.restore();}}c.restore();}}
   else if(OR.HCH.fam(I.id)==='out')drawHechilPlan(c,X,Z,sc,I);
   else if(OR.HCH.fam(I.id)==='cave')drawHCavePlan(c,X,Z,sc,I);
   else if(typeof REALM!=='undefined'&&REALM[I.id])drawRealmPlan(c,X,Z,sc,I);
@@ -31121,11 +31132,13 @@ function drawIslePlan(c,X,Z,sc,I,skipName){const Zd=ZONES[I.id];
   else if(I.id==='khq')drawKhqPlan(c,X,Z,sc,I,khqFloor());
   else if(I.id==='hlodge')drawHLodgePlan(c,X,Z,sc,I,hlodgeFloor());
   else{c.strokeStyle=I.id==='kaolis'?'#2a6a8a':'#4a433b';c.lineWidth=Math.max(3,1.6*sc);c.beginPath();c.arc(X(I.x),Z(I.z),(I.R+1.5)*sc,0,7);c.stroke();}
-  c.fillStyle='#8a6a4a';for(const h of MAP_HOUSES)if(Math.hypot(h.x-I.x,h.z-I.z)<I.R){c.fillRect(X(h.x)-h.r*sc,Z(h.z)-h.r*sc,h.r*2*sc,h.r*2*sc);}
+  c.fillStyle='#8a6a4a';for(const h of MAP_HOUSES)if(Math.hypot(h.x-I.x,h.z-I.z)<I.R){c.fillRect(X(h.x)-h.r*sc,Z(h.z)-h.r*sc,h.r*2*sc,h.r*2*sc);}}
+  if(!pB&&I.id==='marcus'&&typeof CCAR!=='undefined'&&CCAR.ready&&CCAR.pts){c.save();c.strokeStyle='#3a2a12';c.lineWidth=1.2;c.fillStyle='#fff0c0';for(const car of CCAR.cars){if(car.x==null)continue;c.save();c.translate(X(car.x),Z(car.z));c.rotate(-car.ry);const w=Math.max(3,1.1*sc),h=Math.max(5,2.2*sc);c.fillRect(-w/2,-h/2,w,h);c.strokeRect(-w/2,-h/2,w,h);c.restore();}c.restore();}   /* 조각 그림 위에 달리는 마차만 */
+  if(pL){
   for(const p of PORTALS)if(Math.hypot(p.x-I.x,p.z-I.z)<I.R&&!p.door&&portalSeen(p))drawPortalIcon(c,X(p.x),Z(p.z),Math.max(5,1.4*sc));
   for(const m of monsters)if(m.dying===null&&Math.hypot(m.mesh.position.x-I.x,m.mesh.position.z-I.z)<I.R+5){const gap=m.lv-(P?P.lv:1);c.fillStyle=gap>=6?'#ff2a2a':gap>2?'#ff8a5a':'#e0533f';c.beginPath();c.arc(X(m.mesh.position.x),Z(m.mesh.position.z),Math.max(3.6,.9*sc),0,7);c.fill();}
   c.fillStyle='#9fd3e6';for(const o of others.values())if(I.id!=='guildhall'&&Math.hypot(o.mesh.position.x-I.x,o.mesh.position.z-I.z)<I.R+5){c.beginPath();c.arc(X(o.mesh.position.x),Z(o.mesh.position.z),5,0,7);c.fill();}
-  if(I.id==='marcus')drawMarcusLabels(c,X,Z,sc,I,skipName);else if(typeof REALM!=='undefined'&&REALM[I.id])drawRealmLabels(c,X,Z,sc,I);else if(I.id==='exmarket')drawMarketLabels(c,X,Z,sc,I);else if(I.id==='guildhall')drawGuildLabels(c,X,Z,sc,I,ghViewFl(c),(c.__raw||c)===mctx);else if(I.id==='library')drawLibraryLabels(c,X,Z,sc,I,libFloor(),(c.__raw||c)===mctx);else if(I.id==='khq')drawKhqLabels(c,X,Z,sc,I,khqFloor(),(c.__raw||c)===mctx);else if(I.id==='hlodge')drawHLodgeLabels(c,X,Z,sc,I,hlodgeFloor(),(c.__raw||c)===mctx);}
+  if(I.id==='marcus')drawMarcusLabels(c,X,Z,sc,I,skipName);else if(typeof REALM!=='undefined'&&REALM[I.id])drawRealmLabels(c,X,Z,sc,I);else if(I.id==='exmarket')drawMarketLabels(c,X,Z,sc,I);else if(I.id==='guildhall')drawGuildLabels(c,X,Z,sc,I,ghViewFl(c),(c.__raw||c)===mctx);else if(I.id==='library')drawLibraryLabels(c,X,Z,sc,I,libFloor(),(c.__raw||c)===mctx);else if(I.id==='khq')drawKhqLabels(c,X,Z,sc,I,khqFloor(),(c.__raw||c)===mctx);else if(I.id==='hlodge')drawHLodgeLabels(c,X,Z,sc,I,hlodgeFloor(),(c.__raw||c)===mctx);}}
 /* 중앙 시장 평면도: 광장·회랑·분수·좌판·문, 그리고 가게마다 이름표 */
 function drawMarketPlan(c,X,Z,sc,I){const PL=marcusPlan(),m=PL.zone('market'),W=m.w,D=m.h,cx=I.x,cz=I.z;
   c.fillStyle='#8a9a62';c.fillRect(X(cx-W/2-24),Z(cz-D/2-24),(W+48)*sc,(D+48)*sc);
@@ -31151,7 +31164,7 @@ function drawShopIcon(c,kind){c.lineCap='round';c.lineJoin='round';
     case 'magic':c.fillStyle='#f3d878';c.beginPath();c.arc(-1.5,-1,5.5,.9,5.4);c.arc(.6,-2.2,4.4,5.2,1.1,true);c.closePath();c.fill();for(const [x,y,r] of [[4.5,-5,1.3],[5.5,1.5,.9],[2.5,4.5,.8]]){c.beginPath();for(let k=0;k<8;k++){const a=k/8*6.283,rr=k%2?r*.4:r*1.5;c.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr);}c.closePath();c.fill();}break;   /* 초승달과 별 */
     case 'stable':c.strokeStyle='#d8d8e0';c.lineWidth=2.4;c.beginPath();c.arc(0,-.5,5.5,.6,Math.PI-.6,true);c.stroke();c.fillStyle='#d8d8e0';for(const s of [-1,1])c.fillRect(s*4.6-1.2,3.2,2.4,2.4);c.fillStyle='#4a3a2a';for(const a of [-1.2,-.4,.4,1.2]){c.beginPath();c.arc(Math.sin(a)*5.5,-.5-Math.cos(a)*5.5,.7,0,7);c.fill();}break;}}   /* 편자 */
 function drawMarketLabels(c,X,Z,sc,I){c.save();c.textAlign='center';c.textBaseline='middle';c.lineJoin='round';
-  const bw=c.canvas.getBoundingClientRect?c.canvas.getBoundingClientRect().width:0,k=bw>0?c.canvas.width/bw:1,fs=Math.round(11*k);
+  const bw=cvBW(c.canvas),k=bw>0?c.canvas.width/bw:1,fs=Math.round(11*k);
   /* 가게는 글자 대신 그림표: 칼(전사)·지팡이(마법사)·단검(도적)·활(궁수)·모루(대장간)·편자(마구간) */
   const R=Math.max(5,5.5*k);   /* 가게 그림표: 작게 (가게끼리 가까워 크면 서로 덮였다) */
   const MD=EXM.magicDoor,marks=NPCS.filter(n=>/^ex_(war|mag|rog|arc|smith|stable|book|goods)$/.test(n.id)&&n.mesh).map(n=>[n.mesh.position.x,n.mesh.position.z,n.id.slice(3)]);if(MD)marks.push([MD.x,MD.z-3.8,'magic']);
@@ -31221,7 +31234,7 @@ function drawGuildPlan(c,X,Z,sc,I,fl){const cx=I.x,cz=I.z,{HW,HD}=GHALL,T=.6,IN=
   for(const n of NPCS){const q=n.mesh?n.mesh.position:{x:n.x,y:n.y||0,z:n.z};if(inI(q.x,q.z)&&flOf(q.y)===fl&&!(n.hideIf&&n.hideIf()))O(q.x-cx,q.z-cz,.55,'#f3cf6a');}
   for(const o of others.values()){const q=o.mesh.position;if(inI(q.x,q.z)&&flOf(q.y)===fl)O(q.x-cx,q.z-cz,.6,'#9fd3e6');}}
 function drawGuildLabels(c,X,Z,sc,I,fl,mini){c.save();c.textAlign='center';c.textBaseline='middle';c.lineJoin='round';
-  const bw=c.canvas.getBoundingClientRect?c.canvas.getBoundingClientRect().width:0,k=bw>0?c.canvas.width/bw:1,fs=Math.round((mini?8.5:11)*k),cx=I.x,cz=I.z,HD=GHALL.HD;
+  const bw=cvBW(c.canvas),k=bw>0?c.canvas.width/bw:1,fs=Math.round((mini?8.5:11)*k),cx=I.x,cz=I.z,HD=GHALL.HD;
   const T=(t,a,b,col)=>{const px=X(cx+a),py=Z(cz+b);c.font=`700 ${fs}px "KMUSunggokSemiSerif","Gowun Batang",serif`;c.lineWidth=3*k;c.strokeStyle='rgba(28,20,12,.9)';c.strokeText(t,px,py);c.fillStyle=col||'#fff3dc';c.fillText(t,px,py);};
   const S=[];
   if(fl===1)S.push(['접수대',0,-10.6],['의뢰 게시판',-11.2,HD-2],['술집',14.2,-7.2],['벽난로',-15.5,-7.6],['큰 홀',0,0],['계단 (2층으로)',-17.9,-4.4],['정문 (시내로)',0,HD+2.6,'#ffe08a'],['뒷문 (훈련장)',-11,-HD-2.4,'#ffe08a'],['지하 창고 문',11,-HD+2]);
@@ -31238,7 +31251,7 @@ function drawGuildLabels(c,X,Z,sc,I,fl,mini){c.save();c.textAlign='center';c.tex
 // 마르쿠스 이름표 (설계도의 이름과 자리)
 function drawMarcusLabels(c,X,Z,sc,I,skipName){   /* skipName: 지도 맨 위 제목으로 이미 쓴 장소 이름은 다시 쓰지 않는다 */
   const PL=marcusPlan();c.save();c.textAlign='center';c.textBaseline='middle';c.lineJoin='round';
-  const bw=c.canvas.getBoundingClientRect?c.canvas.getBoundingClientRect().width:0,k=bw>0?c.canvas.width/bw:1;
+  const bw=cvBW(c.canvas),k=bw>0?c.canvas.width/bw:1;
   const L=[];for(const z of PL.zones){if(z.nolabel||(skipName&&z.name===skipName))continue;let x,y;if(z.lx!==undefined){x=z.lx;y=z.ly;}else if(z.shape==='poly'){x=z.pts.reduce((a,p)=>a+p[0],0)/z.pts.length;y=z.pts.reduce((a,p)=>a+p[1],0)/z.pts.length;}else{x=z.x;y=z.y;}L.push([z.name,x,y,/palace|plaza|market|harbor|guild/.test(z.kind)]);}
   for(const g of PL.gates)L.push([g.name,g.x+Math.cos(g.out)*18,g.y+Math.sin(g.out)*18,true]);
   for(const [n,x,y,big] of L){const fs=Math.round((big?13:11)*k);c.font=`700 ${fs}px "KMUSunggokSemiSerif","Gowun Batang","Nanum Myeongjo",serif`;const px=Math.round(X(I.x+x)),py=Math.round(Z(I.z+y));
@@ -31277,12 +31290,29 @@ function drawHuntMini(I){const S=264,VR=235,sc=S/(2*VR),X=v=>S/2+(v-I.x)*sc,Z=v=
   const x=X(player.position.x),y=Z(player.position.z);c.translate(x,y);c.rotate(-player.rotation.y);c.fillStyle='#fff';c.strokeStyle='#1b1712';c.lineWidth=2;
   c.beginPath();c.moveTo(0,10);c.lineTo(-7,-7);c.lineTo(0,-3);c.lineTo(7,-7);c.closePath();c.stroke();c.fill();
   c.restore();}
+/* 엑시즈 미니맵 바탕(길·구역·집 등 바뀌지 않는 것)은 땅에 붙은 조각 그림으로 한 번만 그려 두고, 프레임마다 그 위에 움직이는 것만 그린다
+   (예전에는 1초에 20번 시내 전체를 새로 그리느라 엑시즈에서 한 번에 10ms씩 걸렸다). 조각은 384px, 둘레 3×3을 하나씩 미리 그려 둔다 */
+const MINI_T={px:384,m:new Map(),key:''};
+function miniTile(I,sc,ti,tj){const k=ti+','+tj;let t=MINI_T.m.get(k);if(t){MINI_T.m.delete(k);MINI_T.m.set(k,t);return t;}
+  const TP=MINI_T.px,TW=TP/sc,cv=document.createElement('canvas');cv.width=cv.height=TP;const c=cv.getContext('2d'),X=v=>(v-ti*TW)*sc,Z=v=>(v-tj*TW)*sc;
+  drawIslePlan(mapInk(c,X,Z),X,Z,sc,I,undefined,'base');
+  MINI_T.m.set(k,cv);if(MINI_T.m.size>16)MINI_T.m.delete(MINI_T.m.keys().next().value);return cv;}
+function miniTiles(c,I,sc,px,pz,S){const key=(typeof CCAR!=='undefined'&&CCAR.ready?1:0)+':'+sc+':'+MAP_HOUSES.length;if(key!==MINI_T.key){MINI_T.key=key;MINI_T.m.clear();}
+  const TP=MINI_T.px,TW=TP/sc,x0=px-S/2/sc,z0=pz-S/2/sc,x1=px+S/2/sc,z1=pz+S/2/sc;
+  for(let tj=Math.floor(z0/TW);tj<=Math.floor(z1/TW);tj++)for(let ti=Math.floor(x0/TW);ti<=Math.floor(x1/TW);ti++)
+    c.drawImage(miniTile(I,sc,ti,tj),Math.round(S/2+(ti*TW-px)*sc),Math.round(S/2+(tj*TW-pz)*sc));
+  const ci=Math.floor(px/TW),cj=Math.floor(pz/TW);
+  for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++)if(!MINI_T.m.has((ci+di)+','+(cj+dj))){miniTile(I,sc,ci+di,cj+dj);dj=di=9;}   /* 이웃 조각은 한 번에 하나만 */
+  c.canvas._ink=true;return true;}
+/* 그림판의 화면 위 너비: 1초에 한 번만 잰다 (잴 때마다 화면 배치를 다시 계산해서 미니맵을 그릴 때마다 멈칫했다) */
+let CVBW_G=0;addEventListener('resize',()=>CVBW_G++);
+function cvBW(cv){if(!cv.getBoundingClientRect)return 0;const now=performance.now();if(!(now-(cv._bwT||-1e9)<1000)||cv._bwG!==CVBW_G||!cv._bw){cv._bwT=now;cv._bwG=CVBW_G;cv._bw=cv.getBoundingClientRect().width;}return cv._bw;}
 function drawIsleMini(){
   {const I0=OR.isleAt(player.position.x,player.position.z);if(OPT.mini!=='all'&&OR.MHUNT.includes(I0.id)){drawHuntMini(I0);return;}}
   if(OPT.mini==='all'&&OR.MHUNT.includes(OR.isleAt(player.position.x,player.position.z).id)){const S=264;mctx.save();mctx.clearRect(0,0,S,S);mctx.beginPath();mctx.arc(S/2,S/2,S/2,0,7);mctx.clip();drawMarcusOverview(mctx,S,S,{mini:true});mctx.restore();return;}
   const I=OR.isleAt(player.position.x,player.position.z),S=264,VR=I.id==='guildhall'?24:I.id==='library'?30:I.id==='khq'?30:I.id==='hlodge'?22:70,sc=S/(2*VR),px=player.position.x,pz=player.position.z,X=v=>S/2+(v-px)*sc,Z=v=>S/2+(v-pz)*sc;
   mctx.save();mctx.clearRect(0,0,S,S);mctx.beginPath();mctx.arc(S/2,S/2,S/2,0,7);mctx.clip();
-  drawIslePlan(mapInk(mctx,X,Z),X,Z,sc,I);if(typeof myHomeMapMark==='function')myHomeMapMark(mctx,X,Z,1,I);if(typeof ganelMapMark==='function')ganelMapMark(mctx,X,Z,1,I);if(typeof bakeryMapMark==='function')bakeryMapMark(mctx,X,Z,1,I);if(typeof dineMapMark==='function')dineMapMark(mctx,X,Z,1,I);wpMini(mctx,X,Z,S);
+  if(I.id==='marcus'&&miniTiles(mctx,I,sc,px,pz,S))drawIslePlan(mapInk(mctx,X,Z),X,Z,sc,I,undefined,'live');else drawIslePlan(mapInk(mctx,X,Z),X,Z,sc,I);if(typeof myHomeMapMark==='function')myHomeMapMark(mctx,X,Z,1,I);if(typeof ganelMapMark==='function')ganelMapMark(mctx,X,Z,1,I);if(typeof bakeryMapMark==='function')bakeryMapMark(mctx,X,Z,1,I);if(typeof dineMapMark==='function')dineMapMark(mctx,X,Z,1,I);wpMini(mctx,X,Z,S);
   mctx.translate(S/2,S/2);mctx.rotate(-player.rotation.y);mctx.fillStyle='#fff';mctx.strokeStyle='#1b1712';mctx.lineWidth=2;
   mctx.beginPath();mctx.moveTo(0,10);mctx.lineTo(-7,-7);mctx.lineTo(0,-3);mctx.lineTo(7,-7);mctx.closePath();mctx.stroke();mctx.fill();
   mctx.restore();
@@ -35449,10 +35479,12 @@ function monLod(m,i){if(!player||((m._lodT=(m._lodT||0)+1)+i)%8)return;const d=M
     m.mesh.traverse(o=>{if(!o.isMesh)return;ps.push(o);o.userData._cs=o.castShadow;B.setFromObject(o);const s=Math.max(...B.getSize(sz).toArray());   /* 눈·이빨·발톱 같은 작은 부위와 바닥 그림자 원판은 멀면 뺀다 */
       if(s<H*.18||(o.material&&o.material.isMeshBasicMaterial&&o.material.transparent))m._small.add(o);});m._parts=ps;}
   for(const o of m._parts){o.castShadow=L===0&&o.userData._cs;if(L>=2&&m._small.has(o)){if(o.visible){o.visible=false;o.userData._lodHid=1;}}else if(o.userData._lodHid){o.visible=true;o.userData._lodHid=0;}}}
+/* 다른 맵에 있어 이미 숨긴 몬스터는 8프레임에 한 번만 살핀다 (엑시즈에 있어도 천 마리를 매 프레임 돌았다) */
+let _monF=0;
 function updateNetMonsters(dt){if(player&&tAll-_myMapT>.3){_myMapT=tAll;_myMap=mapKeyAt(player.position.x,player.position.z);}if(player){const _n=OR.spNear(player.position.x,player.position.z);player._spT=Math.hypot(player.position.x-OR.C2.x,player.position.z-OR.C2.z)<OR.TOWN_R+4?0:(_n?_n.t:0);}
   updateDuelMarks(dt);if(typeof duelTick==='function')duelTick(dt);if(typeof dummyTick==='function')dummyTick(dt);if(typeof chatterTick==='function')chatterTick(dt);
   if(DUMMIES.length&&!DUMMIES.ok){DUMMIES.ok=1;dummiesEnsure();}
-  MON_BUD=10;
+  MON_BUD=10;_monF++;
   for(let i=monsters.length-1;i>=0;i--){
     const m=monsters[i],mp=m.mesh.position;
     if(m.pvp){m.hp=m.mh;m.dying=null;m.tag.hidden=true;continue;}
@@ -35465,8 +35497,8 @@ function updateNetMonsters(dt){if(player&&tAll-_myMapT>.3){_myMapT=tAll;_myMap=m
     if(m.ox||m.oz){mp.x-=m.ox;mp.z-=m.oz;m.ox=m.oz=0;}
     /* 다른 맵(하레나 사냥터의 다른 구역, 다른 섬 등)에 있는 몬스터는 그리지도 움직이지도 않는다. 자리만 맞춰 둔다 */
     if(!(tAll-(m._mkT||-9)<.5)){m._mkT=tAll;m._mk=mapKeyAt(mp.x,mp.z);}
-    if(!sameMap(m._mk,_myMap)&&!m.thrown&&!(player&&Math.abs(mp.x-player.position.x)<MAP_NEAR&&Math.abs(mp.z-player.position.z)<MAP_NEAR)){if(m.mesh.visible)m.mesh.visible=false;if(!m.tag.hidden)m.tag.hidden=true;const q=snapAt(m);if(q){mp.x=q[0];mp.z=q[1];}else{mp.x=m.tx;mp.z=m.tz;}if(!m.mesh.userData.stub&&!m.D.boss&&!m.D.dragon&&tAll-(m._seenT||0)>90)monUnbuild(m);continue;}
-    m._seenT=tAll;
+    if(!sameMap(m._mk,_myMap)&&!m.thrown&&!(player&&Math.abs(mp.x-player.position.x)<MAP_NEAR&&Math.abs(mp.z-player.position.z)<MAP_NEAR)){if(m._oth===1&&((i+_monF)&7)!==0&&!m.mesh.visible)continue;m._oth=1;if(m.mesh.visible)m.mesh.visible=false;if(!m.tag.hidden)m.tag.hidden=true;const q=snapAt(m);if(q){mp.x=q[0];mp.z=q[1];}else{mp.x=m.tx;mp.z=m.tz;}if(!m.mesh.userData.stub&&!m.D.boss&&!m.D.dragon&&tAll-(m._seenT||0)>90)monUnbuild(m);continue;}
+    m._seenT=tAll;m._oth=0;
     if(m.mesh.userData.stub){const q=snapAt(m);if(q){mp.x=q[0];mp.z=q[1];}else{mp.x=m.tx;mp.z=m.tz;}const near=player&&Math.abs(mp.x-player.position.x)<40&&Math.abs(mp.z-player.position.z)<40;if(MON_BUD>0||near){MON_BUD--;monBuild(m);}if(!m.tag.hidden)m.tag.hidden=true;continue;}   /* 빈 묶음: 지어서 다음 프레임부터 움직인다 */
     m.phase+=dt;
     if((m.D.boss||m.D.dragon)&&!m.mesh.visible)m.mesh.visible=true;   /* 보스·용은 다른 맵에 있을 때 숨겼다가, 같은 맵에 오면 다시 보이게 */
