@@ -2384,7 +2384,7 @@ make();addEventListener('resize',function(){clearTimeout(tm);tm=ST(make,250);});
     redgiant: { name: '붉은 바위 거인', lv: 59, build: 'biped', color: 0x7a3a2a, hpM: 1.8, atkM: 1.25, scale: 2.1, club: true },
     // 석굴
     // 심연 끝
-    wyvern:{ name: '와이번', lv: 30, fixed: { hp: 16800, atk: 184, def: 19, exp: 10900 }, gold: 3000, build: 'dragon', wyvern: true, color: 0x2f5a46, scale: 1.3, dragon: true, arena: 'WLAIR' },
+    wyvern:{ name: '공허의 와이번 녹티스', lv: 30, fixed: { hp: 16800, atk: 184, def: 19, exp: 10900 }, gold: 3000, build: 'dragon', wyvern: true, color: 0x2f5a46, scale: 1.3, dragon: true, arena: 'WLAIR' },
     // 실바 (Lv 60–70)
     silvawolf:{ name: '은빛 늑대', lv: 63, build: 'quad', color: 0xc8ccd4, hpM: 1.0, atkM: 1.15, scale: 1.1 },
     mossslime:{ name: '이끼 슬라임', lv: 66, build: 'slime', color: 0x5a8a3a, hpM: 1.3, atkM: 1.0, scale: 1.4, glow: 0x3aa050 },
@@ -2804,22 +2804,88 @@ make();addEventListener('resize',function(){clearTimeout(tm);tm=ST(make,250);});
       nearCast(m, out);
       if (sk.k === 'dive' || sk.k === 'leap') { m.mv = { fx: m.x, fz: m.z, tx: sk.x, tz: sk.z, t: 0, dur: sk.k === 'leap' ? 0.16 : 0.25 }; }
     }
+    // ---------- 공허의 와이번 녹티스 (Lv 30) ----------
+    // (2026-11-12 원호 "공격 모션·패턴 더 고퀄리티로") 거리와 방향을 보고 기술을 고른다:
+    //   앞 가까이 → 두 번 물기(두 번째는 다시 겨눔) / 앞 중간 → 숨결(단계마다 훑는 폭이 넓어짐) / 옆 → 날개로 후려치기 / 뒤 → 꼬리 휩쓸기
+    //   멀리 → 날아올라 내리꽂고 그 자리에서 꼬리로 이어 치기 / 둘러싸이면 발 구르기 / 2단계부터 별 떨어뜨리기(무늬 셋) / 3단계 하늘의 눈 응시
+    //   큰 기술 뒤엔 숨 고르는 틈(m.gap)이 있어 그때가 칠 때다. 가까이 붙지 않을 땐 곧장 오지 않고 비스듬히 돌며 다가온다.
+    function wyvernTick(m, tg, A, NM) {
+      const C = m.cd; for (const k in C) C[k] -= TICK;
+      m.gap -= TICK; m.atkCd -= TICK;
+      const frac = m.hp / m.mh, ph = frac < 0.25 ? 3 : frac < 0.55 ? 2 : 1;
+      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: ph === 2 ? '하늘의 눈이 열렸다.' : '녹티스의 살갗이 찢어지며 별빛이 쏟아진다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1.5); if (ph === 3) C.gaze = Math.min(C.gaze || 0, 3); }
+      const fast = ph === 3 ? 0.7 : ph === 2 ? 0.85 : 1;
+      if (m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }
+      if (m.next && m.gap <= 0) { const f = m.next; m.next = null; f(tg); lairClamp(m, m.r); return; }
+      if (m.gap > 0) { lairClamp(m, m.r); return; }
+      let t = tg.find((q) => q.id === m.aggroOn);
+      if (m.taunt > 0) m.taunt -= TICK;
+      if (!t || (!(m.taunt > 0) && Math.random() < 0.012)) { const tn = tg.filter((q) => !q.dc); t = pick(tn.length ? tn : tg); m.aggroOn = t.id; }
+      const dx = t.x - m.x, dz = t.z - m.z, dist = Math.hypot(dx, dz), a = Math.atan2(dx, dz);
+      let rel = a - m.ry; rel = Math.atan2(Math.sin(rel), Math.cos(rel)); const ar = Math.abs(rel);
+      const headAt = (ang) => ({ x: m.x + Math.sin(ang) * (m.r + 0.5), z: m.z + Math.cos(ang) * (m.r + 0.5) });
+      const reach = m.r + 3.2, near = (R) => tg.filter((q) => Math.hypot(q.x - m.x, q.z - m.z) < R);
+      if (ph >= 2 && C.meteor <= 0 && dist > 4) {
+        const P = [], pat = ph === 3 ? pick(['rain', 'line', 'ring']) : pick(['rain', 'line']);
+        if (pat === 'line') { for (let k = 0; k < 7; k++) { const u = 3 + k * 3; P.push({ x: m.x + Math.sin(a) * u, z: m.z + Math.cos(a) * u, d: 1.2 + k * 0.18 }); } }
+        else if (pat === 'ring') { const o = Math.random() * 6.28; for (let k = 0; k < 7; k++) { const aa = o + k / 7 * 6.28; P.push({ x: t.x + Math.cos(aa) * 4.6, z: t.z + Math.sin(aa) * 4.6, d: 1.3 }); } P.push({ x: t.x, z: t.z, d: 2.3 }); }
+        else { const n = 4 + ph * 2; for (let k = 0; k < n; k++) { const q = k < tg.length ? tg[k] : null; const p = q ? { x: q.x + rnd(-1.5, 1.5), z: q.z + rnd(-1.5, 1.5) } : (() => { const aa = rnd(0, 6.28), d = rnd(2, A.r - 2); return { x: A.x + Math.cos(aa) * d, z: A.z + Math.sin(aa) * d }; })(); P.push({ ...p, d: 1.5 + k * 0.22 }); } }
+        for (const p of P) { lairClamp(p, 1.5); dSkill(m, { k: 'meteor', sh: 'c', x: p.x, z: p.z, r: 2.6, tele: p.d, mul: 1.1, pool: [3, 0.15], col: 1 }); }
+        C.meteor = 15 * fast; m.gap = 1.3;
+      } else if (C.dive <= 0 && dist > 9) {
+        dSkill(m, { k: 'dive', sh: 'c', x: t.x, z: t.z, r: 5.5, tele: 1.9, mul: 2.0, block: true });
+        C.dive = 14 * fast;
+        // 내려앉은 자리에서: 곁에 누가 있으면 곧바로 꼬리로 휩쓸고, 없으면 숨을 고른다
+        m.next = (L) => { if (L.some((q) => Math.hypot(q.x - m.x, q.z - m.z) < 9)) { dSkill(m, { k: 'tail', sh: 'c', x: m.x, z: m.z, r: 7.5, tele: 0.75, mul: 1.1, jump: 1, block: true }); C.tail = Math.max(C.tail, 4); m.gap = 1.0; } else m.gap = 1.4; };
+      } else if (ar > 2.0 && dist < 9.5 && C.tail <= 0) {
+        dSkill(m, { k: 'tail', sh: 'c', x: m.x, z: m.z, r: 7.5, tele: 0.95, mul: 1.3, jump: 1, block: true });
+        C.tail = rnd(6, 8) * fast; m.gap = 0.8;
+      } else if (ar > 0.8 && ar <= 2.0 && dist < 8.5 && (C.wing || 0) <= 0) {
+        const s2 = rel > 0 ? 1 : -1, sa = m.ry + s2 * Math.PI / 2, cx = m.x + Math.sin(sa) * (m.r + 1.2), cz = m.z + Math.cos(sa) * (m.r + 1.2);
+        dSkill(m, { k: 'wing', sh: 'c', x: cx, z: cz, r: 4.2, tele: 0.8, mul: 1.15, block: true, side: s2 });
+        C.wing = rnd(5, 7) * fast; m.gap = 0.6;
+      } else if (C.stomp <= 0 && (near(10).length >= 2 || (ph >= 2 && dist < 7))) {
+        dSkill(m, { k: 'stomp', sh: 'c', x: m.x, z: m.z, r: 10.5, tele: 1.45, mul: 1.0, jump: 1, block: true });
+        C.stomp = rnd(10, 13) * fast; m.gap = 1.2;
+      } else if (ph === 3 && (C.gaze || 0) <= 0) {
+        for (const q of tg.slice(0, 6)) dSkill(m, { k: 'gaze', sh: 'c', x: q.x, z: q.z, r: 3.2, tele: 2.3, mul: 1.4, block: true });
+        C.gaze = 13 * fast; m.gap = 1.0;
+      } else if (ar < 0.6 && dist > 4.5 && dist < 17 && C.breath <= 0) {
+        // 숨결: 1단계는 곧게, 2단계는 세 갈래로, 3단계는 다섯 갈래로 훑는다 (훑는 쪽은 그때그때)
+        m.ry = a; const n = ph === 1 ? 1 : ph === 2 ? 3 : 5, span = ph === 1 ? 0 : ph === 2 ? 0.9 : 1.4, dir = Math.random() < 0.5 ? 1 : -1, len = 17, w = n > 1 ? 2.4 : 2.7;
+        for (let k = 0; k < n; k++) { const aa = a + (n > 1 ? (k / (n - 1) - 0.5) * span * dir : 0), h = headAt(aa); dSkill(m, { k: 'breath', sh: 'l', x: h.x, z: h.z, a: aa, len, w, tele: 1.3 + k * 0.2, mul: n > 1 ? 1.15 : 1.6, pool: [3, 0.15], col: 1, block: true }); }
+        C.breath = rnd(7, 9) * fast; m.gap = 0.9;
+      } else if (ar < 0.9 && dist < reach + 1.2 && m.atkCd <= 0) {
+        // 두 번 물기: 고개를 젖혔다가 앞으로 내리꽂고, 두 번째는 상대가 옮긴 자리를 다시 겨눈다
+        m.ry = a; const h = headAt(a);
+        dSkill(m, { k: 'snap', sh: 'l', x: h.x - Math.sin(a) * 1.5, z: h.z - Math.cos(a) * 1.5, a, len: 6.5, w: 2.6, tele: 0.6, mul: 1.0, block: true });
+        const id = t.id; m.atkCd = 2.6 * fast;
+        m.next = (L) => { const q = L.find((z) => z.id === id) || L[0] || t, a2 = Math.atan2(q.x - m.x, q.z - m.z); m.ry = a2; const h2 = headAt(a2); dSkill(m, { k: 'snap', sh: 'l', x: h2.x - Math.sin(a2) * 1.5, z: h2.z - Math.cos(a2) * 1.5, a: a2, len: 6.5, w: 2.6, tele: 0.45, mul: 1.25, block: true, n2: 1 }); m.gap = 0.9; };
+      } else if (dist > reach) {
+        // 곧장 오지 않고 비스듬히 돌며 다가온다 (도는 쪽은 가끔 바뀐다)
+        if (!m.orb || Math.random() < 0.01) m.orb = Math.random() < 0.5 ? 1 : -1;
+        const o = dist > 12 ? 0.55 : 0.35, ga = a + m.orb * o, step = Math.min(dist - reach + 1, 6);
+        moveToward(m, m.x + Math.sin(ga) * step, m.z + Math.cos(ga) * step, ph === 3 ? 3.8 : 3.3); turn(m, a, 0.18);
+      } else turn(m, a, 0.3);
+      lairClamp(m, m.r);
+    }
     function dragonTick(m, ts) {
       const A = arenaOf(m), tg = ts.filter((t) => inArena(A, t)), W = m.ty === 'wyvern', NM = m.D.name, NMi = NM + ((NM.charCodeAt(NM.length - 1) - 0xac00) % 28 ? '이' : '가');
       // 진행 중인 기술
       for (const sk of [...m.sks]) { sk.t += TICK; if (sk.t >= sk.tele) { dResolve(m, sk, tg); m.sks.splice(m.sks.indexOf(sk), 1); } }
       if (m.mv) { m.mv.t += TICK; const k = Math.min(1, m.mv.t / m.mv.dur); m.x = m.mv.fx + (m.mv.tx - m.mv.fx) * k; m.z = m.mv.fz + (m.mv.tz - m.mv.fz) * k; if (k >= 1) m.mv = null; lairClamp(m, m.r); return; }
       if (!tg.length) {
-        m.idleT += TICK; m.aggroOn = null; m.windup = 0;
+        m.idleT += TICK; m.aggroOn = null; m.windup = 0; m.next = null;
         if (m.idleT > 10 && m.hp < m.mh) { m.hp = Math.min(m.mh, m.hp + m.mh * 0.04 * TICK); m.dirty = true; if (m.hp >= m.mh) { m.hitBy.clear(); m.phase = 1; m.said = 0; } }
         moveToward(m, m.home.x, m.home.z, 2.5); return;
       }
       if (m.idleT > 3 || !m.said) { broadcast({ t: 'bsay', m: W ? `${NM}의 눈이 하나씩 뜨인다.` : '붉은 용 이그니스가 깨어났다! 바닥의 붉은 표시를 피하세요.', lair: 1, ax: A.x, az: A.z }); m.said = 1; }
       m.idleT = 0;
+      if (W) { m.windup = 0; wyvernTick(m, tg, A, NM); return; }
       const C = m.cd; for (const k in C) C[k] -= TICK;
       m.gap -= TICK; m.atkCd -= TICK;
       const frac = m.hp / m.mh, ph = frac < 0.25 ? 3 : frac < 0.55 ? 2 : 1;
-      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? '하늘의 눈이 열렸다.' : `${NM}의 살갗이 찢어지며 별빛이 쏟아진다.`) : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
+      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? '하늘의 눈이 열렸다.' : '녹티스의 살갗이 찢어지며 별빛이 쏟아진다.') : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
       const fast = ph === 3 ? 0.65 : ph === 2 ? 0.82 : 1;
       if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 3.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); nearCast(m, { t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.8 * fast; } return; }
       if (m.gap > 0 || m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }
@@ -7115,7 +7181,7 @@ function makeWyvern2(D){
 /* 와이번이 살아 있는 동안 매 프레임: 눈 뜨고 감기·깜빡임, 고개를 뚝 꺾는 경련, 큰 턱, 고리, 찢어짐 번지기, 잠깐씩 몸이 튀는 끊김 */
 function wyvVoidTick(m,dt,t){const U=m.mesh.userData,V=U.vw;WYV.U.uT.value=tAll;
   const frac=m.mh?m.hp/m.mh:1;WYV.U.uVoid.value+=((1-frac)*.85-WYV.U.uVoid.value)*Math.min(1,dt*1.5);
-  const awake=inArenaOf(m),wide=m.breathT>0||m.stompT>0||m.flyT>0;
+  const awake=inArenaOf(m),wide=m.breathT>0||m.stompT>0||m.flyT>0||m.gazeT>0;
   for(const e of V.eyes){if(awake){if(e.dl>0)e.dl-=dt;}else e.dl=Math.random()*1.6;
     let want=awake&&e.dl<=0?1:0;e.nb-=dt;if(e.nb<0){e.bl=.16;e.nb=2+Math.random()*8;}if(e.bl>0){e.bl-=dt;want=0;}
     e.o+=(want-e.o)*Math.min(1,dt*(want?7:22));const w=wide?1.18:1;e.m.scale.set(e.r*w,e.r*Math.max(.06,e.o)*w,e.r*w);}
@@ -7160,7 +7226,7 @@ function wyvSnd(kind,at,vol=1){try{const X=SFX.ctx;if(!X||!SFX.master||SFX.vol<=
 }catch(e){}}
 /* ---- 와이번 둥지의 분위기: 별밤 하늘과 하늘을 찢고 뜬 거대한 눈, 차가운 보랏빛, 떠다니는 바위, 낮은 웅웅거림과 속삭임, 싸울 때 화면 가장자리의 어둠과 심장 소리 ----
    하늘·눈은 둥근 하늘 하나(셰이더 한 번), 소리는 둥지에 있을 때만 켠다 */
-const WNEST={dome:null,U:null,rocks:[],amb:null,wsT:3,hbT:0,vig:null,vk:0,open:0,look:new THREE.Vector2(),blink:0,blT:15};
+const WNEST={gazeT:0,dome:null,U:null,rocks:[],amb:null,wsT:3,hbT:0,vig:null,vk:0,open:0,look:new THREE.Vector2(),blink:0,blT:15};
 function wnestDome(){if(WNEST.dome)return WNEST.dome;const U=WNEST.U={uT:{value:0},uOpen:{value:0},uLook:{value:new THREE.Vector2()},uE:{value:new THREE.Vector3(0,1.3,-1).normalize()}};
   const m=new THREE.ShaderMaterial({uniforms:U,side:THREE.BackSide,depthWrite:false,depthTest:false,fog:false,
     vertexShader:'varying vec3 vD;void main(){vD=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
@@ -7205,7 +7271,7 @@ function voidNestTick(dt,z){const D=WNEST.dome,inN=z==='wlair'&&mode==='world';
   /* 하늘의 눈: 와이번이 있으면 내가 둥지에 들어설 때 뜨고, 맞을수록 더 크게 뜬다. 눈동자는 조금 늦게 나를 따라온다. 가끔 아주 천천히 깜빡인다 */
   const frac=w?w.hp/w.mh:1,want=!w?0:inA?(frac<.25?.75:frac<.55?.55:.32):.08;
   WNEST.blT-=dt;if(WNEST.blT<0){WNEST.blink=1.2;WNEST.blT=14+Math.random()*14;}if(WNEST.blink>0)WNEST.blink-=dt;
-  WNEST.open+=((WNEST.blink>0?0:want)-WNEST.open)*Math.min(1,dt*(WNEST.blink>0?3:.6));WNEST.U.uOpen.value=WNEST.open;
+  if(WNEST.gazeT>0)WNEST.gazeT-=dt;const gz=WNEST.gazeT>0&&w;WNEST.open+=((gz?1:WNEST.blink>0?0:want)-WNEST.open)*Math.min(1,dt*(gz?4:WNEST.blink>0?3:.6));WNEST.U.uOpen.value=WNEST.open;
   WNEST.look.lerp(_wyL.set(Math.max(-1,Math.min(1,(q.x-A.x)/A.r)),Math.max(-1,Math.min(1,(A.z-q.z)/A.r))*.5),Math.min(1,dt*.8));WNEST.U.uLook.value.copy(WNEST.look);
   for(const r of WNEST.rocks){r.m.position.y=r.y+Math.sin(tAll*r.s+r.p)*.6;r.m.rotation.y+=dt*r.s*.2;r.m.rotation.x+=dt*r.s*.1;}
   /* 소리: 둥지에 있는 동안 낮은 웅웅거림, 가끔 한쪽 귀에 속삭임. 싸우는 동안엔 심장 소리 */
@@ -35166,9 +35232,12 @@ function dragonBite(m){const U=m.mesh.userData;m.biteT=.42;sfx('slam',m.mesh.pos
 function dragonTele(m,msg,d,T){
   const U=m.mesh.userData;
   const W=m.D.wyvern;   /* 와이번: 짐승 울음 대신 비명 합창이 겹친다 */
-  if(msg.k==='breath'){m.breathT=d;sfx('roar',m.mesh.position,W?.5:1,.7);if(W)wyvSnd('choir',m.mesh.position,1);}
+  if(msg.k==='breath'){if(!(m.breathT>0)){m.brDur=d;sfx('roar',m.mesh.position,W?.5:1,.7);if(W)wyvSnd('choir',m.mesh.position,1);}m.breathT=Math.max(m.breathT||0,d);}
+  else if(W&&msg.k==='snap'){m.snapT=m.snapDur=d;sfx('whoosh',m.mesh.position,.5,.6);}
+  else if(W&&msg.k==='wing'){m.wingT=m.wingDur=d;const ry=m.mesh.rotation.y,dx=T.x-m.mesh.position.x,dz=T.z-m.mesh.position.z;m.wingS=(dx*Math.cos(ry)-dz*Math.sin(ry))>=0?1:-1;sfx('whoosh',m.mesh.position,.6,.5);}
+  else if(W&&msg.k==='gaze'){if(!(m.gazeT>0)){m.gazeT=m.gazeDur=d;wyvSnd('choir',m.mesh.position,.7);WNEST.gazeT=d+.6;}}
   else if(msg.k==='dive'){m.flyT=d;m.flyDur=d;sfx('bossroar',m.mesh.position,W?.5:1);if(W)wyvSnd('scream',m.mesh.position,1);}
-  else if(msg.k==='tail'){m.tailT=d;}
+  else if(msg.k==='tail'){m.tailT=m.tailDur=d;}
   else if(msg.k==='stomp'){m.stompT=d;m.stompDur=d;sfx('roar',m.mesh.position,W?.4:.8,.9);if(W)wyvSnd('choir',m.mesh.position,.8);}
   else if(msg.k==='meteor'){const ob=new THREE.Mesh(new THREE.SphereGeometry(.6,10,8),W?mat(0xd8d6de,{emissive:0x5a5866,emissiveIntensity:1.2}):mat(0xff7a20,{emissive:0xff4000,emissiveIntensity:1.6}));   /* 와이번: 떨어지는 별 */
     const to=new THREE.Vector3(T.x,heightAt(T.x,T.z)+.3,T.z),from=to.clone().add(new THREE.Vector3(rnd(-6,6),26,rnd(-6,6)));ob.position.copy(from);scene.add(ob);
@@ -35178,8 +35247,9 @@ function dragonLand(m,msg){
   const x=num(msg.x),z=num(msg.z),k=msg.k,p=new THREE.Vector3(x,heightAt(x,z)+.5,z);
   const C=dCol(m);
   if(k==='breath'){const a=num(msg.a),len=num(msg.len,15),w=num(msg.w,2.7);
+    if(m.D.wyvern){let r=a-m.mesh.rotation.y;r=Math.atan2(Math.sin(r),Math.cos(r));m.brYaw=Math.max(-.9,Math.min(.9,r));}   /* 갈래마다 고개를 그쪽으로 */
     // 0.6초 동안 세 번의 물결로 뿜는다: 입에서 쏟아지는 알갱이 + 바닥을 따라 번지는 불꽃 고리
-    for(let wv=0;wv<4;wv++)setTimeout(()=>{for(let i=1;i<=10;i++){const u=len*i/10,px=x+Math.sin(a)*u,pz=z+Math.cos(a)*u,q=new THREE.Vector3(px,heightAt(px,pz)+.9+Math.random()*.6,pz);
+    for(let wv=0,nw=m.D.wyvern?2:4;wv<nw;wv++)setTimeout(()=>{for(let i=1;i<=10;i++){const u=len*i/10,px=x+Math.sin(a)*u,pz=z+Math.cos(a)*u,q=new THREE.Vector3(px,heightAt(px,pz)+.9+Math.random()*.6,pz);
         VFX.burst(q,i%2?C.a:C.b,6+i,2+i*.25,.5,{up:.6,mix:0xffffff,glow:i<4});if(wv===0&&i%2===0)VFX.shock(new THREE.Vector3(px,heightAt(px,pz)+.08,pz),C.c,w*(.6+i*.05),.5);}},wv*150);
     for(let i=1;i<=9;i++){const u=len*i/9;spawnFx(i%2?C.a:C.b,new THREE.Vector3(x+Math.sin(a)*u,heightAt(x+Math.sin(a)*u,z+Math.cos(a)*u)+1,z+Math.cos(a)*u),1.2+i*.18,.55);}
     sfx('fire',p,1,.7);sfx('fire',{x:x+Math.sin(a)*8,z:z+Math.cos(a)*8},1,.6);m.breathT=0;m.breathFx=.7;}
@@ -35191,6 +35261,14 @@ function dragonLand(m,msg){
     dustPuffs(p,R*.8,16);VFX.shock(p,0xe8dcc0,R,.45);}
   else if(k==='stomp'){spawnRing(0xffe0c0,p,num(msg.r,10),.6);spawnFx(0xd8c8b0,p,4,.5);sfx('boom',p,1,.8);m.landT=.45;
     const R=num(msg.r,10);groundCrack(p,R*.7,1.6);rockDebris(p,R*.45,26);dustPuffs(p,R*.9,22);for(let i=0;i<3;i++)setTimeout(()=>VFX.shock(p,i?0xe8dcc0:0xffffff,R*(.5+i*.3),.5),i*90);if(player&&Math.hypot(player.position.x-x,player.position.z-z)<16)shakeT=.35;}
+  if(!m.D.wyvern)return;
+  if(k==='dive'||k==='stomp')m.recT=1.4;
+  else if(k==='snap'){dragonBite(m);m.lungeW=.4;m.snapT=0;}
+  else if(k==='wing'){m.wingT=0;m.wingHit=.45;const s2=m.wingS||1;sfx('whoosh',p,1,.55);sfx('heavy',p,.8,.9);
+    const q=m.mesh.position.clone();q.y+=1.6;VFX.slash(q,m.mesh.rotation.y+s2*Math.PI/2,0xe0dcd4,{r:4.6,arc:2.4,tilt:.15*s2,dur:.22,dir:-s2});dustPuffs(p,3.5,10);VFX.shock(new THREE.Vector3(x,heightAt(x,z)+.08,z),0xcfc8bc,4.2,.4);
+    if(player&&Math.hypot(player.position.x-x,player.position.z-z)<7)shakeT=Math.max(shakeT,.2);}
+  else if(k==='gaze'){m.gazeT=0;const r=num(msg.r,3.2);VFX.burst(p,0x8a8494,22,4,.8,{up:2.2,mix:0x2a2830});VFX.shock(new THREE.Vector3(x,heightAt(x,z)+.08,z),0x4a4652,r*1.2,.6);VFX.shock(new THREE.Vector3(x,heightAt(x,z)+.1,z),0xd6d2da,r*.6,.35);sfx('boom',p,.7,.55);groundCrack(p,r*.7,1);
+    if(player&&Math.hypot(player.position.x-x,player.position.z-z)<6)shakeT=Math.max(shakeT,.25);}
 }
 function updateDragonVisual(m,dt){
   const U=m.mesh.userData,t=(m.dph=(m.dph||0)+dt);
@@ -35224,8 +35302,43 @@ function updateDragonVisual(m,dt){
   // 맞으면 번쩍
   const fl=m.flash>0?m.flash/.18:0;m.flash=Math.max(0,(m.flash||0)-dt);
   U.mats.forEach(mt=>{if(mt.emissive)mt.emissive.setRGB(fl*.6+(m.hp<m.mh*.25?.12+Math.sin(t*6)*.06:0),fl*.3,fl*.2);});
-  if(U.vw)wyvVoidTick(m,dt,t);
+  if(U.vw){wyvMotion(m,dt,t);wyvVoidTick(m,dt,t);}
 }
+/* 와이번 공격 동작 (2026-11-12 원호 "공격 모션·패턴 더 고퀄리티로"): 모든 기술에 예비 동작 → 몸 전체가 실리는 치기 → 숨 고르기.
+   붉은 용과 같이 쓰는 움직임(updateDragonVisual) 위에 덮어 쓴다. 몸 그룹(body)을 앞뒤·위아래로 쏠리고 비틀어 무게가 실려 보이게 한다 */
+function wyvMotion(m,dt,t){const U=m.mesh.userData,ez=k=>k*k*(3-2*k),cl=k=>Math.max(0,Math.min(1,k)),N=U.neck;
+  let bz=0,by=0,bry=0,sc=0;
+  for(const F of [U.foldL,U.foldR]){F.rotation.z=0;F.rotation.y=0;}
+  // 날아올라 내리꽂기: 웅크렸다 솟고, 맴돌며 내려다보다, 날개를 접고 머리부터 떨어진다
+  if(m.flyT>0){const k=1-m.flyT/Math.max(.1,m.flyDur);let h;
+    if(k<.18){h=0;by-=.6*ez(k/.18);}else if(k<.82)h=9*ez(cl((k-.18)/.3));else{const q=(k-.82)/.18;h=9-6*q*q;}
+    m.mesh.position.y=heightAt(m.mesh.position.x,m.mesh.position.z)+h;
+    U.body.rotation.x=m.pitch=k<.18?.15:k<.82?-.12+Math.sin(t*3)*.05:.15+.5*cl((k-.82)/.18);
+    N[0].rotation.x=k<.82?.45:.65;N[1].rotation.x=.2;U.head.rotation.x=.35;
+    const fl=k<.18?.3:k<.82?Math.sin(t*7)*.8:-.7;U.wingL.rotation.z=-.15+fl;U.wingR.rotation.z=.15-fl;}
+  // 발 구르기: 뒷발로 천천히 일어서 날개를 펴고, 판정 직전에 온몸으로 내리찍는다
+  if(m.stompT>0){const k=1-m.stompT/Math.max(.1,m.stompDur||1),up=k<.82?ez(cl(k/.7)):1-ez(cl((k-.82)/.18));
+    U.body.rotation.x=m.pitch=-.75*up+.12*(k>.82?1:0);by+=1.0*up;N[0].rotation.x=-.3*up;U.head.rotation.x=.3*up;U.jaw.rotation.x=.6*up;
+    const fl=Math.sin(t*11)*.6*up;U.wingL.rotation.z=-.4*up-fl;U.wingR.rotation.z=.4*up+fl;}
+  // 물기 준비: 고개를 S자로 젖히고 몸을 뒤로 뺐다가, 판정 때 몸째 앞으로 내지른다 (dragonBite가 목을 내리꽂는다)
+  if(m.snapT>0){m.snapT-=dt;const k=ez(cl(1-m.snapT/m.snapDur));N[0].rotation.x=-.4*k;N[1].rotation.x=.3*k;U.head.rotation.x=-.3*k;U.jaw.rotation.x=.75*k;bz-=.55*k;by+=.12*k;}
+  if(m.lungeW>0){m.lungeW-=dt;const q=1-m.lungeW/.4;bz+=1.2*Math.sin(Math.min(1,q*1.8)*Math.PI/2)*(1-ez(cl((q-.5)/.5)));by-=.15*Math.sin(q*Math.PI);}
+  // 숨결: 가슴을 부풀리며 목을 뒤로 감았다가, 내뿜을 때 머리를 내지르고 갈래마다 고개를 돌려 훑는다
+  if(m.breathT>0){const k=ez(cl(1-m.breathT/Math.max(.1,m.brDur||1)));sc=.07*k;N[0].rotation.x=-.5*k;N[1].rotation.x=.3*k;U.head.rotation.x=.45*k;U.jaw.rotation.x=.7*k;by+=.3*k;bz-=.3*k;}
+  if(m.breathFx>0){N[0].rotation.x=.2;U.jaw.rotation.x=.85;bz+=.25;sc=-.03;}
+  {const want=m.breathFx>0||m.breathT>0?(m.brYaw||0):0;N[0].rotation.y+=(want-N[0].rotation.y)*Math.min(1,dt*9);if(!(m.breathFx>0)&&!(m.breathT>0))m.brYaw=0;}
+  // 날개로 후려치기: 그쪽 날개를 들어 뒤로 젖히고 몸을 반대로 비틀었다가, 앞으로 크게 휘두른다
+  {const s=m.wingS||1,F=s>0?U.foldR:U.foldL;
+    if(m.wingT>0){m.wingT-=dt;const k=ez(cl(1-m.wingT/m.wingDur));F.rotation.z=s*.85*k;F.rotation.y=s*.55*k;bry=-s*.35*k;by+=.15*k;}
+    if(m.wingHit>0){m.wingHit-=dt;const q=1-m.wingHit/.45,sw=Math.sin(Math.min(1,q*2)*Math.PI/2);F.rotation.z=s*.85*(1-ez(q));F.rotation.y=s*(.55-1.5*sw)*(1-ez(cl((q-.6)/.4)));bry=s*.45*Math.sin(q*Math.PI);}}
+  // 꼬리 휩쓸기: 반대로 몸을 감고 꼬리를 들었다가, 빠르게 돌고 천천히 멈춘다
+  if(m.tailT>0){const k=ez(cl(1-m.tailT/Math.max(.1,m.tailDur||1)));bry=-.75*k;by-=.25*k;U.tail.forEach(T=>{T.rotation.x-=.12*k;T.rotation.y+=.2*k;});}
+  // 응시: 하늘을 올려다보며 굳은 채 떨고, 큰 턱을 활짝 벌린다
+  if(m.gazeT>0){m.gazeT-=dt;const k=ez(cl(1-m.gazeT/m.gazeDur));N[0].rotation.x=-.75*k;N[1].rotation.x=-.2*k;U.head.rotation.x=-.6*k;U.jaw.rotation.x=.55*k;by+=.4*k;U.body.position.x=(Math.random()-.5)*.08*k;}
+  // 큰 기술 뒤 숨 고르기: 고개를 떨구고 몸이 크게 들썩인다
+  if(m.recT>0){m.recT-=dt;const q=m.recT/1.4;by+=Math.sin(t*7)*.09*q-.25*q;N[0].rotation.x+=.3*q;U.head.rotation.x+=.15*q;}
+  U.body.position.z=bz;U.body.position.y+=by;U.body.scale.set(1+sc,1+sc*.7,1);
+  if(m.tailSpin>0){const q=1-m.tailSpin/.5;U.body.rotation.y=-.75+(Math.PI*2+.75)*(1-Math.pow(1-q,3));}else U.body.rotation.y=bry;}
 function bigBanner(t,sub){
   document.querySelectorAll('.lvup').forEach(e=>e.remove());
   const o=document.createElement('div');o.className='lvup boss';
@@ -35361,7 +35474,7 @@ const MAINQ={
     get goal(){const q=P&&P.quest;return q&&q.special==='portal'?'깊은 사막3 길 끝의 포탈로 들어간다':'카일의 게시판에서 특별 의뢰를 받는다';},
     get npc(){const q=P&&P.quest;return q&&q.special==='portal'?null:'kyle';}},
   messenger60:{title:'전달자 만나기',
-    get goal(){return P&&P.got&&P.got.wyvern?'길드홀 지하실의 전달자에게 말을 건다':'포탈 너머의 와이번을 쓰러뜨리고 길드홀 지하실로 간다';},npc:'messenger'},
+    get goal(){return P&&P.got&&P.got.wyvern?'길드홀 지하실의 전달자에게 말을 건다':'포탈 너머의 와이번 녹티스를 쓰러뜨리고 길드홀 지하실로 간다';},npc:'messenger'},
   /* (옛 저장용) 2차 전직 뒤 전달자를 찾아가면 길드홀의 버키를 찾아가라고 한다 */
   messenger100:{title:'전달자 찾아가기',goal:'길드홀 지하실의 전달자에게 말을 건다',npc:'messenger'},
   bucky100:{title:'버키 찾아가기',goal:'길드홀 3층 끝 방의 버키에게 말을 건다',npc:'bucky'},
@@ -35498,7 +35611,7 @@ const LIB_BOOKS={
     '모래도마뱀: 모래 속에 몸을 숨기고 있다가 발소리에 튀어 오른다. 꼬리를 잘라도 금세 다시 자란다는 소문이 있다.',
     '전갈: 집게보다 꼬리를 조심하라. 독에 찔리면 해독약 없이 오래 버티기 어렵다.',
     '들늑대: 혼자 다니는 법이 없다. 한 마리가 보이면 이미 셋이 그대를 보고 있다고 생각하라.',
-    '와이번: 깊은 사막 끝, 포탈 너머의 둥지에 산다. 와이번이라 부르는 건 날개가 있어서일 뿐, 그것을 보고 온 사냥꾼들은 몸에 박힌 눈들과 찢어진 살갗 너머의 별밤 이야기만 되풀이한다. 하늘에서 떨어지는 별을 피할 자신이 없다면 가까이 가지 말 것.',
+    '공허의 와이번 녹티스: 깊은 사막 끝, 포탈 너머의 둥지에 산다. 녹티스라는 이름은 처음 살아 돌아온 사냥꾼이 붙였다. 와이번이라 부르는 건 날개가 있어서일 뿐, 그것을 보고 온 사냥꾼들은 몸에 박힌 눈들과 찢어진 살갗 너머의 별밤 이야기만 되풀이한다. 하늘에서 떨어지는 별을 피할 자신이 없다면 가까이 가지 말 것.',
     '덧붙임: 옛이야기의 마왕은 이 도감에 없다. 기록된 적이 한 번도 없기 때문이다. 이 땅에 있는 것은 몬스터뿐이다.']},
   lib_harena:{title:'사막의 도시 하레나',sub:'모래와 성벽의 이야기',pages:[
     '하레나는 처음에 성벽도 없는 작은 장터였다. 서쪽 황야의 상인과 북쪽 황야의 사냥꾼이 그 자리에서 물건을 바꾸었다.',

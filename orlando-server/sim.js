@@ -176,22 +176,88 @@
       nearCast(m, out);
       if (sk.k === 'dive' || sk.k === 'leap') { m.mv = { fx: m.x, fz: m.z, tx: sk.x, tz: sk.z, t: 0, dur: sk.k === 'leap' ? 0.16 : 0.25 }; }
     }
+    // ---------- 공허의 와이번 녹티스 (Lv 30) ----------
+    // (2026-11-12 원호 "공격 모션·패턴 더 고퀄리티로") 거리와 방향을 보고 기술을 고른다:
+    //   앞 가까이 → 두 번 물기(두 번째는 다시 겨눔) / 앞 중간 → 숨결(단계마다 훑는 폭이 넓어짐) / 옆 → 날개로 후려치기 / 뒤 → 꼬리 휩쓸기
+    //   멀리 → 날아올라 내리꽂고 그 자리에서 꼬리로 이어 치기 / 둘러싸이면 발 구르기 / 2단계부터 별 떨어뜨리기(무늬 셋) / 3단계 하늘의 눈 응시
+    //   큰 기술 뒤엔 숨 고르는 틈(m.gap)이 있어 그때가 칠 때다. 가까이 붙지 않을 땐 곧장 오지 않고 비스듬히 돌며 다가온다.
+    function wyvernTick(m, tg, A, NM) {
+      const C = m.cd; for (const k in C) C[k] -= TICK;
+      m.gap -= TICK; m.atkCd -= TICK;
+      const frac = m.hp / m.mh, ph = frac < 0.25 ? 3 : frac < 0.55 ? 2 : 1;
+      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: ph === 2 ? '하늘의 눈이 열렸다.' : '녹티스의 살갗이 찢어지며 별빛이 쏟아진다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1.5); if (ph === 3) C.gaze = Math.min(C.gaze || 0, 3); }
+      const fast = ph === 3 ? 0.7 : ph === 2 ? 0.85 : 1;
+      if (m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }
+      if (m.next && m.gap <= 0) { const f = m.next; m.next = null; f(tg); lairClamp(m, m.r); return; }
+      if (m.gap > 0) { lairClamp(m, m.r); return; }
+      let t = tg.find((q) => q.id === m.aggroOn);
+      if (m.taunt > 0) m.taunt -= TICK;
+      if (!t || (!(m.taunt > 0) && Math.random() < 0.012)) { const tn = tg.filter((q) => !q.dc); t = pick(tn.length ? tn : tg); m.aggroOn = t.id; }
+      const dx = t.x - m.x, dz = t.z - m.z, dist = Math.hypot(dx, dz), a = Math.atan2(dx, dz);
+      let rel = a - m.ry; rel = Math.atan2(Math.sin(rel), Math.cos(rel)); const ar = Math.abs(rel);
+      const headAt = (ang) => ({ x: m.x + Math.sin(ang) * (m.r + 0.5), z: m.z + Math.cos(ang) * (m.r + 0.5) });
+      const reach = m.r + 3.2, near = (R) => tg.filter((q) => Math.hypot(q.x - m.x, q.z - m.z) < R);
+      if (ph >= 2 && C.meteor <= 0 && dist > 4) {
+        const P = [], pat = ph === 3 ? pick(['rain', 'line', 'ring']) : pick(['rain', 'line']);
+        if (pat === 'line') { for (let k = 0; k < 7; k++) { const u = 3 + k * 3; P.push({ x: m.x + Math.sin(a) * u, z: m.z + Math.cos(a) * u, d: 1.2 + k * 0.18 }); } }
+        else if (pat === 'ring') { const o = Math.random() * 6.28; for (let k = 0; k < 7; k++) { const aa = o + k / 7 * 6.28; P.push({ x: t.x + Math.cos(aa) * 4.6, z: t.z + Math.sin(aa) * 4.6, d: 1.3 }); } P.push({ x: t.x, z: t.z, d: 2.3 }); }
+        else { const n = 4 + ph * 2; for (let k = 0; k < n; k++) { const q = k < tg.length ? tg[k] : null; const p = q ? { x: q.x + rnd(-1.5, 1.5), z: q.z + rnd(-1.5, 1.5) } : (() => { const aa = rnd(0, 6.28), d = rnd(2, A.r - 2); return { x: A.x + Math.cos(aa) * d, z: A.z + Math.sin(aa) * d }; })(); P.push({ ...p, d: 1.5 + k * 0.22 }); } }
+        for (const p of P) { lairClamp(p, 1.5); dSkill(m, { k: 'meteor', sh: 'c', x: p.x, z: p.z, r: 2.6, tele: p.d, mul: 1.1, pool: [3, 0.15], col: 1 }); }
+        C.meteor = 15 * fast; m.gap = 1.3;
+      } else if (C.dive <= 0 && dist > 9) {
+        dSkill(m, { k: 'dive', sh: 'c', x: t.x, z: t.z, r: 5.5, tele: 1.9, mul: 2.0, block: true });
+        C.dive = 14 * fast;
+        // 내려앉은 자리에서: 곁에 누가 있으면 곧바로 꼬리로 휩쓸고, 없으면 숨을 고른다
+        m.next = (L) => { if (L.some((q) => Math.hypot(q.x - m.x, q.z - m.z) < 9)) { dSkill(m, { k: 'tail', sh: 'c', x: m.x, z: m.z, r: 7.5, tele: 0.75, mul: 1.1, jump: 1, block: true }); C.tail = Math.max(C.tail, 4); m.gap = 1.0; } else m.gap = 1.4; };
+      } else if (ar > 2.0 && dist < 9.5 && C.tail <= 0) {
+        dSkill(m, { k: 'tail', sh: 'c', x: m.x, z: m.z, r: 7.5, tele: 0.95, mul: 1.3, jump: 1, block: true });
+        C.tail = rnd(6, 8) * fast; m.gap = 0.8;
+      } else if (ar > 0.8 && ar <= 2.0 && dist < 8.5 && (C.wing || 0) <= 0) {
+        const s2 = rel > 0 ? 1 : -1, sa = m.ry + s2 * Math.PI / 2, cx = m.x + Math.sin(sa) * (m.r + 1.2), cz = m.z + Math.cos(sa) * (m.r + 1.2);
+        dSkill(m, { k: 'wing', sh: 'c', x: cx, z: cz, r: 4.2, tele: 0.8, mul: 1.15, block: true, side: s2 });
+        C.wing = rnd(5, 7) * fast; m.gap = 0.6;
+      } else if (C.stomp <= 0 && (near(10).length >= 2 || (ph >= 2 && dist < 7))) {
+        dSkill(m, { k: 'stomp', sh: 'c', x: m.x, z: m.z, r: 10.5, tele: 1.45, mul: 1.0, jump: 1, block: true });
+        C.stomp = rnd(10, 13) * fast; m.gap = 1.2;
+      } else if (ph === 3 && (C.gaze || 0) <= 0) {
+        for (const q of tg.slice(0, 6)) dSkill(m, { k: 'gaze', sh: 'c', x: q.x, z: q.z, r: 3.2, tele: 2.3, mul: 1.4, block: true });
+        C.gaze = 13 * fast; m.gap = 1.0;
+      } else if (ar < 0.6 && dist > 4.5 && dist < 17 && C.breath <= 0) {
+        // 숨결: 1단계는 곧게, 2단계는 세 갈래로, 3단계는 다섯 갈래로 훑는다 (훑는 쪽은 그때그때)
+        m.ry = a; const n = ph === 1 ? 1 : ph === 2 ? 3 : 5, span = ph === 1 ? 0 : ph === 2 ? 0.9 : 1.4, dir = Math.random() < 0.5 ? 1 : -1, len = 17, w = n > 1 ? 2.4 : 2.7;
+        for (let k = 0; k < n; k++) { const aa = a + (n > 1 ? (k / (n - 1) - 0.5) * span * dir : 0), h = headAt(aa); dSkill(m, { k: 'breath', sh: 'l', x: h.x, z: h.z, a: aa, len, w, tele: 1.3 + k * 0.2, mul: n > 1 ? 1.15 : 1.6, pool: [3, 0.15], col: 1, block: true }); }
+        C.breath = rnd(7, 9) * fast; m.gap = 0.9;
+      } else if (ar < 0.9 && dist < reach + 1.2 && m.atkCd <= 0) {
+        // 두 번 물기: 고개를 젖혔다가 앞으로 내리꽂고, 두 번째는 상대가 옮긴 자리를 다시 겨눈다
+        m.ry = a; const h = headAt(a);
+        dSkill(m, { k: 'snap', sh: 'l', x: h.x - Math.sin(a) * 1.5, z: h.z - Math.cos(a) * 1.5, a, len: 6.5, w: 2.6, tele: 0.6, mul: 1.0, block: true });
+        const id = t.id; m.atkCd = 2.6 * fast;
+        m.next = (L) => { const q = L.find((z) => z.id === id) || L[0] || t, a2 = Math.atan2(q.x - m.x, q.z - m.z); m.ry = a2; const h2 = headAt(a2); dSkill(m, { k: 'snap', sh: 'l', x: h2.x - Math.sin(a2) * 1.5, z: h2.z - Math.cos(a2) * 1.5, a: a2, len: 6.5, w: 2.6, tele: 0.45, mul: 1.25, block: true, n2: 1 }); m.gap = 0.9; };
+      } else if (dist > reach) {
+        // 곧장 오지 않고 비스듬히 돌며 다가온다 (도는 쪽은 가끔 바뀐다)
+        if (!m.orb || Math.random() < 0.01) m.orb = Math.random() < 0.5 ? 1 : -1;
+        const o = dist > 12 ? 0.55 : 0.35, ga = a + m.orb * o, step = Math.min(dist - reach + 1, 6);
+        moveToward(m, m.x + Math.sin(ga) * step, m.z + Math.cos(ga) * step, ph === 3 ? 3.8 : 3.3); turn(m, a, 0.18);
+      } else turn(m, a, 0.3);
+      lairClamp(m, m.r);
+    }
     function dragonTick(m, ts) {
       const A = arenaOf(m), tg = ts.filter((t) => inArena(A, t)), W = m.ty === 'wyvern', NM = m.D.name, NMi = NM + ((NM.charCodeAt(NM.length - 1) - 0xac00) % 28 ? '이' : '가');
       // 진행 중인 기술
       for (const sk of [...m.sks]) { sk.t += TICK; if (sk.t >= sk.tele) { dResolve(m, sk, tg); m.sks.splice(m.sks.indexOf(sk), 1); } }
       if (m.mv) { m.mv.t += TICK; const k = Math.min(1, m.mv.t / m.mv.dur); m.x = m.mv.fx + (m.mv.tx - m.mv.fx) * k; m.z = m.mv.fz + (m.mv.tz - m.mv.fz) * k; if (k >= 1) m.mv = null; lairClamp(m, m.r); return; }
       if (!tg.length) {
-        m.idleT += TICK; m.aggroOn = null; m.windup = 0;
+        m.idleT += TICK; m.aggroOn = null; m.windup = 0; m.next = null;
         if (m.idleT > 10 && m.hp < m.mh) { m.hp = Math.min(m.mh, m.hp + m.mh * 0.04 * TICK); m.dirty = true; if (m.hp >= m.mh) { m.hitBy.clear(); m.phase = 1; m.said = 0; } }
         moveToward(m, m.home.x, m.home.z, 2.5); return;
       }
       if (m.idleT > 3 || !m.said) { broadcast({ t: 'bsay', m: W ? `${NM}의 눈이 하나씩 뜨인다.` : '붉은 용 이그니스가 깨어났다! 바닥의 붉은 표시를 피하세요.', lair: 1, ax: A.x, az: A.z }); m.said = 1; }
       m.idleT = 0;
+      if (W) { m.windup = 0; wyvernTick(m, tg, A, NM); return; }
       const C = m.cd; for (const k in C) C[k] -= TICK;
       m.gap -= TICK; m.atkCd -= TICK;
       const frac = m.hp / m.mh, ph = frac < 0.25 ? 3 : frac < 0.55 ? 2 : 1;
-      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? '하늘의 눈이 열렸다.' : `${NM}의 살갗이 찢어지며 별빛이 쏟아진다.`) : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
+      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? '하늘의 눈이 열렸다.' : '녹티스의 살갗이 찢어지며 별빛이 쏟아진다.') : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
       const fast = ph === 3 ? 0.65 : ph === 2 ? 0.82 : 1;
       if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 3.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); nearCast(m, { t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.8 * fast; } return; }
       if (m.gap > 0 || m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }

@@ -440,7 +440,7 @@
     redgiant: { name: '붉은 바위 거인', lv: 59, build: 'biped', color: 0x7a3a2a, hpM: 1.8, atkM: 1.25, scale: 2.1, club: true },
     // 석굴
     // 심연 끝
-    wyvern:{ name: '와이번', lv: 30, fixed: { hp: 16800, atk: 184, def: 19, exp: 10900 }, gold: 3000, build: 'dragon', wyvern: true, color: 0x2f5a46, scale: 1.3, dragon: true, arena: 'WLAIR' },
+    wyvern:{ name: '공허의 와이번 녹티스', lv: 30, fixed: { hp: 16800, atk: 184, def: 19, exp: 10900 }, gold: 3000, build: 'dragon', wyvern: true, color: 0x2f5a46, scale: 1.3, dragon: true, arena: 'WLAIR' },
     // 실바 (Lv 60–70)
     silvawolf:{ name: '은빛 늑대', lv: 63, build: 'quad', color: 0xc8ccd4, hpM: 1.0, atkM: 1.15, scale: 1.1 },
     mossslime:{ name: '이끼 슬라임', lv: 66, build: 'slime', color: 0x5a8a3a, hpM: 1.3, atkM: 1.0, scale: 1.4, glow: 0x3aa050 },
