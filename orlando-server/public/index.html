@@ -32023,7 +32023,7 @@ function fireProj(o){
       let yaw0=0;if(o.yawOff){const a=o.yawOff,c=Math.cos(a),s=Math.sin(a);yaw0=1;const nx=ux*c+uz*s,nz=-ux*s+uz*c;dir.set(nx*Math.cos(th),Math.sin(th),nz*Math.cos(th));}
       if(!yaw0)dir.set(ux*Math.cos(th),Math.sin(th),uz*Math.cos(th));dir.normalize();o.life=Math.max(o.life||1.3,d/(v*Math.cos(th))+.25);}}
   const arm=o.arm!==undefined?o.arm:start.distanceTo(camera.position)<1.6?camArm(start,dir):0;   /* 3인칭 카메라에서 쏘면 내 몸을 지나기 전까지는 벽을 보지 않는다 (카메라가 내 뒤 나무·벽에 걸쳐 있어도 바로 꺼지지 않게) */
-  if(!o.visual)netFx({k:'p',x:start.x,y:start.y,z:start.z,dx:dir.x,dy:dir.y,dz:dir.z,sp:o.speed,s:o.size,c:o.color,g:o.g,...(o.rim!=null?{r:o.rim}:{}),...(o.arrow?{a:1}:{}),...(arm>.05?{w:arm}:{})});
+  if(!o.visual)netFx({k:'p',x:start.x,y:start.y,z:start.z,dx:dir.x,dy:dir.y,dz:dir.z,sp:o.speed,s:o.size,c:o.color,g:o.g,...(o.rim!=null?{r:o.rim}:{}),...(o.arrow?{a:1}:{}),...(o.lasso?{ls:o.lasso}:{}),...(arm>.05?{w:arm}:{})});
   const rim=o.rim!=null?o.rim:o.color;
   const m=new THREE.Mesh(new THREE.SphereGeometry(1,10,8),new THREE.MeshBasicMaterial({color:rim,transparent:true,opacity:o.rim!=null?.4:.95,blending:THREE.AdditiveBlending,depthWrite:false}));
   if(o.size>=.18&&!o.star){const core=new THREE.Mesh(new THREE.SphereGeometry(o.rim!=null?.5:.62,12,10),new THREE.MeshBasicMaterial({color:o.color}));m.add(core);
@@ -32042,7 +32042,7 @@ function fireProj(o){
   projs.push({m,vel:dir.multiplyScalar(o.speed),life:o.life||1.3,o,hit:new Set(),arm,trav:0});if(o.ref)o.ref.p=projs[projs.length-1];
 }
 function endProj(p,i){if(p.o.onEnd){const cb=p.o.onEnd;p.o.onEnd=null;cb(p.m.position.clone(),p);}
-  {const big=p.o.size>=.18&&!p.o.star;VFX.burst(p.m.position,p.o.rim!=null?p.o.rim:p.o.color,big?18:p.o.star?5:7,big?4:p.o.star?1.6:2.5,p.o.star?.3:.45,{mix:0xffffff,glow:!p.o.star});}   /* 수리검은 맞은 자리에 작은 불꽃만 */
+  if(!p.o.lasso){const big=p.o.size>=.18&&!p.o.star;VFX.burst(p.m.position,p.o.rim!=null?p.o.rim:p.o.color,big?18:p.o.star?5:7,big?4:p.o.star?1.6:2.5,p.o.star?.3:.45,{mix:0xffffff,glow:!p.o.star});}   /* 수리검은 맞은 자리에 작은 불꽃만 */
   if(p.o.explode){aoeHit(p.m.position,p.o.explode,p.o.mult*.6,{...p.o.opt,noKnock:true});spawnFx(p.o.color,p.m.position,p.o.explode,.4);}
   {if(p.o.opt&&p.o.opt.re2){const q=p.m.position.clone(),r2=p.o.opt.re2;setTimeout(()=>{if(mode!=='world'||!P)return;aoeHit(q,r2.r,r2.mul,{noKnock:true});detonateFx(q,r2.r,0xb8c8ff);sfx('mg_boom',q,.7,1.25);shakeT=Math.max(shakeT,.08);},380);}}   /* 강화마법-충격2: 잠시 뒤 한 번 더 */
   scene.remove(p.m);p.m.traverse(o=>{if(o.userData.keep)return;if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});projs.splice(i,1);
@@ -32177,7 +32177,7 @@ function updateProjs(dt){
     for(const m of alive()){
       if(p.hit.has(m))continue;if(p.o.target&&m!==p.o.target)continue;
       const c=mCenter(m);if(segDist3(_pv,p.m.position,c)<m.r+.35+p.o.size){   /* 한 프레임 동안 지나간 선분으로 잰다 (빠른 화살이 작은 적을 건너뛰지 않게) */
-        p.hit.add(m);if(!p.o.noDirect){damageMonster(m,p.o.mult,p.o.opt||{});spawnFx(p.o.color,p.m.position,.6,.25);}if(p.o.onHit)p.o.onHit(m);
+        p.hit.add(m);if(!p.o.noDirect){damageMonster(m,p.o.mult,p.o.opt||{});if(!p.o.lasso)spawnFx(p.o.color,p.m.position,.6,.25);}if(p.o.onHit)p.o.onHit(m);
         if(!p.o.pierce||p.o.pierceN&&p.hit.size>p.o.pierceN){endProj(p,i);ended=true;break;}
       }
     }
@@ -33459,7 +33459,8 @@ function playRemoteFx(d){
   const col=Math.floor(n(d.c,0,0xffffff,0xffffff));
   if(d.k==='p'){sfx(d.a?'bw_fire':n(d.g,0,20)>0?'bow':'cast',{x:n(d.x,-WB,WB),z:n(d.z,-WB,WB)},.45);
     const dir=new THREE.Vector3(n(d.dx,-1,1),n(d.dy,-1,1),n(d.dz,-1,1));if(dir.lengthSq()<.01)return;
-    fireProj({visual:true,start:new THREE.Vector3(n(d.x,-WB,WB),n(d.y,-50,200),n(d.z,-WB,WB)),dir,speed:n(d.sp,5,80,30),size:n(d.s,.05,.6,.2),color:col,g:n(d.g,0,20),...(d.r!=null?{rim:n(d.r,0,0xffffff,0)}:{}),...(d.a?{arrow:true}:{}),arm:n(d.w,0,12,0)});
+    const ls=d.ls===1||d.ls===2?d.ls:0,lr={};   /* 올가미는 다른 사람 화면에도 올가미 모양으로 */
+    fireProj({visual:true,start:new THREE.Vector3(n(d.x,-WB,WB),n(d.y,-50,200),n(d.z,-WB,WB)),dir,speed:n(d.sp,5,80,30),size:n(d.s,.05,.6,.2),color:col,g:n(d.g,0,20),...(d.r!=null?{rim:n(d.r,0,0xffffff,0)}:{}),...(d.a?{arrow:true}:{}),...(ls?{mesh:()=>lassoFlyMesh(ls),ref:lr}:{}),arm:n(d.w,0,12,0)});if(ls)lassoThrowFx(lr.p,ls,false);
   }else if(d.k==='r'){spawnRing(col,new THREE.Vector3(n(d.x,-WB,WB),0,n(d.z,-WB,WB)),n(d.s,.5,8,2),n(d.d,.1,2,.5));}
   else if(d.k==='l'){addLightZone(new THREE.Vector3(n(d.x,-WB,WB),0,n(d.z,-WB,WB)),n(d.s,1,12,5),n(d.d,1,10,6),n(d.g,100,200,115)/100,false);}
   else{spawnFx(col,new THREE.Vector3(n(d.x,-WB,WB),n(d.y,-50,200),n(d.z,-WB,WB)),n(d.s,.2,6,1),n(d.d,.1,2,.45));}
@@ -34475,17 +34476,11 @@ function wlBlade(S,pw,opt){const tg=wlNooseTarget(S),q=player.position;
     wlStab(S,pw,opt,tg);}
   else wlStab(S,pw,opt,null);
   const f=flatFwd();return q.clone().add(new THREE.Vector3(f.x*1.5,1.2,f.z*1.5));}
-/* 옥죄는 올가미: 금실을 꼬아 만든 올가미가 적을 감고 조여든다 */
-function wlNooseFx(m,hold){const g=new THREE.Group(),s=(m.D.scale||1),rope=new THREE.MeshStandardMaterial({color:0xc89a50,roughness:.8,metalness:.2}),gold=new THREE.MeshStandardMaterial({color:WL_GOLD,metalness:.8,roughness:.3});
-  const rings=[];for(let k=0;k<3;k++){const r=new THREE.Mesh(new THREE.TorusGeometry(.6*s*(1-k*.1),.032,6,28),rope);r.rotation.x=Math.PI/2+(k-1)*.12;r.position.y=(k-1)*.2;g.add(r);rings.push(r);}
-  const knot=new THREE.Mesh(new THREE.SphereGeometry(.07,10,8),gold);knot.position.set(.6*s,0,0);g.add(knot);scene.add(g);
-  rogueFx.push({t:0,o:g,up:(e)=>{if(m.dying!==null||!(m.lassoT>tAll))return false;const c=mCenter(m);g.position.set(c.x,c.y-.1,c.z);
-    const k=Math.min(1,e.t/.35),sq=1.35-.45*(1-Math.pow(1-k,3))+Math.sin(e.t*7)*.02;rings.forEach((r,i)=>{r.scale.setScalar(sq*(1-i*.04));});g.rotation.y+=.015;   /* 감기자마자 조여든다 */
-    if(Math.random()<.08)VFX.emit(0,c.x+(Math.random()-.5)*.6*s,c.y+(Math.random()-.5)*.4,c.z+(Math.random()-.5)*.6*s,0,.3,0,0xffd060,.25,0,1.4);}});}
+/* 옥죄는 올가미: 금실 한 가닥을 꼬아 넣은 올가미를 던져 몸을 한 바퀴 더 감아 조인다 (모양은 lassoBind) */
 function wlNoose(S,pw,opt){const tg=frontTarget(S.range,.75)||aimTarget(S.range,.95);const hold=Math.min(6,S.slow*(1+.1*(pw-1)/.25));
   setTimeout(()=>{if(mode!=='world')return;const st=player.position.clone();st.y+=1.5;const dir=tg&&tg.dying===null?mCenter(tg).sub(st).normalize():camDir();
-    fireProj({dir,start:st,color:0xd8b060,rim:0x8a6a30,speed:32,size:.16,arc:6,mult:S.mult*pw,opt:{...opt,slow:hold,sk:'wnoose'},...(tg?{target:tg}:{}),life:.9,
-      onHit:m=>{m.lassoT=tAll+hold;wlNooseFx(m,hold);const c=mCenter(m);VFX.burst(c,0xffd060,12,2.6,.35,{mix:0xffffff});sfx('block',m.mesh.position,.6,.8);sfx('step',m.mesh.position,.5,1.4);}});sfx('throw',st,.8);},240);
+    const R={};fireProj({dir,start:st,color:0xd8b060,rim:0x8a6a30,speed:32,size:.16,arc:6,mult:S.mult*pw,opt:{...opt,slow:hold,sk:'wnoose'},...(tg?{target:tg}:{}),life:.9,mesh:()=>lassoFlyMesh(2),lasso:2,ref:R,
+      onHit:m=>{m.lassoT=tAll+hold;lassoBind(m,hold,2);const c=mCenter(m);VFX.burst(c,0xffd060,6,1.6,.25);sfx('block',m.mesh.position,.6,.8);sfx('step',m.mesh.position,.5,1.4);}});lassoThrowFx(R.p,2,true);sfx('throw',st,.8);},240);
   const f=flatFwd();return player.position.clone().add(new THREE.Vector3(f.x*1.6,1.3,f.z*1.6));}
 /* 동전 폭약: 앞쪽 부채꼴 바닥에 동전을 흩뿌린다. 떨어진 뒤 잠깐 뒤부터 밟히면 터진다 */
 function wlCoins(S,pw,opt,lvl){const n=S.count+(lvl-1),f=flatFwd(),q=player.position,st=q.clone();st.y+=1.25;st.x+=f.x*.4;st.z+=f.z*.4;
@@ -34677,8 +34672,8 @@ function lootSkill(S,id,pw,opt){
   // 올가미 날리기: 앞의 적 하나를 묶어 느리게 하고, 처형할 수 있는 HP를 올린다
   if(id==='lasso'){const tg=frontTarget(S.range,.75)||aimTarget(S.range,.95);const hold=S.slow*(1+.1*(pw-1)/.25);
     setTimeout(()=>{if(mode!=='world')return;const st=player.position.clone();st.y+=1.5;const dir=tg&&tg.dying===null?mCenter(tg).sub(st).normalize():camDir();
-      fireProj({dir,start:st,color:S.color,rim:0x8a6a40,speed:30,size:.16,arc:6,mult:S.mult*pw,opt:{...opt,slow:hold,sk:'lasso'},...(tg?{target:tg}:{}),life:.9,
-        onHit:m=>{m.lassoT=tAll+hold;lassoFx(m,hold);sfx('block',m.mesh.position,.6);}});sfx('throw',st,.8);},240);
+      const R={};fireProj({dir,start:st,color:S.color,rim:0x8a6a40,speed:30,size:.16,arc:6,mult:S.mult*pw,opt:{...opt,slow:hold,sk:'lasso'},...(tg?{target:tg}:{}),life:.9,mesh:()=>lassoFlyMesh(1),lasso:1,ref:R,
+        onHit:m=>{m.lassoT=tAll+hold;lassoBind(m,hold,1);sfx('block',m.mesh.position,.6);}});lassoThrowFx(R.p,1,true);sfx('throw',st,.8);},240);
     const f=flatFwd();return q0.clone().add(new THREE.Vector3(f.x*1.6,1.3,f.z*1.6));}
   // 폭약 뿌리기: 뒤로 뛰어오르며 앞쪽에 폭약을 흩뿌린다. 피해 = 200 + 가진 골드의 5%
   if(id==='bombs'){const f=flatFwd();vy=8.5;pvel.x=-f.x*10;pvel.z=-f.z*10;sitting=false;const dmg=(200+P.gold*.05)*pw,st=player.position.clone().add(new THREE.Vector3(0,1.3,0));const pts=[];
@@ -34722,9 +34717,95 @@ function lootSkill(S,id,pw,opt){
       log(`${I.name}을(를) 들이켰다`);updateHud();invDirty();},500);
     return q0.clone().add(new THREE.Vector3(0,1.4,0));}
   return null;}
-function lassoFx(m,hold){const g=new THREE.Group();const mt=new THREE.MeshStandardMaterial({color:0xb89060,roughness:.9});
-  for(let k=0;k<2;k++){const r=new THREE.Mesh(new THREE.TorusGeometry(.55*(m.D.scale||1)*(k?.85:1),.035,5,24),mt);r.rotation.x=Math.PI/2;r.position.y=k*.18;g.add(r);}scene.add(g);
-  rogueFx.push({t:0,o:g,up:(e)=>{if(m.dying!==null||!(m.lassoT>tAll))return false;const c=mCenter(m);g.position.set(c.x,c.y-.1,c.z);g.rotation.y+=.02;}});}
+/* ---------- 올가미: 세 가닥을 꼰 밧줄 한 줄로 빚은 진짜 올가미 ----------
+   밧줄 끝을 접어 만든 작은 고리(혼다) 속으로 긴 줄이 지나가 큰 고리를 만든다. 끝은 실로 감쳐 도톰하고, 가닥 사이 홈은 어둡다.
+   약탈자 '올가미 날리기'는 삼베 밧줄(kind 1), 원더루터 '옥죄는 올가미'는 금실 한 가닥을 꼬아 넣은 밧줄(kind 2).
+   던질 때는 고리가 활짝 펴진 채 돌며 날아가고 손까지 줄이 이어진다. 맞으면 고리가 위에서 씌워져 몸통을 조인다.
+   모양은 종류·크기마다 한 번만 빚어 돌려 쓰고(LASSO.geo), 줄은 미리 만든 그릇의 점만 매 프레임 고친다 */
+const LASSO={geo:new Map(),mat:null};
+const LASSO_C={1:{base:[.86,.68,.44],tw:[.42,.30,.19],gold:null},2:{base:[.80,.62,.40],tw:[.95,.72,.26],gold:[1,.82,.30]}};
+/* 밧줄 겉 그림: 비스듬히 꼬인 세 가닥과 그 사이 어두운 홈, 가닥 안의 가는 섬유 결 (u 둘레, v 길이, 가닥은 u-v 방향) */
+function lassoTex(kind){const C=LASSO_C[kind],S=128,cv=document.createElement('canvas');cv.width=cv.height=S;const x=cv.getContext('2d'),im=x.createImageData(S,S),D=im.data;
+  for(let py=0;py<S;py++)for(let px=0;px<S;px++){const t=((px-py)/S%1+1)%1,f=t*3,si=Math.floor(f)%3,fr=f-Math.floor(f),lb=Math.sin(fr*Math.PI),
+      fib=.9+.1*Math.sin((px+py)/S*Math.PI*2*14+si*2)+.05*Math.sin((px*3+py)*1.7),k=(.28+.72*Math.pow(lb,.55))*fib,c=C.gold&&si===0?C.gold:C.base,o=(py*S+px)*4;
+    D[o]=Math.min(255,c[0]*k*255);D[o+1]=Math.min(255,c[1]*k*255);D[o+2]=Math.min(255,c[2]*k*255);D[o+3]=255;}
+  x.putImageData(im,0,0);const T=new THREE.CanvasTexture(cv);T.wrapS=T.wrapT=THREE.RepeatWrapping;T.anisotropy=4;return T;}
+function lassoMat(kind){const k='m'+kind;return LASSO[k]||(LASSO[k]=new THREE.MeshStandardMaterial({vertexColors:true,map:lassoTex(kind),roughness:.84,metalness:kind===2?.14:.04}));}
+/* 점들을 지나는 밧줄 한 줄의 꼭짓점. rr = 밧줄 굵기(반지름), wrapL = 끝에서부터 실로 감친 길이 */
+function lassoRope(pts,rr,kind,wrapL,out){const C=LASSO_C[kind],cv=new THREE.CatmullRomCurve3(pts,false,'centripetal'),L=cv.getLength(),
+    N=Math.max(24,Math.min(240,Math.round(L/rr))),RS=15,fr=cv.computeFrenetFrames(N,false),lay=rr*1.5,base=out.pos.length/3;
+  const P=new THREE.Vector3(),nv=new THREE.Vector3();
+  for(let i=0;i<=N;i++){const u=i/N,s=u*L;cv.getPointAt(u,P);const T=fr.tangents[i],Nn=fr.normals[i],B=fr.binormals[i];
+    const end=Math.min(1,s/(rr*.7),(L-s)/(rr*.7)),tip=end<1?.3+.7*Math.sqrt(Math.max(0,end)):1;   /* 끝은 둥글게 오므린다 */
+    const inW=s<=wrapL,ph=s/lay;
+    for(let j=0;j<=RS;j++){const a=j/RS*Math.PI*2;let r,dr,col;
+      if(inW){const g=Math.abs(Math.sin(s/(rr*.42)));r=rr*1.22*(.93+.07*Math.sqrt(g));dr=0;   /* 감친 실: 둥근 테가 촘촘히 */
+        const k=(.55+.45*Math.sqrt(g))/.9,c=C.tw,b=C.base;col=[c[0]/b[0]*k,c[1]/b[1]*k,c[2]/b[2]*k];}
+      else{const x=a-ph,lb=Math.abs(Math.cos(1.5*x)),lp=Math.pow(lb,.6);r=rr*(.76+.3*lp);   /* 가닥 셋이 비틀려 돌아가는 단면 */
+        dr=-rr*.3*.6*Math.pow(Math.max(lb,1e-3),-.4)*1.5*Math.sin(1.5*x)*Math.sign(Math.cos(1.5*x));
+        col=[1,1,1];}
+      r*=tip;const ca=Math.cos(a),sa=Math.sin(a);
+      out.pos.push(P.x+(Nn.x*ca+B.x*sa)*r,P.y+(Nn.y*ca+B.y*sa)*r,P.z+(Nn.z*ca+B.z*sa)*r);
+      const tx=-Nn.x*sa+B.x*ca,ty=-Nn.y*sa+B.y*ca,tz=-Nn.z*sa+B.z*ca,q=Math.max(-1.1,Math.min(1.1,dr/Math.max(r,1e-4)));   /* 겉면 기울기만큼 법선을 눕힌다 */
+      nv.set(Nn.x*ca+B.x*sa-tx*q,Nn.y*ca+B.y*sa-ty*q,Nn.z*ca+B.z*sa-tz*q);if(tip<1)nv.addScaledVector(T,(s<L/2?-1:1)*(1-tip)*1.4);nv.normalize();
+      out.nor.push(nv.x,nv.y,nv.z);out.col.push(col[0],col[1],col[2]);out.uv.push(inW?.5:j/RS+1/6,inW?0:-s/(lay*Math.PI*2));   /* 그림의 가닥이 겉면 굴곡과 같은 자리에 오게 */}}
+  for(let i=0;i<N;i++)for(let j=0;j<RS;j++){const a=base+i*(RS+1)+j,b=a+RS+1;out.idx.push(a,b,a+1,b,b+1,a+1);}}
+/* 올가미 모양: 고리 반지름 R (가로 XZ 평면, 혼다는 +x 쪽). coil = 고리를 지나 몸을 더 감는 바퀴 수, drop = 꼬리가 늘어져 닿는 땅 깊이(0이면 짧은 꼬리만) */
+function lassoGeo(kind,R,coil,drop){const key=kind+'|'+R.toFixed(2)+'|'+coil+'|'+drop.toFixed(1);let G=LASSO.geo.get(key);if(G)return G;
+  const rr=Math.max(.022,Math.min(.06,R*.055)),e=rr*2.7,V=(x,y,z)=>new THREE.Vector3(x,y,z),pts=[];
+  pts.push(V(R+e*.25,-e*2.2,e*.15),V(R+e*.15,-e*1.45,0));   /* 접혀 감친 끝 */
+  for(const d of [-90,-40,10,60,110,160,205,245])pts.push(V(R+e*Math.cos(d*Math.PI/180),e*Math.sin(d*Math.PI/180),0));   /* 혼다(끝 고리) */
+  const ny=-e*1.05;for(let k=1;k<=14;k++){const f=-.32-k/14*(Math.PI*2-.62),y=ny*Math.max(0,1-k/4);pts.push(V(R*Math.cos(f),y+Math.sin(k*1.9)*rr*.25,R*Math.sin(f)));}   /* 큰 고리 */
+  pts.push(V(R*Math.cos(.14),0,R*Math.sin(.14)),V(R,0,0),V(R*1.005,-rr*.3,-R*.13));   /* 혼다 속을 지난다 */
+  let last;
+  if(coil>0){const R2=R*1.08,n=Math.round(coil*12);for(let k=1;k<=n;k++){const f=-.28-k/12*Math.PI*2,y=-e*1.1-(k/n)*R*.42;pts.push(V(R2*Math.cos(f),y,R2*Math.sin(f)));}   /* 몸을 한 바퀴 더 감아 내려간다 */
+    last=pts[pts.length-1];}
+  else{pts.push(V(R*1.1,-rr*.5,-R*.27));last=pts[pts.length-1];}
+  if(drop>0){const ox=last.x/Math.hypot(last.x,last.z),oz=last.z/Math.hypot(last.x,last.z),g=-drop+rr*.9,y0=last.y;   /* 꼬리: 밖으로 처져 땅에 닿고 조금 늘어진다 */
+    pts.push(V(last.x+ox*.18,y0-.08,last.z+oz*.18),V(last.x+ox*.3,(y0+g)*.5,last.z+oz*.3),V(last.x+ox*.38,g+.05,last.z+oz*.38),V(last.x+ox*.55+oz*.1,g,last.z+oz*.55-ox*.1),V(last.x+ox*.8+oz*.02,g,last.z+oz*.8-ox*.24),V(last.x+ox*.95-oz*.15,g,last.z+oz*.95-ox*.18));}
+  else pts.push(V(R*1.24,-rr*.4,-R*.33));
+  const out={pos:[],nor:[],col:[],uv:[],idx:[]};lassoRope(pts,rr,kind,e*1.25,out);
+  G=new THREE.BufferGeometry();G.setAttribute('position',new THREE.Float32BufferAttribute(out.pos,3));G.setAttribute('normal',new THREE.Float32BufferAttribute(out.nor,3));
+  G.setAttribute('color',new THREE.Float32BufferAttribute(out.col,3));G.setAttribute('uv',new THREE.Float32BufferAttribute(out.uv,2));G.setIndex(out.idx);G.computeBoundingSphere();
+  G.userData.tail=pts[pts.length-1].clone();G.userData.rr=rr;LASSO.geo.set(key,G);return G;}
+function lassoMesh(kind,R,coil=0,drop=0){const G=lassoGeo(kind,R,coil,drop),m=new THREE.Mesh(G,lassoMat(kind));m.userData.keep=1;m.castShadow=true;return m;}
+/* 날아가는 올가미 (fireProj의 mesh): 앞이 +z, 고리는 가로로 펼쳐져 돈다 */
+function lassoFlyMesh(kind){const g=new THREE.Group(),sp=new THREE.Group(),R=kind===2?.62:.55,m=lassoMesh(kind,R);sp.add(m);g.add(sp);sp.rotation.z=.12;
+  g.userData.spin=sp;g.userData.tailL=G_tail(m);g.userData.keep=1;sp.userData.keep=1;return g;}
+function G_tail(m){return m.geometry.userData.tail;}
+/* 손에서 올가미까지 이어진 줄: 꼭짓점 수가 정해진 관 하나를 매 프레임 고쳐 쓴다 */
+function lassoLine(kind){const NS=22,RS=6,C=LASSO_C[kind],pos=new Float32Array((NS+1)*(RS+1)*3),nor=new Float32Array(pos.length),col=new Float32Array(pos.length),idx=[];
+  const uv=new Float32Array((NS+1)*(RS+1)*2);col.fill(1);for(let i=0;i<=NS;i++)for(let j=0;j<=RS;j++){const k=(i*(RS+1)+j)*2;uv[k]=j/RS;uv[k+1]=i*.9;}
+  for(let i=0;i<NS;i++)for(let j=0;j<RS;j++){const a=i*(RS+1)+j,b=a+RS+1;idx.push(a,b,a+1,b,b+1,a+1);}
+  const G=new THREE.BufferGeometry();G.setAttribute('position',new THREE.BufferAttribute(pos,3));G.setAttribute('normal',new THREE.BufferAttribute(nor,3));G.setAttribute('color',new THREE.BufferAttribute(col,3));G.setAttribute('uv',new THREE.BufferAttribute(uv,2));G.setIndex(idx);
+  const m=new THREE.Mesh(G,lassoMat(kind));m.frustumCulled=false;m.userData.ns=NS;m.userData.rs=RS;return m;}
+const _ll={a:new THREE.Vector3(),b:new THREE.Vector3(),m:new THREE.Vector3(),p:new THREE.Vector3(),t:new THREE.Vector3(),n:new THREE.Vector3(),w:new THREE.Vector3(),up:new THREE.Vector3(0,1,0)};
+function lassoLineSet(m,a,b,sag,rr){const NS=m.userData.ns,RS=m.userData.rs,pos=m.geometry.attributes.position.array,nor=m.geometry.attributes.normal.array,M=_ll.m.copy(a).lerp(b,.5);M.y-=sag;
+  for(let i=0;i<=NS;i++){const u=i/NS,iu=1-u;_ll.p.set(iu*iu*a.x+2*iu*u*M.x+u*u*b.x,iu*iu*a.y+2*iu*u*M.y+u*u*b.y,iu*iu*a.z+2*iu*u*M.z+u*u*b.z);
+    _ll.t.set(2*iu*(M.x-a.x)+2*u*(b.x-M.x),2*iu*(M.y-a.y)+2*u*(b.y-M.y),2*iu*(M.z-a.z)+2*u*(b.z-M.z)).normalize();
+    _ll.n.crossVectors(_ll.t,_ll.up);if(_ll.n.lengthSq()<1e-6)_ll.n.set(1,0,0);_ll.n.normalize();_ll.w.crossVectors(_ll.n,_ll.t);
+    for(let j=0;j<=RS;j++){const ang=j/RS*Math.PI*2,c=Math.cos(ang),s=Math.sin(ang),k=(i*(RS+1)+j)*3,nx=_ll.n.x*c+_ll.w.x*s,ny=_ll.n.y*c+_ll.w.y*s,nz=_ll.n.z*c+_ll.w.z*s;
+      pos[k]=_ll.p.x+nx*rr;pos[k+1]=_ll.p.y+ny*rr;pos[k+2]=_ll.p.z+nz*rr;nor[k]=nx;nor[k+1]=ny;nor[k+2]=nz;}}
+  m.geometry.attributes.position.needsUpdate=true;m.geometry.attributes.normal.needsUpdate=true;}
+/* 던진 올가미가 나는 동안: 손에서 펼쳐지며 돌고, 내가 던진 것이면 손까지 줄이 따라온다 */
+function lassoThrowFx(p,kind,mine){if(!p)return;const g=p.m.children[p.m.children.length-1];if(!g||!g.userData.spin)return;const sp=g.userData.spin;
+  const line=mine?lassoLine(kind):null;if(line)scene.add(line);const tw=new THREE.Vector3(),hand=new THREE.Vector3();sp.scale.setScalar(.3);
+  rogueFx.push({t:0,up:(e,dt)=>{const live=projs.includes(p);
+    if(!live){if(line){scene.remove(line);line.geometry.dispose();}return false;}
+    sp.scale.setScalar(Math.min(1,.3+e.t*5));sp.rotation.y+=dt*(kind===2?8:6.5);
+    if(line){const L=g.userData.tailL;tw.copy(L);sp.localToWorld(tw);const f=flatFwd();hand.copy(player.position);hand.x+=f.x*.35+f.z*.18;hand.z+=f.z*.35-f.x*.18;hand.y+=cam.third?1.3:1.38;
+      const d=tw.distanceTo(hand);lassoLineSet(line,tw,hand,Math.min(.6,d*.06),.02);}}});}
+/* 맞은 적에게 걸리는 올가미: 위에서 크게 씌워져 몸통으로 내려오며 조이고, 꼬리 줄은 던진 사람 쪽 땅으로 늘어진다 */
+function lassoBind(m,hold,kind){const s=(m.D.scale||1),h=(m.mesh.userData&&m.mesh.userData.h)||1.6,R=Math.round(Math.max(.34,Math.min(2.4,.55*s*(kind===2?.98:1)))*20)/20;
+  const c0=mCenter(m),drop=Math.round((c0.y-m.mesh.position.y)*10)/10,g=new THREE.Group(),body=lassoMesh(kind,R,kind===2?1:0,Math.max(.2,drop));g.add(body);
+  const q=player.position,ang=Math.atan2(-(q.z-c0.z),q.x-c0.x);g.rotation.y=ang;g.position.copy(c0);scene.add(g);
+  const tight=kind===2?.9:.97;
+  rogueFx.push({t:0,o:g,up:(e)=>{if(m.dying!==null||!(m.lassoT>tAll))return false;const c=mCenter(m);
+    const k=Math.min(1,e.t/.32),ek=1-Math.pow(1-k,3);   /* 0.32초: 머리 위에서 몸통으로 씌워진다 */
+    const k2=Math.min(1,Math.max(0,(e.t-.3)/.22)),sc=(1.55-(1.55-1)*ek)*(1-(1-tight)*k2)+(k2>=1?Math.sin(e.t*(kind===2?7:5))*.012:0);   /* 그다음 조인다 */
+    g.position.set(c.x,c.y+(1-ek)*h*.55,c.z);body.scale.set(sc,1,sc);
+    if(kind===2&&Math.random()<.05)VFX.emit(0,c.x+(Math.random()-.5)*R*1.6,c.y+(Math.random()-.5)*.4,c.z+(Math.random()-.5)*R*1.6,0,.25,0,0xffd060,.22,0,1.4);}});
+  return g;}
 function throwBombs(st,pts,R,dmg,opt){const objs=pts.map(()=>{const g=new THREE.Group();const b=new THREE.Mesh(new THREE.SphereGeometry(.17,10,8),new THREE.MeshStandardMaterial({color:0x26222c,metalness:.4,roughness:.5}));g.add(b);
     const sp=new THREE.Mesh(new THREE.SphereGeometry(.05,6,5),new THREE.MeshBasicMaterial({color:0xffd060}));sp.position.y=.2;g.add(sp);g.position.copy(st);scene.add(g);return g;});
   const fl=.38,fuse=.75;let boomed=false;sfx('throw',st,.9);
