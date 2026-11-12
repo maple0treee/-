@@ -2787,12 +2787,12 @@ setInterval(tick,400);
         if (m.idleT > 10 && m.hp < m.mh) { m.hp = Math.min(m.mh, m.hp + m.mh * 0.04 * TICK); m.dirty = true; if (m.hp >= m.mh) { m.hitBy.clear(); m.phase = 1; m.said = 0; } }
         moveToward(m, m.home.x, m.home.z, 2.5); return;
       }
-      if (m.idleT > 3 || !m.said) { broadcast({ t: 'bsay', m: W ? `${NMi} 날개를 펼쳤다.` : '붉은 용 이그니스가 깨어났다! 바닥의 붉은 표시를 피하세요.', lair: 1, ax: A.x, az: A.z }); m.said = 1; }
+      if (m.idleT > 3 || !m.said) { broadcast({ t: 'bsay', m: W ? `${NM}의 눈이 하나씩 뜨인다.` : '붉은 용 이그니스가 깨어났다! 바닥의 붉은 표시를 피하세요.', lair: 1, ax: A.x, az: A.z }); m.said = 1; }
       m.idleT = 0;
       const C = m.cd; for (const k in C) C[k] -= TICK;
       m.gap -= TICK; m.atkCd -= TICK;
       const frac = m.hp / m.mh, ph = frac < 0.25 ? 3 : frac < 0.55 ? 2 : 1;
-      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? `${NMi} 높이 떠올랐다.` : `${NMi} 울부짖는다.`) : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
+      if (ph > m.phase) { m.phase = ph; broadcast({ t: 'bsay', m: W ? (ph === 2 ? '하늘의 눈이 열렸다.' : `${NM}의 살갗이 찢어지며 별빛이 쏟아진다.`) : ph === 2 ? '이그니스가 날개를 펼쳤다! 하늘에서 불덩이가 쏟아진다.' : '이그니스가 분노했다! 숨결이 두 번 휩쓴다.', lair: 1, ax: A.x, az: A.z }); C.meteor = Math.min(C.meteor, 1); }
       const fast = ph === 3 ? 0.65 : ph === 2 ? 0.82 : 1;
       if (m.windup > 0) { m.windup -= TICK; if (m.windup <= 0) { const t = tg.find((q) => q.id === m.biteTo); if (t && Math.hypot(t.x - m.x, t.z - m.z) < m.r + 3.2) send(t.id, { t: 'matk', i: m.i, to: t.id, atk: m.atk }); nearCast(m, { t: 'matk', i: m.i, to: null }, m.biteTo); m.atkCd = 1.8 * fast; } return; }
       if (m.gap > 0 || m.sks.some((s) => s.block)) { lairClamp(m, m.r); return; }
@@ -3342,7 +3342,7 @@ const ZONES={
   hinn:{name:'한나의 여관',diff:0,rec:'',sky:0x1c150f,mm:'#5a4632'},
   myhome:{get name(){return P&&P.name?`${P.name}의 집`:'내 집';},diff:0,rec:'',sky:0x1c150f,mm:'#5a4632'},
   hall:{name:'길드홀 지하실',diff:0,rec:'',sky:0x16110c,mm:'#4a3e34'},
-  wlair:{name:'와이번 둥지',diff:5,rec:'',sky:0xb9c6cc,mm:'#6a6258'},
+  wlair:{name:'와이번 둥지',diff:5,rec:'',sky:0x0d0a16,mm:'#3a3446'},
   silva:{name:'실바',diff:6,sky:0xa8c8a0,mm:'#3f6a38'},
   arbus:{name:'아르부스',diff:6,sky:0xdce6ee,mm:'#dde6ec'},
   kaolis:{name:'카올리스',diff:6,sky:0x9fd0e8,mm:'#3f8ab0'},
@@ -6837,122 +6837,334 @@ function makeBiped2(D){
   g.userData.h=1.85;
   return g;
 }
-/* ===== 와이번: 매끈한 곡면 몸 + 날개 팔 (움직임 그룹은 붉은 용과 같아 같은 움직임 코드를 쓴다) ===== */
+/* ===== 와이번: 별 너머에서 온 것 (2026-11-12 원호 "엄청 무섭게, 코즈믹 호러 느낌으로. 게임에 무리가 가지 않게")
+   뼈대·움직임 그룹(body·neck·head·jaw·glow·wingL/R·foldL/R·legs·tail)은 예전 자리 그대로라 붉은 용과 같은 움직임 코드를 쓴다.
+   - 살갗 군데군데가 찢어져 그 안으로 별밤이 비친다. 보는 방향으로 별을 그려서 몸이 움직여도 별은 제자리에 있다(몸에 뚫린 구멍처럼 보인다). 맞을수록 찢어짐이 번진다(WYV.U.uVoid).
+   - 날개막은 통째로 밤하늘 구멍이다. 군데군데 찢겨 뚫려 있다.
+   - 몸 곳곳에 눈이 서른 개 넘게 박혀 있고, 모두 나(카메라)를 본다. 둥지에 들어오기 전엔 감고 있다가 들어오면 하나씩 뜬다.
+   - 머리는 눈 없는 뼈 가면에 눈 무더기, 양옆으로 벌어지는 큰 턱, 목구멍 속 눈, 머리 뒤의 부서진 고리. 가슴·턱 밑엔 촉수.
+   셰이더는 살·날개막·눈·촉수 넷뿐이고 모든 부위가 같이 쓴다. 모양·재질은 한 번만 만들어 다시 나올 때도 쓴다. */
+const WYV={U:{uT:{value:0},uVoid:{value:0}},M:null,eyeGeo:null};
+const WYV_GLSL=`
+float wvh(vec3 p){p=fract(p*vec3(.1031,.1030,.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}
+float wvn(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+  return mix(mix(mix(wvh(i),wvh(i+vec3(1.,0.,0.)),f.x),mix(wvh(i+vec3(0.,1.,0.)),wvh(i+vec3(1.,1.,0.)),f.x),f.y),
+             mix(mix(wvh(i+vec3(0.,0.,1.)),wvh(i+vec3(1.,0.,1.)),f.x),mix(wvh(i+vec3(0.,1.,1.)),wvh(i+vec3(1.,1.,1.)),f.x),f.y),f.z);}
+vec3 wvStars(vec3 d,float t,float nb){vec3 c=vec3(0.);
+  float n=wvn(d*2.2+vec3(0.,t*.02,0.))*.6+wvn(d*5.1)*.4;
+  c+=mix(vec3(.13,.02,.22),vec3(.02,.12,.16),wvn(d*1.3+7.))*smoothstep(.4,.95,n)*1.3*nb;
+  for(int k=0;k<2;k++){float s=k==0?60.:150.;vec3 p=d*s;vec3 i=floor(p);vec3 f=fract(p)-.5;float h=wvh(i+float(k)*17.);
+    if(h>.9){vec3 o=vec3(wvh(i+3.1),wvh(i+5.7),wvh(i+9.3))-.5;float r=length(f-o*.5);float tw=.55+.45*sin(t*(1.5+h*4.)+h*40.);
+      c+=mix(vec3(.7,.78,1.),vec3(1.,.75,.95),wvh(i+1.))*smoothstep(.16,.0,r)*tw*(k==0?2.2:1.3);}}
+  return c;}
+`;
+function wyMats(){if(WYV.M)return WYV.M;const U=WYV.U;
+  const hook=(m,key,vs,fs,head='')=>{m.onBeforeCompile=s=>{s.uniforms.uT=U.uT;s.uniforms.uVoid=U.uVoid;
+      s.vertexShader='uniform float uT,uVoid;varying vec3 vMP;varying vec3 vWP;'+head+'\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvMP=position;\n'+vs).replace('#include <project_vertex>','#include <project_vertex>\nvWP=(modelMatrix*vec4(transformed,1.)).xyz;');
+      s.fragmentShader='uniform float uT,uVoid;varying vec3 vMP;varying vec3 vWP;'+head.replace(/attribute[^;]*;/g,'')+'\n'+WYV_GLSL+s.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n'+fs);};
+    m.customProgramCacheKey=()=>'wyv3-'+key;return m;};
+  /* 살: 젖은 듯 번들거리는 멍빛 살. 천천히 숨 쉬듯 부풀고, 찢어진 곳엔 별밤, 찢어진 가장자리는 보랏빛으로 탄다 */
+  const skin=hook(new THREE.MeshStandardMaterial({vertexColors:true,roughness:.4,metalness:.05}),'skin',
+    'transformed+=objectNormal*(.022*sin(uT*1.3+position.z*2.1+position.x*1.7)+.006*sin(uT*5.1+position.y*9.+position.z*7.));',
+    '{float n=wvn(vMP*1.5+vec3(0.,0.,uT*.04))*.6+wvn(vMP*4.3-uT*.03)*.28+wvn(vMP*13.)*.12;float th=.69-uVoid*.3;float m=smoothstep(th,th+.006,n),edge=smoothstep(th-.025,th,n)*(1.-m);'+
+    'vec3 vd=normalize(vWP-cameraPosition);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.0),m);roughnessFactor=mix(roughnessFactor,1.,m);'+
+    'totalEmissiveRadiance+=wvStars(vd,uT,.3)*m*2.+vec3(.75,.3,1.)*pow(edge,3.)*(.6+.4*sin(uT*3.+vMP.z*4.));'+
+    'float rim=1.-abs(dot(normalize(vViewPosition),normal));totalEmissiveRadiance+=vec3(.14,.08,.24)*pow(rim,3.)*.5;}');
+  /* 날개막: 밤하늘 구멍. 막의 결(핏줄)만 희미하게 보이고 군데군데 찢겨 뚫렸다 */
+  const mem=hook(new THREE.MeshStandardMaterial({color:0x07050c,roughness:.9,side:THREE.DoubleSide}),'mem','',
+    '{float h=wvn(vMP*1.9+3.)*.7+wvn(vMP*5.3)*.3;if(h>.74)discard;float rimH=smoothstep(.66,.74,h);'+
+    'vec3 vd=normalize(vWP-cameraPosition);float vein=smoothstep(.035,.0,abs(wvn(vMP*2.6)-.5))+smoothstep(.02,.0,abs(wvn(vMP*6.1+9.)-.5))*.6;'+
+    'totalEmissiveRadiance+=wvStars(vd,uT,.35)*1.3+vec3(.3,.08,.35)*vein*(.12+.1*sin(uT*2.+vMP.x*3.))+vec3(.75,.3,1.)*pow(rimH,4.)*.9;}');
+  /* 눈: 공 모양 그대로 두고, 셰이더가 눈동자를 늘 카메라 쪽에 그린다 (모든 눈이 나를 본다). 눈동자 속도 별밤 */
+  const eyeH='varying vec3 vEN;varying vec3 vEC;';
+  const eyeVS='vEN=position;{vec3 wc=(modelMatrix*vec4(0.,0.,0.,1.)).xyz;vec3 tc=normalize(cameraPosition-wc);mat3 R=mat3(modelMatrix);vec3 l=tc*R;vEC=normalize(l/vec3(dot(R[0],R[0]),dot(R[1],R[1]),dot(R[2],R[2])));}';
+  const eyeFS=(ir1,ir2,two)=>'{vec3 en=normalize(vEN);float c=dot(en,vEC);vec3 ax=normalize(cross(vEC,vec3(.0013,1.,.0021)));vec3 bx=cross(vEC,ax);float ang=atan(dot(en,bx),dot(en,ax));'+
+    'vec3 col=vec3(.8,.76,.6)*(.75+.25*c);float vein=smoothstep(.06,.0,abs(wvn(en*7.)-.5))*smoothstep(.9,.4,c);col=mix(col,vec3(.45,.03,.05),vein*.85);'+
+    'float st=.55+.45*sin(ang*23.+sin(ang*7.)*2.5);float ir=smoothstep(.79,.81,c);vec3 irc=mix(vec3'+ir1+',vec3'+ir2+',smoothstep(.81,.95,c))*st;col=mix(col,irc,ir);'+
+    'float pu=smoothstep(.948,.956,c'+(two?')+smoothstep(.986,.99,dot(en,normalize(vEC+ax*.3)))':')')+';col=mix(col,vec3(.0),min(1.,pu));'+
+    'diffuseColor.rgb=col;totalEmissiveRadiance+=irc*ir*(1.-min(1.,pu))*.9+wvStars(en,uT,1.)*min(1.,pu)*1.4+col*.08;}';
+  const eyeA=hook(new THREE.MeshStandardMaterial({color:0xffffff,roughness:.12}),'eyeA',eyeVS,eyeFS('(1.,.72,.12)','(.55,.08,.1)',0),eyeH);
+  const eyeB=hook(new THREE.MeshStandardMaterial({color:0xffffff,roughness:.12}),'eyeB',eyeVS,eyeFS('(.7,.35,1.)','(.12,.75,.7)',1),eyeH);
+  /* 촉수: 끝으로 갈수록 크게 흔들린다. 끝은 희미하게 빛난다 */
+  const tent=hook(new THREE.MeshStandardMaterial({vertexColors:true,roughness:.35,side:THREE.DoubleSide}),'tent',
+    '{float w=aT*aT;transformed.x+=sin(uT*1.6+aPh+aT*5.)*w*aL*.22;transformed.z+=cos(uT*1.25+aPh*1.7+aT*4.)*w*aL*.2;transformed.y+=sin(uT*2.1+aPh)*w*aL*.06;vTT=aT;}',
+    '{totalEmissiveRadiance+=vec3(.55,.25,.95)*smoothstep(.8,1.,vTT)*(.6+.4*sin(uT*4.+vMP.x*20.));}','\nattribute float aT;\nattribute float aPh;\nattribute float aL;\nvarying float vTT;');
+  const bone=new THREE.MeshStandardMaterial({color:0x1c1822,roughness:.45});
+  const horn=new THREE.MeshStandardMaterial({color:0xb4aa96,roughness:.55});
+  const tooth=new THREE.MeshStandardMaterial({color:0xe2d8c2,roughness:.35});
+  const shard=new THREE.MeshStandardMaterial({color:0x050408,roughness:.15,metalness:.7,emissive:0x12061f});
+  const ring=new THREE.MeshBasicMaterial({color:0xa070ff,transparent:true,opacity:.7,blending:THREE.AdditiveBlending,depthWrite:false});
+  return WYV.M={skin,mem,eyeA,eyeB,tent,bone,horn,tooth,shard,ring};}
+/* 표면 찾기: o에서 d쪽으로 가다 처음 밖으로 나오는 점과 그 자리의 바깥 방향 */
+function wySurf(f,o,d){const n=Math.hypot(d[0],d[1],d[2]),dx=d[0]/n,dy=d[1]/n,dz=d[2]/n;let x=o[0],y=o[1],z=o[2];
+  for(let i=0;i<500&&f(x,y,z)<0;i++){x+=dx*.01;y+=dy*.01;z+=dz*.01;}
+  const e=.01,gx=f(x+e,y,z)-f(x-e,y,z),gy=f(x,y+e,z)-f(x,y-e,z),gz=f(x,y,z+e)-f(x,y,z-e),gl=Math.hypot(gx,gy,gz)||1;return {p:[x,y,z],n:[gx/gl,gy/gl,gz/gl]};}
+/* 작은 조각들(가시·이빨)을 한 덩어리로: 그리기 횟수를 줄인다 */
+function wyMerge(list){const P=[],N=[];for(const g0 of list){const g=g0.index?g0.toNonIndexed():g0;const p=g.attributes.position.array,n=g.attributes.normal.array;for(let i=0;i<p.length;i++){P.push(p[i]);N.push(n[i]);}}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.computeBoundingSphere();return g;}
+const _wyM4=new THREE.Matrix4(),_wyQ=new THREE.Quaternion(),_wyV=new THREE.Vector3(),_wyY=new THREE.Vector3(0,1,0);
+function wyCone(r,h,seg,p,dir,bend=0){const g=new THREE.ConeGeometry(r,h,seg);g.translate(0,h/2,0);if(bend)g.rotateX(bend);_wyV.set(dir[0],dir[1],dir[2]).normalize();_wyQ.setFromUnitVectors(_wyY,_wyV);g.applyMatrix4(_wyM4.makeRotationFromQuaternion(_wyQ));g.translate(p[0],p[1],p[2]);return g;}
+/* 촉수 묶음: [뿌리, 방향, 길이, 굵기, 흔들림 어긋남] */
+function wyTentGeo(list){const P=[],C=[],T=[],PH=[],L=[],I=[],SEG=10,RAD=6,c0=_c3(0x18141f),c1=_c3(0x6a5a84);
+  for(const [o,dv,len,r0,ph] of list){const d=new THREE.Vector3(...dv).normalize(),a=Math.abs(d.x)>.9?new THREE.Vector3(0,0,1):new THREE.Vector3(1,0,0),u=a.clone().cross(d).normalize(),w=d.clone().cross(u),b=P.length/3;
+    for(let i=0;i<=SEG;i++){const k=i/SEG,r=r0*(1-k*.9),cx=o[0]+d.x*len*k,cy=o[1]+d.y*len*k,cz=o[2]+d.z*len*k,cc=_mx(c0,c1,k*k);
+      for(let j=0;j<RAD;j++){const an=j/RAD*Math.PI*2,ca=Math.cos(an),sa=Math.sin(an);P.push(cx+(u.x*ca+w.x*sa)*r,cy+(u.y*ca+w.y*sa)*r,cz+(u.z*ca+w.z*sa)*r);
+        C.push(Math.pow(cc[0],1.7),Math.pow(cc[1],1.7),Math.pow(cc[2],1.7));T.push(k);PH.push(ph);L.push(len);}}
+    for(let i=0;i<SEG;i++)for(let j=0;j<RAD;j++){const a0=b+i*RAD+j,a1=b+i*RAD+(j+1)%RAD,b0=a0+RAD,b1=a1+RAD;I.push(a0,a1,b0,a1,b1,b0);}}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
+  g.setAttribute('aT',new THREE.Float32BufferAttribute(T,1));g.setAttribute('aPh',new THREE.Float32BufferAttribute(PH,1));g.setAttribute('aL',new THREE.Float32BufferAttribute(L,1));g.setIndex(I);g.computeVertexNormals();
+  g.boundingSphere=new THREE.Sphere(new THREE.Vector3(),6);return g;}
 function makeWyvern2(D){
-  const g=new THREE.Group(),mats=[];
-  const sc=_c3(0x35604c),dk=_c3(0x1a2c24),bl=_c3(0xcabd8c),ridge=_c3(0x24382e);
-  const skin=(x,y,z,bellyY,f=22)=>{const n=_nz(x,y,z,f);let c=_mx(sc,dk,_st(.2,.9,y-bellyY)*.55);c=_mx(c,bl,_st(bellyY+.05,bellyY-.35,y)*.9);
-    // 배 비늘 띠
-    if(y<bellyY&&Math.sin(z*7.5)>.75)c=_sc(c,.82);
-    // 등 무늬
+  const g=new THREE.Group(),M=wyMats(),mats=[M.skin,M.bone,M.mem,M.tent],eyes=[];
+  if(!WYV.eyeGeo)WYV.eyeGeo=new THREE.SphereGeometry(1,20,14);
+  const G=WYV.geo||(WYV.geo={});
+  const sc=_c3(0x3a3446),dk=_c3(0x141119),bl=_c3(0x8a8376),ridge=_c3(0x221e2a),bone=_c3(0xbdb3a0),wet=_c3(0x2a0a12);
+  const skin=(x,y,z,bellyY,f=22)=>{const n=_nz(x,y,z,f);let c=_mx(sc,dk,_st(.2,.9,y-bellyY)*.6);c=_mx(c,bl,_st(bellyY+.05,bellyY-.35,y)*.75);
+    if(y<bellyY&&Math.sin(z*7.5)>.75)c=_sc(c,.8);
     if(y>bellyY+.55&&Math.sin(z*3.1+Math.abs(x)*4)>.6)c=_mx(c,ridge,.6);
-    return _sc(c,.86+n*.24);};
-  // 몸통 (몸 그룹 원점 = 예전과 같은 자리)
+    return _sc(c,.82+n*.26);};
+  const meshOf=(geo,m=M.skin,sh=true)=>{const me=new THREE.Mesh(geo,m);me.castShadow=sh;return me;};
+  /* 눈 하나: 표면에 반쯤 묻고 바깥을 보게 돌린다. 감기는 눈 자신의 위아래(y)로 납작해지는 것 */
+  const eye=(par,s,r,mat=M.eyeA)=>{const e=new THREE.Mesh(WYV.eyeGeo,mat);e.position.set(s.p[0]-s.n[0]*r*.35,s.p[1]-s.n[1]*r*.35,s.p[2]-s.n[2]*r*.35);
+    _wyV.set(...s.n).normalize();e.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),_wyV);e.scale.set(r,r*.06,r);par.add(e);
+    eyes.push({m:e,r,o:0,dl:Math.random()*1.6,nb:2+Math.random()*8,bl:0});return e;};
+  /* 눈꺼풀: 눈 둘레에 도톰한 살 고리 (눈 가장자리를 덮어 박혀 있는 것처럼) */
+  const lid=(f,list)=>(x,y,z)=>{let d=f(x,y,z);for(const [s,r] of list){const qx=x-s.p[0]+s.n[0]*r*.1,qy=y-s.p[1]+s.n[1]*r*.1,qz=z-s.p[2]+s.n[2]*r*.1,h=qx*s.n[0]+qy*s.n[1]+qz*s.n[2],rho=Math.hypot(qx-s.n[0]*h,qy-s.n[1]*h,qz-s.n[2]*h);
+    d=_smin(d,Math.hypot(rho-r*.92,h)-r*.32,r*.5);}return d;};
+  const nearEye=(list,x,y,z)=>{let k=0;for(const [s,r] of list){const d=Math.hypot(x-s.p[0],y-s.p[1],z-s.p[2])/(r*1.7);if(d<1)k=Math.max(k,1-d);}return k;};
+  // 몸통: 앙상하게 마른 몸. 갈비뼈가 비치고 배는 꺼졌다
   const body=new THREE.Group();body.position.y=2.3;body.rotation.x=.04;g.add(body);
-  const fb=(x,y,z)=>{const ax=Math.abs(x);
-    let d=_ell(x,y,z,0,0,0,1.0,.9,1.9);
-    d=_smin(d,_ell(x,y,z,0,.28,1.5,1.05,1.0,1.05),.5);                 // 가슴
-    d=_smin(d,_ell(x,y,z,0,-.05,-1.45,.88,.82,1.05),.45);               // 엉덩이
-    d=_smin(d,_ell(ax,y,z,.82,-.25,-.85,.5,.75,.72),.35);               // 허벅지 근육
-    d=_smin(d,_ell(ax,y,z,.75,.62,1.45,.45,.38,.5),.3);                 // 날개 어깨
-    d=_smin(d,_cap(x,y,z,0,.5,2.0,0,.95,2.75,.72,.6),.35);              // 목 밑동
-    d=_smin(d,_cap(x,y,z,0,-.05,-2.2,0,-.12,-2.95,.62,.5),.35);         // 꼬리 밑동
+  const fb0=(x,y,z)=>{const ax=Math.abs(x);
+    let d=_ell(x,y,z,0,.05,0,.9,.85,1.9);
+    d=_smin(d,_ell(x,y,z,0,.3,1.5,.98,.95,1.0),.5);
+    d=_smin(d,_ell(x,y,z,0,-.05,-1.45,.8,.78,1.0),.45);
+    d=_smin(d,_ell(ax,y,z,.78,-.25,-.85,.46,.72,.68),.35);
+    d=_smin(d,_ell(ax,y,z,.72,.62,1.45,.42,.36,.48),.3);
+    d=_smin(d,_cap(x,y,z,0,.5,2.0,0,.95,2.75,.66,.56),.35);
+    d=_smin(d,_cap(x,y,z,0,-.05,-2.2,0,-.12,-2.95,.56,.46),.35);
+    if(z>-1.1&&z<1.9)d-=.05*Math.pow(Math.max(0,Math.sin(z*5.6+.4)),3)*_st(.3,.75,ax)*_st(-.5,.1,y);   // 갈비뼈
+    d-=.06*Math.pow(Math.max(0,Math.sin(z*9)),4)*_st(.55,.95,y)*_st(.28,0,ax);                          // 등뼈 마디
+    d+=.07*_st(-.15,-.65,y)*_st(.55,0,ax)*_st(-1.6,-.6,z)*_st(1.8,.9,z);                                   // 꺼진 배
     return d;};
-  body.add(m2mesh(m2geo('wy_body',fb,(x,y,z)=>skin(x,y,z,-.35),[-1.7,-1.4,-3.3],[1.7,1.7,3.4],.07),mats,{r:.6}));
-  // 등가시 (매끈한 원뿔)
-  const hornM=MD.smooth(0x2a2420,{roughness:.45});mats.push(hornM);
-  for(let k=0;k<9;k++){const sp=new THREE.Mesh(new THREE.ConeGeometry(.13,.5-k*.03,8),hornM);sp.position.set(0,1.02-Math.abs(k-3)*.05,1.9-k*.55);sp.rotation.x=-.45;body.add(sp);}
-  // 목: 세 마디
+  const BE=[[1.6,1.0,.11,1],[1.1,1.3,.08,1],[.35,1.1,.13,-1],[-.3,1.38,.09,-1],[-.95,.9,.08,1],[.9,.72,.065,-1],[-1.45,1.2,.1,1],[.05,.6,.07,1],[2.05,.85,.08,-1],[-.65,.5,.055,-1],[.25,1.75,.06,1],[1.45,1.65,.055,-1],[-1.9,.95,.06,-1]]
+    .map(([z,a,r,s])=>[wySurf(fb0,[0,.1,z],[s*Math.sin(a),Math.cos(a),0]),r*1.6]);
+  BE.push([wySurf(fb0,[0,.1,1.7],[0,-.35,1]),.3]);   // 가슴 한가운데 큰 눈
+  const fb=lid(fb0,BE);
+  body.add(meshOf(G.body||(G.body=m2geo('wy3_body',fb,(x,y,z)=>_mx(skin(x,y,z,-.35),wet,nearEye(BE,x,y,z)*.8),[-1.7,-1.4,-3.3],[1.7,1.7,3.4],.07))));
+  BE.forEach(([s,r],i)=>eye(body,s,r,i%3===1?M.eyeB:M.eyeA));
+  // 등뼈 가시: 길이도 기울기도 제각각, 몇은 부러졌다
+  body.add(meshOf(G.spine||(G.spine=wyMerge([...Array(13)].map((_,k)=>{const z=2.1-k*.42,h=(k%4===2?.22:.55+((k*37)%7)*.07)*(1-k*.03),s=wySurf(fb,[0,.2,z],[((k*13)%5-2)*.06,1,0]);
+    return wyCone(.05+.02*(k%3),h,6,s.p,[s.n[0]*.6,1,-.55],((k*29)%9-4)*.06);}).concat([-1,1].flatMap(s=>[0,1,2].map(j=>wyCone(.06,.7-j*.15,6,[s*(.95+j*.1),1.0-j*.12,1.35-j*.25],[s*.9,.6,-.4+j*.2],.3)))))),M.horn));
+  // 가슴 아래 촉수
+  body.add(meshOf(G.tentB||(G.tentB=wyTentGeo([[-.45,-.55,1.6],[.3,-.6,1.3],[-.15,-.65,.8],[.5,-.55,.4],[-.5,-.6,0],[.1,-.62,-.4],[.35,-.5,1.85]].map(([x,y,z],k)=>[[x,y,z],[x*.25,-1,.15*(k%3-1)],1.5+((k*7)%5)*.18,.12-k*.005,k*1.7]))),M.tent,false));
+  // 목: 세 마디, 마디마다 눈
   const neck=[];
-  const segGeo=(k,len,r0,r1)=>m2geo('wy_n'+k,(x,y,z)=>_smin(_cap(x,y,z,0,0,0,0,len[0],len[1],r0,r1),_ell(x,y,z,0,len[0]*.5,len[1]*.5,r0*.95,r0*.9,Math.hypot(len[0],len[1])*.55),.15),
-    (x,y,z)=>{const u=(y-z*.9);return skin(x,u*.6,z,-.25,26);},[-r0-.2,-r0-.2,-r0-.2],[r0+.2,len[0]+r1+.2,len[1]+r1+.2],.04);
-  const n0=new THREE.Group();n0.position.set(0,.6,2.4);body.add(n0);neck.push(n0);n0.add(m2mesh(segGeo(0,[.75,.8],.62,.54),mats,{r:.6}));
-  const n1=new THREE.Group();n1.position.set(0,.75,.8);n0.add(n1);neck.push(n1);n1.add(m2mesh(segGeo(1,[.7,.75],.55,.47),mats,{r:.6}));
-  const n2=new THREE.Group();n2.position.set(0,.7,.75);n1.add(n2);neck.push(n2);n2.add(m2mesh(segGeo(2,[.45,.85],.48,.42),mats,{r:.6}));
-  // 머리
+  const segF=(len,r0,r1)=>(x,y,z)=>_smin(_cap(x,y,z,0,0,0,0,len[0],len[1],r0,r1),_ell(x,y,z,0,len[0]*.5,len[1]*.5,r0*.9,r0*.85,Math.hypot(len[0],len[1])*.55),.15);
+  const NE=[[[.6,.4,.7],.13,1],[[-.7,.55,.35],.09,0],[[.75,.2,.4],.11,1],[[-.4,.8,.3],.08,0]];
+  const segGeo=(k,len,r0,r1,ev)=>{const f0=segF(len,r0,r1),L=ev.map(([d,r])=>[wySurf(f0,[0,len[0]*.5,len[1]*.5],d),r]),f=lid(f0,L);
+    return {g:G['n'+k]||(G['n'+k]=m2geo('wy3_n'+k,f,(x,y,z)=>{const u=(y-z*.9);return _mx(skin(x,u*.6,z,-.25,26),wet,nearEye(L,x,y,z)*.8);},[-r0-.2,-r0-.2,-r0-.2],[r0+.2,len[0]+r1+.2,len[1]+r1+.2],.04)),L};};
+  const segs=[[0,[.75,.8],.58,.5,[NE[0],NE[1]]],[1,[.7,.75],.5,.43,[NE[2]]],[2,[.45,.85],.44,.38,[NE[3]]]];
+  let par=body;const npos=[[0,.6,2.4],[0,.75,.8],[0,.7,.75]];
+  segs.forEach(([k,len,r0,r1,ev],i)=>{const N=new THREE.Group();N.position.set(...npos[i]);par.add(N);neck.push(N);const S=segGeo(k,len,r0,r1,ev);N.add(meshOf(S.g));S.L.forEach(([s,r],j)=>eye(N,s,r,ev[j][2]?M.eyeB:M.eyeA));par=N;});
+  const n2=neck[2];
+  // 머리: 눈구멍 없는 길쭉한 뼈 가면, 위에 눈 무더기
   const head=new THREE.Group();head.position.set(0,.45,.85);head.scale.setScalar(1.3);n2.add(head);
-  const fh=(x,y,z)=>{const ax=Math.abs(x);
-    let d=_ell(x,y,z,0,.14,.1,.5,.42,.58);
-    d=_smin(d,_cap(x,y,z,0,.1,.35,0,.06,1.45,.33,.2),.22);               // 주둥이
-    d=_smin(d,_ell(ax,y,z,.26,.36,.55,.16,.1,.26),.1);                   // 눈두덩
-    d=_smin(d,_ell(ax,y,z,.12,.2,1.45,.07,.06,.08),.05);                // 콧구멍 둔덕
-    d=_smin(d,_cap(ax,y,z,.32,.02,.1,.42,-.12,-.18,.12,.05),.12);        // 볼 가시 뿌리
-    // 아래턱 자리(위턱만): 아래는 평평하게 깎는다
-    d=Math.max(d,-(y+.06));
-    return d;};
-  const hc=(x,y,z)=>{let c=skin(x,y,z,-.02,34);if(z>1.3&&y>.12&&Math.abs(x)>.06&&Math.abs(x)<.14)c=[.06,.05,.05];return c;};
-  head.add(m2mesh(m2geo('wy_head',fh,hc,[-.62,-.12,-.65],[.62,.62,1.75],.025),mats,{r:.55}));
+  const fh0=(x,y,z)=>{const ax=Math.abs(x);
+    let d=_ell(x,y,z,0,.12,.05,.44,.4,.58);
+    d=_smin(d,_cap(x,y,z,0,.1,.3,0,.0,1.55,.3,.13),.24);
+    d=_smin(d,_cap(x,y,z,0,.38,-.05,0,.6,-.75,.12,.03),.12);                 // 뒤로 뻗은 볏
+    d=_smin(d,_cap(ax,y,z,.3,.02,.05,.46,-.1,-.3,.1,.04),.12);
+    d=Math.max(d,-(y+.06));return d;};
+  const HE=[[-.17,.62,.11,1],[.13,.78,.095,0],[.27,.38,.075,0],[-.04,1.02,.07,1],[.19,1.18,.05,0],[-.22,1.24,.05,0],[.0,.3,.085,1],[-.31,.3,.06,0],[.08,1.4,.04,1]]
+    .map(([x,z,r,b])=>[wySurf(fh0,[x*.6,.05,z],[x*1.4,1,0]),r*1.35,b]);
+  const fh=lid(fh0,HE);
+  head.add(meshOf(G.head||(G.head=m2geo('wy3_head',fh,(x,y,z)=>{let c=skin(x,y,z,-.02,34);c=_mx(c,_sc(bone,.8+_nz(x,y,z,30)*.25),_st(.05,.3,y)*_st(-.2,.35,z)*.9);return _mx(c,wet,nearEye(HE,x,y,z)*.85);},[-.62,-.12,-.85],[.62,.75,1.8],.025))));
+  HE.forEach(([s,r,b])=>eye(head,s,r,b?M.eyeB:M.eyeA));
+  // 목구멍 속 눈: 턱이 벌어질 때만 보인다
+  eye(head,{p:[0,-.07,.78],n:[0,-.85,.5]},.13,M.eyeB);
   const jaw=new THREE.Group();jaw.position.set(0,-.08,.3);head.add(jaw);
-  jaw.add(m2mesh(m2geo('wy_jaw',(x,y,z)=>{let d=_cap(x,y,z,0,-.06,0,0,-.04,1.05,.28,.15);d=Math.max(d,y+.0);return d;},
-    (x,y,z)=>{let c=_mx(bl,dk,_st(-.05,-.2,y)*.3);if(y>-.03)c=[.45,.14,.16];return _sc(c,.9+_nz(x,y,z,40)*.15);},[-.35,-.36,-.3],[.35,.05,1.25],.02),mats,{r:.6}));
-  const toothM=MD.smooth(0xf0e8d8,{roughness:.4});
-  for(let k=0;k<6;k++)[-1,1].forEach(s=>{const t=new THREE.Mesh(new THREE.ConeGeometry(.035,.14,6),toothM);t.position.set(s*.2*(1-k*.08),.02,.18+k*.16);jaw.add(t);
-    const u=new THREE.Mesh(new THREE.ConeGeometry(.035,.14,6),toothM);u.position.set(s*.21*(1-k*.08),-.08,.48+k*.16);u.rotation.x=Math.PI;head.add(u);});
-  const glow=new THREE.Mesh(new THREE.SphereGeometry(.26,12,10),new THREE.MeshBasicMaterial({color:0x9aff60,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));glow.position.set(0,-.05,1.15);head.add(glow);
-  const eyeM=mat(0xfff0a0,{emissive:0xffb020,emissiveIntensity:1.6,flatShading:false});
-  [-1,1].forEach(s=>{const e=new THREE.Mesh(new THREE.SphereGeometry(.085,12,10),eyeM);e.position.set(s*.33,.33,.68);e.scale.set(.7,.6,.45);head.add(e);
-    const pu=new THREE.Mesh(new THREE.BoxGeometry(.012,.09,.02),mat(0x100808));pu.position.set(s*.355,.33,.71);head.add(pu);
-    // 뒤로 휘는 뿔 두 쌍
-    const h1=new THREE.Mesh(new THREE.ConeGeometry(.1,1.0,10),hornM);h1.position.set(s*.28,.5,-.38);h1.rotation.set(-1.15,0,s*.25);head.add(h1);
-    const h2=new THREE.Mesh(new THREE.ConeGeometry(.07,.55,8),hornM);h2.position.set(s*.42,.25,-.3);h2.rotation.set(-1.35,0,s*.7);head.add(h2);});
-  // 날개(=팔): 매끈한 뼈 + 반투명 막
-  const boneM=MD.smooth(0x1e2e26,{roughness:.55});mats.push(boneM);
-  const memM=new THREE.MeshStandardMaterial({color:0x4a6a52,roughness:.75,side:THREE.DoubleSide,transparent:true,opacity:.9});mats.push(memM);
-  const limb=(a,b,r0,r1)=>{const v=new THREE.Vector3(b[0]-a[0],b[1]-a[1],b[2]-a[2]),L=v.length();const c=new THREE.Mesh(new THREE.CylinderGeometry(r1,r0,L,10),boneM);
-    c.position.set((a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2);c.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.normalize());return c;};
-  const joint=(p,r)=>{const j=new THREE.Mesh(new THREE.SphereGeometry(r,12,10),boneM);j.position.set(...p);return j;};
+  jaw.add(meshOf(G.jaw||(G.jaw=m2geo('wy3_jaw',(x,y,z)=>{let d=_cap(x,y,z,0,-.06,0,0,-.04,1.15,.27,.13);d=Math.max(d,y+.0);return d;},
+    (x,y,z)=>{let c=_mx(bl,dk,_st(-.05,-.2,y)*.4);if(y>-.03)c=[.28,.06,.12];return _sc(c,.9+_nz(x,y,z,40)*.15);},[-.35,-.36,-.3],[.35,.05,1.35],.02))));
+  // 이빨: 바늘 같은 이빨이 두 줄씩 (한 덩어리)
+  const TU=[],TL=[];for(let k=0;k<11;k++)for(const s of [-1,1])for(const row of [0,1]){const z=.12+k*.1+row*.05,w=(.2-row*.05)*(1-k*.045);
+    TL.push(wyCone(.018,.12+((k*7+row)%4)*.03,5,[s*w,.01,z],[s*.15,1,.1*(row?1:-1)]));TU.push(wyCone(.018,.13+((k*5+row)%4)*.03,5,[s*(w+.01),-.07,.3+z],[s*.1,-1,.05]));}
+  jaw.add(meshOf(G.tl||(G.tl=wyMerge(TL)),M.tooth,false));head.add(meshOf(G.tu||(G.tu=wyMerge(TU)),M.tooth,false));
+  // 턱 밑 촉수
+  jaw.add(meshOf(G.tentJ||(G.tentJ=wyTentGeo([[-.15,-.25,.3],[.12,-.27,.5],[.0,-.24,.75],[-.08,-.2,.95],[.17,-.22,.2]].map((p,k)=>[p,[p[0]*.6,-1,.25],.8+((k*3)%4)*.18,.055,k*2.3]))),M.tent,false));
+  // 양옆으로 벌어지는 큰 턱 둘 (턱이 벌어지면 같이 벌어진다)
+  const mand=[-1,1].map(s=>{const Mg=new THREE.Group();Mg.position.set(s*.3,-.03,.25);head.add(Mg);
+    Mg.add(meshOf(G['md'+s]||(G['md'+s]=m2geo('wy3_md'+s,(x,y,z)=>_smin(_cap(x,y,z,0,0,0,s*.12,-.05,.6,.075,.05),_cap(x,y,z,s*.12,-.05,.6,s*-.06,-.1,1.12,.05,.018),.06),
+      (x,y,z)=>_sc(bone,.75+_nz(x,y,z,40)*.25),[-.25,-.22,-.15],[.25,.12,1.25],.018)),M.skin));
+    const hk=new THREE.Mesh(G.mh||(G.mh=wyCone(.03,.2,5,[0,0,0],[0,0,1])),M.horn);hk.position.set(s*-.06,-.1,1.12);hk.rotation.y=-s*.9;Mg.add(hk);return Mg;});
+  const glow=new THREE.Mesh(new THREE.SphereGeometry(.26,12,10),new THREE.MeshBasicMaterial({color:0xb27aff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));glow.position.set(0,-.05,1.15);head.add(glow);
+  // 머리 뒤의 부서진 고리: 검은 조각 아홉 개와 끊긴 빛의 고리 둘이 서로 다르게 돈다
+  const halo=new THREE.Group();halo.position.set(0,.5,-.6);head.add(halo);
+  const hA=new THREE.Group(),hB=new THREE.Group();halo.add(hA,hB);
+  hA.add(meshOf(G.shard||(G.shard=wyMerge([...Array(9)].map((_,k)=>{const a=k/9*Math.PI*2+((k*17)%5)*.06,r=.95+((k*11)%3)*.05,b=new THREE.BoxGeometry(.05,.28+((k*7)%4)*.06,.03);b.rotateZ(a+.25*((k%3)-1));b.translate(Math.cos(a)*r,Math.sin(a)*r,0);return b;}))),M.shard,false));
+  const r1=new THREE.Mesh(G.r1||(G.r1=new THREE.TorusGeometry(.82,.012,4,64,5.2)),M.ring),r2=new THREE.Mesh(G.r2||(G.r2=new THREE.TorusGeometry(1.12,.009,4,72,4.6)),M.ring);hA.add(r1);hB.add(r2);hB.rotation.x=.5;
+  // 날개(=팔): 가는 뼈 + 밤하늘 구멍 같은 막, 막 위에도 눈
+  const limb=(a,b,r0,r1)=>{const v=new THREE.Vector3(b[0]-a[0],b[1]-a[1],b[2]-a[2]),L=v.length();const c=new THREE.Mesh(new THREE.CylinderGeometry(r1,r0,L,8),M.bone);
+    c.position.set((a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2);c.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.normalize());c.castShadow=true;return c;};
+  const joint=(p,r)=>{const j=new THREE.Mesh(new THREE.SphereGeometry(r,10,8),M.bone);j.position.set(...p);return j;};
+  const memEyes=(par,pos,ids,rs)=>ids.forEach((t,j)=>{const a=pos.slice(t*9,t*9+3),b=pos.slice(t*9+3,t*9+6),c=pos.slice(t*9+6,t*9+9);
+    const p=[(a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3,(a[2]+b[2]+c[2])/3],u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],v=[c[0]-a[0],c[1]-a[1],c[2]-a[2]];
+    const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],nl=Math.hypot(...n)||1;eye(par,{p:[p[0]+n[0]/nl*rs[j]*.35,p[1]+n[1]/nl*rs[j]*.35,p[2]+n[2]/nl*rs[j]*.35],n:n.map(q=>q/nl)},rs[j],j%2?M.eyeB:M.eyeA);});
   const mkWing=s=>{const W=new THREE.Group();W.position.set(s*1.0,.9,1.2);W.rotation.set(-.25,s*-.25,s*.35);body.add(W);
     const arm=new THREE.Group();W.add(arm);
     const sh=[0,0,0],el=[s*1.3,.75,-.1],wr=[s*2.5,1.0,0];
-    arm.add(limb(sh,el,.26,.18),limb(el,wr,.17,.12),joint(el,.2),joint(wr,.15));
-    const claw=new THREE.Mesh(new THREE.ConeGeometry(.08,.42,8),hornM);claw.position.set(wr[0],wr[1]+.25,wr[2]+.1);arm.add(claw);
-    const fingers=[[s*6.2,1.6,-1.0],[s*6.6,-.2,-2.0],[s*5.4,-1.2,-3.3],[s*3.6,-1.4,-4.0]];
+    arm.add(limb(sh,el,.22,.15),limb(el,wr,.14,.1),joint(el,.17),joint(wr,.13));
+    const claw=new THREE.Mesh(new THREE.ConeGeometry(.06,.5,6),M.horn);claw.position.set(wr[0],wr[1]+.3,wr[2]+.1);arm.add(claw);
+    const fingers=[[s*6.6,1.9,-1.0],[s*7.1,-.3,-2.1],[s*5.8,-1.5,-3.5],[s*3.8,-1.7,-4.3]];
     const pos=[];let prev=wr;
-    fingers.forEach((f,k)=>{arm.add(limb(wr,f,.08,.035));const cl=new THREE.Mesh(new THREE.ConeGeometry(.05,.25,6),hornM);cl.position.set(...f);arm.add(cl);
+    fingers.forEach(f=>{const mid=[(wr[0]+f[0])/2+s*.15,(wr[1]+f[1])/2+.25,(wr[2]+f[2])/2];arm.add(limb(wr,mid,.07,.05),limb(mid,f,.05,.025),joint(mid,.065));const cl=new THREE.Mesh(new THREE.ConeGeometry(.04,.35,5),M.horn);cl.position.set(...f);arm.add(cl);
       pos.push(...wr,...prev,...f);prev=f;});
     pos.push(...wr,...prev,0,-.6,-2.6);pos.push(...wr,0,-.6,-2.6,...sh);
     const mg=new THREE.BufferGeometry();mg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));mg.computeVertexNormals();
-    arm.add(new THREE.Mesh(mg,memM));return arm;};
+    arm.add(new THREE.Mesh(mg,M.mem));memEyes(arm,pos,[1,2,3,4],[.3,.24,.36,.2]);return arm;};
   const wingL=mkWing(-1),wingR=mkWing(1);
   wingL.parent.visible=wingR.parent.visible=false;  // 펼친 날개는 날 때만
   // 접은 날개 = 앞발: 손목(날개 마디)으로 땅을 짚고, 손가락과 막은 등 쪽으로 접어 올린다
   const mkFold=s=>{const F=new THREE.Group();F.position.set(s*1.0,.75,1.3);body.add(F);
     const E=[s*1.45,.75,-.6],Wr=[s*2.05,-2.85,1.05];
-    F.add(limb([0,0,0],E,.27,.2),limb(E,Wr,.19,.14),joint(E,.21),joint(Wr,.17));
-    const kn=new THREE.Mesh(new THREE.ConeGeometry(.1,.42,8),hornM);kn.position.set(Wr[0],Wr[1]-.02,Wr[2]+.28);kn.rotation.x=Math.PI/2;F.add(kn);
-    for(const dx of [-.12,.12]){const c=new THREE.Mesh(new THREE.ConeGeometry(.06,.26,8),hornM);c.position.set(Wr[0]+dx,Wr[1]-.05,Wr[2]+.22);c.rotation.x=Math.PI/2+.3;F.add(c);}
-    const tips=[[s*2.05,1.75,-1.3],[s*2.35,1.0,-1.9],[s*2.2,.2,-2.25],[s*1.75,-.45,-2.15]];
+    F.add(limb([0,0,0],E,.23,.17),limb(E,Wr,.16,.11),joint(E,.18),joint(Wr,.14));
+    const kn=new THREE.Mesh(new THREE.ConeGeometry(.08,.5,6),M.horn);kn.position.set(Wr[0],Wr[1]-.02,Wr[2]+.3);kn.rotation.x=Math.PI/2;F.add(kn);
+    for(const dx of [-.12,0,.12]){const c=new THREE.Mesh(new THREE.ConeGeometry(.04,.36,6),M.horn);c.position.set(Wr[0]+dx,Wr[1]-.05,Wr[2]+.26);c.rotation.x=Math.PI/2+.3;F.add(c);}
+    const tips=[[s*2.15,1.95,-1.3],[s*2.45,1.1,-2.0],[s*2.3,.2,-2.4],[s*1.8,-.5,-2.25]];
     const pos=[];let prev=E;
-    tips.forEach(t=>{F.add(limb(Wr,t,.075,.035));pos.push(...Wr,...prev,...t);prev=t;});
+    tips.forEach(t=>{F.add(limb(Wr,t,.06,.025));pos.push(...Wr,...prev,...t);prev=t;});
     pos.push(...Wr,...prev,s*-.35,-.85,-2.0);
-    const mg=new THREE.BufferGeometry();mg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));mg.computeVertexNormals();F.add(new THREE.Mesh(mg,memM));
+    const mg=new THREE.BufferGeometry();mg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));mg.computeVertexNormals();F.add(new THREE.Mesh(mg,M.mem));memEyes(F,pos,[1,2],[.24,.17]);
     return F;};
   const foldL=mkFold(-1),foldR=mkFold(1);
-  // 다리 2개 (뒷다리만): 굵은 허벅지, 뒤로 꺾인 발목, 세 발가락
-  const legGeo=m2geo('wy_leg',(x,y,z)=>{let d=_ell(x,y,z,0,-.3,-.05,.5,.72,.62);
-      d=_smin(d,_cap(x,y,z,0,-.7,.05,0,-1.25,-.4,.34,.24),.2);
-      d=_smin(d,_cap(x,y,z,0,-1.25,-.4,0,-1.75,-.15,.22,.18),.12);
-      d=_smin(d,_ell(x,y,z,0,-1.86,.2,.3,.12,.42),.12);
-      for(const tx of [-.18,0,.18])d=_smin(d,_cap(x,y,z,tx,-1.88,.3,tx*1.3,-1.92,.72,.08,.05),.06);
-      return d;},(x,y,z)=>{let c=skin(x,y,z,-.9);if(y<-1.55)c=_mx(c,dk,.6);return c;},[-.6,-2.05,-.8],[.6,.45,.9],.035);
+  // 뒷다리: 가늘고 긴 정강이, 손가락 같은 긴 발톱
+  const legG=G.leg||(G.leg=m2geo('wy3_leg',(x,y,z)=>{let d=_ell(x,y,z,0,-.3,-.05,.44,.7,.56);
+      d=_smin(d,_cap(x,y,z,0,-.7,.05,0,-1.25,-.45,.28,.17),.2);
+      d=_smin(d,_cap(x,y,z,0,-1.25,-.45,0,-1.78,-.15,.16,.12),.12);
+      d=_smin(d,_ell(x,y,z,0,-1.86,.15,.24,.1,.32),.1);
+      for(const tx of [-.2,0,.2])d=_smin(d,_cap(x,y,z,tx,-1.88,.25,tx*1.6,-1.93,.85,.06,.035),.05);
+      return d;},(x,y,z)=>{let c=skin(x,y,z,-.9);if(y<-1.55)c=_mx(c,dk,.6);return c;},[-.6,-2.05,-.8],[.6,.45,1.0],.035));
   const legs=[];
-  [-1,1].forEach(s=>{const L=new THREE.Group();L.position.set(s*1.05,-.35,-.75);L.add(m2mesh(legGeo,mats,{r:.6}));
-    for(const tx of [-.18,0,.18]){const c=new THREE.Mesh(new THREE.ConeGeometry(.06,.3,8),hornM);c.position.set(tx*1.3,-1.92,.82);c.rotation.x=Math.PI/2;L.add(c);}
+  [-1,1].forEach(s=>{const L=new THREE.Group();L.position.set(s*1.05,-.35,-.75);L.add(meshOf(legG));
+    L.add(meshOf(G.toe||(G.toe=wyMerge([-.2,0,.2].map(tx=>wyCone(.045,.42,6,[tx*1.6,-1.93,.82],[tx*.4,-.35,1])))),M.horn));
     body.add(L);legs.push(L);});
-  // 꼬리: 일곱 마디 (같은 모양을 크기만 줄여 쓴다), 끝은 가시 달린 곤봉
-  const tGeo=m2geo('wy_tail',(x,y,z)=>_cap(x,y,z,0,0,.1,0,0,-1.35,.62,.5),(x,y,z)=>skin(x,y,z,-.25,24),[-.8,-.8,-1.95],[.8,.8,.8],.05);
+  // 꼬리: 일곱 마디, 끝에는 뼈 꽃잎에 둘러싸인 눈
+  const tGeo=G.tail||(G.tail=m2geo('wy3_tail',(x,y,z)=>_cap(x,y,z,0,0,.1,0,0,-1.35,.56,.44),(x,y,z)=>skin(x,y,z,-.25,24),[-.8,-.8,-1.95],[.8,.8,.8],.05));
   const tail=[];let tp=body,off=[0,-.1,-2.8];
   for(let k=0;k<7;k++){const T=new THREE.Group();T.position.set(...off);tp.add(T);tail.push(T);const s2=1-k*.12;
-    const me=m2mesh(tGeo,mats,{r:.6});me.scale.set(s2,s2*.92,1);T.add(me);
-    const sp=new THREE.Mesh(new THREE.ConeGeometry(.09*s2,.36*s2,8),hornM);sp.position.set(0,.55*s2,-.6);sp.rotation.x=-.5;T.add(sp);
+    const me=meshOf(tGeo);me.scale.set(s2,s2*.92,1);T.add(me);
+    const sp=new THREE.Mesh(G.tsp||(G.tsp=wyCone(.06,.42,6,[0,0,0],[0,1,-.5])),M.horn);sp.position.set(0,.5*s2,-.6);sp.scale.setScalar(s2);T.add(sp);
     tp=T;off=[0,-.03,-1.3];}
   const club=new THREE.Group();club.position.set(0,0,-.6);tp.add(club);
-  club.add(m2mesh(m2geo('wy_club',(x,y,z)=>_ell(x,y,z,0,0,-.2,.3,.22,.55),(x,y,z)=>_sc(dk,.9+_nz(x,y,z,30)*.2),[-.4,-.3,-.85],[.4,.3,.45],.03),mats));
-  for(let k=0;k<6;k++){const a=k/6*Math.PI*2,c=new THREE.Mesh(new THREE.ConeGeometry(.06,.35,6),hornM);c.position.set(Math.cos(a)*.27,Math.sin(a)*.2,-.25);c.rotation.set(0,0,a-Math.PI/2);club.add(c);}
-  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
-  g.userData={mats,body,neck,head,jaw,glow,wingL,wingR,foldL,foldR,legs,tail,h:5.5};
+  const petals=[];for(let k=0;k<6;k++){const a=k/6*Math.PI*2,P=new THREE.Group();P.rotation.z=a;club.add(P);
+    const c=new THREE.Mesh(G.pet||(G.pet=wyCone(.07,.6,6,[0,.13,0],[0,.35,-1],0)),M.horn);P.add(c);petals.push(P);}
+  eye(club,{p:[0,0,-.3],n:[0,0,-1]},.17,M.eyeB);
+  g.userData={mats,body,neck,head,jaw,glow,wingL,wingR,foldL,foldR,legs,tail,h:5.5,vw:{eyes,mand,halo,hA,hB,petals,tw:0,twA:0,twN:3,gl:0}};
+  g.userData.dieLen=2.6;g.userData.die=wyvDie;
   return g;
 }
+/* 와이번이 살아 있는 동안 매 프레임: 눈 뜨고 감기·깜빡임, 고개를 뚝 꺾는 경련, 큰 턱, 고리, 찢어짐 번지기, 잠깐씩 몸이 튀는 끊김 */
+function wyvVoidTick(m,dt,t){const U=m.mesh.userData,V=U.vw;WYV.U.uT.value=tAll;
+  const frac=m.mh?m.hp/m.mh:1;WYV.U.uVoid.value+=((1-frac)*.85-WYV.U.uVoid.value)*Math.min(1,dt*1.5);
+  const awake=inArenaOf(m),wide=m.breathT>0||m.stompT>0||m.flyT>0;
+  for(const e of V.eyes){if(awake){if(e.dl>0)e.dl-=dt;}else e.dl=Math.random()*1.6;
+    let want=awake&&e.dl<=0?1:0;e.nb-=dt;if(e.nb<0){e.bl=.16;e.nb=2+Math.random()*8;}if(e.bl>0){e.bl-=dt;want=0;}
+    e.o+=(want-e.o)*Math.min(1,dt*(want?7:22));const w=wide?1.18:1;e.m.scale.set(e.r*w,e.r*Math.max(.06,e.o)*w,e.r*w);}
+  // 고개를 뚝 꺾었다가(사람이 아닌 것처럼 빠르게) 잠깐 그대로 있다가 돌아온다
+  V.twN-=dt;if(V.twN<0){if(V.tw>0){V.tw=0;V.twA=0;V.twN=3+Math.random()*6;}else{V.tw=1;V.twA=(Math.random()<.5?-1:1)*(.55+Math.random()*.5);V.twN=.35+Math.random()*.6;}}
+  U.head.rotation.z+=(V.twA-U.head.rotation.z)*Math.min(1,dt*30);U.neck[1].rotation.z+=(V.twA*.3-U.neck[1].rotation.z)*Math.min(1,dt*20);
+  V.mand.forEach((Mg,i)=>{const s=i?1:-1;Mg.rotation.y=s*(.12+U.jaw.rotation.x*1.2+.06*Math.sin(t*9+i*2)*(awake?1:.2));});
+  V.hA.rotation.z=t*.35;V.hB.rotation.z=-t*.22;V.hB.rotation.y=Math.sin(t*.3)*.4;
+  V.petals.forEach((P,k)=>P.children[0].rotation.x=.25*Math.sin(t*1.4+k));
+  // 끊김: 아주 가끔 몸이 한두 프레임 옆으로 튄다
+  if(V.gl>0){V.gl-=dt;U.body.position.x=(Math.random()-.5)*.5;U.body.rotation.z=(Math.random()-.5)*.1;}else{U.body.position.x=0;U.body.rotation.z=0;if(awake&&Math.random()<dt*.12)V.gl=.07;}}
+/* 쓰러질 때: 찢어짐이 온몸으로 번지고 눈이 모두 크게 떠진 채 떨다가, 별빛 속으로 빨려 들어가듯 오그라든다 */
+function wyvDie(m,dt){const U=m.mesh.userData,V=U.vw,k=Math.min(1,m.dying/U.dieLen),s=m.D.scale||1,p=m.mesh.position;WYV.U.uT.value=tAll;
+  WYV.U.uVoid.value=Math.min(1.2,WYV.U.uVoid.value+dt*.5);
+  if(!V.dieFx){V.dieFx=1;try{wyvSnd('scream',p,1.2);VFX.burst(p.clone().setY(p.y+3),0xb070ff,40,6,1,{up:1,mix:0xffffff});}catch(e){}}
+  for(const e of V.eyes){e.o+=(1-e.o)*Math.min(1,dt*10);const j=1.3+Math.random()*.15;e.m.scale.set(e.r*j,e.r*j*e.o,e.r*j);}
+  U.body.position.x=(Math.random()-.5)*.3*(1-k);
+  if(k>.62){const q=(k-.62)/.38;m.mesh.scale.setScalar(s*Math.max(.001,1-q*q));m.mesh.rotation.y+=dt*q*9;
+    if(!V.dieFx2){V.dieFx2=1;try{VFX.burst(p.clone().setY(p.y+2.5),0xe8d8ff,50,9,.9,{mix:0xb070ff});VFX.shock(new THREE.Vector3(p.x,heightAt(p.x,p.z)+.1,p.z),0x8a40ff,9,.7);wyvSnd('implode',p,1);}catch(e){}}}
+  else m.mesh.scale.setScalar(s);}
+/* ---- 와이번 소리 (합성): 속삭임·비명 합창·빨려 드는 소리·심장 ---- */
+function wyvSnd(kind,at,vol=1){try{const X=SFX.ctx;if(!X||!SFX.master||SFX.vol<=0)return;const out=at?_out(at,vol):(()=>{const g=X.createGain();g.gain.value=vol;g.connect(SFX.master);return g;})();if(!out)return;const t=X.currentTime+.01,sr=X.sampleRate;
+  const gn=v=>{const G=X.createGain();G.gain.value=v;return G;},bp=(f,q)=>{const F=X.createBiquadFilter();F.type='bandpass';F.frequency.value=f;F.Q.value=q;return F;};
+  const noise=sec=>{const s=X.createBufferSource();s.buffer=SFX.noise;s.loop=true;s.loopEnd=Math.min(1.5,sec);return s;};
+  if(kind==='whisper'){/* 알아들을 수 없는 속삭임: 숨소리 잡음을 두 소리길(모음)로 거르고, 소리길이 움직이며 음절이 끊긴다. 한쪽 귀에서만 */
+    const L=1.4+Math.random()*1.6,s=noise(L),pan=X.createStereoPanner?X.createStereoPanner():null,g=gn(0),n=5+Math.floor(Math.random()*6);
+    const f1=bp(500+Math.random()*300,6),f2=bp(1600+Math.random()*900,8);
+    for(let i=0;i<n;i++){const a=t+i*L/n,b=a+L/n*(.4+Math.random()*.4);g.gain.setValueAtTime(0,a);g.gain.linearRampToValueAtTime(.55+Math.random()*.45,a+.03);g.gain.linearRampToValueAtTime(0,b);
+      f1.frequency.setValueAtTime(350+Math.random()*500,a);f2.frequency.setValueAtTime(1300+Math.random()*1400,a);}
+    const m=gn(1);s.connect(f1);s.connect(f2);f1.connect(m);f2.connect(m);m.connect(g);
+    if(pan){pan.pan.value=(Math.random()<.5?-1:1)*(.6+Math.random()*.4);g.connect(pan);pan.connect(out);}else g.connect(out);s.start(t);s.stop(t+L+.1);}
+  else if(kind==='choir'||kind==='scream'){/* 수많은 목소리가 어긋나게 겹쳐 오르내리는 비명 합창 */
+    const L=kind==='scream'?2.2:1.6,base=kind==='scream'?330:180;
+    for(let i=0;i<7;i++){const o=X.createOscillator();o.type='sawtooth';const f0=base*Math.pow(1.059,i*1.7+Math.random());o.frequency.setValueAtTime(f0*(kind==='scream'?.6:1.1),t);o.frequency.exponentialRampToValueAtTime(f0*(kind==='scream'?1.5:.7),t+L*.7);o.frequency.exponentialRampToValueAtTime(f0*.45,t+L);
+      const vib=X.createOscillator(),vg=gn(f0*.03);vib.frequency.value=5+Math.random()*4;vib.connect(vg);vg.connect(o.frequency);vib.start(t);vib.stop(t+L);
+      const f=bp(700+i*260,4),g=gn(0);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.07,t+.15+i*.03);g.gain.setValueAtTime(.07,t+L*.6);g.gain.linearRampToValueAtTime(0,t+L);o.connect(f);f.connect(g);g.connect(out);o.start(t);o.stop(t+L);}
+    const o=X.createOscillator();o.type='sine';o.frequency.setValueAtTime(48,t);o.frequency.linearRampToValueAtTime(31,t+L);const g=gn(0);g.gain.linearRampToValueAtTime(.5,t+.2);g.gain.linearRampToValueAtTime(0,t+L);o.connect(g);g.connect(out);o.start(t);o.stop(t+L);}
+  else if(kind==='implode'){/* 뒤집어 튼 듯 커지다 뚝 끊기는 소리 */
+    const L=1.3,s=noise(L),f=X.createBiquadFilter();f.type='lowpass';f.frequency.setValueAtTime(200,t);f.frequency.exponentialRampToValueAtTime(5000,t+L);const g=gn(0);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.9,t+L);g.gain.setValueAtTime(0,t+L+.01);s.connect(f);f.connect(g);g.connect(out);s.start(t);s.stop(t+L+.05);
+    const o=X.createOscillator();o.frequency.setValueAtTime(30,t);o.frequency.exponentialRampToValueAtTime(400,t+L);const g2=gn(0);g2.gain.linearRampToValueAtTime(.35,t+L);g2.gain.setValueAtTime(0,t+L+.01);o.connect(g2);g2.connect(out);o.start(t);o.stop(t+L+.05);}
+  else if(kind==='heart'){for(const [dt,a] of [[0,1],[.22,.7]]){const o=X.createOscillator();o.frequency.setValueAtTime(62,t+dt);o.frequency.exponentialRampToValueAtTime(34,t+dt+.18);const g=gn(0);g.gain.setValueAtTime(0,t+dt);g.gain.linearRampToValueAtTime(.55*a,t+dt+.015);g.gain.exponentialRampToValueAtTime(.001,t+dt+.26);o.connect(g);g.connect(out);o.start(t+dt);o.stop(t+dt+.3);}}
+}catch(e){}}
+/* ---- 와이번 둥지의 분위기: 별밤 하늘과 하늘을 찢고 뜬 거대한 눈, 차가운 보랏빛, 떠다니는 바위, 낮은 웅웅거림과 속삭임, 싸울 때 화면 가장자리의 어둠과 심장 소리 ----
+   하늘·눈은 둥근 하늘 하나(셰이더 한 번), 소리는 둥지에 있을 때만 켠다 */
+const WNEST={dome:null,U:null,rocks:[],amb:null,wsT:3,hbT:0,vig:null,vk:0,open:0,look:new THREE.Vector2(),blink:0,blT:15};
+function wnestDome(){if(WNEST.dome)return WNEST.dome;const U=WNEST.U={uT:{value:0},uOpen:{value:0},uLook:{value:new THREE.Vector2()},uE:{value:new THREE.Vector3(0,1.3,-1).normalize()}};
+  const m=new THREE.ShaderMaterial({uniforms:U,side:THREE.BackSide,depthWrite:false,depthTest:false,fog:false,
+    vertexShader:'varying vec3 vD;void main(){vD=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader:'varying vec3 vD;uniform float uT,uOpen;uniform vec2 uLook;uniform vec3 uE;'+WYV_GLSL+`
+void main(){vec3 d=normalize(vD);
+  vec3 c=mix(vec3(.05,.03,.08),vec3(.008,.004,.016),smoothstep(-.05,.55,d.y));
+  c+=wvStars(d,uT*.3,.6)*.8*smoothstep(-.03,.2,d.y);
+  vec3 E=normalize(uE),a=normalize(cross(E,vec3(0.,1.,0.))),b=cross(a,E);
+  float u=dot(d,a)/.5,v=dot(d,b)/.5,f=dot(d,E);
+  if(f>.5&&abs(u)<1.3){
+    float h=(1.-u*u)*.48*uOpen;
+    float crack=smoothstep(.07,0.,abs(abs(v)-max(h,.004)))*smoothstep(1.12,.75,abs(u));
+    c+=vec3(.45,.05,.12)*crack*(.35+.65*max(uOpen,.15))*(.75+.25*sin(uT*1.7));
+    float ins=step(abs(u),1.)*smoothstep(h,h-.015,abs(v));
+    if(ins>0.){vec2 q=vec2(u,v)-uLook*.45;float r=length(q),ang=atan(q.y,q.x);
+      vec3 ec=vec3(.3,.27,.21)*(1.-.65*length(vec2(u,v*1.8)));
+      ec=mix(ec,vec3(.35,.02,.04),smoothstep(.05,.0,abs(wvn(vec3(u*5.,v*5.,1.))-.5))*.8);
+      vec3 ir=mix(vec3(.85,.5,.1),vec3(.25,.03,.2),smoothstep(.06,.4,r))*(.75+.25*sin(ang*31.+sin(ang*5.)*3.)*wvn(vec3(ang*4.,r*9.,2.)));
+      ec=mix(ec,ir,smoothstep(.41,.37,r));
+      float pr=length(vec2(q.x*3.4,q.y));
+      ec=mix(ec,wvStars(normalize(vec3(q*2.,1.)),uT,1.)*1.5,smoothstep(.17,.15,pr));
+      c=mix(c,ec,ins);}}
+  gl_FragColor=vec4(c,1.);
+  #include <encodings_fragment>
+`+ORL_GRADE+`}`});
+  const s=new THREE.Mesh(new THREE.SphereGeometry(330,40,20),m);s.renderOrder=-999;s.frustumCulled=false;s.visible=false;scene.add(s);return WNEST.dome=s;}
+function wnestAmb(on){const X=SFX.ctx;if(!X||!SFX.master)return;const A=WNEST.amb,t=X.currentTime;
+  if(on&&!A){const g=X.createGain();g.gain.value=0;g.gain.linearRampToValueAtTime(1,t+3);g.connect(SFX.master);const lp=X.createBiquadFilter();lp.type='lowpass';lp.frequency.value=150;lp.connect(g);const os=[];
+    for(const [f,ty,v] of [[38.9,'sawtooth',.11],[39.5,'sawtooth',.11],[58.3,'triangle',.06]]){const o=X.createOscillator();o.type=ty;o.frequency.value=f;const og=X.createGain();og.gain.value=v;o.connect(og);og.connect(lp);o.start();os.push(o);}
+    const lfo=X.createOscillator(),lg=X.createGain();lfo.frequency.value=.07;lg.gain.value=60;lfo.connect(lg);lg.connect(lp.frequency);lfo.start();os.push(lfo);
+    /* 귀에 맴도는 아주 작은 높은 울림 (두 음이 맞부딪쳐 느리게 일렁인다) */
+    for(const f of [1244,1249.5]){const o=X.createOscillator();o.frequency.value=f;const og=X.createGain();og.gain.value=.0045;o.connect(og);og.connect(g);o.start();os.push(o);}
+    WNEST.amb={g,os};}
+  else if(!on&&A){A.g.gain.cancelScheduledValues(t);A.g.gain.setValueAtTime(A.g.gain.value,t);A.g.gain.linearRampToValueAtTime(0,t+1.2);for(const o of A.os)o.stop(t+1.3);WNEST.amb=null;}}
+function voidNestTick(dt,z){const D=WNEST.dome,inN=z==='wlair'&&mode==='world';
+  if(!inN){if(D&&D.visible){D.visible=false;wnestAmb(false);if(WNEST.vig)WNEST.vig.style.opacity=0;}return;}
+  const dome=wnestDome();dome.visible=true;dome.position.copy(camera.position);skyDome.visible=false;WNEST.U.uT.value=tAll;
+  /* 차가운 별빛: 보랏빛이 도는 어둠. 바위는 겨우 보이고 와이번의 빛나는 눈과 찢어진 살이 돋보이게 */
+  hemi.intensity=.26;sun.intensity=.34;hemi.color.set(0x7a6a9c);hemi.groundColor.set(0x1a1424);sun.color.set(0x9a90d0);ENV.k=.5;
+  scene.background.set(0x0d0a16);scene.fog.color.set(0x0d0a16);scene.fog.near=8;scene.fog.far=70;
+  const A=OR.WLAIR,w=monsters.find(m=>m.D&&m.D.wyvern&&m.dying===null),q=player.position,inA=!!w&&Math.hypot(q.x-A.x,q.z-A.z)<A.r-.5;
+  /* 하늘의 눈: 와이번이 있으면 내가 둥지에 들어설 때 뜨고, 맞을수록 더 크게 뜬다. 눈동자는 조금 늦게 나를 따라온다. 가끔 아주 천천히 깜빡인다 */
+  const frac=w?w.hp/w.mh:1,want=!w?0:inA?(frac<.25?1:frac<.55?.8:.5):.12;
+  WNEST.blT-=dt;if(WNEST.blT<0){WNEST.blink=1.2;WNEST.blT=14+Math.random()*14;}if(WNEST.blink>0)WNEST.blink-=dt;
+  WNEST.open+=((WNEST.blink>0?0:want)-WNEST.open)*Math.min(1,dt*(WNEST.blink>0?3:.6));WNEST.U.uOpen.value=WNEST.open;
+  WNEST.look.lerp(_wyL.set(Math.max(-1,Math.min(1,(q.x-A.x)/A.r)),Math.max(-1,Math.min(1,(A.z-q.z)/A.r))*.5),Math.min(1,dt*.8));WNEST.U.uLook.value.copy(WNEST.look);
+  for(const r of WNEST.rocks){r.m.position.y=r.y+Math.sin(tAll*r.s+r.p)*.6;r.m.rotation.y+=dt*r.s*.2;r.m.rotation.x+=dt*r.s*.1;}
+  /* 소리: 둥지에 있는 동안 낮은 웅웅거림, 가끔 한쪽 귀에 속삭임. 싸우는 동안엔 심장 소리 */
+  wnestAmb(true);WNEST.wsT-=dt;if(WNEST.wsT<0){WNEST.wsT=(w?3:7)+Math.random()*(w?6:9);wyvSnd('whisper',null,w?.5:.3);}
+  /* 화면 가장자리의 어둠: 싸우는 동안 짙어지고 심장 소리에 맞춰 조여 온다 */
+  if(!WNEST.vig){const v=WNEST.vig=document.createElement('div');v.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:2;opacity:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 48%,rgba(14,3,24,.6) 78%,rgba(6,0,12,.95) 100%)';const c=document.getElementById('c');(c&&c.parentNode||document.body).insertBefore(v,c?c.nextSibling:null);}
+  let pulse=0;if(inA){WNEST.hbT-=dt;const per=.55+frac*.55;if(WNEST.hbT<0){WNEST.hbT=per;wyvSnd('heart',null,.6);}pulse=Math.pow(Math.max(0,1-(per-WNEST.hbT)/.35),2);}
+  WNEST.vk+=((inA?.75:.35)-WNEST.vk)*Math.min(1,dt*1.5);WNEST.vig.style.opacity=Math.min(1,WNEST.vk+pulse*.2).toFixed(3);}
+const _wyL=new THREE.Vector2();
 const MON2_BUILD={wyvern:makeWyvern2,wolf:makeCanine2,dog:makeCanine2,jackal:makeCanine2,hyena:makeCanine2,boar:makeBoar2,toad:makeToad2};
 for(const k in BIPED2)MON2_BUILD[k]=makeBiped2;
 
@@ -15237,7 +15449,9 @@ await BOOT.y();
   const rockM=mat(0x7a7268,{roughness:1}),rock2=mat(0x5e574f,{roughness:1}),dirt=mat(0x8a7b66,{roughness:1}),bone=mat(0xe8e0cc,{roughness:.8}),straw=mat(0xb89a5a,{roughness:1});
   const fl=new THREE.Mesh(new THREE.CircleGeometry(R+14,64),dirt);fl.rotation.x=-Math.PI/2;fl.position.set(A.x,0,A.z);add(fl,false);
   // 바닥에 흩어진 돌판과 그을린 자국
-  for(let k=0;k<26;k++){const a=Math.random()*6.28,d=Math.random()*(R-3);const p=new THREE.Mesh(new THREE.CircleGeometry(.8+Math.random()*1.6,6),k%3?rock2:mat(0x4a423a,{roughness:1}));p.rotation.x=-Math.PI/2;p.rotation.z=Math.random()*3;p.position.set(A.x+Math.cos(a)*d,.01+k*.0004,A.z+Math.sin(a)*d);add(p,false);}
+  /* 돌판끼리 겹치면 같은 높이의 면이 요동치므로 서로 닿지 않는 자리에만 놓는다 */
+  {const put=[],burnM=mat(0x4a423a,{roughness:1});for(let k=0,tries=0;k<26&&tries<400;tries++){const a=Math.random()*6.28,d=Math.random()*(R-3),r=.8+Math.random()*1.6,x=A.x+Math.cos(a)*d,z=A.z+Math.sin(a)*d;if(put.some(q=>Math.hypot(q[0]-x,q[1]-z)<q[2]+r+.1))continue;put.push([x,z,r]);
+    const p=new THREE.Mesh(new THREE.CircleGeometry(r,6),k%3?rock2:burnM);p.rotation.x=-Math.PI/2;p.rotation.z=Math.random()*3;p.position.set(x,.01+(k%3?0:.012),z);add(p,false);k++;}}
   // 둘레 절벽: 크고 거친 바위 기둥을 겹겹이
   for(let ring=0;ring<2;ring++){const n=ring?26:34,rr=R+2.5+ring*5;
     for(let i=0;i<n;i++){const a=i/n*Math.PI*2+ring*.1,h=(ring?22:12)+Math.random()*(ring?14:8),w=(ring?6:4.2)+Math.random()*2.5;
@@ -15248,6 +15462,10 @@ await BOOT.y();
   const pad=new THREE.Mesh(new THREE.CylinderGeometry(4.2,4.6,.3,18),straw);pad.position.set(N.x,.15,N.z);add(pad,false);
   for(let k=0;k<14;k++){const a=Math.random()*6.28,d=5+Math.random()*(R-8);const bn=new THREE.Mesh(new THREE.CylinderGeometry(.07,.09,1+Math.random(),5),bone);bn.position.set(A.x+Math.cos(a)*d,.08,A.z+Math.sin(a)*d);bn.rotation.set(Math.PI/2,0,Math.random()*3);add(bn,false);
     if(k%4===0){const sk=new THREE.Mesh(new THREE.SphereGeometry(.3,8,6),bone);sk.scale.set(1,.8,1.3);sk.position.set(bn.position.x+.4,.2,bn.position.z);add(sk,false);}}
+  // 땅의 힘이 뒤틀려 허공에 떠 있는 바위들 (천천히 떠오르내리며 돈다: voidNestTick)
+  for(let k=0;k<14;k++){const a=k/14*Math.PI*2+Math.random()*.3,d=R*(.55+Math.random()*.7),y=6+Math.random()*14,r=.6+Math.random()*1.8;
+    const c=new THREE.Mesh(new THREE.DodecahedronGeometry(r,0),k%2?rockM:rock2);c.scale.set(1,.7+Math.random()*.6,1);c.position.set(A.x+Math.cos(a)*d,y,A.z+Math.sin(a)*d);c.rotation.set(Math.random()*3,Math.random()*3,0);c.castShadow=true;scene.add(c);
+    WNEST.rocks.push({m:c,y,s:.2+Math.random()*.4,p:Math.random()*6});}
 })();
 
 /* 길 끝 포탈: 길을 가로질러 서 있고, 돌아오면 포탈 앞(길 쪽)에 서서 길을 바라본다 */
@@ -15257,7 +15475,7 @@ const PORTALS=[
   {id:'east',x:OR.EPORTAL.x,z:OR.EPORTAL.z,ry:EP_RY,minLv:30,label:'포탈로 들어가기',
     to:{x:OR.HALL.x,z:OR.HALL.z+OR.HALL.R-3.5,yaw:0},msg:null,color:0xffd23a,
     // 와이번을 잡기 전에는 둥지로
-    alt:()=>P&&!(P.got&&P.got.wyvern)?{x:OR.WLAIR.x,z:OR.WLAIR.z+OR.WLAIR.r-5,yaw:0,msg:`포탈을 지나자 거센 바람이 몰아친다.`}:null},
+    alt:()=>P&&!(P.got&&P.got.wyvern)?{x:OR.WLAIR.x,z:OR.WLAIR.z+OR.WLAIR.r-5,yaw:0,msg:`포탈을 지나자 모든 소리가 멎었다.`}:null},
   {id:'nest_out',x:OR.WLAIR.x+OR.WLAIR.r-8,z:OR.WLAIR.z,ry:-Math.PI/2,minLv:0,label:'포탈로 들어가기',
     // 와이번을 잡기 전에는 동쪽 황야로 돌아가는 문, 잡은 뒤에는 지하실로 가는 문
     alt:()=>P&&!(P.got&&P.got.wyvern)?{x:EP_BACK.x,z:EP_BACK.z,yaw:EP_BACK.yaw,msg:null}:null,
@@ -33649,6 +33867,7 @@ function updateWorld(dt){
     skyDome.visible=!inD;skyDome.position.copy(camera.position);SKY.t.value=tAll;SKY.hor.value.copy(scene.background);
     _zenC.copy(scene.background).lerp(_skyBlue.set(inHa?(hi<5?0x2f78d4:hi<7?0x6a6a9a:0x4a3a40):z==='htop'?0x2462c8:inMil||z==='marcus'||inMh||inHc?0x3f80d0:inM?0x5a8ac8:0x4f86c4),inHa?(hi<5?.74:.5):z==='htop'?.86:inMil||z==='marcus'||inMh||inHc?.74:inM?.62:.55);if(!inD)_zenC.multiplyScalar(DEEP_DES[z]?Math.max(DL.bg,.5):DL.bg).multiply(DL.bgTint);SKY.zen.value.lerp(_zenC,kk);
     SKY.cloud.value+=((z==='htop'?.12:inT?.18:/^w/.test(z)||z==='marcus'||inMh||z==='forest'||z==='plains'||z==='swamp'||z==='ruins'?.3:.5)-SKY.cloud.value)*kk*.5;SKY.glow.value+=((inT?1.8:1)-SKY.glow.value)*kk;}
+  voidNestTick(dt,z);   /* 와이번 둥지: 별밤·하늘의 눈·보랏빛·소리 (다른 곳에선 끄기만) */
   {const q=player.position,ty=Math.min(q.y,heightAt(q.x,q.z)+6);   /* 높이 날아도 그림자 상자는 땅 위에 */
     /* 그림자 상자를 그림자 그림의 한 칸 단위로만 옮긴다: 걸을 때 땅에 그림자 줄무늬가 흐르듯 움직이지 않게 */
     const B=_sunBasis,T=72/sun.shadow.mapSize.x,px=q.x*B.x.x+ty*B.x.y+q.z*B.x.z,py=q.x*B.y.x+ty*B.y.y+q.z*B.y.z,dx=Math.round(px/T)*T-px,dy=Math.round(py/T)*T-py;
@@ -34707,7 +34926,7 @@ const arenaOfD=D=>D&&D.arena==='WLAIR'?OR.WLAIR:D&&D.arena==='HLAIR'?OR.HLAIR:OR
 const inArenaOf=m=>{const A=arenaOfD(m.D);return !!(player&&Math.hypot(player.position.x-A.x,player.position.z-A.z)<A.r-.5);};
 /* 용의 경고 표시 위 연출: 숨결은 입에 불이 모이고, 불덩이는 하늘에서 떨어지고, 급강하는 날아오른다 */
 const _hp=new THREE.Vector3();
-const dCol=m=>m.D.wyvern?{a:0x9aff60,b:0xe8ff90,c:0x58c040,deep:0x2a6a20}:{a:0xff8a2a,b:0xffc040,c:0xff5a1a,deep:0x8a2a08};
+const dCol=m=>m.D.wyvern?{a:0xa070ff,b:0xe8d8ff,c:0x5a2ab0,deep:0x1a0a38}:{a:0xff8a2a,b:0xffc040,c:0xff5a1a,deep:0x8a2a08};
 // 물기: 고개를 내리꽂으며 턱을 닫는다. 이빨 자국 두 줄과 파편
 function dragonBite(m){const U=m.mesh.userData;m.biteT=.42;sfx('slam',m.mesh.position,.9,.7);sfx('heavy',m.mesh.position,.8,1.2);
   setTimeout(()=>{if(!U.head)return;U.head.getWorldPosition(_hp);const yaw=m.mesh.rotation.y+Math.PI,C=dCol(m);
@@ -34716,11 +34935,12 @@ function dragonBite(m){const U=m.mesh.userData;m.biteT=.42;sfx('slam',m.mesh.pos
     dustPuffs(new THREE.Vector3(p.x,heightAt(p.x,p.z),p.z),1.6,5);if(player&&player.position.distanceTo(p)<9)shakeT=Math.max(shakeT,.18);},140);}
 function dragonTele(m,msg,d,T){
   const U=m.mesh.userData;
-  if(msg.k==='breath'){m.breathT=d;sfx('roar',m.mesh.position,1,.7);}
-  else if(msg.k==='dive'){m.flyT=d;m.flyDur=d;sfx('bossroar',m.mesh.position,1);}
+  const W=m.D.wyvern;   /* 와이번: 짐승 울음 대신 비명 합창이 겹친다 */
+  if(msg.k==='breath'){m.breathT=d;sfx('roar',m.mesh.position,W?.5:1,.7);if(W)wyvSnd('choir',m.mesh.position,1);}
+  else if(msg.k==='dive'){m.flyT=d;m.flyDur=d;sfx('bossroar',m.mesh.position,W?.5:1);if(W)wyvSnd('scream',m.mesh.position,1);}
   else if(msg.k==='tail'){m.tailT=d;}
-  else if(msg.k==='stomp'){m.stompT=d;m.stompDur=d;sfx('roar',m.mesh.position,.8,.9);}
-  else if(msg.k==='meteor'){const ob=new THREE.Mesh(new THREE.SphereGeometry(.6,10,8),mat(0xff7a20,{emissive:0xff4000,emissiveIntensity:1.6}));
+  else if(msg.k==='stomp'){m.stompT=d;m.stompDur=d;sfx('roar',m.mesh.position,W?.4:.8,.9);if(W)wyvSnd('choir',m.mesh.position,.8);}
+  else if(msg.k==='meteor'){const ob=new THREE.Mesh(new THREE.SphereGeometry(.6,10,8),W?mat(0xd8c8ff,{emissive:0x8a40ff,emissiveIntensity:2}):mat(0xff7a20,{emissive:0xff4000,emissiveIntensity:1.6}));   /* 와이번: 떨어지는 별 */
     const to=new THREE.Vector3(T.x,heightAt(T.x,T.z)+.3,T.z),from=to.clone().add(new THREE.Vector3(rnd(-6,6),26,rnd(-6,6)));ob.position.copy(from);scene.add(ob);
     hazards.push({type:'fall',mesh:ob,from,to,t:-(d-.7),d:.7});}
 }
@@ -34774,6 +34994,7 @@ function updateDragonVisual(m,dt){
   // 맞으면 번쩍
   const fl=m.flash>0?m.flash/.18:0;m.flash=Math.max(0,(m.flash||0)-dt);
   U.mats.forEach(mt=>{if(mt.emissive)mt.emissive.setRGB(fl*.6+(m.hp<m.mh*.25?.12+Math.sin(t*6)*.06:0),fl*.3,fl*.2);});
+  if(U.vw)wyvVoidTick(m,dt,t);
 }
 function bigBanner(t,sub){
   document.querySelectorAll('.lvup').forEach(e=>e.remove());
@@ -35046,7 +35267,7 @@ const LIB_BOOKS={
     '모래도마뱀: 모래 속에 몸을 숨기고 있다가 발소리에 튀어 오른다. 꼬리를 잘라도 금세 다시 자란다는 소문이 있다.',
     '전갈: 집게보다 꼬리를 조심하라. 독에 찔리면 해독약 없이 오래 버티기 어렵다.',
     '들늑대: 혼자 다니는 법이 없다. 한 마리가 보이면 이미 셋이 그대를 보고 있다고 생각하라.',
-    '와이번: 깊은 사막 끝, 포탈 너머의 둥지에 산다. 하늘에서 내리꽂히는 발톱을 피할 자신이 없다면 가까이 가지 말 것.',
+    '와이번: 깊은 사막 끝, 포탈 너머의 둥지에 산다. 와이번이라 부르는 건 날개가 있어서일 뿐, 그것을 보고 온 사냥꾼들은 몸에 박힌 눈들과 찢어진 살갗 너머의 별밤 이야기만 되풀이한다. 하늘에서 떨어지는 별을 피할 자신이 없다면 가까이 가지 말 것.',
     '덧붙임: 옛이야기의 마왕은 이 도감에 없다. 기록된 적이 한 번도 없기 때문이다. 이 땅에 있는 것은 몬스터뿐이다.']},
   lib_harena:{title:'사막의 도시 하레나',sub:'모래와 성벽의 이야기',pages:[
     '하레나는 처음에 성벽도 없는 작은 장터였다. 서쪽 황야의 상인과 북쪽 황야의 사냥꾼이 그 자리에서 물건을 바꾸었다.',
