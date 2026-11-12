@@ -1206,7 +1206,7 @@ button,.cta,.ghost,.slot,.slot .k,#interact,#lockTip,#toast,.qsec .qtag,#questBo
 /* 기타 */
 #tut{position:fixed;left:50%;top:64%;transform:translateX(-50%);padding:8px 16px;font-size:15px;pointer-events:none;white-space:nowrap;opacity:0;transition:opacity .45s}
 #tut.on{opacity:1}
-#tut kbd{display:inline-block;margin:0 5px 0 0;padding:1px 7px;border:1px solid rgba(232,206,150,.6);border-radius:3px;font:inherit;font-size:13px;color:#f3cf6a;background:rgba(0,0,0,.25)}
+#tut kbd{display:inline-block;margin:0 5px;padding:1px 7px;border:1px solid rgba(232,206,150,.6);border-radius:3px;font:inherit;font-size:13px;color:#f3cf6a;background:rgba(0,0,0,.25)}
 #tut i{font-style:normal;margin:0 9px;opacity:.5}
 #interact,#lockTip,#tut{border-radius:2px;border:1px solid transparent;border-image:var(--th-small) 26 / 12px / 5px stretch;background:var(--th-noise),linear-gradient(rgba(36,26,16,.95),rgba(14,9,5,.95));color:#f6ecd4;animation:none}
 #bossbar{border-image:var(--th-small) 26 / 13px / 6px stretch}
@@ -12369,7 +12369,7 @@ function homeSelect(id){selId=id;for(const e of $('#homeChars').children)e.class
   const nickOk=()=>{const ok=!!($('#nick').value||'').trim();$('#go').disabled=!ok;return ok;};
   $('#nick').addEventListener('input',()=>{nickOk();$('#nickShow').textContent=$('#nick').value.trim();});nickOk();
   $('#go').onclick=()=>{if(!nickOk()){$('#nick').focus();return;}if(BOOT.on||BOOT.q){BOOT.wait(()=>$('#go').onclick());return;}const name=$('#nick').value.trim(),T=OR.THOUSE;
-    startGame({id:'c'+Date.now().toString(36)+Math.floor(Math.random()*1e4),name,job:chosen,needBook:true,tut:0,lv:1,exp:0,sp:0,skills:{},slots:Array(NSK).fill(null),x:T.x-2.9,z:T.z-2.5,y:0,ap:apCode(newAp)});};
+    startGame({id:'c'+Date.now().toString(36)+Math.floor(Math.random()*1e4),name,job:chosen,needBook:true,tut:0,tips:{},lv:1,exp:0,sp:0,skills:{},slots:Array(NSK).fill(null),x:T.x-2.9,z:T.z-2.5,y:0,ap:apCode(newAp)});};
   $('#nick').addEventListener('keydown',e=>{if(e.key==='Enter'){if(newStep<AP_STEPS.length-1)newStepGo(newStep+1);else $('#go').click();}});
   $('#nsPrev').onclick=()=>{if(newStep)newStepShow(newStep-1);else $('#backList').click();};$('#nsNext').onclick=()=>newStepGo(newStep+1);
   document.querySelectorAll('#stepNew .nsBar .st').forEach((e,i)=>e.onclick=()=>newStepGo(i));newStepShow(0);
@@ -27485,7 +27485,7 @@ setInterval(()=>{
 addEventListener('keydown',e=>{if(codeOf(e)!=='KeyB'||e.repeat||e.target.tagName==='INPUT'||!P||mode==='title'||!party)return;voiceMic(!PVOICE.micOn);});
 
 /* 다른 플레이어에게 말 걸기 */
-function openPlayerMenu(peer){
+function openPlayerMenu(peer){tutDid('party');
   const o=others.get(peer);if(!o||mode!=='world')return;
   mode='dialog';attackHeld=false;unlockPointer();syncLockTip();interactTarget=null;$('#interact').hidden=true;
   $('#pmName').textContent=o.name;$('#pmSub').textContent=`${JOBS[o.job].name} · Lv ${o.lv}${party&&party.members.some(m=>m.id===peer)?' · 같은 파티':''}`;
@@ -27746,7 +27746,7 @@ let gPick=GUILD_COLS[0],gView='book';
 function aileyActs(){const g=gMine();if(!g)return [['길드 만들기','guild:make'],['길드 가입 신청',`guild:join`]];
   if(gRank()==='m'){const n=gAppsList().length;return [[`가입 신청 확인${n?` (${n})`:''}`,'guild:apps'],['길드 관리','guild:manage']];}
   return [['내 길드 보기','guild:manage']];}
-function openGuild(v){gView=v||'book';mode='dialog';attackHeld=false;unlockPointer();syncLockTip();interactTarget=null;$('#interact').hidden=true;$('#gwin').hidden=false;renderGuild();}
+function openGuild(v){tutDid('guild');gView=v||'book';mode='dialog';attackHeld=false;unlockPointer();syncLockTip();interactTarget=null;$('#interact').hidden=true;$('#gwin').hidden=false;renderGuild();}
 function closeGuild(){if($('#gwin').hidden)return;$('#gwin').hidden=true;mode='world';syncLockTip();focusGame();relock();}
 function renderGuild(){const box=$('#gBody');box.innerHTML='';const g=gMine(),me=g?gRank():null;
   const el=(t,c,txt)=>{const e=document.createElement(t);if(c)e.className=c;if(txt!=null)e.textContent=txt;return e;};
@@ -29415,20 +29415,33 @@ function unlockPointer(){quietUnlock=!!document.pointerLockElement;try{if(docume
 function syncLockTip(){$('#lockTip').hidden=coarse()||lockFailed||isLocked()||mode!=='world'||wantLock;$('#cross').hidden=mode!=='world';}
 let lockFailed=false;
 /* 처음 온 모험가: 조작 표시가 하나씩 떴다가 해 보면 사라진다. 새 캐릭터만 (P.tut = 지금 단계, 다 하면 없어진다) */
-const TUT={el:null,cur:-1,wait:1.6,yaw:null,turn:0,last:null,walk:0,hideT:0};
+const TUT={el:null,cur:null,shown:0,wait:1.6,yaw:null,turn:0,last:null,walk:0,hideT:0};
 const tutSteps=()=>coarse()?[
   {id:'move',h:'<kbd>왼쪽</kbd>끌어서 이동'},{id:'look',h:'<kbd>오른쪽</kbd>끌어서 시점'},{id:'atk',h:'<kbd>공격</kbd>눌러서 공격'},{id:'skill',h:'<kbd>메뉴</kbd>스킬창'}]:[
   {id:'move',h:'<kbd>W A S D</kbd>이동'},{id:'look',h:'<kbd>마우스</kbd>시점'},{id:'jump',h:'<kbd>Shift</kbd>달리기<i>·</i><kbd>Space</kbd>점프'},{id:'atk',h:'<kbd>왼쪽 클릭</kbd>공격'},{id:'skill',h:'<kbd>K</kbd>스킬창'}];
-function tutDid(id){if(!P||P.tut==null)return;const L=tutSteps(),S=L[P.tut];if(!S||S.id!==id)return;
-  P.tut++;TUT.cur=-1;TUT.wait=.9;TUT.turn=0;TUT.walk=0;if(TUT.el)TUT.el.classList.remove('on');if(P.tut>=L.length){P.tut=undefined;save();}}
+/* 기본 조작을 다 익힌 뒤: 의뢰·파티·길드를 처음 만나는 자리에서 한 번씩 (P.tips, 새 캐릭터만). 15초 넘게 떠 있으면 그만 띄운다 */
+const nearNpc=(id,r)=>{const n=NPCS.find(q=>q.id===id);return !!(n&&!(n.hideIf&&n.hideIf())&&Math.hypot(player.position.x-n.x,player.position.z-n.z)<r&&Math.abs(player.position.y-n.y)<2.5);};
+const tutTips=()=>{const m=coarse(),F=m?'':'<kbd>F</kbd>';return [
+  {id:'board',h:m?'<kbd>카일</kbd>게시판에서 의뢰 받기':F+'게시판에서 의뢰 받기',on:()=>!P.quest&&nearNpc('kyle',7)},
+  {id:'qwin',h:m?'<kbd>의뢰</kbd>칸을 눌러 자세히':'<kbd>Q</kbd>의뢰 자세히',on:()=>!!P.quest},
+  {id:'party',h:m?'<kbd>모험가</kbd>앞에서 파티 만들기':'모험가 앞에서 <kbd>F</kbd>파티 만들기',on:()=>{if(party||!room)return false;for(const o of others.values())if(o.mesh&&o.mesh.visible&&Math.hypot(player.position.x-o.mesh.position.x,player.position.z-o.mesh.position.z)<7)return true;return false;}},
+  {id:'guild',h:m?'<kbd>에일리</kbd>길드 만들기<i>·</i>가입':F+'길드 만들기<i>·</i>가입',on:()=>!(typeof gMine==='function'&&gMine())&&nearNpc('ailey',7)}];};
+function tutDid(id){if(!P)return;
+  if(P.tut!=null){const L=tutSteps(),S=L[P.tut];if(!S||S.id!==id)return;
+    P.tut++;TUT.cur=null;TUT.wait=.9;TUT.turn=0;TUT.walk=0;if(TUT.el)TUT.el.classList.remove('on');if(P.tut>=L.length){P.tut=undefined;save();}return;}
+  if(P.tips&&!P.tips[id]&&tutTips().some(T=>T.id===id)){P.tips[id]=1;if(TUT.cur==='t:'+id){TUT.cur=null;TUT.wait=.9;if(TUT.el)TUT.el.classList.remove('on');}save();}}
 function tutTick(dt){if(!TUT.el)TUT.el=$('#tut');const el=TUT.el;
-  const L=P&&P.tut!=null?tutSteps():null,S=L&&L[P.tut];
-  const show=!!S&&!P.needBook&&mode==='world'&&P.hp>0&&!P.fly&&(coarse()||isLocked());
-  if(!show){if(el.classList.contains('on'))el.classList.remove('on');TUT.hideT+=dt;if(TUT.hideT>.5&&!el.hidden)el.hidden=true;TUT.cur=-1;if(!S)return;TUT.wait=Math.max(TUT.wait,.6);return;}
+  const ok=!!P&&!P.needBook&&mode==='world'&&P.hp>0&&!P.fly&&(coarse()||isLocked());
+  let S=null,key=null;
+  if(P&&P.tut!=null){S=tutSteps()[P.tut];key=S&&'b:'+P.tut;}
+  else if(ok&&P.tips){for(const T of tutTips())if(!P.tips[T.id]&&T.on()){S=T;key='t:'+T.id;break;}}
+  if(!ok||!S||(TUT.cur&&TUT.cur!==key)){if(el.classList.contains('on'))el.classList.remove('on');TUT.hideT+=dt;if(TUT.hideT>.5&&!el.hidden)el.hidden=true;TUT.cur=null;TUT.wait=Math.max(TUT.wait,.6);return;}
   TUT.hideT=0;
   const p=player.position;if(TUT.last)TUT.walk+=Math.hypot(p.x-TUT.last.x,p.z-TUT.last.z);TUT.last={x:p.x,z:p.z};
   if(TUT.yaw!=null)TUT.turn+=Math.abs(cam.yaw-TUT.yaw);TUT.yaw=cam.yaw;
-  if(TUT.cur!==P.tut){TUT.wait-=dt;if(TUT.wait>0)return;TUT.cur=P.tut;TUT.walk=0;TUT.turn=0;el.innerHTML=S.h;el.hidden=false;requestAnimationFrame(()=>el.classList.add('on'));return;}
+  if(TUT.cur!==key){TUT.wait-=dt;if(TUT.wait>0)return;TUT.cur=key;TUT.walk=0;TUT.turn=0;TUT.shown=0;el.innerHTML=S.h;el.hidden=false;requestAnimationFrame(()=>el.classList.add('on'));return;}
+  TUT.shown+=dt;
+  if(key[0]==='t'){if(TUT.shown>15)tutDid(S.id);return;}
   if(S.id==='move'&&TUT.walk>4)tutDid('move');
   else if(S.id==='look'&&TUT.turn>1.4)tutDid('look');}
 addEventListener('keydown',e=>{if(mode!=='world'||e.repeat)return;const c=codeOf(e);if(c==='Space'||c==='ShiftLeft'||c==='ShiftRight')tutDid('jump');});
@@ -30450,7 +30463,7 @@ function spawnRing(color,pos,radius,dur=.5){
   VFX.ringSparks(pos,color,radius);
 }
 
-function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:spAll(),skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mhv:6,mentorReady:P.mentorReady,faith:P.faith|0||undefined,needBook:P.needBook||undefined,tut:P.tut!=null&&P.tut<tutSteps().length?P.tut:undefined,mq:P.mq||undefined,mqDone:P.mqDone||undefined,myHome:P.myHome||undefined,gq:P.gq&&Object.keys(P.gq).length?P.gq:undefined,gqDone:P.gqDone||undefined,gqPin:P.gqPin&&Object.keys(P.gqPin).length?P.gqPin:undefined,spc:P.spc&&Object.keys(P.spc).length?P.spc:undefined,poff:P.poff&&Object.keys(P.poff).length?P.poff:undefined,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap),gk:P.gk,guild:P.guild||undefined,gApply:P.gApply||undefined,gApps:P.gApps&&P.gApps.list.length?{gid:P.gApps.gid,list:P.gApps.list.map(a=>({n:a.n,k:a.k,t:a.t,no:a.no?1:undefined}))}:undefined,wbk:P.wbk&&Object.keys(P.wbk).length?P.wbk:undefined,shelf:P.shelf&&P.shelf.length?P.shelf:undefined,lak:P.lak||undefined}:null;}
+function snapshotP(){return P&&player?{id:P.id,t:Date.now(),name:P.name,job:P.job,lv:P.lv,exp:P.exp,hp:P.hp,mp:P.mp,gold:P.gold,bag:P.bag,equip:P.equip,enh:P.enh,quest:P.quest,pastSkills:P.pastSkills||{},quick:P.quick,home:P.home,sp:spAll(),skills:P.skills,slots:P.slots,x:player.position.x,y:+player.position.y.toFixed(2),z:player.position.z,mhv:6,mentorReady:P.mentorReady,faith:P.faith|0||undefined,needBook:P.needBook||undefined,tut:P.tut!=null&&P.tut<tutSteps().length?P.tut:undefined,tips:P.tips||undefined,mq:P.mq||undefined,mqDone:P.mqDone||undefined,myHome:P.myHome||undefined,gq:P.gq&&Object.keys(P.gq).length?P.gq:undefined,gqDone:P.gqDone||undefined,gqPin:P.gqPin&&Object.keys(P.gqPin).length?P.gqPin:undefined,spc:P.spc&&Object.keys(P.spc).length?P.spc:undefined,poff:P.poff&&Object.keys(P.poff).length?P.poff:undefined,got:P.got,skv:P.skv,advSp:P.advSp,ap:apCode(P.ap),gk:P.gk,guild:P.guild||undefined,gApply:P.gApply||undefined,gApps:P.gApps&&P.gApps.list.length?{gid:P.gApps.gid,list:P.gApps.list.map(a=>({n:a.n,k:a.k,t:a.t,no:a.no?1:undefined}))}:undefined,wbk:P.wbk&&Object.keys(P.wbk).length?P.wbk:undefined,shelf:P.shelf&&P.shelf.length?P.shelf:undefined,lak:P.lak||undefined}:null;}
 /* 같은 캐릭터를 창 두 개(또는 휴대폰에 남아 있던 옛 탭)에서 켜 두면, 옛 창이 나중에 저장하면서 새 창의 기록을 덮어썼다.
    만든 길드처럼 옛 창에 없던 것이 통째로 사라졌다. 그래서 저장할 때 이 창의 표(tab)를 남기고,
    이 창이 캐릭터를 불러온 뒤에 다른 창이 같은 캐릭터를 저장했으면 이 창은 더 저장하지 않는다. */
@@ -31046,7 +31059,7 @@ const portalPosterUp=()=>!!(P&&P.lv>=30&&!(P.mqDone&&P.mqDone.messenger100)&&!(P
 let boardId=null,boardList=[],boardGiver=null;
 const localBoards={};
 function boardLocal(b){if(!localBoards[b])localBoards[b]=[];const L=localBoards[b];let k=0;while(L.length<OR.BOARD_CAP[b]&&k++<60)L.push(OR.makePoster(b,Math.random,'l'+Math.random().toString(36).slice(2,9)));return L;}
-function openBoard(b){boardGiver=npcCur?{id:npcCur.id,name:npcCur.name}:{id:'kyle',name:'카일'};
+function openBoard(b){tutDid('board');boardGiver=npcCur?{id:npcCur.id,name:npcCur.name}:{id:'kyle',name:'카일'};
   $('#npc').hidden=true;document.body.classList.remove('talking');$('#npcChoices').hidden=true;mode='dialog';attackHeld=false;unlockPointer();syncLockTip();
   boardId=b;$('#boardTitle').textContent=OR.BOARDS[b].title;$('#boardDetail').hidden=true;boardTabsBuild(b);
   const shared=!!(window.ORLANDO_WS&&room&&room.connected());
@@ -31216,7 +31229,7 @@ function renderDailyTab(body){   /* 한 번이라도 받아 본(진행 중이거
         ['보상',`경험치 ${qwNum(needExp(P.lv)*G.exp)} · ${qwNum(P.lv*G.gold)} 골드`]]}));}
   const pins=ids.filter(gqPinned).length;$('#qwCount').textContent=`일일 ${ids.length}개${pins?` · 고정 ${pins}개`:''}`;}
 $('#qwTabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||!b.dataset.t||b.dataset.t===qwTab)return;qwTab=b.dataset.t;sfx('ui');renderQuestWin();});
-function openQuestWin(){if(mode!=='world'||!P)return;mode='dialog';attackHeld=false;unlockPointer();syncLockTip();qwTab='now';renderQuestWin();$('#qwin').hidden=false;}
+function openQuestWin(){if(mode!=='world'||!P)return;tutDid('qwin');mode='dialog';attackHeld=false;unlockPointer();syncLockTip();qwTab='now';renderQuestWin();$('#qwin').hidden=false;}
 function closeQuestWin(){if($('#qwin').hidden)return;$('#qwin').hidden=true;mode='world';syncLockTip();focusGame();relock();}
 $('#qwClose').onclick=closeQuestWin;
 $('#qwin').addEventListener('pointerdown',e=>{if(e.target.id==='qwin')closeQuestWin();});   /* 창 바깥을 누르면 닫힌다 */
