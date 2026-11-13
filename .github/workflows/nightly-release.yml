@@ -1,7 +1,8 @@
 # 매일 오전 4시(한국 시간)에 시험용 브랜치 dev 의 변경을 본 서버 브랜치 main 으로 한 번에 올린다
 # main 에 올라가면 Render 가 본 서버(orlando.io.kr)를 새로 배포한다
-# GitHub 예약 작업은 자주 늦거나 건너뛰어서, 04:00 부터 08:30 사이에 여러 번 걸어 둔다
-# (이미 올렸으면 할 일이 없어서 그냥 끝나고, 한국 시간 04~08시가 아니면 예약 실행은 아무것도 안 한다)
+# GitHub 예약 작업은 자주 늦거나 건너뛰어서(2026-11-12·13에는 5~6시간씩 늦게 돎), 여러 번 걸어 둔다
+# 늦게 돌아도 '가장 최근 오전 4시'까지 dev 에 들어온 것만 올린다 (그 뒤 것은 다음 날 4시 몫)
+# 이미 올렸으면 할 일이 없어서 그냥 끝난다
 name: nightly-release
 on:
   schedule:
@@ -32,17 +33,17 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
         run: |
-          H=$(TZ=Asia/Seoul date +%H)
-          if [ "$EVENT" = "schedule" ] && { [ "$H" -lt 4 ] || [ "$H" -ge 9 ]; }; then
-            echo "한국 시간 ${H}시: 오전 4~8시가 아니라서 건너뛰어요"; exit 0
-          fi
           git config user.name "orlando-release"
           git config user.email "orlando-release@users.noreply.github.com"
           git fetch origin main dev
-          # 예약 실행은 오늘 오전 4시 전까지 dev 에 들어온 것만 올린다 (4시 뒤에 들어온 것은 내일 4시에)
+          # 예약 실행은 가장 최근 오전 4시(한국) 전까지 dev 에 들어온 것만 올린다
+          # (예약이 늦게 돌아도 4시 뒤에 들어온 것은 다음 날 4시에)
           T=origin/dev
           if [ "$EVENT" = "schedule" ]; then
-            T=$(git rev-list -1 --first-parent --before="$(TZ=Asia/Seoul date +%Y-%m-%d)T04:00:00+09:00" origin/dev)
+            D=$(TZ=Asia/Seoul date +%Y-%m-%d)
+            if [ $((10#$(TZ=Asia/Seoul date +%H))) -lt 4 ]; then D=$(TZ=Asia/Seoul date -d '-1 day' +%Y-%m-%d); fi
+            echo "기준: ${D} 오전 4시 (한국)"
+            T=$(git rev-list -1 --first-parent --before="${D}T04:00:00+09:00" origin/dev)
             [ -n "$T" ] || { echo "올릴 것이 없어요"; exit 0; }
           fi
           if git merge-base --is-ancestor "$T" origin/main; then
