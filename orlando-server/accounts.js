@@ -1,4 +1,4 @@
-// 계정(회원가입·로그인): 아이디·비밀번호로 가입하고, 캐릭터 목록과 재무청 금고를 계정에 저장한다
+// 계정(회원가입·로그인): 아이디·비밀번호로 가입하고, 캐릭터 목록·캐릭터 칸 순서와 재무청 금고를 계정에 저장한다
 // - 비밀번호는 그대로 두지 않고 scrypt(소금 섞은 느린 해시)로만 저장한다
 // - 로그인하면 무작위 표(토큰)를 주고, 서버에는 표의 sha256만 남긴다
 // - 저장소: DATABASE_URL(Postgres, 예: Neon 무료)이 있으면 거기에, ACCOUNT_DIR이 있으면 그 폴더(Render 저장 디스크 등)에,
@@ -104,7 +104,14 @@ function cleanBank(b) {
   if (!isFinite(gold) || gold < 0) return null;
   return { gold: Math.min(Number.MAX_SAFE_INTEGER, gold), t: isFinite(t) && t > 0 ? t : 0 };
 }
-const publicDoc = (d) => ({ name: d.id, chars: d.chars || [], gone: d.gone || {}, bank: d.bank || { gold: 0, t: 0 } });
+// 캐릭터 고르는 칸의 순서 설정: sort(순서 고르기), order(끌어서 바꾼 캐릭터 id 차례), t(바꾼 때)
+function cleanHome(h) {
+  if (!h || typeof h !== 'object' || Array.isArray(h)) return null;
+  const t = Number(h.t), sort = typeof h.sort === 'string' && /^[a-z]{0,12}$/.test(h.sort) ? h.sort : '';
+  const order = Array.isArray(h.order) ? [...new Set(h.order.filter((x) => typeof x === 'string' && CHAR_ID.test(x)))].slice(0, 100) : [];
+  return { sort, order, t: isFinite(t) && t > 0 ? t : 0 };
+}
+const publicDoc = (d) => ({ name: d.id, chars: d.chars || [], gone: d.gone || {}, bank: d.bank || { gold: 0, t: 0 }, home: d.home || null });
 
 // ---------- HTTP ----------
 function reply(res, code, obj) {
@@ -197,6 +204,8 @@ async function handle(req, res, url) {
         const b = cleanBank(body.bank), add = cleanBank(body.bankAdd), cur = cleanBank(doc.bank) || { gold: 0, t: 0 };
         if (b) doc.bank = b;
         else if (add && add.gold > 0) doc.bank = { gold: Math.min(Number.MAX_SAFE_INTEGER, cur.gold + add.gold), t: cur.t || add.t || now };   // 이 기기에 있던 금고를 계정 금고에 더한다
+        const home = cleanHome(body.home);
+        if (home && (!doc.home || home.t >= (doc.home.t || 0))) doc.home = home;   // 더 나중에 바꾼 순서만 받는다
         doc.chars = [...map.values()]; doc.gone = gone;
         if (Buffer.byteLength(JSON.stringify(doc)) > MAX_DOC) return reply(res, 413, { err: 'big' });
         await rawPut(a.id, doc);
