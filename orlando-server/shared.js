@@ -310,7 +310,7 @@
   const THOUSE = { x: -200, z: -800, hw: 5.5, hd: 4.5, rh: 3.8 };
   const inTHouse = (x, z) => Math.abs(x - THOUSE.x) < THOUSE.hw + 6 && Math.abs(z - THOUSE.z) < THOUSE.hd + 6;
   // 내 집: 엑시즈 시내에서 배정받은 집의 안 (집마다 문은 다르지만 안은 이 방 하나를 함께 쓴다, 다른 사람은 안 보인다)
-  const MYHOME = { x: -200, z: -840, hw: 5.5, hd: 4.5, rh: 3.8 };
+  const MYHOME = { x: -200, z: -840, hw: 5.5, hd: 4.5, rh: 3.8, g: 6.8, bw: 8, bd: 6.5 };   // g: 1층 바닥 높이, bw·bd: 지하 반너비·반깊이 (지하는 지상보다 넓다)
   const inMyHome = (x, z) => Math.abs(x - MYHOME.x) < MYHOME.hw + 6 && Math.abs(z - MYHOME.z) < MYHOME.hd + 6;
   // 가늘롱 저택: 엑시즈 귀족 구역에 선 귀족 가늘롱의 집 안 (2층: 1층 바닥 y 0, 2층 바닥 y 4.6, 천장 8.8. 가운데 두 층 높이 현관홀, 양옆 방들)
   const GHOUSE = { x: -240, z: -800, hw: 10, hd: 7.5, f1: 4.6, rh: 8.8 };
@@ -376,7 +376,7 @@
     if (inHInn(p.x, p.z)) { const T = HINN; p.x = clampN(p.x, T.x - T.hw + rad, T.x + T.hw - rad); p.z = clampN(p.z, T.z - T.hd + rad, T.z + T.hd - rad); return; }
     if (inMShop(p.x, p.z)) { const T = MSHOP; p.x = clampN(p.x, T.x - T.hw + rad, T.x + T.hw - rad); p.z = clampN(p.z, T.z - T.hd + rad, T.z + T.hd - rad); return; }
     { const d = inDine(p.x, p.z); if (d) { const T = DINES[d]; p.x = clampN(p.x, T.x - T.hw + rad, T.x + T.hw - rad); p.z = clampN(p.z, T.z - T.hd + rad, T.z + T.hd - rad); return; } }
-    if (inMyHome(p.x, p.z)) { const T = MYHOME; p.x = clampN(p.x, T.x - T.hw + rad, T.x + T.hw - rad); p.z = clampN(p.z, T.z - T.hd + rad, T.z + T.hd - rad); return; }
+    if (inMyHome(p.x, p.z)) { const T = MYHOME, lo = p.y != null && p.y < T.g - 1.2, hw = lo ? T.bw : T.hw, hd = lo ? T.bd : T.hd; p.x = clampN(p.x, T.x - hw + rad, T.x + hw - rad); p.z = clampN(p.z, T.z - hd + rad, T.z + hd - rad); return; }   // 지하(1층 바닥보다 낮은 곳)는 더 넓다
     if (p.x >= 800) { const I = isleAt(p.x, p.z); if (I.line) return mhClamp(p, rad); if (I.clamp && I.clamp(p, rad)) return; const d = Math.hypot(p.x - I.x, p.z - I.z), r = isleEdge(I, Math.atan2(p.z - I.z, p.x - I.x)) - rad; if (d > r) { p.x = I.x + (p.x - I.x) * r / d; p.z = I.z + (p.z - I.z) * r / d; } return; }
     if (p.z > 300) return roomClamp(p, rad);
     /* 길드홀 지하실(신전과 딸린 방·계단·창고): 밖으로 나갔으면 (벽을 뚫었으면) 가장 가까운 안쪽 자리로 되민다 */
