@@ -14212,7 +14212,7 @@ function npcFolds(mesh,n,amp,y0,y1){const P=mesh.geometry.attributes.position;
   mesh.geometry.computeVertexNormals();return mesh;}
 // 살아 있는 듯한 움직임: 숨쉬기, 고개 돌리기, 눈 깜박이기, 팔 흔들기
 const smoothN=(a,b,x)=>{const k=Math.max(0,Math.min(1,(x-a)/(b-a)));return k*k*(3-2*k);};
-function animNpc(g,t,dt){const u=g.userData;if(u.stick){stickNpcPose(g,u.pose||'idle',t+(u.ph||0));if(u.hunch){const S=u.stick;S.upper.rotation.x+=u.hunch;S.head.rotation.x-=u.hunch*.7;}return;}if(!u.head)return;const ph=u.ph||0;
+function animNpc(g,t,dt){const u=g.userData;if(u.stick){stickNpcPose(g,u.pose||'idle',t+(u.ph||0));if(u.nbP)nbrAim(g,t);if(u.hunch){const S=u.stick;S.upper.rotation.x+=u.hunch;S.head.rotation.x-=u.hunch*.7;}return;}if(!u.head)return;const ph=u.ph||0;
   if(u.baked&&u.idleU){const U=u.idleU.value;   /* 숨 쉬고, 가끔 무게를 옮기고, 이따금 고개를 돌린다. 가까이 온 사람은 쳐다본다 */
     const nz=(a,s)=>Math.sin(t*a+s)*.5+Math.sin(t*a*1.93+s*2.1)*.3+Math.sin(t*a*3.7+s*4.3)*.2;
     /* 고개만 따로 돌리면 머리카락·모자가 뒤틀려서, 몸 전체를 살짝 돌린다 */
@@ -14376,6 +14376,22 @@ function stickNpcPose(g,pose,t){const S=g.userData.stick;if(!S)return;const AR=S
     case 'ride':S.body.position.y=1.25;legs(-.75,.95,-.75,.95);S.L.hip.rotation.z=-.78;S.R.hip.rotation.z=.78;arm(AR,-.85,0,.12,-.6);arm(AL,-.85,0,-.12,-.6);S.upper.rotation.x=br+.1;look(.8);break;   /* 말 위: 안장 높이에 올라 다리를 걸치고 두 손은 고삐 */
     case 'drive':S.body.position.y=-.47;legs(-1.45,1.35,-1.45,1.35);arm(AR,-.85,0,.05,-.55);arm(AL,-.85,0,-.05,-.55);S.upper.rotation.x=br+.08;look(.4);break;
     case 'hoe':{const u=(Math.sin(t*3.2)+1)/2;arm(AR,-1.7+u*1.1,0,-.05,-.4);arm(AL,-1.7+u*1.1,0,.05,-.4);S.upper.rotation.x=.35+u*.2;S.head.rotation.set(.3,0,0);legs(-.3,.35,.2,.15);break;}
+    /* 옆집 이웃 도로테아: 오른손엔 빗자루·물뿌리개, 왼손엔 바구니. 든 것은 nbrAim이 몸짓 뒤에 바로 세운다 */
+    case 'nbidle':case 'nbwave':case 'nbtalk':case 'nbwalk':case 'nbsweep':case 'nbwater':case 'nbknock':{const u=g.userData,hd=u.nbHeld;
+      const holdR=()=>{if(hd==='broom'){arm(AR,-.3,0,.12,-.6);u.nbTip=[.22,.42];}else if(hd==='can')arm(AR,-.12,0,.16,-.3);else return false;return true;},
+        holdL=()=>{if(hd==='basket'){arm(AL,-.12,0,-.16,-.55);return true;}return false;};
+      if(pose==='nbwalk'){stickWalkPose(g,u.nbPh||0,u.nbW||.6,t);const s=Math.sin(u.nbPh||0)*.12;
+        if(hd==='broom'){arm(AR,-.25,0,.1,-.5);u.nbTip=[.2,.55];}else if(hd==='can')arm(AR,-.1+s,0,.16,-.3);else if(hd==='basket')arm(AL,-.1-s,0,-.16,-.5);break;}
+      if(pose==='nbsweep'){const w=Math.sin(t*2.3);legs(-.18,.2,.1,.12);S.body.rotation.y=w*.1;S.upper.rotation.set(br+.28,w*.12,0);S.head.rotation.set(.32,-w*.1,0);
+        arm(AR,-.62,0,.06+w*.12,-.55);arm(AL,-.62,-.25,.42+w*.12,-.75,.3);u.nbTip=[.12+w*.38,.62];break;}
+      if(pose==='nbwater'){const k=Math.max(0,Math.min(1,(Math.sin(t*.9)+.6)*1.6));arm(AR,-.95-k*.12,0,.16,-.2);arm(AL,.15,.7,-.6,-1.65);S.upper.rotation.x=br+.16+k*.06;S.head.rotation.set(.38,0,0);legs(-.12,.12,.05,.06);u.nbPour=.15+k*.85;break;}
+      if(pose==='nbknock'){const c=((t%2.6)+2.6)%2.6;holdL();if(c<1.1){const k=Math.abs(Math.sin(c*Math.PI/.37));arm(AR,-1.25,0,.22,-1.45+k*.4);S.head.rotation.set(.05,0,0);}else{arm(AR,.05,0,.1,-.2);S.head.rotation.set(-.02,.18,.06);}S.upper.rotation.x=br+.04;break;}
+      const r=holdR(),l=holdL();
+      if(pose==='nbwave'){const v=Math.sin(t*7);if(r)arm(AL,-.2,0,-1.95,-1.25+v*.3,-1.3);else arm(AR,-.2,0,1.95,-1.25+v*.3,1.3);look(.6);break;}
+      if(pose==='nbtalk'){const g1=Math.max(0,_sn(t*.9,1));if(r)arm(AL,-.25-g1*.5,0,-.15-g1*.2,-.5-g1*.8);else arm(AR,-.25-g1*.5,0,.15+g1*.2,-.5-g1*.8);S.head.rotation.set(Math.max(0,_sn(t*1.7,2))*.1,_sn(t*.3,6)*.25,0);break;}
+      if(!r&&!l){arm(AR,-.42,-.55,.12,-1.25);arm(AL,-.42,.55,-.12,-1.25);}   /* 빈손이면 앞치마 앞에 두 손을 모은다 */
+      else{if(!r)arm(AR,.05,0,.1,-.2);if(!l)arm(AL,.05,0,-.1,-.2);}
+      look(.8);break;}
     case 'sweep':{const u=Math.sin(t*1.6);arm(AR,-.7,0,.2+u*.25,-.6);arm(AL,-.9,0,-.2+u*.25,-.4);S.upper.rotation.x=.3;S.head.rotation.set(.25,0,0);break;}
     case 'carry':arm(AR,-.6,0,.1,-1.6);arm(AL,-.6,0,-.1,-1.6);look(.5);break;
     case 'wave':{const on=_sn(t*.15,2)>.1,u=Math.sin(t*7);if(on)arm(AR,-.2,0,1.95,-1.25+u*.3,1.3);else arm(AR,.05,0,.1,-.15);arm(AL,.05,0,-.1,-.15);look();break;}
@@ -27532,6 +27548,7 @@ function updateIsles(t,dt){
   if(typeof dineTick==='function')dineTick(t);
   if(typeof mshopTick==='function')mshopTick(t);
   if(typeof myHomeTick==='function'&&myHomeTick.ok)myHomeTick(t);libTick();
+  if(typeof nbrTick==='function'&&nbrTick.ok)nbrTick(t,dt);
   if(typeof castleTick==='function')castleTick(t,dt);if(typeof guildHallTick==='function')guildHallTick(t,dt);if(typeof khqTick==='function')khqTick(t,dt);if(typeof hlodgeTick==='function')hlodgeTick(t,dt);if(typeof arenaTick==='function')arenaTick(t,dt);if(typeof exMarketTick==='function')exMarketTick(dt);
   if(ISLE_FX.water&&x>1300&&x<1700)ISLE_FX.water.position.y=KAOLIS_WY+Math.sin(t*.9)*.06;
   /* 물속에 카메라가 들어가면 물빛을 씌운다 (물 표면은 아래에서도 보인다) */
@@ -38506,6 +38523,203 @@ function mqBuckyHome(n){n.mqLock=true;
   showPages(['집은 찾아가 봤어? 현관에 네 이름이 적힌 문패가 걸린 집이야.','서두를 것 없어. 엑시즈는 넓으니까 구경하면서 천천히 가 봐.'],0,last=>{n.mqLock=false;npcEndLine(last);});}
 (function(){const bk=NPCS.find(n=>n.id==='bucky');if(bk){const prev=bk.onOpen;bk.onOpen=()=>{if(P&&P.mq==='home100'){mqBuckyHome(bk);return true;}return prev?prev():false;};}})();
 myHomeTick.ok=1;
+/* ---------- 옆집 이웃 도로테아 (2026-11-13) ----------
+   내 집과 같은 길을 보고 나란히 붙은 가장 가까운 살림집을 '옆집'으로 삼는다 (집이 사람마다 다르니 옆집도 사람마다 다르다).
+   이웃은 그 집 문을 열고 나와 볼일을 본 뒤 다시 들어간다: 문 앞 쓸기 · 화분에 물 주기 · 바구니를 들고 우리 집 문 두드리기 ·
+   길가에 나가 손차양을 하고 배달부 기다리기 · 문 앞에서 기지개 켜기. 들어가 있는 동안에는 보이지 않는다.
+   옆집 문은 입체 문짝이 경첩으로 열리고, 열린 자리는 어두운 판이라 그 안으로 걸어 들어가면 몸이 차례로 가려진다.
+   문 둘레 판들은 벽에 그려진 문(벽에서 .1m)·문고리(.17m)·돌 계단 윗면(.14m)과 1cm 넘게 비켜 둔다 (겹친 면 깜빡임) */
+const NBR={n:null,rec:null,key:null,g:null,hinge:null,dark:null,ang:0,want:0,st:'in',wait:6,q:[],step:null,ph:0,lt:null,props:null,prop:null,act:null,last:null,greet:0,wasNear:false,face:null,cols:[],dir:1,D:0,fw:0,far:0,said:null};
+NPC_FINE.nbr={fine:{hair:'bun',hairC:0x9a8c80,body:{bust:1,w:1.1,belly:1.12},skin:0xf0d4bc,brow:{c:0x8a7c70,t:-.1,th:.016},eye:'round',nose:'button',mouth:'smile',lash:1,blush:0xe89a8c,age:1,
+  cl:{scarf:0x8a4a3a,collar:0xf4ece0,buttons:{n:4,c:0xc8a050},apronPockets:1,rolled:0xeee4d2}}};
+VOICE.nbr={p:192,sp:47,fs:1.06,vol:1.5};
+const NBR_LOOK={robe:0x6e5a7a,robe2:0xeee4d2,hat:'hair',hatC:0x9a8c80,long:1,cloth:{apron:0xeadfc8,sleeve:'long',skirtC:0x4e4058,shoes:0x3a2a1e}};
+/* 하는 일에 맞춘 말 (볼일마다 둘), 그 밖의 말, 긴 이야기 */
+const NBR_SAY={
+  sweep:['어머, 옆집 새 이웃! 문 앞은 하루에 두 번은 쓸어야 해요. 바닷바람이 모래를 자꾸 실어 오거든요.',
+    '비질은 바깥에서 안쪽으로가 아니라 안쪽에서 바깥으로 하는 거예요. 복은 들이고 먼지는 내보내야죠, 호호.'],
+  water:['이 제라늄들 예쁘죠? 흙이 마르면 그때 듬뿍 줘야 해요. 너무 자주 주면 뿌리가 숨을 못 쉬어요.',
+    '꽃은 말을 못 해도 주인 발소리는 안대요. 그쪽 집 문 앞 화분도 가끔 들여다봐 줘요.'],
+  visit:['마침 잘 왔어요! 빵을 넉넉히 구웠길래 좀 나눠 주려고 문을 두드리던 참이었어요.',
+    '집에 없길래 그냥 돌아가려 했지요. 혼자 사는 사람은 잘 챙겨 먹어야 해요, 알았죠?'],
+  wait:['배달부가 올 때가 됐는데… 먼 데 사는 아들 편지를 기다리고 있어요.',
+    '이 길 끝에서 파란 모자가 보이면 배달부예요. 오늘은 좀 늦네요.'],
+  air:['아이고, 허리야. 집 안에만 있으면 답답해서 바람 좀 쐬러 나왔어요.',
+    '바다 냄새 좋죠? 엑시즈에 서른 해를 살아도 이 냄새는 안 질려요.']};
+const NBR_LINES=[
+  '옆집에 젊은 사람이 들어온다길래 얼마나 반가웠는지 몰라요. 전에 살던 노인은 고양이만 열두 마리 키웠거든요.',
+  '밤늦게 다니는 건 좋은데 문은 꼭 걸어 잠가요. 골목 고양이들이 문틈으로 들어와 부엌을 뒤진다니까요.',
+  '빵은 서문 대로 바르톨네가 제일이에요. 새벽에 가야 꿀빵이 남아 있어요.',
+  '저녁에 수프를 너무 많이 끓였어요. 배고프면 언제든 우리 집 문 두드려요.',
+  '벽 너머로 가끔 쿵쾅 소리가 나던데, 무기 손질하는 소리였군요? 괜찮아요. 우리 영감 코 고는 소리에 비하면 아무것도 아니에요.',
+  '이 골목에서 제일 오래 산 게 나예요. 누가 이사 오고 누가 떠났는지 다 알지요. 궁금한 거 있으면 물어봐요.'];
+const NBR_STORY=[
+  ['우리 아들도 그쪽처럼 칼 한 자루 들고 집을 나갔어요. 열여섯 살 때였지요.','편지는 석 달에 한 번 올까 말까 해요. 그래도 올 때마다 글씨가 조금씩 반듯해져요.','그쪽도 고향에 소식 자주 전해요. 기다리는 사람은 편지 한 장에 한 달을 버티거든요.'],
+  ['내가 처음 이 골목에 왔을 땐 저 길이 다 흙길이었어요. 비만 오면 신발이 빠져서 맨발로 다녔지요.','돌을 깐 건 성에서 사람들이 나와서였는데, 우리 영감이 그때 일꾼들한테 매일 물을 날라 줬어요.','그래서 이 앞 돌 몇 장엔 영감 손자국이 있대요. 어느 건지는 영감도 몰라요, 호호.'],
+  ['화분 하나는 이사 온 첫해에 심은 거예요. 그때는 손바닥만 한 싹이었지요.','해마다 겨울을 못 넘길 줄 알았는데, 봄만 되면 또 빨간 꽃을 피워요.','사람도 꽃도 뿌리만 잘 내리면 어떻게든 살아요. 그쪽도 이 동네에 뿌리 잘 내려요.']];
+const NBR_FIRST='어머, 옆집에 새로 온 분이죠? 난 도로테아예요. 이 골목에서만 서른 해를 살았답니다. 모르는 거 있으면 언제든 물어봐요.';
+/* 길에 걸리는 것이 있는지: 그 자리에 사람이 서면 밀려나는지로 본다 (벽·등·상자·우물 모두) */
+function nbrFree(x,z){const p={x,z,y:heightAt(x,z)+.5};pushOut(p,.34);return Math.hypot(p.x-x,p.z-z)<.01;}
+/* 옆집 고르기: 내 집과 같은 쪽을 보고(앞면이 2.5m 안쪽으로 나란한), 옆으로 3.5~30m 떨어진 살림집 가운데 가장 가까운 집.
+   두 문 앞을 잇는 길(둘 중 더 나온 앞면에서 1.6m)과 문에서 그 길까지가 비어 있어야 한다 (이웃이 그 길로 우리 집까지 걸어온다) */
+function nbrPick(r){const H=MARCUS.homes||[],sx=r.nz,sz=-r.nx;let best=null,bd=1e9;
+  const frontOk=h=>{for(const o of [.8,1.2,1.6])if(!nbrFree(h.x+h.nx*o,h.z+h.nz*o))return false;return true;},
+    seg=(x0,z0,x1,z1)=>{const L=Math.hypot(x1-x0,z1-z0);for(let s=0;s<=L;s+=.4){const k=L?s/L:0;if(!nbrFree(x0+(x1-x0)*k,z0+(z1-z0)*k))return false;}return true;};
+  for(const h of H){if(h.n===r.n||h.nx*r.nx+h.nz*r.nz<.9)continue;const dx=h.x-r.x,dz=h.z-r.z,lat=dx*sx+dz*sz,fw=dx*r.nx+dz*r.nz,d=Math.abs(lat);
+    if(Math.abs(fw)>2.5||d<3.5||d>30||d>=bd)continue;if(!frontOk(h))continue;
+    const o=Math.max(0,fw)+1.6,a={x:r.x+r.nx*o,z:r.z+r.nz*o},b={x:r.x+sx*lat+r.nx*o,z:r.z+sz*lat+r.nz*o};
+    if(!seg(r.x+r.nx*1.1,r.z+r.nz*1.1,a.x,a.z)||!seg(a.x,a.z,b.x,b.z)||!seg(h.x+h.nx*1.1,h.z+h.nz*1.1,b.x,b.z))continue;
+    bd=d;best=h;}
+  if(!best){/* 나란히 붙은 집이 없으면: 가까운 살림집 아무거나 (우리 집까지 오지는 않는다) */
+    for(const h of H){if(h.n===r.n)continue;const d=Math.hypot(h.x-r.x,h.z-r.z);if(d<bd&&d<45&&frontOk(h)){bd=d;best=h;}}}
+  return best;}
+/* 옆집 문 앞 좌표 (lx: 문에서 옆으로, 집 안에서 바깥을 볼 때 오른쪽이 +, lz: 벽에서 바깥으로) */
+const nbrW=(lx,lz)=>{const h=NBR.rec;return {x:h.x+h.nz*lx+h.nx*lz,z:h.z-h.nx*lx+h.nz*lz};};
+/* 문 앞 땅 높이: 돌 계단(벽에서 .07~.69m, 윗면 .14m) 위에서는 계단 높이 */
+function nbrY(lx,lz){const h=NBR.rec,w=nbrW(lx,lz),g=heightAt(w.x,w.z);if(Math.abs(lx)>1.05||lz>.9)return g;const st=h.y+.14;if(lz<.69)return Math.max(g,st);const k=(lz-.69)/.21;return Math.max(g,st+(g-st)*k);}
+function nbrArchShape(w,h,hr){const s=new THREE.Shape();s.moveTo(-w/2,0);s.lineTo(w/2,0);s.lineTo(w/2,hr);s.absellipse(0,hr,w/2,h-hr,0,Math.PI,false);s.lineTo(-w/2,0);return s;}
+function nbrDarkTex(){if(nbrDarkTex.t)return nbrDarkTex.t;const c=document.createElement('canvas');c.width=64;c.height=128;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,128);g.addColorStop(0,'#07050a');g.addColorStop(.55,'#120c08');g.addColorStop(.86,'#2a1c12');g.addColorStop(1,'#3a2818');x.fillStyle=g;x.fillRect(0,0,64,128);
+  const r=x.createRadialGradient(40,96,2,40,96,46);r.addColorStop(0,'rgba(255,170,90,.22)');r.addColorStop(1,'rgba(255,170,90,0)');x.fillStyle=r;x.fillRect(0,0,64,128);   /* 안쪽 깊은 곳 난롯불 빛 */
+  const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;return nbrDarkTex.t=t;}
+/* 옆집 문: 경첩으로 열리는 입체 문짝 + 문틀 + 열린 자리의 어둠 + 문 양옆 제라늄 화분 둘 (집을 따라 옮겨진다) */
+function nbrDoorBuild(h){
+  if(NBR.g){scene.remove(NBR.g);NBR.g.traverse(o=>{if(o.isMesh&&o.geometry)o.geometry.dispose();});NBR.g=null;}
+  for(const c of NBR.cols){const i=colliders.indexOf(c);if(i>=0)colliders.splice(i,1);}NBR.cols=[];
+  const g=new THREE.Group();g.position.set(h.x,h.y,h.z);g.rotation.y=h.ry;scene.add(g);NBR.g=g;
+  const M=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.85},o)),
+    add=(par,geo,m,x,y,z,rx=0,ry=0,rz=0)=>{const q=new THREE.Mesh(geo,m);q.position.set(x,y,z);q.rotation.set(rx,ry,rz);q.castShadow=q.receiveShadow=true;par.add(q);return q;};
+  const wood=new THREE.MeshStandardMaterial({map:doorWoodTex(),color:0x6e8a7a,roughness:.75}),   /* 바랜 청록 칠 */
+    frame=M(0x4a3424),iron=M(0x26231f,{metalness:.65,roughness:.42}),brass=M(0xc9a050,{metalness:.85,roughness:.3});
+  /* 문틀: 벽에 그려진 문(.1m)보다 앞에서 시작해(.09~.25m) 뒷면은 벽 속, 안쪽 너비 1.44m */
+  {const o=nbrArchShape(1.66,2.72,1.42),i=nbrArchShape(1.44,2.6,1.36);o.holes.push(new THREE.Path(i.getPoints(24).reverse()));
+    const geo=new THREE.ExtrudeGeometry(o,{depth:.16,bevelEnabled:false,curveSegments:24});add(g,geo,frame,0,-.03,.09);}   /* 밑동은 땅 속 3cm */
+  /* 열린 자리의 어둠: 문틀 안, 문고리(.17m)보다 앞 .19m. 문이 닫혀 있으면 감춘다 */
+  {const geo=new THREE.ShapeGeometry(nbrArchShape(1.44,2.46,1.22),24);const uv=geo.attributes.uv,p=geo.attributes.position;for(let k=0;k<uv.count;k++)uv.setXY(k,(p.getX(k)+.72)/1.44,p.getY(k)/2.46);
+    const d=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({map:nbrDarkTex()}));d.position.set(0,.14,.19);d.visible=false;g.add(d);NBR.dark=d;}
+  /* 문짝: 왼쪽 경첩(x -.69)에 매달려 바깥으로 열린다. 아랫면은 계단 윗면보다 1cm 위 */
+  {const hg=new THREE.Group();hg.position.set(-.69,.15,.215);g.add(hg);NBR.hinge=hg;const W=1.38,Hh=2.44,hr=1.2;
+    const sh=nbrArchShape(W,Hh,hr),geo=new THREE.ExtrudeGeometry(sh,{depth:.05,bevelEnabled:true,bevelThickness:.008,bevelSize:.008,bevelSegments:1,curveSegments:24});
+    geo.translate(W/2,0,-.025);const uv=geo.attributes.uv;for(let k=0;k<uv.count;k++)uv.setXY(k,uv.getX(k)/1.2,uv.getY(k)/2.4);add(hg,geo,wood,0,0,0);
+    const fz=.034;   /* 앞면(.025+베벨 .008)보다 조금 앞 */
+    for(let k=1;k<5;k++)add(hg,new THREE.BoxGeometry(.014,hr+.4,.01),M(0x2e3a32),k*W/5,(hr+.4)/2+.06,fz);   /* 판자 사이 홈 */
+    for(const y of [.32,1.5]){add(hg,new THREE.BoxGeometry(1.0,.07,.02),iron,.52,y,fz+.005);add(hg,new THREE.CylinderGeometry(.06,.06,.02,3),iron,1.06,y,fz+.005,Math.PI/2,0,-Math.PI/2);
+      for(let k=0;k<5;k++)add(hg,new THREE.SphereGeometry(.018,6,4),iron,.1+k*.2,y,fz+.02);
+      add(hg,new THREE.CylinderGeometry(.03,.03,.18,10),iron,-.01,y,0);}   /* 경첩 띠·징·경첩 통 */
+    add(hg,new THREE.CylinderGeometry(.06,.06,.02,14),brass,W/2,1.32,fz+.006,Math.PI/2);add(hg,new THREE.TorusGeometry(.075,.014,8,18),brass,W/2,1.23,fz+.03);   /* 두드리는 고리 */
+    add(hg,new THREE.BoxGeometry(.07,.22,.02),brass,W-.2,.98,fz+.006);add(hg,new THREE.SphereGeometry(.032,10,8),brass,W-.2,1.02,fz+.05);   /* 손잡이 */
+    {const win=add(hg,new THREE.CircleGeometry(.13,18),M(0xffd8a0,{emissive:0xffa850,emissiveIntensity:.55}),W/2,1.88,fz+.014);win.castShadow=false;   /* 둥근 작은 창 (문짝 앞면보다 1.4cm 앞) */
+      add(hg,new THREE.TorusGeometry(.13,.02,6,20),frame,W/2,1.88,fz+.014);add(hg,new THREE.BoxGeometry(.26,.018,.02),frame,W/2,1.88,fz+.02);add(hg,new THREE.BoxGeometry(.018,.26,.02),frame,W/2,1.88,fz+.02);}}
+  /* 화분: 벽에서 .45m, 문 양옆 1.32m. 붉은 흙 화분에 제라늄 */
+  const clay=M(0xb0603e,{roughness:.9}),clay2=M(0x9a5034,{roughness:.9}),soil=M(0x3a2818,{roughness:1}),leaf=M(0x4a7a3c,{roughness:.8}),leaf2=M(0x3c6a32,{roughness:.8}),fl=[M(0xd8303a,{roughness:.7}),M(0xe85060,{roughness:.7}),M(0xc02030,{roughness:.7})];
+  for(const sd of [-1,1]){const lx=sd*1.32,lz=.45,w=nbrW(lx,lz),gy=heightAt(w.x,w.z)-h.y-.01;const pg=new THREE.Group();pg.position.set(lx,gy,lz);g.add(pg);
+    const prof=[[0,0],[.13,0],[.135,.02],[.17,.3],[.2,.31],[.205,.35],[.18,.36],[.165,.33],[.15,.28],[0,.28]].map(p=>new THREE.Vector2(p[0],p[1]));
+    add(pg,new THREE.LatheGeometry(prof,20),clay,0,0,0);add(pg,new THREE.TorusGeometry(.163,.014,6,22),clay2,0,.24,0,Math.PI/2);
+    add(pg,new THREE.CircleGeometry(.156,18),soil,0,.295,0,-Math.PI/2);   /* 흙: 화분 속 바닥(.28)보다 1.5cm 위 */
+    let s=sd>0?11:5;const r=()=>(s=(s*16807)%2147483647)/2147483647;
+    for(let k=0;k<11;k++){const a=k*2.4+r(),rr=.05+r()*.13,lf=add(pg,new THREE.SphereGeometry(.075,8,6),k%2?leaf:leaf2,Math.cos(a)*rr,.4+r()*.14,Math.sin(a)*rr);lf.scale.set(1,.45,1);lf.rotation.set(r()*.6,a,r()*.6);}
+    for(let k=0;k<5;k++){const a=k*1.3+r()*.5,rr=.04+r()*.1,cx=Math.cos(a)*rr,cz=Math.sin(a)*rr,cy=.56+r()*.1;add(pg,new THREE.CylinderGeometry(.006,.006,.14,4),leaf2,cx,cy-.07,cz);
+      for(let j=0;j<5;j++){const b=j*1.26;add(pg,new THREE.SphereGeometry(.028,6,5),fl[(k+j)%3],cx+Math.cos(b)*.035,cy+r()*.02,cz+Math.sin(b)*.035);}}
+    const c={x:w.x,z:w.z,r:.24};colliders.push(c);NBR.cols.push(c);}
+  if(typeof COLG!=='undefined')COLG.n=-1;
+  g.updateMatrixWorld(true);}
+/* 손에 드는 것: 빗자루·물뿌리개·바구니 (빚기 뒤에 붙여 따로 보이고 감춘다) */
+function nbrProps(n){const S=n.mesh.userData.stick;if(!S)return null;const M=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.8},o)),
+  add=(par,geo,m,x,y,z,rx=0,ry=0,rz=0)=>{const q=new THREE.Mesh(geo,m);q.position.set(x,y,z);q.rotation.set(rx,ry,rz);q.castShadow=true;q.userData.noSculpt=1;par.add(q);return q;};
+  const P={};
+  /* 빗자루: 쥔 곳에서 -y 쪽으로 자루가 뻗고 끝에 짚 다발. 길이는 손에서 땅까지에 맞춰 늘인다 (B.len=1) */
+  {const b=new THREE.Group(),k=new THREE.Group();b.add(k);P.broom=b;b.userData.k=k;S.AR.hand.add(b);
+    add(k,new THREE.CylinderGeometry(.016,.018,1.0,8),M(0x8a5e34),0,-.2,0);add(k,new THREE.CylinderGeometry(.018,.016,.32,8),M(0x8a5e34),0,.46,0);
+    for(const y of [-.7,-.74])add(k,new THREE.CylinderGeometry(.034,.034,.018,10),M(0x6a2a1e),0,y,0);
+    const st=add(k,new THREE.CylinderGeometry(.04,.13,.32,12,1,true),M(0xc8a860,{side:THREE.DoubleSide,roughness:.95}),0,-.86,0);st.scale.z=.42;
+    const bt=add(k,new THREE.CylinderGeometry(.13,.13,.02,12),M(0xb89850,{roughness:1}),0,-1.01,0);bt.scale.z=.42;}
+  /* 물뿌리개: 쥔 곳은 위 손잡이, 몸통은 아래, 주둥이는 앞(+z) */
+  {const c=new THREE.Group();P.can=c;S.AR.hand.add(c);const zn=M(0x8a989c,{metalness:.6,roughness:.4}),zn2=M(0x6a777a,{metalness:.6,roughness:.45});
+    const prof=[[0,0],[.09,0],[.1,.01],[.1,.17],[.095,.18],[0,.18]].map(p=>new THREE.Vector2(p[0],p[1]));add(c,new THREE.LatheGeometry(prof,16),zn,0,-.3,0);
+    add(c,new THREE.TorusGeometry(.1,.008,5,18),zn2,0,-.12,0,Math.PI/2);add(c,new THREE.TorusGeometry(.1,.012,6,14,Math.PI),zn2,0,-.11,0,0,Math.PI/2);   /* 테두리·위 손잡이 */
+    add(c,new THREE.CylinderGeometry(.012,.02,.34,8),zn,0,-.17,.24,.95);add(c,new THREE.CylinderGeometry(.04,.02,.05,10),zn2,0,-.055,.395,.95);}   /* 주둥이·꽃 모양 꼭지 */
+  /* 바구니: 왼손에 걸고, 체크무늬 덮개 밑으로 빵이 보인다 */
+  {const b=new THREE.Group();P.basket=b;S.AL.hand.add(b);const wk=M(0xa8804a,{roughness:.95}),wk2=M(0x8a6436,{roughness:.95});
+    const prof=[[0,0],[.11,0],[.13,.02],[.16,.15],[.165,.16],[0,.16]].map(p=>new THREE.Vector2(p[0],p[1]));const bs=add(b,new THREE.LatheGeometry(prof,16),wk,0,-.36,0);bs.scale.z=.75;
+    for(const [y,r] of [[-.32,.136],[-.27,.147],[-.22,.158]]){const t=add(b,new THREE.TorusGeometry(r,.007,4,20),wk2,0,y,0,Math.PI/2);t.scale.y=.75;}   /* 엮은 띠: 몸통 겉면에 */
+    add(b,new THREE.TorusGeometry(.17,.012,5,16,Math.PI),wk2,0,-.2,0);
+    const cl=add(b,new THREE.SphereGeometry(.16,12,6,0,Math.PI*2,0,Math.PI/2),M(0xc84a3a,{roughness:.9}),0,-.205,0);cl.scale.set(1,.28,.75);
+    if(typeof FOODK!=='undefined'){try{const q=new THREE.Mesh(FOODK.geo('hand:1'),FOODK.mat());q.position.set(.04,-.19,.02);q.rotation.set(0,.5,.4);q.userData.noSculpt=1;b.add(q);}catch(e){}}}
+  for(const k in P)P[k].visible=false;return P;}
+/* 몸짓을 정한 뒤 손에 든 것을 바로 세운다: 손의 기울기와 상관없이 물뿌리개·바구니는 똑바로, 빗자루는 손에서 땅의 한 점으로 */
+const _nbQ=new THREE.Quaternion(),_nbQ2=new THREE.Quaternion(),_nbV=new THREE.Vector3(),_nbV2=new THREE.Vector3(),_nbDn=new THREE.Vector3(0,-1,0),_nbE=new THREE.Euler();
+function nbrAim(g,t){const u=g.userData,P=u.nbP;if(!P)return;g.updateMatrixWorld(true);
+  const hold=(o,rx)=>{o.parent.getWorldQuaternion(_nbQ);g.getWorldQuaternion(_nbQ2);_nbQ2.multiply(_nbQ.setFromEuler(_nbE.set(rx,0,0)));o.parent.getWorldQuaternion(_nbQ);o.quaternion.copy(_nbQ.invert().multiply(_nbQ2));};
+  if(P.can.visible)hold(P.can,u.nbPour||0);
+  if(P.basket.visible)hold(P.basket,0);
+  if(P.broom.visible){const b=P.broom;b.parent.getWorldPosition(_nbV);const tg=u.nbTip||[.12,.42];   /* 빗자루 끝이 닿을 땅 자리 (사람 기준 옆·앞) */
+    _nbV2.set(tg[0],0,tg[1]);g.localToWorld(_nbV2);_nbV2.y=g.position.y+.02;_nbV2.sub(_nbV);const len=Math.max(.4,_nbV2.length());_nbV2.normalize();
+    _nbQ2.setFromUnitVectors(_nbDn,_nbV2);b.parent.getWorldQuaternion(_nbQ);b.quaternion.copy(_nbQ.invert().multiply(_nbQ2));b.userData.k.scale.set(1,len/1.02,1);}}
+/* 볼일 순서 만들기. 문 나오기 → 볼일 → 문 들어가기 */
+function nbrPlan(){const out=[{k:'open'},{k:'walk',x:.05,z:1.15},{k:'close'}],inn=[{k:'walk',x:.05,z:1.15},{k:'open'},{k:'walk',x:.05,z:-.55},{k:'close'},{k:'hide'}];
+  const R=Math.random,dir=NBR.dir,D=NBR.D,acts=[['sweep',3],['water',3],['air',1.5]];if(D>0)acts.push(['visit',2.2]);if(NBR.far>=3)acts.push(['wait',1.5]);
+  let tot=0;for(const a of acts)if(a[0]!==NBR.last)tot+=a[1];let x=R()*tot,act=acts[0][0];for(const a of acts){if(a[0]===NBR.last)continue;x-=a[1];if(x<=0){act=a[0];break;}}
+  NBR.last=act;NBR.act=act;let mid=[];
+  if(act==='sweep'){NBR.prop='broom';mid=[{k:'walk',x:-.3,z:1.4},{k:'do',pose:'nbsweep',dur:8+R()*4,face:[-.3,3]},{k:'walk',x:.7,z:1.25},{k:'do',pose:'nbsweep',dur:6+R()*4,face:[.9,3]},{k:'walk',x:.2,z:1.9},{k:'do',pose:'nbsweep',dur:5+R()*3,face:[.2,4]}];}
+  else if(act==='water'){NBR.prop='can';const a=R()<.5?-1:1;mid=[{k:'walk',x:a*1.32,z:1.05},{k:'do',pose:'nbwater',dur:6+R()*3,face:[a*1.32,.45]},{k:'walk',x:-a*1.32,z:1.05},{k:'do',pose:'nbwater',dur:6+R()*3,face:[-a*1.32,.45]},{k:'do',pose:'nbidle',dur:2.5,face:[0,4]}];}
+  else if(act==='visit'){NBR.prop='basket';const fx=dir*D,fz=NBR.fw;const L=NBR.line;mid=[{k:'walk',x:.05,z:L},{k:'walk',x:fx,z:L},{k:'walk',x:fx,z:fz+1.3},{k:'do',pose:'nbknock',dur:4.2,face:[fx,fz]},{k:'do',pose:'nbidle',dur:5+R()*3,face:[fx,fz]},{k:'do',pose:'shrug',dur:2.2,face:[fx,fz+3]},{k:'walk',x:fx,z:L},{k:'walk',x:.05,z:L}];}
+  else if(act==='wait'){NBR.prop=null;const fx=-dir*NBR.far;mid=[{k:'walk',x:.05,z:1.7},{k:'walk',x:fx,z:1.7},{k:'do',pose:'lookfar',dur:7+R()*4,face:[fx-dir*8,1.7]},{k:'do',pose:'nbidle',dur:3,face:[fx-dir*8,2.5]},{k:'do',pose:'lookfar',dur:4+R()*3,face:[fx-dir*8,1.7]},{k:'walk',x:.05,z:1.7}];}
+  else{NBR.prop=null;mid=[{k:'walk',x:.15,z:1.5},{k:'do',pose:'stretch',dur:6,face:[.15,4]},{k:'do',pose:'nbidle',dur:6+R()*4,face:[1.5,4]}];}
+  NBR.q=out.concat(mid,inn);NBR.step=null;NBR.said=null;}
+/* 옆집 정하기·문 짓기·이웃 세우기 (내 집이 바뀌면 다시) */
+function nbrSync(){const r=myHomeRec(),key=r?r.n+':'+r.x.toFixed(1)+':'+r.z.toFixed(1):null;if(key===NBR.key)return;NBR.key=key;
+  NBR.rec=null;NBR.st='in';NBR.wait=4+Math.random()*6;NBR.q=[];NBR.step=null;NBR.ang=NBR.want=0;
+  if(NBR.g){NBR.g.visible=false;}if(NBR.n)nbrPark();
+  if(!r)return;const h=nbrPick(r);if(!h)return;NBR.rec=h;nbrDoorBuild(h);
+  {const sx=h.nz,sz=-h.nx,dx=r.x-h.x,dz=r.z-h.z,lat=dx*sx+dz*sz,fw=dx*h.nx+dz*h.nz;NBR.dir=Math.sign(lat)||1;NBR.fw=fw;
+    NBR.D=Math.abs(fw)<=2.5&&Math.abs(lat)<=30?Math.abs(lat):0;NBR.line=Math.max(0,fw)+1.6;   /* 나란히 붙은 집일 때만 우리 집까지 온다 (두 문 앞을 잇는 길) */
+    if(NBR.D){for(let s=0;s<=NBR.D;s+=.4){const w=nbrW(NBR.dir*s,NBR.line);if(!nbrFree(w.x,w.z)){NBR.D=0;break;}}
+      if(NBR.D)for(let z=fw+1.1;z<=NBR.line;z+=.3){const w=nbrW(NBR.dir*NBR.D,z);if(!nbrFree(w.x,w.z)){NBR.D=0;break;}}}
+    let far=0;for(let s=.5;s<=11;s+=.5){const w=nbrW(-NBR.dir*s,1.7);if(!nbrFree(w.x,w.z))break;far=s;}NBR.far=Math.max(0,far-.6);}
+  if(!NBR.n){const w=nbrW(.05,1.2);NPC_POSE.nbr='idle';
+    const n=addNpc({id:'nbr',name:'도로테아',role:'옆집 이웃',x:w.x,z:w.z,y:h.y,look:NBR_LOOK,lines:NBR_LINES,acts:[],story:NBR_STORY});
+    {const k=colliders.findIndex(c=>c.npc&&c.x===n.x&&c.z===n.z);if(k>=0)colliders.splice(k,1);}   /* 걸어 다니는 사람은 부딪힘 없이 */
+    n.walkN=1;n.hideIf=()=>NBR.st==='in'||!NBR.rec;n.poses=null;NBR.n=n;NBR.props=nbrProps(n);n.mesh.userData.nbP=NBR.props;
+    n.onOpen=()=>{renderNpc(nbrLine());return true;};}
+  nbrPark();}
+function nbrPark(){const n=NBR.n;if(!n)return;n.x=n.z=1e6;n.mesh.position.set(1e6,0,1e6);n.mesh.visible=false;}
+/* 말 걸면: 처음엔 인사, 그다음엔 지금 하는 일 이야기와 다른 이야기를 번갈아 */
+function nbrLine(){const n=NBR.n;n.li=n.li||0;if(!NBR.met){NBR.met=1;return NBR_FIRST;}
+  if(NBR.act&&NBR.said!==NBR.act){NBR.said=NBR.act;const L=NBR_SAY[NBR.act];return L[Math.floor(Math.random()*L.length)];}
+  return NBR_LINES[n.li%NBR_LINES.length];}
+/* 매 프레임 */
+function nbrTick(t,dt){if(!player||!P)return;if(!MARCUS||!MARCUS.homes)return;
+  if(!nbrTick.chk||t-nbrTick.chk>1){nbrTick.chk=t;nbrSync();}
+  const h=NBR.rec,n=NBR.n;if(!h||!n)return;dt=Math.min(.1,Math.max(0,dt||0));
+  /* 문짝 */
+  {const k=NBR.ang;NBR.ang+=Math.sign(NBR.want-NBR.ang)*Math.min(Math.abs(NBR.want-NBR.ang),dt*2.2);if(k!==NBR.ang){const e=NBR.ang*NBR.ang*(3-2*NBR.ang);NBR.hinge.rotation.y=-e*1.62;NBR.dark.visible=NBR.ang>.01;}}
+  const far=Math.hypot(player.position.x-h.x,player.position.z-h.z)>140;NBR.g.visible=!far;
+  if(NBR.st==='in'){NBR.wait-=dt;if(NBR.wait<=0&&!warping){nbrPlan();NBR.st='out';NBR.lx=.05;NBR.lz=-.55;NBR.ry=null;}else return;}
+  const u=n.mesh.userData,p=player.position,talking=mode==='dialog'&&npcCur===n,wpos=nbrW(NBR.lx,NBR.lz),dp=Math.hypot(p.x-wpos.x,p.z-wpos.z),
+    near=dp<3.0&&Math.abs(p.y-(n.y||0))<2,inDoor=NBR.lz<.75&&Math.abs(NBR.lx)<.8,hold=talking||(near&&!inDoor&&(!NBR.step||NBR.step.k!=='open'));
+  if(near&&!NBR.wasNear)NBR.greet=2.4;NBR.wasNear=dp<6&&(near||NBR.wasNear);if(NBR.greet>0)NBR.greet-=dt;
+  for(const k in NBR.props)NBR.props[k].visible=NBR.prop===k;
+  let pose='nbidle',moving=false,face=null,spd=0;
+  if(!hold){if(!NBR.step&&NBR.q.length){NBR.step=Object.assign({},NBR.q.shift());NBR.step.t=0;}
+    const s=NBR.step;
+    if(s){s.t+=dt;
+      if(s.k==='open'){if(NBR.want!==1){NBR.want=1;sfx('door',nbrW(0,.3),.55);}if(NBR.ang>=.85)NBR.step=null;}
+      else if(s.k==='close'){NBR.want=0;if(NBR.ang<1&&NBR.ang>.98)sfx('door',nbrW(0,.3),.35);NBR.step=null;}
+      else if(s.k==='hide'){NBR.st='in';NBR.wait=25+Math.random()*35;NBR.prop=null;NBR.act=null;nbrPark();for(const k in NBR.props)NBR.props[k].visible=false;return;}
+      else if(s.k==='walk'){const dx=s.x-NBR.lx,dz=s.z-NBR.lz,d=Math.hypot(dx,dz),v=1.05;
+        if(d<.03){NBR.step=null;}else{const m=Math.min(d,v*dt);NBR.lx+=dx/d*m;NBR.lz+=dz/d*m;moving=true;spd=v;face=[s.x,s.z];}}
+      else if(s.k==='do'){pose=s.pose;face=s.face;if(s.t>=s.dur)NBR.step=null;}}}
+  else{pose=talking?'talk':NBR.greet>0?'wave':'nbidle';}
+  /* 자리·높이 */
+  const w=nbrW(NBR.lx,NBR.lz),y=nbrY(NBR.lx,NBR.lz);n.x=w.x;n.z=w.z;n.y=y;n.mesh.position.set(w.x,y,w.z);
+  /* 몸 방향 (문 앞 좌표의 목표를 바라본다; 붙잡혀 있으면 모험가 쪽) */
+  let want;if(hold)want=Math.atan2(p.x-w.x,p.z-w.z);else if(face){const f=nbrW(face[0],face[1]);want=Math.atan2(f.x-w.x,f.z-w.z);}else want=NBR.ry??h.ry;
+  if(NBR.ry==null)NBR.ry=want;let a=want-NBR.ry;a=Math.atan2(Math.sin(a),Math.cos(a));NBR.ry+=a*Math.min(1,dt*(moving?7:5));
+  facing.delete(n.mesh);u.baseQ=null;n.mesh.rotation.set(0,NBR.ry,0);
+  /* 걸음: 실제 빠르기에 맞춘 보폭·발 빠르기 */
+  if(moving){const sc=n.mesh.scale.x||1,sw=stickStride(spd,sc);u.nbW=sw;NBR.ph+=dt*stickCadence(spd,sw,1,sc);u.nbPh=NBR.ph;pose='nbwalk';}
+  if(pose==='wave'||pose==='talk')pose=(NBR.prop==='broom'||NBR.prop==='can')?'nb'+pose:pose;u.nbHeld=NBR.prop;u.pose=pose;}
+nbrTick.ok=1;
 
 const hot=window.claude&&window.claude.hot;
 if(hot&&typeof hot.snapshot==='function')hot.snapshot(()=>{const s=snapshotP();return s?{P:s}:{};});
