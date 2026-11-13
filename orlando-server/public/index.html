@@ -3390,7 +3390,7 @@ make();addEventListener('resize',function(){clearTimeout(tm);tm=ST(make,250);});
    세상은 뒤에서 짓고, 로딩 화면은 '모험 시작'을 눌렀는데 아직 다 못 지었을 때만 뜬다 (wait) */
 /* 짓는 동안 장면에 붙은 물체 (EW가 셰이더를 미리 굽는 데 쓴다) */
 const EWQ=[];let EWHOOK=null;
-const BOOT=(()=>{const L=document.getElementById('loading'),M=document.getElementById('loadMsg'),S=document.getElementById('start'),N=286;let k=0,last=performance.now(),on=true,bld=true,pq=null;
+const BOOT=(()=>{const L=document.getElementById('loading'),M=document.getElementById('loadMsg'),S=document.getElementById('start'),N=245;let k=0,last=performance.now(),on=true,bld=true,pq=null;
   if(M)M.textContent='불러오는 중… 0%';
   const inS=e=>S&&e.target instanceof Node&&S.contains(e.target)&&!S.hidden&&!pq;
   const block=e=>{if(on&&!inS(e)){e.stopImmediatePropagation();if(e.cancelable&&e.type!=='wheel'&&e.type!=='touchstart')e.preventDefault();}};
@@ -3415,11 +3415,14 @@ const BOOT=(()=>{const L=document.getElementById('loading'),M=document.getElemen
     set(f){WD.set.call(this,typeof f==='function'&&on&&bld?function(e){if(on)gate.then(()=>f.call(this,e));else f.call(this,e);}:f);}});
   const ch=new MessageChannel(),q=[];ch.port1.onmessage=()=>{const f=q.shift();if(f)f();};
   const pass=()=>new Promise(r=>{q.push(r);ch.port2.postMessage(0);});
+  /* 다 지은 뒤에도 짓는 코드(FARB: 먼 맵 나중에 짓기)가 부르면: 급하면(로딩 화면) 40ms, 시작 창 12ms, 게임 안 4ms씩만 일하고 쉰다 */
+  const late=()=>{const t=performance.now(),u=typeof FARB!=='undefined'&&FARB.u,b=u?40:typeof mode!=='undefined'&&mode==='title'?12:4;if(t-last<b)return null;
+    return (u?pass():new Promise(r=>_raf.call(W,()=>_st.call(W,r,0)))).then(()=>{last=performance.now();});};
   return {get on(){return on;},get k(){return k;},get q(){return pq;},raf:f=>_raf.call(W,f),
     /* 지난번에 넘긴 뒤 40ms 넘게 일했으면(must면 늘) 한 번 넘긴다. 시작 창이 떠 있으면 조금 더 자주 넘겨 미리보기가 덜 끊기게 */
-    y(must){k++;const t=performance.now();if(!must&&t-last<(pq?90:S&&!S.hidden?25:40))return null;if(M)M.textContent='불러오는 중… '+Math.min(90,Math.floor(k/N*90))+'%';bld=false;if(EWHOOK)try{EWHOOK();}catch(e){}return pass().then(()=>{last=performance.now();bld=true;});},
+    y(must){if(!on)return late();k++;const t=performance.now();if(!must&&t-last<(pq?90:S&&!S.hidden?25:40))return null;if(M)M.textContent='불러오는 중… '+Math.min(90,Math.floor(k/N*90))+'%';bld=false;if(EWHOOK)try{EWHOOK();}catch(e){}return pass().then(()=>{last=performance.now();bld=true;});},
     /* z: 큰 짓기 함수 안의 잔 쉬는 자리 (y와 같지만 진행 %는 세지 않는다). 한 덩어리가 0.3~0.7초씩 이어져 홈 화면이 그만큼 멈췄다 */
-    z(){const t=performance.now();if(t-last<(pq?90:S&&!S.hidden?25:40))return null;bld=false;if(EWHOOK)try{EWHOOK();}catch(e){}return pass().then(()=>{last=performance.now();bld=true;});},
+    z(){if(!on)return late();const t=performance.now();if(t-last<(pq?90:S&&!S.hidden?25:40))return null;bld=false;if(EWHOOK)try{EWHOOK();}catch(e){}return pass().then(()=>{last=performance.now();bld=true;});},
     /* 시작 창 코드를 세상보다 먼저 돌리는 동안: 거기서 건 타이머·파일 받기는 미루지 않는다 */
     hold(v){bld=!!v;},
     msg(t){if(M)M.textContent=t;},
@@ -3469,6 +3472,27 @@ const LAZYG={on:true,jobs:[],flushed:false,
   tick(){if(BOOT.on)return;if(!this.jobs.length){if(!this.flushed){this.flushed=true;GRC.flush();}return;}
     if(player&&mode!=='title')this.prep(player.position.x,player.position.z);
     const t0=performance.now(),bud=mode==='title'?10:3;while(this.jobs.length&&performance.now()-t0<bud){if(this.step(this.jobs[0]))this.jobs.shift();}}};
+/* 먼 맵 나중에 짓기 (FARB): 첫 로딩에서 뺀 맵(마차 길·성·길드홀·기사단 본부·시장·도서관)은 다 지은 뒤(홈 화면)부터 뒤에서 조금씩 짓는다.
+   다 짓기 전에 그 맵으로 들어가려 하면(게임 시작·순간이동·서 있는 자리) 로딩 화면을 띄우고 서둘러 마저 짓는다 (허칠 HCHL과 같은 방식) */
+const FARB={on:true,jobs:[],ids:new Set(),st:0,done:true,u:0,cbs:[],
+  add(ids,f){for(const i of ids)this.ids.add(i);this.jobs.push(f);this.done=false;},
+  isF(x,z){if(this.done||!(x>=800))return false;const I=OR.isleAt(x,z);return !!I&&this.ids.has(I.id);},
+  start(){if(this.st||this.done)return;this.st=1;const before=new Set(scene.children);
+    (async()=>{for(const f of this.jobs){try{await f();}catch(e){console.warn('farb',e);}}await this.finish(scene.children.filter(c=>!before.has(c)));})();},
+  /* 첫 로딩 끝과 똑같이: 움직이지 않는 묶음은 하나로 합치고, 먼 좌표는 작게 옮기고, 그래픽카드에 미리 올린다 */
+  async finish(added){const go=async it=>{while(!it.next().done){const p=BOOT.z();if(p)await p;}};
+    try{await go(mergeStaticGen(3,added.filter(c=>c.isGroup)));}catch(e){console.warn('farb merge',e);}
+    try{InstChunks.init(64,added.filter(c=>c.isInstancedMesh));}catch(e){console.warn('farb chunks',e);}
+    try{await go(Rebase.gen());}catch(e){}
+    this.done=true;this.jobs.length=0;
+    try{if(typeof MOV_CACHE!=='undefined')for(const k in MOV_CACHE)delete MOV_CACHE[k];}catch(e){}
+    try{const objs=[];for(const c of added)c.traverse(o=>{if(!o.isLight&&(o.isMesh||o.isPoints||o.isLine||o.isSprite))objs.push(o);});twAdd(objs);}catch(e){console.warn('farb warm',e);}
+    if(this.u)precompileAll();
+    for(const f of this.cbs.splice(0))try{f();}catch(e){console.error(e);}},
+  need(f){if(this.done){if(f)f();return;}if(f)this.cbs.push(f);if(this.u)return;this.u=1;
+    const L=$('#loading'),M=$('#loadMsg');if(L){L.hidden=false;if(M)M.textContent='불러오는 중…';}warping=true;
+    this.cbs.unshift(()=>{this.u=0;warping=false;if(L)L.hidden=true;});this.start();},
+  tick(){if(this.done||BOOT.on)return;if(!this.st)this.start();if(!this.u&&player&&mode!=='title'&&this.isF(player.position.x,player.position.z))this.need(null);}};
 /* 성능: 움직이지 않은 물체는 매 프레임 행렬을 다시 만들지 않는다 (세상에 물체가 4만 개가 넘어 이것만으로 한 프레임 시간을 크게 잡아먹었다).
    자리·회전·크기가 지난번과 같으면 건너뛰고, 바뀌었을 때만 다시 계산한다. 다른 부모로 옮겨 붙으면 한 번 새로 계산한다 */
 (function(){const O=THREE.Object3D.prototype,_add=O.add;
@@ -5641,9 +5665,9 @@ const LightPool={src:[],pool:[],t:0,
 };
 // 여러 개 묶음을 구역별로 나눈다
 const InstChunks={list:[],
-  init(cell=64){
+  init(cell=64,only){   /* only: 나중에 지은 맵(FARB)이 새로 넣은 것만 */
     const M=new THREE.Matrix4(),v=new THREE.Vector3(),col=new THREE.Color();
-    for(const m of scene.children.slice()){
+    for(const m of (only||scene.children).slice()){
       if(!m.isInstancedMesh||(m.count<60&&!m.userData.lodD)||m.parent!==scene)continue;   /* 멀고 가까움에 따라 바꿔 그리는 모형(lodD)은 적어도 나눠 둔다 */
       m.updateMatrix();if(!m.matrix.equals(new THREE.Matrix4()))continue;
       const g=m.geometry;if(!g.boundingSphere)g.computeBoundingSphere();const gr=g.boundingSphere.radius+g.boundingSphere.center.length();
@@ -5706,7 +5730,7 @@ const Rebase={done:new WeakSet(),watch:[],t:0,_I:new THREE.Matrix4(),_M:new THRE
     for(let i=0;i<L.length;i++){step(L[i]);if((i&63)===63)yield;}
   },
   /* 나중에 생긴 메시도 챙기고, 옮긴 뒤 누가 꼭짓점을 세상 좌표로 다시 쓰면(움직이는 것) 되돌린다 */
-  tick(dt){if((this.t+=dt)<3)return;this.t=0;if(HCHL.st&&!HCHL.done)return;   /* 허칠을 짓는 중에는 옮기지 않는다 (짓는 코드가 아직 꼭짓점을 고치고 있다) */
+  tick(dt){if((this.t+=dt)<3)return;this.t=0;if(HCHL.st&&!HCHL.done||FARB.st&&!FARB.done)return;   /* 허칠을 짓는 중에는 옮기지 않는다 (짓는 코드가 아직 꼭짓점을 고치고 있다) */
     for(let i=this.watch.length-1;i>=0;i--){const w=this.watch[i];if(w.a.version!==w.v){w.o.position.set(0,0,0);w.o.updateMatrix();this.watch.splice(i,1);}}
     this.run();}
 };
@@ -19002,12 +19026,13 @@ async function buildMarcus(H){
   await BOOT.z();const addInst=(geo,mtl,list,fn,colorFn)=>{const m=H.inst(geo,mtl,list,fn,colorFn);if(m){m.frustumCulled=false;MARCUS.inst.push(m);}return m;};
   await BOOT.z();const tk=(t,e,sv,v)=>{e.set(0,(t.x*7.3+t.z*3.1)%6,0);sv.set(t.s,t.s,t.s);v.set(t.x,heightAt(t.x,t.z)-.1,t.z);};
   /* 나무: NAT 모형 (사이프러스·올리브·우산소나무·정원수). 줄기와 잎은 같은 tk로 놓는다 */
-  await BOOT.z();await BOOT.y();await BOOT.z();{const LOD_D=50,pair=(hi,lo,mt,list,cf)=>{const a=addInst(hi,mt,list,tk,cf);if(!a)return;a.userData.lodD=LOD_D;a.userData.lodHi=true;const b=addInst(lo,mt,list,tk,cf);b.castShadow=false;b.userData.lodD=LOD_D;};
-    await BOOT.z();const two=(T,bc,list,cf)=>{const TL=NAT.lo(()=>T.mk());pair(T.trunk,TL.trunk,NAT.bark(bc),list);pair(T.crown,TL.crown,NAT.leaf(0xffffff),list,cf);};
-    await BOOT.z();two({...NAT.cypress(),mk:NAT.cypress},0x4a3a2a,cypress,(t,c)=>c.setHSL(.31+((t.x*5)%1+1)%1*.02,.38,.26+((t.z*7)%1+1)%1*.04));
-    await BOOT.z();two({...NAT.olive(),mk:NAT.olive},0x5a4a3a,olives,(t,c)=>c.setHSL(.19,.17,.5+((t.x*3)%1+1)%1*.05));
-    await BOOT.z();two({...NAT.stonePine(),mk:NAT.stonePine},0x6a4a34,pines,(t,c)=>c.setHSL(.265,.37,.29+((t.z*3)%1+1)%1*.04));
-    await BOOT.z();two({...NAT.garden(),mk:NAT.garden},0x5a4029,gardenTrees,(t,c)=>c.setHSL(.27,.45,.31+((t.x*7)%1+1)%1*.04));}
+  await BOOT.z();await BOOT.y();await BOOT.z();const TREES=[];const plantTrees=async(lists)=>{const LOD_D=50,pair=(hi,lo,mt,list,cf)=>{const a=addInst(hi,mt,list,tk,cf);if(!a)return;a.userData.lodD=LOD_D;a.userData.lodHi=true;const b=addInst(lo,mt,list,tk,cf);b.castShadow=false;b.userData.lodD=LOD_D;};
+    await BOOT.z();const two=(T,bc,list,cf)=>{if(!list.length)return;const TL=T._lo||(T._lo=NAT.lo(()=>T.mk()));pair(T.trunk,TL.trunk,NAT.bark(bc),list);pair(T.crown,TL.crown,NAT.leaf(0xffffff),list,cf);};
+    await BOOT.z();if(!TREES[0])TREES[0]={...NAT.cypress(),mk:NAT.cypress};two(TREES[0],0x4a3a2a,lists[0],(t,c)=>c.setHSL(.31+((t.x*5)%1+1)%1*.02,.38,.26+((t.z*7)%1+1)%1*.04));
+    await BOOT.z();if(!TREES[1])TREES[1]={...NAT.olive(),mk:NAT.olive};two(TREES[1],0x5a4a3a,lists[1],(t,c)=>c.setHSL(.19,.17,.5+((t.x*3)%1+1)%1*.05));
+    await BOOT.z();if(!TREES[2])TREES[2]={...NAT.stonePine(),mk:NAT.stonePine};two(TREES[2],0x6a4a34,lists[2],(t,c)=>c.setHSL(.265,.37,.29+((t.z*3)%1+1)%1*.04));
+    await BOOT.z();if(!TREES[3])TREES[3]={...NAT.garden(),mk:NAT.garden};two(TREES[3],0x5a4029,lists[3],(t,c)=>c.setHSL(.27,.45,.31+((t.x*7)%1+1)%1*.04));};
+  await BOOT.z();await plantTrees([cypress,olives,pines,gardenTrees]);const treeN=[cypress.length,olives.length,pines.length,gardenTrees.length];
   await BOOT.z();addInst(NAT.vine(),NAT.leaf(0xffffff),vines,(t,e,sv,v)=>{e.set(0,0,0);sv.set(1,1,1);v.set(t.x,heightAt(t.x,t.z),t.z);},(t,c)=>c.setRGB(1,1,1));   /* 잎 재질은 그루마다 빛깔(instanceColor)을 받는 셰이더라 흰색을 넣어 둔다 */
   await BOOT.z();{const c=document.createElement('canvas');await BOOT.z();c.width=256;await BOOT.z();c.height=256;await BOOT.z();const x=c.getContext('2d');await BOOT.z();let _w=91;await BOOT.z();const R=()=>(_w=(_w*16807)%2147483647)/2147483647;
     /* 밀 이삭 그림: 줄기와 잎, 두 줄로 어긋나게 붙은 낟알(빛 받는 쪽이 밝다), 낟알마다 위로 뻗은 까락 */
@@ -19045,7 +19070,14 @@ async function buildMarcus(H){
   await BOOT.z();const bake=(b,key,parent)=>{if(!b.pos.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(fit(b.pos),3));g.setAttribute('normal',new THREE.BufferAttribute(fit(b.nor),3));g.setAttribute('color',new THREE.BufferAttribute(fit(b.col),3));g.setAttribute('mt',new THREE.BufferAttribute(fit(b.mt),1));
     g.computeBoundingSphere();const m=new THREE.Mesh(g,MAT[key]);m.castShadow=SHD[key][0];m.receiveShadow=SHD[key][1];parent.add(m);b.pos=b.nor=b.col=b.mt=null;return m;};
   await BOOT.z();for(const C of MARCUS.cells.values()){await BOOT.y();for(const k of ['op','gl','sh','ip','sm'])bake(C[k],k,C.g);C.dm=bake(C.dt,'dt',C.g);if(C.dm)C.dm.visible=false;C.fm=bake(C.fd,'fd',C.g);if(C.fm)C.fm.visible=false;C.pm=bake(C.pr,'pr',C.g);if(C.pm)C.pm.visible=false;}
-  await BOOT.z();plodAdd(FOODK.geo('Slamp:0'),FOODK.geo('Slamplo:0'),LAMPM,{D:PR_D});
+  await BOOT.z();plodAdd(FOODK.geo('Slamp:0'),FOODK.geo('Slamplo:0'),LAMPM,{D:PR_D});const lampN=LAMPM.length;
+  /* 나중에 지은 맵(FARB: 성·길드홀·시장 …)이 보탠 나무·가로등·칸 조각을 첫 로딩 끝과 똑같이 굽는다 */
+  MARCUS.lateBake=async()=>{
+    await plantTrees([cypress,olives,pines,gardenTrees].map((l,k)=>l.slice(treeN[k])));for(const [k,l] of [cypress,olives,pines,gardenTrees].entries())treeN[k]=l.length;
+    if(LAMPM.length>lampN)plodAdd(FOODK.geo('Slamp:0'),FOODK.geo('Slamplo:0'),LAMPM.slice(lampN),{D:PR_D});
+    const one=(C,b,k,cur)=>{const m=bake(b,k,C.g);if(!m)return cur;m.visible=false;if(cur){C.g.remove(m);m.visible=true;cur.add(m);return cur;}return m;};   /* 칸에 이미 있으면 그 밑에 달아 같이 켜고 끈다 */
+    for(const C of MARCUS.cells.values()){if(!['op','gl','sh','ip','sm','dt','fd','pr'].some(k=>C[k].pos&&C[k].pos.length))continue;await BOOT.y();
+      for(const k of ['op','gl','sh','ip','sm'])if(C[k].pos)bake(C[k],k,C.g);if(C.dt.pos)C.dm=one(C,C.dt,'dt',C.dm);if(C.fd.pos)C.fm=one(C,C.fd,'fd',C.fm);if(C.pr.pos)C.pm=one(C,C.pr,'pr',C.pm);}};
   await BOOT.z();await BOOT.y();await BOOT.z();makeCitizens(cx,cz);
   await BOOT.z();await BOOT.y();await BOOT.z();if(typeof marcusLife==='function')await marcusLife(cx,cz);
   await BOOT.z();MARCUS.ready=true;
@@ -20139,12 +20171,16 @@ async function buildRealm(K){
   await BOOT.y();{const MP=marcusPlan(),g=MP.gates.find(q=>q.name==='북문')||MP.gates[0],ux=Math.cos(g.out),uz=Math.sin(g.out),px=-uz,pz=ux;
     const wx=mcx+g.x+ux*44+px*7.5,wz=mcz+g.y+uz*44+pz*7.5;wagon(wx,wz,Math.atan2(ux,uz));
     REALM.coach.marcus={x:mcx+g.x+ux*44+px*3.8,z:mcz+g.y+uz*44+pz*3.8,yaw:Math.atan2(ux,uz),px:mcx+g.x+ux*46+px*2.5,pz:mcz+g.y+uz*46+pz*2.5};}
+  /* 성·길드홀·기사단 본부·중앙 시장·도서관은 따로 된 맵이라 첫 로딩에서 빼고 홈 화면이 뜬 뒤 뒤에서 짓는다 (FARB). 차례는 예전 그대로 */
   await BOOT.y();if(typeof buildCoachway==='function')await buildCoachway({...K,road});
+  const farMaps=async()=>{
   await BOOT.y();if(typeof buildCastle==='function')await buildCastle({...K,road,Hd,nearSeg,well,fence,haystack});
   await BOOT.y();if(typeof buildGuildHallMap==='function')try{await buildGuildHallMap({...K,road,Hd,nearSeg,well,fence,haystack});}catch(e){console.warn('guildhall',e);}
   await BOOT.y();if(typeof buildKnightsHQ==='function')try{await buildKnightsHQ({...K,road,Hd,nearSeg,well,fence,haystack});}catch(e){console.warn('khq',e);}
   await BOOT.y();if(typeof buildExMarket==='function')try{await buildExMarket(K);}catch(e){console.warn('exmarket',e);}
   await BOOT.y();try{await buildLibraryMap(K);}catch(e){console.warn('library',e);}
+  flushRoads();if(MARCUS.lateBake)await MARCUS.lateBake();};
+  if(FARB.on)FARB.add(['castle','guildhall','khq','exmarket','library'],farMaps);else await farMaps();
   await BOOT.y();if(typeof buildArena==='function')try{buildArena(K);}catch(e){console.warn('arena',e);}
   await BOOT.y();if(typeof buildArtisans==='function')try{buildArtisans(K);}catch(e){console.warn('artisans',e);}
   await BOOT.y();if(typeof buildStreetProps==='function')try{buildStreetProps(K);}catch(e){console.warn('props',e);}
@@ -26664,7 +26700,8 @@ const HCHL={st:0,done:false,u:0,last:0,cbs:[],t0:0,
   ch:null,q:[],
   y(){const t=performance.now(),u=this.u>0,b=u?40:mode==='title'?12:4;if(t-this.last<b)return null;
     return new Promise(r=>{if(u){if(!this.ch){this.ch=new MessageChannel();this.ch.port1.onmessage=()=>{const f=this.q.shift();if(f)f();};}this.q.push(r);this.ch.port2.postMessage(0);}else requestAnimationFrame(()=>setTimeout(r,0));}).then(()=>{this.last=performance.now();});},
-  start(){if(this.st)return;this.st=1;this.last=performance.now();const before=new Set(scene.children);
+  start(){if(this.st)return;if(!FARB.done){if(!this.fw){this.fw=1;if(this.u){FARB.u=1;FARB.cbs.unshift(()=>{FARB.u=0;});}FARB.cbs.push(()=>{this.fw=0;this.start();});FARB.start();}return;}   /* 먼 맵(FARB)을 다 지은 뒤에 */
+    this.st=1;this.last=performance.now();const before=new Set(scene.children);
     (async()=>{try{await buildHMaps();}catch(e){console.warn('hmaps',e);}
       try{await buildHechilLodge();}catch(e){console.warn('hlodge',e);}
       try{await buildHCave();}catch(e){console.warn('hcave',e);}
@@ -32224,6 +32261,7 @@ document.addEventListener('pointerlockchange',()=>{if(!isLocked()&&mode==='world
 // 애니 모델을 불러온 뒤 시작한다 (처음 한 번은 로딩 화면)
 function startGame(data){if(BOOT.on||BOOT.q){BOOT.wait(()=>startGame(data));return;}
   if(data&&data.x!=null&&!HCHL.done&&HCHL.isH(data.x,data.z||0)){HCHL.need(()=>startGame(data));return;}   /* 허칠에서 끝냈으면 허칠부터 짓는다 */
+  if(data&&data.x!=null&&FARB.isF(data.x,data.z||0)){FARB.need(()=>startGame(data));return;}   /* 아직 안 지은 맵(길드홀 등)에서 끝냈으면 그 맵부터 마저 짓는다 */
   const ap=apParse(data.ap)||(data.ap&&data.ap.g?data.ap:null)||apDefault();
   if(OLD_LOOK||PM.data[ap.g])return startGameNow(data);
   const L=$('#loading');L.hidden=false;$('#loadMsg').textContent='모험가를 불러오는 중…';
@@ -32450,7 +32488,7 @@ function drunkBlackout(){if(!P||!player||warping)return;const f=$('#fade');f.cla
   setTimeout(()=>{P.blackout=false;const q=player.position;let bx=q.x,bz=q.z;for(let k=0;k<12;k++){const a=Math.random()*Math.PI*2,d=4+Math.random()*9,x=q.x+Math.cos(a)*d,z=q.z+Math.sin(a)*d;const p={x,z};if(typeof OR.worldClamp==='function')OR.worldClamp(p,.5);if(Math.hypot(p.x-q.x,p.z-q.z)>3){bx=p.x;bz=p.z;break;}}
     player.position.set(bx,floorAt(bx,bz,q.y+1),bz);pvel.x=pvel.z=0;vy=0;P.drunk=Math.max(0,P.drunk-2.5);if(P.seat!=null){P.seat=null;sitting=false;}
     log('…정신을 차려 보니 엉뚱한 곳에 있다. 중간 기억이 없다','sys');publishPresence(true);setTimeout(()=>f.classList.remove('on'),300);},2600);}
-function warpTo(x,z,yaw,msg,fy){if(!HCHL.done&&HCHL.isH(x,z)){if(!warping)HCHL.need(()=>warpTo(x,z,yaw,msg,fy));return;}try{LAZYG.prep(x,z);}catch(e){}standUp=null;if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.seat!=null){P.seat=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
+function warpTo(x,z,yaw,msg,fy){if(!HCHL.done&&HCHL.isH(x,z)){if(!warping)HCHL.need(()=>warpTo(x,z,yaw,msg,fy));return;}if(FARB.isF(x,z)){if(!warping)FARB.need(()=>warpTo(x,z,yaw,msg,fy));return;}try{LAZYG.prep(x,z);}catch(e){}standUp=null;if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.seat!=null){P.seat=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
   if(warping)return;warping=true;
   const f=$('#fade');f.classList.add('on');
   setTimeout(()=>{const gy=heightAt(x,z);player.position.set(x,Math.max(gy,floorAt(x,z,fy!=null?fy:gy+20)),z);   /* fy: 여러 층 건물 안에서는 도착할 층 높이 */pvel.x=pvel.z=0;vy=0;cam.yaw=yaw;cam.pitch=0;
@@ -36779,7 +36817,7 @@ function loop(){
   requestAnimationFrame(loop);
   try{loopBody();}catch(e){if(loopErr++<1){console.error(e);try{log('화면 갱신 중 오류: '+String(e&&e.message||e).slice(0,120),'bad');}catch(_){}}try{renderer.render(scene,camera);}catch(_){}}
 }
-function loopBody(){if(HCHL.u)return;   /* 허칠을 서둘러 짓는 동안(로딩 화면): 화면을 그리지 않고 짓기에 다 쓴다 */
+function loopBody(){if(HCHL.u||FARB.u)return;   /* 허칠을 서둘러 짓는 동안(로딩 화면): 화면을 그리지 않고 짓기에 다 쓴다 */
   const dt=Math.min(clock.getDelta(),.05);tAll+=dt;dtLast=dt;NAT.uT.value=tAll;xbHud();
   if(mode!=='title'){ccarTick(dt);nrideTick(dt);}
   if(mode==='title'){const a=tAll*.05;camera.position.set(Math.cos(a)*30,14,Math.sin(a)*30);camera.lookAt(0,2,0);apPreviewTick(dt);}
@@ -36793,7 +36831,7 @@ function loopBody(){if(HCHL.u)return;   /* 허칠을 서둘러 짓는 동안(로
     if(npcCur&&npcCur.poses&&npcCur.mesh){npcCur.mesh.userData.pose=npcCur.poses.talk;animNpc(npcCur.mesh,tAll,dt);}}   /* 말하는 동안에도 몸짓을 이어 간다 (버키: 손짓하며 설명) */
   updateFx(dt);VFX.update(dt);updateAmbient(dt);seaTick(dt);if(typeof questMarkTick==='function')questMarkTick(dt);zoneMotes(dt);updateOthers(dt);animateDungeonLights(tAll);updatePortals(tAll);
   if(mode!=='title'){const pp=player?player.position:camera.position;LightPool.update(dt,pp);InstChunks.update(camera.position);geocTick();mapSplitTick(dt);for(const m of monsters)if(m.mesh)setFarHidden(m.mesh,m.mesh.position.distanceToSquared(camera.position)>95*95);}
-  Perf.tick();fpsTick();Rebase.tick(dt);HCHL.tick();LAZYG.tick();
+  Perf.tick();fpsTick();Rebase.tick(dt);HCHL.tick();LAZYG.tick();FARB.tick();
   updateHazards(dt);updateTeles(dt);for(const f of lairFlames)f.scale.set(1+Math.sin(tAll*11+f.position.z)*.12,1+Math.sin(tAll*7+f.position.z)*.2,1);renderMirror(dt);
   if(mode==='world'){updateBossBar();
     if(shakeT>0){shakeT-=dt;const a=shakeT*.12;camera.position.x+=rnd(-a,a);camera.position.y+=rnd(-a,a);}}
@@ -36854,7 +36892,7 @@ await BOOT.z();if(window.ORLANDO_WS){
 function bootGo(){if(!BOOT.q){BOOT.done();return;}const t0=performance.now();
   (function w(){const n=TW.list?TW.list.length:0;if(!TW.done&&!warmGpu.done&&performance.now()-t0<800){BOOT.msg('불러오는 중… '+Math.min(99,90+Math.floor(9*(n?TW.i/n:0)))+'%');requestAnimationFrame(w);return;}
     BOOT.done();BOOT.run();})();}
-await BOOT.y(true);EWHOOK=null;EWQ.length=0;LAZYG.on=false;BOOT.ready();loop();requestAnimationFrame(()=>requestAnimationFrame(bootGo));
+await BOOT.y(true);EWHOOK=null;EWQ.length=0;LAZYG.on=false;FARB.on=false;BOOT.ready();loop();requestAnimationFrame(()=>requestAnimationFrame(bootGo));
 
 /* ---------- 메인 퀘스트 · 옛 친구의 책 ----------
    메인 퀘스트는 퀘스트 창 맨 위 '메인' 칸에 뜬다. 하나가 끝나면 조건에 맞는 다음 것이 뜬다.
