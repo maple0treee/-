@@ -4798,6 +4798,227 @@ const FOODK=(()=>{
     if(!big){put(A,c(0),T(-.18,0,0,.05));put(A,c(1),T(-.15,.52,.02,-.18));put(A,c(2),T(.48,0,.08,.4));}
     else{put(A,c(0),T(-.35,0,0,.02));put(A,c(1),T(.36,0,.05,-.06));put(A,c(2),T(.0,.5,0,.22));put(A,ST.sack(v),T(.3,0,.62,.5));put(A,ST.sack(v+1),T(-.25,0,.6,-.3,0,.12));}
     return A;};
+  /* ===== 길드홀 카운터: 접수대(Sgdesk:0, 길이 16)·술집 바(Sgdesk:1, 길이 11)·칸막이와 쪽문(Sgpart)·바 의자(Sbstool) =====
+     앞 +z, 길이 x, 밑은 원점 (길드홀 바닥 판 윗면은 y .1). 몸통 앞면 z .45, 상판 윗면 y 1.19 (위에 놓는 물건은 1.2에 앉혀 1cm 띄운다).
+     몰딩·상판·들보는 평면 윤곽을 따라 단면을 쓸어 돌려 모서리가 연귀로 만난다. 색이 다른 판끼리 같은 평면에 겹치지 않게 1cm씩 비키거나 속으로 넣었다 */
+  const CK=(()=>{
+    /* 네 꼭짓점 사이를 고르게 나눈 면 (p00→p10이 u, p00→p01이 v) */
+    const q4=(A,a,b,c,d,nu,nv,col,gl,m)=>surf(A,nu,nv,(u,v,P)=>{const w0=(1-u)*(1-v),w1=u*(1-v),w2=(1-u)*v,w3=u*v;P.set(a[0]*w0+b[0]*w1+c[0]*w2+d[0]*w3,a[1]*w0+b[1]*w1+c[1]*w2+d[1]*w3,a[2]*w0+b[2]*w1+c[2]*w2+d[2]*w3);},col,gl,{wrap:false,m});
+    /* 평면 사각형 [x0,x1,z0,z1] 윤곽을 따라 단면 prof [[o,y],...]를 쓸어 돈다 (o: 윤곽에서 바깥으로 나온 거리). 모서리는 꼭짓점을 둘로 나눠 날을 세운다.
+       col(C,P,s,o,y): s는 윤곽을 따라 간 거리 */
+    const sweep=(A,rc,prof,col,gl,m,step=.5)=>{const [x0,x1,z0,z1]=rc,c=[[x0,z1],[x1,z1],[x1,z0],[x0,z0]],nr=[[-1,1],[1,1],[1,-1],[-1,-1]],pts=[];let s=0;
+      for(let e=0;e<4;e++){const a=c[e],b=c[(e+1)%4],dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz),n=Math.max(1,Math.ceil(len/step)),en=[-dz/len,dx/len];
+        pts.push({x:a[0],z:a[1],n:nr[e],s});for(let i=1;i<n;i++)pts.push({x:a[0]+dx*i/n,z:a[1]+dz*i/n,n:en,s:s+len*i/n});s+=len;pts.push({x:b[0],z:b[1],n:nr[(e+1)%4],s});}
+      const nu=pts.length,nv=prof.length-1;
+      return surf(A,nu,nv,(u,v,P)=>{const p=pts[Math.round(u*nu)%nu],[o,y]=prof[Math.round(v*nv)];P.set(p.x+p.n[0]*o,y,p.z+p.n[1]*o);},
+        (C,P,u,v)=>{const p=pts[Math.round(u*nu)%nu],[o,y]=prof[Math.round(v*nv)];col(C,P,p.s,o,y);},gl,{m});};
+    /* 두께 있는 판: 윤곽 단면을 돌리고 위·아래를 채운다. prof는 안쪽 아래(o<0)에서 시작해 안쪽 위(o<0)에서 끝난다 */
+    const slab=(A,rc,prof,col,gl,m,o={})=>{const [x0,x1,z0,z1]=rc;sweep(A,rc,prof,(C,P,s,oo,y)=>col(C,P,oo,y),gl,m,o.step);
+      const f=(oo,y)=>{const a=x0-oo,b=x1+oo,c=z0-oo,d=z1+oo,nu=Math.max(1,Math.ceil((b-a)/(o.du||.25))),nv=Math.max(1,Math.ceil((d-c)/(o.dv||.04)));q4(A,[a,y,c],[b,y,c],[a,y,d],[b,y,d],nu,nv,(C,P)=>col(C,P,-1,y),gl,m);};
+      const pl=prof[prof.length-1],p0=prof[0];if(o.top!==false)f(pl[0],pl[1]);if(o.bot!==false)f(p0[0],p0[1]);};
+    /* 나뭇결: 세로 결(기둥·널), 가로 결(x를 따라: 가로대·상판), 깊이 결(z를 따라) */
+    const gY=(C,P,k,sd,lo,hi)=>OAKC(C,{x:P.y*.3,y:P.x+P.z,z:k*.37},k,sd,lo,hi);
+    const gX=(C,P,k,sd,lo,hi)=>OAKC(C,{x:P.x*.3,y:P.y+P.z,z:k*.37},k,sd,lo,hi);
+    const gZ=(C,P,k,sd,lo,hi)=>OAKC(C,{x:P.z*.3,y:P.y+P.x,z:k*.37},k,sd,lo,hi);
+    const BRASS=(C,P,sd=0)=>{mixC(C,0x7a5a22,0xe0bc66,fbm(P.x*18+sd,P.y*18,P.z*18,2)*1.3-.1);tint(C,0x4a3414,sm(.68,.85,fbm(P.x*6,P.y*6+sd,P.z*6,2))*.45);};
+    const GILD=(C,P)=>{mixC(C,0x9a7424,0xe8c86a,fbm(P.x*40,P.y*40,P.z*40,2)*1.3-.15);};
+    /* 돋을 판(테두리가 비스듬히 올라 가운데가 솟은 널판): 앞 +z, 가운데 (cx,cy), 밑 평면 zb, 솟음 r, 비탈 너비 bw */
+    const panel=(A,cx,cy,w,h,zb,r,bw,col,gl,m)=>{const x0=cx-w/2,x1=cx+w/2,y0=cy-h/2,y1=cy+h/2,X0=x0+bw,X1=x1-bw,Y0=y0+bw,Y1=y1-bw,zt=zb+r,nu=Math.max(2,Math.ceil((X1-X0)/.05)),nv=Math.max(2,Math.ceil((Y1-Y0)/.07));
+      q4(A,[X0,Y0,zt],[X1,Y0,zt],[X0,Y1,zt],[X1,Y1,zt],nu,nv,col,gl,m);
+      q4(A,[x0,y0,zb],[x1,y0,zb],[X0,Y0,zt],[X1,Y0,zt],nu,1,col,gl,m);q4(A,[X0,Y1,zt],[X1,Y1,zt],[x0,y1,zb],[x1,y1,zb],nu,1,col,gl,m);
+      q4(A,[x0,y0,zb],[X0,Y0,zt],[x0,y1,zb],[X0,Y1,zt],1,nv,col,gl,m);q4(A,[X1,Y0,zt],[x1,y0,zb],[X1,Y1,zt],[x1,y1,zb],1,nv,col,gl,m);};
+    /* 홈 판 기둥(필라스터) 몸: 앞면에 세로 홈 n줄, 위아래 끝은 둥글게 멎는다. 뒤는 zb(몸통 속) */
+    const flutes=(A,cx,y0,y1,w,zb,zf,n,col,gl,m)=>{const nu=n*6+4;
+      surf(A,nu,10,(u,v,P)=>{const x=(u-.5)*w,y=y0+(y1-y0)*v,t=(u*w-.03)/(w-.06)*n,ti=Math.floor(t),tf=t-ti;let d=0;if(t>0&&t<n&&tf>.14&&tf<.86)d=Math.pow(Math.sin(PI*(tf-.14)/.72),.7);
+        d*=sm(y0+.02,y0+.09,y)*sm(y1-.02,y1-.09,y);P.set(cx+x,y,zf-.011*d);},col,gl,{wrap:false,m});
+      q4(A,[cx-w/2,y0,zb],[cx-w/2,y0,zf],[cx-w/2,y1,zb],[cx-w/2,y1,zf],1,3,col,gl,m);q4(A,[cx+w/2,y0,zf],[cx+w/2,y0,zb],[cx+w/2,y1,zf],[cx+w/2,y1,zb],1,3,col,gl,m);};
+    /* 돋을새김 둥근 판(타원): 테두리 구슬띠, 안에 방패와 엇갈린 칼. 앞 +z, 바탕 평면 zb (가장자리는 3mm 속으로 묻힌다) */
+    const segD=(x,y,ax,ay,bx,by)=>{const px=x-ax,py=y-ay,dx=bx-ax,dy=by-ay,t=cl((px*dx+py*dy)/(dx*dx+dy*dy));return [Math.hypot(px-dx*t,py-dy*t),t];};
+    /* 엇갈린 칼 두 자루 (x,y는 -1~1): 돌려주는 값 [높이, 무늬 0 바탕·1 칼날·2 자루·코등이] */
+    const crestH=(x,y)=>{let h=0,k=0;
+      for(const s of [-1,1]){const ux=s*.7071,uy=.7071,ax=-s*.62,ay=-.62;   /* 칼끝은 위로, 자루는 아래 바깥 */
+        const along=(x-ax)*ux+(y-ay)*uy,across=-(x-ax)*uy+(y-ay)*ux;
+        const bl=along>.3&&along<1.62?Math.abs(across)-.07*Math.min(1,(1.62-along)/.22):1,ridge=Math.exp(-((across/.02)**2));
+        const gd=Math.abs(along-.27)<.035?Math.abs(across)-.24:1,gr=along>.04&&along<.27?Math.abs(across)-.035:1,pm=Math.hypot(along-.0,across)-.07;
+        const d=Math.min(bl,gd,gr,pm);if(d<0){const e=sm(0,-.03,d),hh=(d===bl?.011+.003*ridge:.014)*e;if(hh>h){h=hh;k=d===bl?1:2;}}}
+      return [h,k];};
+    const medal=(A,cx,cy,zb,rx,ry,m,o={})=>{const N=o.n||40;
+      surf(A,N,N,(u,v,P)=>{const s=u*2-1,t=v*2-1,x=s*Math.sqrt(1-t*t/2),y=t*Math.sqrt(1-s*s/2),r=Math.hypot(x,y);
+          let h=-.003+.006*sm(1,.985,r)+.01*Math.exp(-(((r-.91)/.04)**2))*sm(1,.96,r)+.003*sm(.86,.6,r);if(r<.84){const [ch]=crestH(x/.78,y/.78);h+=ch;}
+          P.set(cx+x*rx,cy+y*ry,zb+h);},
+        (C,P,u,v)=>{const s=u*2-1,t=v*2-1,x=s*Math.sqrt(1-t*t/2),y=t*Math.sqrt(1-s*s/2),r=Math.hypot(x,y);
+          if(r>.85){GILD(C,P);return;}const [,k]=crestH(x/.78,y/.78);if(k===1){mixC(C,0xb8b4a8,0xe8e4dc,fbm(P.x*50,P.y*50,P.z,2));return;}if(k===2){GILD(C,P);return;}
+          mixC(C,0x5a1410,0x862420,fbm(P.x*30,P.y*30,P.z,2));tint(C,0x2a0806,sm(.7,.85,r)*.5);},
+        (P,u,v)=>{const s=u*2-1,t=v*2-1,x=s*Math.sqrt(1-t*t/2),y=t*Math.sqrt(1-s*s/2),r=Math.hypot(x,y);if(r>.85)return .75;const [,k]=crestH(x/.78,y/.78);return k?.8:.45;},{wrap:false,m});};
+    /* 돌린 기둥 단면 (반지름, 높이): 네모 받침(cbox) 사이의 둥근 몸 */
+    const spindle=(A,x,y0,y1,z,R,col,gl,m)=>{const H=y1-y0,Y=f=>y0+H*f;
+      const pr=[[0,Y(0)],[R*.95,Y(0)],[R*.95,Y(.02)],[R*.7,Y(.05)],[R*.62,Y(.08)],[R*.85,Y(.11)],[R*.85,Y(.13)],[R*.6,Y(.16)],[R*.55,Y(.22)],[R*.78,Y(.42)],[R*.82,Y(.5)],[R*.7,Y(.6)],[R*.5,Y(.74)],[R*.46,Y(.8)],[R*.66,Y(.84)],[R*.66,Y(.86)],[R*.5,Y(.89)],[R*.58,Y(.93)],[R*.95,Y(.98)],[R*.95,Y(1)],[0,Y(1)]];
+      return lathe(A,pr,16,pr.length-1,(C,P)=>col(C,P),gl,{m:m?new THREE.Matrix4().multiplyMatrices(m,T(x,0,z)):T(x,0,z)});};
+    return {q4,sweep,slab,gY,gX,gZ,BRASS,GILD,panel,flutes,medal,spindle,crestH,segD};})();
+
+  ST.gdesk=v=>{const A=acc(),bar=v===1,L=bar?11:16,hl=L/2,sd=bar?7.3:3.1,CF=.45,TOPY=1.2,{q4,sweep,slab,gY,gX,gZ,BRASS,panel,flutes,medal,spindle}=CK;
+    const OF=bar?.25:.2,OB=bar?.15:.1,OE=bar?.18:.17;   /* 상판이 몸통 밖으로 나온 길이: 앞·뒤·양끝 */
+    const FR=[0x4a2e1a,0x82562f],PN=[0x6a4626,0xa87a48],TP=[0x3e2814,0x76502a];let k=0;
+    const core=[-hl,hl,-CF,CF];
+    /* 몸통 속 (판 뒤로 숨는다) */
+    cbox(A,0,.56,0,L-.02,1.08,CF*2,(C,P)=>C.set(0x241810),.05,null,.02);
+    /* 걸레받이와 밑 쇠시리: 바닥에 묻힌 받침에서 작은 둥근 띠와 오목 띠로 몸통에 붙는다 */
+    sweep(A,core,[[-.03,0],[.06,0],[.06,.2],[.06,.2],[.068,.205],[.074,.215],[.072,.226],[.064,.232],[.05,.24],[.036,.252],[.03,.268],[.026,.28],[.026,.28],[.012,.29],[-.03,.29]],
+      (C,P,s,o,y)=>{gX(C,{x:s,y:y*3+o,z:0},11,sd,0x22160c,0x4a3018);if(y>.2)tint(C,0x6a4a2a,.25);},.25);
+    /* 아래·위 가로대 (몸통을 빙 둘러 연귀로 만난다): 앞 모서리를 둥글린 단면 */
+    const rail=(y0,y1,kk)=>sweep(A,core,[[-.02,y0],[.05,y0],[.05,y0],[.062,y0+.008],[.065,y0+.02],[.065,y1-.02],[.062,y1-.008],[.05,y1],[.05,y1],[-.02,y1]],(C,P,s,o,y)=>gX(C,{x:s,y:y*6+o,z:0},kk,sd,FR[0],FR[1]),.3);
+    rail(.28,.4,12);rail(.92,1.02,13);
+    /* 상판 아래 오목 쇠시리(띠·구슬·오목): 몸통에서 상판 밑으로 벌어진다 (위 끝은 상판 속으로) */
+    sweep(A,core,[[-.02,1.015],[.07,1.015],[.07,1.015],[.078,1.022],[.08,1.032],[.076,1.04],[.07,1.045],[.08,1.05],[.1,1.068],[.12,1.09],[.132,1.11],[.136,1.135],[.136,1.135],[-.02,1.135]],
+      (C,P,s,o,y)=>{gX(C,{x:s,y:y*5+o,z:0},14,sd,FR[0],FR[1]);if(y>1.02&&y<1.046)tint(C,0x8a6034,.2);},.3);
+    /* 상판: 두꺼운 널, 앞 가장자리는 오지 쇠시리, 뒤는 둥글게. 반들반들 (팔꿈치 닿는 앞쪽이 조금 더 밝게 닳았다) */
+    const TPF=(C,P,o,y)=>{gX(C,{x:P.x,y:P.z*1.15,z:0},Math.floor((P.z+2)/.31),sd,TP[0],TP[1]);const sj=Math.abs(((P.z+2)/.31)%1-.5);if(o<0&&sj>.485)tint(C,0x140a04,.45);
+      tint(C,0x8a5a30,sm(CF+OF-.35,CF+OF-.02,P.z)*.22);};
+    const tp=bar?[[-.06,1.125],[-.002,1.125],[-.002,1.125],[.004,1.13],[.012,1.14],[.018,1.16],[.018,1.18],[.014,1.2],[.006,1.215],[-.01,1.224],[-.03,1.225],[-.05,1.22],[-.065,1.2],[-.075,TOPY],[-.075,TOPY]]
+                 :[[-.06,1.125],[-.002,1.125],[-.002,1.125],[.006,1.13],[.012,1.14],[.012,1.155],[.004,1.163],[-.002,1.17],[.002,1.178],[.008,1.186],[.004,1.195],[-.006,1.2],[-.02,TOPY],[-.02,TOPY]];
+    slab(A,[-hl-OE,hl+OE,-CF-OB,CF+OF],tp,TPF,.55,null,{du:.3,dv:.045});
+    /* 앞면과 양끝: 기둥(필라스터) 사이를 널판으로 채운다 */
+    const PW=.22,PZ=CF+.1;   /* 기둥 너비, 앞면 */
+    const pilaster=x=>pilasterAt(A,x,k++);
+    /* 칸: 기둥 사이 [a,b]를 널판 n장으로 (사이에 세로 살). 접수대는 가운데 판에 길드 문장 */
+    const bay=(a,b,n,crest)=>{const s=.09,w=(b-a-(n-1)*s)/n;for(let i=0;i<n;i++){const x0=a+i*(w+s),cx=x0+w/2,kk=k++;
+        if(bar){/* 바: 세로로 홈 낸 널빤지(구슬 널) */const nb=Math.max(3,Math.round(w/.11)),bw=w/nb,nu=nb*6;
+          surf(A,nu,4,(u,vv,P)=>{const x=x0-.02+(w+.04)*u,t=((x-x0)/bw)%1,g=Math.min(t,1-t),y=.37+(.95-.37)*vv;P.set(x,y,CF+.03-.008*sm(.12,0,g)*(x>x0&&x<x0+w?1:0));},
+            (C,P)=>{const pk=Math.floor((P.x-x0)/bw);gY(C,P,kk*17+pk,sd,PN[0],PN[1]);const t=((P.x-x0)/bw)%1;if(Math.min(t,1-t)<.05)tint(C,0x1a0e06,.4);},.3,{wrap:false});}
+        else{panel(A,cx,.66,w+.04,.6,CF+.018,.02,.065,(C,P)=>gY(C,P,kk,sd,PN[0],PN[1]),.3);
+          if(crest&&i===(n-1)/2)medal(A,cx,.66,CF+.038,.25,.22,null);}
+        if(i<n-1){const kk2=k++;cbox(A,x0+w+s/2,.66,CF+.024,s,.56,.052,(C,P)=>gY(C,P,kk2,sd,FR[0],FR[1]),.25);}}};
+    const PX=bar?[-hl,-3.6,-1.8,0,1.8,3.6,hl]:[-hl,-2.7,2.7,hl];   /* 양끝 기둥은 모서리에 걸쳐 선다 */
+    for(const x of PX)pilaster(x);
+    for(let i=0;i<PX.length-1;i++)bay(PX[i]+PW/2,PX[i+1]-PW/2,bar?1:3,!bar);
+    /* 양끝 면: 같은 짜임을 옆으로 돌려 붙인다 (뒤쪽 끝에도 기둥) */
+    for(const s of [-1,1]){const m=T(s*hl,0,0,s*PI/2);   /* 끝면을 앞으로 보게 돌린 자리: 이 자리의 z가 몸통 밖(+x 또는 -x) */
+      const mm=new THREE.Matrix4().multiplyMatrices(m,T(0,0,-CF));const B=acc();
+      /* 끝면: 앞 모서리 기둥(앞면 것) 뒤에서 뒤 모서리 기둥까지 판 하나. 이 자리의 x는 바깥에서 볼 때 뒤쪽이 + */
+      const f0=-(CF-.06)-.02,f1=CF-PW/2-.03+.02,e0=s>0?f0:-f1,e1=s>0?f1:-f0,kk=k++;pilasterAt(B,s*CF,kk);   /* s<0 쪽은 돌린 방향이 거꾸로라 뒤가 - */
+      if(bar){const w=e1-e0,nb=Math.max(3,Math.round(w/.11)),bw=w/nb,x0=e0,nu=nb*6;
+        surf(B,nu,4,(u,vv,P)=>{const x=x0+w*u,t=((x-x0)/bw)%1,g=Math.min(t,1-t),y=.37+(.95-.37)*vv;P.set(x,y,CF+.03-.008*sm(.12,0,g));},
+          (C,P)=>{const pk=Math.floor((P.x-x0)/bw);gY(C,P,kk*17+pk,sd,PN[0],PN[1]);const t=((P.x-x0)/bw)%1;if(Math.min(t,1-t)<.05)tint(C,0x1a0e06,.4);},.3,{wrap:false});}
+      else panel(B,(e0+e1)/2,.66,e1-e0,.6,CF+.018,.02,.065,(C,P)=>gY(C,P,kk,sd,PN[0],PN[1]),.3);
+      put(A,B,mm);}
+    function pilasterAt(B,x,kk){const col=(C,P)=>gY(C,P,kk,sd,FR[0],FR[1]);
+      slab(B,[x-PW/2-.03,x+PW/2+.03,CF-.06,PZ+.03],[[-.01,.27],[.0,.27],[.0,.27],[.012,.3],[.012,.34],[.004,.35],[0,.36],[-.012,.37],[-.012,.39],[-.03,.4],[-.03,.4]],col,.3,null,{bot:false,top:false,step:.1});
+      flutes(B,x,.39,.89,PW,CF-.04,PZ,3,col,.3,null);
+      slab(B,[x-PW/2-.03,x+PW/2+.03,CF-.06,PZ+.03],[[-.03,.88],[-.03,.88],[-.012,.89],[-.012,.905],[0,.915],[.008,.93],[.02,.955],[.03,.975],[.03,1.0],[-.01,1.0]],col,.3,null,{bot:false,step:.1});}
+    /* 뒤(안쪽) 면: 서랍 줄 (일하는 쪽) */
+    {const nd=Math.floor(L/.9),dw=L/nd;for(let i=0;i<nd;i++){const x=-hl+dw*(i+.5),kk=k++;cbox(A,x,.78,-CF-.015,dw-.05,.16,.04,(C,P)=>gX(C,P,kk,sd,PN[0],PN[1]),.3);
+        lathe(A,[[0,0],[.016,0],[.016,.008],[.01,.014],[.014,.024],[0,.026]],10,5,(C,P)=>BRASS(C,P,kk),.8,{m:T(x,.78,-CF-.035,0,-PI/2)});}}
+    /* 기둥과 들보: 상판 위로 돌린 기둥, 그 위에 쇠시리 들보, 기둥 머리 양쪽에 소용돌이 까치발 */
+    const PO=bar?[-4.9,0,4.9]:[-8,-2.7,2.7,8],HB=bar?2.565:2.24,BX=bar?5.2:8.12,BW=bar?.15:.09;   /* 바 들보는 넓게: 맥주잔이 양쪽 z ±.1에 매달린다 */
+    for(const x of PO){const kk=k++,col=(C,P)=>gY(C,P,kk,sd,FR[0],FR[1]);
+      cbox(A,x,TOPY+.09,0,.16,.22,.16,col,.3,null,.12);cbox(A,x,HB-.09,0,.15,.22,.15,col,.3,null,.12);spindle(A,x,TOPY+.19,HB-.19,0,.075,col,.35);
+      for(const s of [-1,1]){/* 까치발: 기둥 옆에서 들보 밑으로 휘어 오르는 판 (두께 .06) */
+        const shape=t=>{const a=t*PI*.5;return [.075+.3*(1-Math.cos(a))*.98,HB-.3+.3*Math.sin(a)];};
+        const kb=k++;const bc=(C,P)=>gY(C,P,kb,sd,FR[0],FR[1]);
+        /* 옆면 둘(앞·뒤)과 굽은 아랫면: 까치발 윤곽 = 기둥 면 x=.075, 들보 밑 y=HB, 곡선 */
+        for(const zz of [-.03,.03])surf(A,12,3,(u,vv,P)=>{const [cx2,cy2]=shape(u);const lx=.06+(cx2-.06)*vv,ly=HB+.005-(HB+.005-cy2)*vv;P.set(x+s*lx,ly,zz);},bc,.3,{wrap:false});
+        surf(A,12,1,(u,vv,P)=>{const [cx2,cy2]=shape(u);P.set(x+s*cx2,cy2,-.03+.06*vv);},bc,.3,{wrap:false});
+        /* 소용돌이 끝 */lathe(A,[[0,-.031],[.025,-.031],[.032,-.02],[.032,.02],[.025,.031],[0,.031]],12,5,bc,.3,{m:T(x+s*.09,HB-.29,0,0,PI/2)});}}
+    /* 들보: 아래 모서리를 구슬로 깎은 단면, 위에 얇은 갓판 */
+    slab(A,[-BX,BX,-BW,BW],[[-.04,HB],[-.012,HB],[0,HB+.012],[0,HB+.02],[.006,HB+.03],[0,HB+.04],[0,HB+.12],[.004,HB+.13],[.004,HB+.13],[-.04,HB+.13]],(C,P,o,y)=>gX(C,{x:P.x,y:P.y*4+P.z,z:0},77,sd,FR[0],FR[1]),.3,null,{du:.3,dv:.06});
+    slab(A,[-BX-.03,BX+.03,-BW-.03,BW+.03],[[-.04,HB+.12],[-.008,HB+.12],[0,HB+.128],[.01,HB+.14],[.012,HB+.15],[.004,HB+.16],[-.04,HB+.16]],(C,P,o,y)=>gX(C,{x:P.x,y:P.y*4+P.z,z:0},78,sd,TP[0],TP[1]),.4,null,{du:.3,dv:.06});
+    if(bar){/* 놋쇠 발걸이: 기둥 앞에서 굽은 받침쇠가 잡아 준다, 양끝은 둥근 마개 */
+      const RY=.33,RZ=CF+.24,R=.03,x1=hl-PW/2-.02,x0=-x1;
+      tube(A,(t,o)=>o.set(x0+(x1-x0)*t,RY,RZ),()=>R,10,44,(C,P)=>BRASS(C,P,1),.85);
+      for(const x of [x0,x1])blob(A,R*1.25,R*1.25,R*1.25,10,7,null,(C,P)=>BRASS(C,P,2),.85,{m:T(x,RY,RZ)});
+      for(const x of [x0,-3.6,-1.8,0,1.8,3.6,x1])tube(A,(t,o)=>{const a=t*PI*.5;o.set(x,RY+.12*(1-Math.sin(a)),PZ-.01+(RZ-PZ+.01)*Math.sin(a));},t=>.02+.004*t,8,10,(C,P)=>BRASS(C,P,3),.8);}
+    return A;};
+
+  /* 카운터 안쪽을 닫는 낮은 칸막이와 쪽문 (Sgpart:0 접수대 2.4m, 1 바 5m). 길이 x 0~L, 두께 방향 z (양쪽 다 보이는 면), 쪽문은 g0~g0+1 */
+  ST.gpart=v=>{const A=acc(),{q4,slab,gY,gX,BRASS,panel,spindle}=CK,sd=v*5.1+.3,L=v?5.0:2.43,g0=v?.5:.33,g1=g0+1,TH=.09,H=1.06,FR=[0x4a2e1a,0x82562f],PN=[0x6a4626,0xa87a48];let k=0;
+    const post=(x,kk)=>{const col=(C,P)=>gY(C,P,kk,sd,FR[0],FR[1]);cbox(A,x,(H+.06)/2,0,.12,H+.06,.12,col,.3,null,.1);
+      lathe(A,[[0,0],[.05,0],[.05,.02],[.03,.035],[.026,.05],[.045,.08],[.04,.11],[.012,.13],[.016,.145],[0,.15]],12,9,col,.4,{m:T(x,H+.06,0)});};
+    /* 막힌 칸: 양쪽에 돋을 판, 위 손스침, 아래 걸레받이 */
+    const run=(a,b)=>{if(b-a<.05)return;const kk=k++,col=(C,P)=>gY(C,P,kk,sd,FR[0],FR[1]);
+      cbox(A,(a+b)/2,(H-.04)/2+.02,0,b-a,H-.04,TH-.02,(C,P)=>C.set(0x241810),.05,null,.05);
+      slab(A,[a,b,-TH/2,TH/2],[[-.02,0],[.012,0],[.012,.16],[.016,.17],[.01,.18],[-.02,.18]],(C,P)=>gX(C,P,kk+40,sd,0x22160c,0x4a3018),.25,null,{top:false,bot:false,step:.2});
+      slab(A,[a,b,-TH/2,TH/2],[[-.02,H-.06],[.02,H-.06],[.026,H-.04],[.03,H-.02],[.026,H],[.014,H+.008],[-.02,H+.01],[-.02,H+.01]],(C,P)=>gX(C,P,kk+50,sd,FR[0],FR[1]),.4,null,{bot:false,step:.2});
+      if(b-a>.25)for(const s of [-1,1])panel(A,0,(.18+H-.06)/2,b-a-.06,H-.06-.18-.06,TH/2-.012,.014,.05,(C,P)=>gY(C,P,kk+s,sd,PN[0],PN[1]),.3,T((a+b)/2,0,0,s<0?PI:0));
+      else for(const s of [-1,1])q4(A,[a,.18,s*(TH/2-.004)],[b,.18,s*(TH/2-.004)],[a,H-.06,s*(TH/2-.004)],[b,H-.06,s*(TH/2-.004)],2,4,(C,P)=>gY(C,P,kk+s,sd,PN[0],PN[1]),.3);};
+    run(-.03,g0-.06);run(g1+.06,L+.03);post(g0-.06,k++);post(g1+.06,k++);if(v)post(L-.06,k++);
+    /* 쪽문: 위·아래 가로대 사이에 돌린 난간 살, 쇠 경첩 둘, 놋쇠 걸쇠 */
+    {const kk=k++,col=(C,P)=>gY(C,P,kk,sd,FR[0],FR[1]),gx0=g0+.005,gx1=g1-.005;
+      for(const x of [gx0+.035,gx1-.035])cbox(A,x,.12+(H-.14)/2,0,.06,H-.14,.06,col,.25);
+      for(const y of [.18,H-.1])cbox(A,(gx0+gx1)/2,y,0,gx1-gx0-.02,.07,.055,(C,P)=>gX(C,P,kk+9,sd,FR[0],FR[1]),.25);
+      cbox(A,(gx0+gx1)/2,.43,0,gx1-gx0-.04,.045,.045,(C,P)=>gX(C,P,kk+10,sd,FR[0],FR[1]),.25);
+      const n=6;for(let i=0;i<n;i++){const x=gx0+.07+(gx1-gx0-.14)*(i+.5)/n;spindle(A,x,.45,H-.135,0,.022,col,.35);
+        cbox(A,x,.31,0,.025,.2,.025,col,.2);}
+      for(const y of [.3,H-.22])for(const s of [-1,1])cbox(A,gx0+.12,y,s*.032,.22,.035,.008,(C,P)=>IRONC(C,P,y),.5,null,.3);
+      for(const y of [.3,H-.22])cylY(A,g0-.012,y,.016,.07);
+      blob(A,.022,.022,.012,10,6,null,(C,P)=>BRASS(C,P,4),.85,{m:T(gx1-.05,H-.3,.04)});blob(A,.022,.022,.012,10,6,null,(C,P)=>BRASS(C,P,4),.85,{m:T(gx1-.05,H-.3,-.04)});}
+    function cylY(A,x,y,r,h){lathe(A,[[0,-h/2],[r,-h/2],[r,h/2],[0,h/2]],8,3,(C,P)=>IRONC(C,P,x),.5,{m:T(x,y,0)});}
+    return A;};
+
+  /* 바 의자: 다리 넷이 벌어진 둥근 의자, 발 받침 고리, 오목한 자리 (자리 윗면 y .79). v 빛깔 */
+  ST.bstool=v=>{const A=acc(),sd=v*3.3+.7,{gY}=CK,lo=[0x4a2e18,0x5a3a20,0x3e2614][v%3],hi=[0x84582e,0x946a3a,0x704a28][v%3];
+    lathe(A,[[0,.745],[.17,.745],[.18,.75],[.188,.765],[.186,.78],[.176,.79],[.12,.786],[.06,.782],[0,.781]],24,8,(C,P)=>{OAKC(C,{x:P.x*.3,y:P.z,z:0},3,sd,lo,hi);tint(C,0xa07a4a,sm(.12,0,Math.hypot(P.x,P.z))*.15);},.5);
+    for(let i=0;i<4;i++){const a=i/4*TAU+PI/4,c=Math.cos(a),s=Math.sin(a);
+      tube(A,(t,o)=>o.set(c*(.11+.08*t),.75-.75*t,s*(.11+.08*t)),t=>.022-.006*t,8,8,(C,P)=>gY(C,P,i,sd,lo,hi),.4);}
+    for(const [y,r] of [[.27,.165],[.5,.135]])tube(A,(t,o)=>{const a=t*TAU;o.set(Math.cos(a)*r,y,Math.sin(a)*r);},()=>.011,6,24,(C,P)=>gY(C,P,9,sd,lo,hi),.4);
+    lathe(A,[[0,.70],[.1,.70],[.13,.72],[.13,.745],[0,.745]],16,4,(C,P)=>gY(C,P,7,sd,lo,hi),.3);
+    return A;};
+
+  /* 접수대 위 살림: 가죽 책받침·종이 묶음·잉크병과 깃펜 (창구마다), 부르는 종, 장부 더미. 밑 y 1.2 (상판 윗면 1.19에서 1cm 위) */
+  ST.gdtop=v=>{const A=acc(),{slab,q4,GILD,BRASS}=CK,Y=1.198;
+    for(const x of [-5.4,0,5.4]){const m=T(x,0,.12,(hash3(x,1,2)-.5)*.06);
+      /* 가죽 책받침: 가장자리에 금박 눌러 찍은 줄 */
+      slab(A,[-.45,.45,-.28,.28],[[-.01,Y],[0,Y],[.004,Y+.004],[.004,Y+.008],[0,Y+.012],[-.01,Y+.012]],(C,P,o,y)=>{mixC(C,0x1e3424,0x2e4c34,fbm(P.x*25,P.y*25,P.z*25,2)*1.2);
+          const e=Math.min(.45-Math.abs(P.x),.28-Math.abs(P.z));if(o<0&&e>.035&&e<.045)GILD(C,P);if(o<0&&e<.02)tint(C,0x0e1a12,.4);},.35,m,{du:.05,dv:.05});
+      /* 종이 묶음 (가장자리에 낱장 줄) + 맨 위 한 장 비스듬히 */
+      const pm=new THREE.Matrix4().multiplyMatrices(m,T(-.06,0,.02,.08));
+      slab(A,[-.15,.15,-.21,.21],[[-.004,Y+.01],[0,Y+.01],[0,Y+.022],[-.004,Y+.022]],(C,P,o,y)=>{mixC(C,0xe8dfc8,0xf6f0e0,hash3(Math.round(P.x*40),Math.round(y*900),3));if(o>=0&&hash3(Math.round(y*700),1,Math.round(P.x*10))>.6)C.multiplyScalar(.9);},.1,pm,{du:.05,dv:.05});
+      q4(A,[-.14,Y+.0245,-.2],[.15,Y+.0245,-.19],[-.15,Y+.0245,.21],[.14,Y+.0245,.2],8,10,(C,P)=>{C.set(0xf4eedc);const r=((P.z+.3)*28)%1;if(Math.abs(P.x)<.11&&P.z>-.16&&P.z<.17&&r<.18&&hash3(Math.round(P.z*28),2,Math.round(P.x*20))>.25)C.set(0x5a5040);},.1,new THREE.Matrix4().multiplyMatrices(m,T(.05,0,-.01,-.15)));
+      /* 잉크병 (짙은 유리, 놋쇠 목) + 깃펜 */
+      const im=new THREE.Matrix4().multiplyMatrices(m,T(.3,Y+.01,-.12));
+      lathe(A,[[0,0],[.042,0],[.046,.008],[.046,.04],[.03,.055],[.02,.06],[.02,.07],[.024,.074],[.016,.076],[.012,.066],[0,.064]],16,10,(C,P,th,w)=>{if(P.y>.058)BRASS(C,P,5);else mixC(C,0x0c0e1a,0x1e2840,fbm(P.x*40,P.y*40,P.z*40,2));},.9,{m:im});
+      const qm=new THREE.Matrix4().multiplyMatrices(im,T(0,.04,0,.6,-.0,-.42));
+      tube(A,(t,o)=>o.set(0,t*.32,0),t=>.0035*(1-t*.5),5,8,(C,P)=>C.set(0xe8e0c8),.3,{m:qm});
+      surf(A,4,14,(u,w,P)=>{const y=.09+w*.24,side=u*2-1,wd=(.022+.012*Math.sin(w*PI))*Math.sin(Math.min(1,(1-w)*3+.2)*PI*.5);P.set(side*wd*(side<0?.6:1),y+Math.abs(side)*.01*(1-w),Math.abs(side)*.004);},
+        (C,P,u,w)=>{mixC(C,0xf4f0e6,0xc8bca0,Math.abs(u*2-1)*.6);if(hash3(Math.round(P.y*160),Math.sign(u-.5),3)>.7)C.multiplyScalar(.92);},.2,{wrap:false,m:qm});}
+    /* 부르는 종: 놋쇠 받침에 엎은 종, 위 누름 단추 */
+    {const m=T(1.4,Y,.25);lathe(A,[[0,0],[.075,0],[.08,.006],[.075,.014],[0,.014]],18,4,(C,P)=>OAKC(C,P,4,1,0x2a1a0e,0x4a3018),.4,{m});
+      lathe(A,[[0,.014],[.066,.014],[.064,.022],[.056,.045],[.042,.066],[.022,.078],[0,.082]],20,8,(C,P)=>BRASS(C,P,7),.9,{m});
+      lathe(A,[[0,.08],[.006,.08],[.006,.098],[.012,.1],[.012,.106],[0,.108]],10,5,(C,P)=>BRASS(C,P,8),.9,{m});}
+    /* 장부 더미: 가죽 표지·모서리 쇠·책장 단면 */
+    {let y=Y;for(let i=0;i<3;i++){const w=[.36,.32,.3][i],d=[.27,.25,.22][i],th=[.06,.05,.045][i],c=[0x5a1c16,0x1e3450,0x2e4628][i],m=T(-1.3+(i-1)*.012,y,.2+(i%2)*.02,(i-1)*.12),sdd=i*3.3;
+      slab(A,[-w/2,w/2,-d/2,d/2],[[-.004,0],[0,0],[.002,.004],[.002,.008],[-.006,.008],[-.006,th-.008],[.002,th-.008],[.002,th-.004],[0,th],[-.004,th]],(C,P,o,yy)=>{
+          if(o<-.005&&yy>.008&&yy<th-.008&&P.x>-w/2+.02){mixC(C,0xe0d4b4,0xf0e8d0,hash3(Math.round(yy*800),i,1));return;}mixC(C,c,0x0e0806,.1+fbm(P.x*30+sdd,yy*30,P.z*30,2)*.4);
+          if(Math.abs(P.x)>w/2-.03&&Math.abs(P.z)>d/2-.03)BRASS(C,P,sdd);},.35,m,{du:.06,dv:.06,step:.06});y+=th;}}
+    return A;};
+
+  /* 창구 간판: 들보 위에 세운 깎은 널 간판. 붉게 칠한 바탕, 금박 구슬 테, 가운데 금박 돋을새김 (v 0 깃펜과 두루마리 · 1 엇갈린 칼 · 2 동전 더미).
+     밑(들보 갓판 윗면) y 0, 앞 +z, 너비 1.5 높이 .46 */
+  ST.gsign=v=>{const A=acc(),{q4,sweep,slab,gX,GILD,BRASS,crestH,segD}=CK,W=.75,H=.23,BY=.245,sd=v*2.7+1.1;
+    const m=T(0,BY,0,0,PI/2,0);   /* 눕혀 지은 판을 세운다: 눕힌 자리의 y(두께)가 앞 +z, z가 아래 */
+    const RED=(C,P)=>{mixC(C,0x4e140e,0x6e2018,fbm(P.x*14+sd,P.z*14,P.y,3)*1.2);tint(C,0x3a0c08,sm(.6,.8,fbm(P.x*4,P.z*4+sd,0,2))*.3);};
+    slab(A,[-W,W,-H,H],[[-.05,-.022],[0,-.022],[0,-.022],[.006,-.016],[.008,-.004],[.004,.006],[-.004,.012],[-.014,.018],[-.03,.022],[-.05,.026],[-.06,.026]],(C,P,o,y)=>gX(C,{x:P.x,y:P.z*3+y,z:0},3,sd,0x3a2414,0x6a4426),.35,m,{top:false,du:.15,dv:.05,step:.1});
+    const FX=W-.06,FZ=H-.06,IC=.2,Y=.026;
+    for(const s of [-1,1])q4(A,[s>0?IC:-FX,Y,-FZ],[s>0?FX:-IC,Y,-FZ],[s>0?IC:-FX,Y,FZ],[s>0?FX:-IC,Y,FZ],10,4,RED,.35,m);
+    /* 가운데 돋을새김: ic(u,w) → [높이, 선] (u,w는 -1~1, w가 위). 선(1)은 모양 가장자리·안쪽 새김 줄로 짙게 칠한다 */
+    const ic=(u,w)=>{let h=0,ln=0;const lay=(d,hh,inner)=>{if(d<0){const e=sm(0,-.06,d);if(hh*e+.0001>=h){h=hh*e;ln=d>-.07||inner?1:0;}}};
+      if(v===1){const [hh]=crestH(u*.92,w*.92);if(hh>0){h=hh*.5;ln=hh<.006?1:0;}return [h,ln];}
+      if(v===0){/* 두루마리(양끝이 말린 종이)와 그 위에 비스듬히 놓인 깃펜 */
+        const body=Math.max(Math.abs(u)-.5,Math.abs(w+.25)-.32);lay(body,.004,false);if(h>0&&Math.abs(u)<.38){for(const y of [-.08,-.25,-.42])if(Math.abs(w-y)<.035)ln=1;}
+        for(const s of [-1,1]){const r=Math.hypot(u-s*.58,w+.25)-.34;lay(r,.0055,Math.abs(r+.17)<.035);}
+        const [dq,t]=segD(u,w,-.35,-.75,.82,.95),fw=.025+.2*sm(.28,.62,t)*sm(1.04,.78,t);lay(dq-fw,.0075,dq<.025&&t>.25);return [h,ln];}
+      /* 동전: 눕혀 쌓은 셋(타원)과 세운 큰 동전 하나 (안쪽 테와 가운데 왕관 점 셋) */
+      for(let i=0;i<3;i++){const d=Math.hypot((u+.42)/.5,(w+.62-i*.2)/.17)-1;lay(d*.17,.004+i*.0012,false);}
+      {const r=Math.hypot(u-.42,w+.05),d=r-.55;lay(d,.0078,Math.abs(r-.42)<.03||(Math.abs(w+.0)<.16&&[-0.12,0,.12].some(c=>Math.hypot(u-.42-c,w-.02)<.05)));}
+      return [h,ln];};
+    surf(A,60,48,(u,w,P)=>{const x=(u*2-1)*IC,z=(w*2-1)*FZ,[hh]=ic(x/.17,-z/.17);P.set(x,Y+hh,z);},
+      (C,P)=>{const [hh,ln]=ic(P.x/.17,-P.z/.17);if(hh>.0012){mixC(C,0xb08a34,0xe8c66a,fbm(P.x*20,P.z*20,1,2)*1.1);if(ln)mixC(C,0x5a3c10,0x7a5418,.5);}else RED(C,P);},
+      (P)=>ic(P.x/.17,-P.z/.17)[0]>.0012?.8:.35,{wrap:false,m});
+    /* 금박 구슬 테 (바탕에 반쯤 묻힌 둥근 띠) */
+    sweep(A,[-FX+.035,FX-.035,-FZ+.035,FZ-.035],[[-.007,Y-.003],[-.006,Y+.002],[-.003,Y+.005],[0,Y+.006],[.003,Y+.005],[.006,Y+.002],[.007,Y-.003]],(C,P)=>GILD(C,P),.8,m,.1);
+    /* 양쪽 끝 마름모 장식 */for(const s of [-1,1])surf(A,4,4,(u,w,P)=>{const a=u*TAU,r=w;P.set(s*(FX-.1)+Math.cos(a)*.04*r,Y+.006*(1-r)-.002,Math.sin(a)*.04*r);},(C,P)=>GILD(C,P),.8,{m});
+    /* 받침 발 둘: 들보 갓판에 박힌 놋쇠 받침 */
+    for(const s of [-1,1]){cbox(A,s*(W-.18),.02,0,.12,.06,.09,(C,P)=>BRASS(C,P,s),.8,null,.3);}
+    return A;};
   /* 멀리서 보는 가벼운 짐 모양 (v: 0 통, 1 받침 술통, 2 통 무더기, 3 상자 무더기, 4 큰 상자 무더기) */
   ST.lo=v=>{const A=acc(),WD=(C,P)=>C.set(0x7a5a38),CR=(C,P)=>C.set(0x9c8060),SK=(C)=>C.set(0xc0aa84),
       bar=(m,s=1)=>lathe(A,[[.27*s,0],[.33*s,.45*s],[.27*s,.9*s],[0,.9*s]],8,3,WD,.15,{m});
@@ -20465,24 +20686,18 @@ async function buildGuildHallMap(K){
     else{P(CYL(.06,.08,6),x,ty+.4*s,z,s,.8*s,s,0x5a3a22,IP);P(SPH,x,ty+1.0*s,z,.55*s,.5*s,.55*s,PLEAF[1],IP);for(let k=0;k<6;k++){const a=k/6*PI*2+.5;P(SPH,x+Math.cos(a)*.42*s,ty+(.95+.15*(k%2))*s,z+Math.sin(a)*.42*s,.08*s,.08*s,.08*s,0xf0902a,IP);}}
     rndC(x,z,.45*s,y,1.2*s);};
 
-  /* 카운터 안쪽을 닫는 낮은 칸막이: 허리 높이 판벽 + 경첩 달린 쪽문(보기만 하는 문, 열리지 않는다). 부딪힘은 높게(3m) 잡아 뛰어서도 못 넘는다 */
-  await BOOT.z();const ctrGate=(x0,z0,x1,z1,gAt)=>{const ax=Math.abs(x1-x0)>Math.abs(z1-z0),L=ax?Math.abs(x1-x0):Math.abs(z1-z0),mx=(x0+x1)/2,mz=(z0+z1)/2,
-      B=(c,y,len,h,t,col)=>ax?P(BOX,c,y,mz,len,h,t,col,IP):P(BOX,mx,y,c,t,h,len,col,IP),a=ax?Math.min(x0,x1):Math.min(z0,z1),b=a+L,g0=a+gAt,g1=g0+1;
-    if(g0-a>.05)B((a+g0)/2,.55,g0-a,1.1,.5,WOOD);if(b-g1>.05)B((g1+b)/2,.55,b-g1,1.1,.5,WOOD);
-    if(g0-a>.05)B((a+g0)/2,1.15,g0-a+.1,.1,.62,DARKW);if(b-g1>.05)B((g1+b)/2,1.15,b-g1+.1,.1,.62,DARKW);
-    B((g0+g1)/2,.55,.96,.95,.06,0x7a5232);B((g0+g1)/2,.98,1,.08,.1,DARKW);for(const q of [.2,.5,.8])B(g0+q,.55,.05,.8,.08,0x6a4426);   /* 쪽문 판과 세로 살 */
-    for(const hy of [.3,.8])B(g0+.18,hy,.36,.06,.09,IRON);B(g1-.12,.7,.06,.06,.12,GOLD);   /* 경첩 쇠띠 둘, 손잡이 */
-    objC(mx,mz,ax?L:.7,ax?.7:L,0,3);};
+  /* 카운터 안쪽을 닫는 낮은 칸막이: 판 짠 칸막이 + 난간 살 쪽문(보기만 하는 문, 열리지 않는다). 모양은 FOODK 'Sgpart:v' (v 0 접수대, 1 바).
+     (x,z)에서 ry 쪽(0이면 +x, -π/2면 +z)으로 길이 L. 부딪힘은 높게(3m) 잡아 뛰어서도 못 넘는다 */
+  await BOOT.z();const ctrGate=(x,z,ry,L,v)=>{P(FOODK.geo('Sgpart:'+v),x,0,z,1,1,1,0xffffff,{b:'sm',ry});const c=Math.cos(ry),sn=-Math.sin(ry);objC(x+c*L/2,z+sn*L/2,Math.abs(c)>.5?L:.7,Math.abs(c)>.5?.7:L,0,3);};
 
   /* --- 1층: 큰 홀 (술집 탁자) --- */
   await BOOT.z();rug(0,4,0,6,16);
   await BOOT.z();for(const [x,z] of [[-7,-4.5],[0,-5.5],[7,-4.5],[-7.5,2.5],[7.5,2.5],[-4,7.5],[4,7.5]])tableR(x,z,0,1,rnd()<.5?4:5);
   /* 접수대 (북쪽, 창구 셋) */
-  await BOOT.z();{const zc=-12.6;await BOOT.z();P(BOX,0,.55,zc,16,1.1,1,WOOD,IP);await BOOT.z();P(BOX,0,1.15,zc+.05,16.4,.1,1.2,DARKW,IP);await BOOT.z();objC(0,zc,16.4,1.2,0,3);   /* 마리엘 접수대 안쪽엔 못 들어간다 */
-    await BOOT.z();for(const sd of [-1,1])ctrGate(sd*7.95,zc-.5,sd*7.95,-HD+T,.3);
-    await BOOT.z();for(const x of [-8,-2.7,2.7,8]){P(BOX,x,1.6,zc,.12,1,.12,DARKW,IP);P(BOX,x,2.15,zc,.25,.12,1.1,DARKW,IP);}
-    await BOOT.z();P(BOX,0,2.3,zc,16.2,.12,.18,DARKW,IP);
-    await BOOT.z();for(const x of [-5.4,0,5.4]){P(BOX,x,1.22,zc+.2,.5,.04,.35,0xf0e8d8,IP);P(CYL(.04,.04,6),x+.4,1.3,zc+.2,1,.16,1,0x2a2a2a,IP);P(BOX,x,2.9,zc+.6,1.6,.5,.06,0x7a2a22,IP);P(BOX,x,2.9,zc+.63,1.3,.3,.02,GOLD,IP);}
+  /* 몸통·상판·기둥·들보·길드 문장은 빚은 모양 FOODK 'Sgdesk:0', 위 살림(책받침·종이·잉크병·종·장부)은 'Sgdtop:0' */
+  await BOOT.z();{const zc=-12.6;await BOOT.z();P(FOODK.geo('Sgdesk:0'),0,0,zc,1,1,1,0xffffff,{b:'sm'});await BOOT.z();P(FOODK.geo('Sgdtop:0'),0,0,zc,1,1,1,0xffffff,{b:'sm'});await BOOT.z();objC(0,zc,16.4,1.2,0,3);   /* 마리엘 접수대 안쪽엔 못 들어간다 */
+    await BOOT.z();for(const sd of [-1,1])ctrGate(sd*7.95,-HD+T,-PI/2,zc-.5-(-HD+T),0);
+    await BOOT.z();[-5.4,0,5.4].forEach((x,i)=>P(FOODK.geo('Sgsign:'+i),x,2.4,zc,1,1,1,0xffffff,{b:'sm'}));   /* 창구 간판: 들보 위에 세운 깎은 널 (깃펜·칼·동전) */
     /* 접수대 뒤: 서류 선반, 큰 문장 */
     await BOOT.z();shelfW(-5,-ID+.1,0,0,4,false);await BOOT.z();shelfW(5,-ID+.1,0,0,4,false);await BOOT.z();for(const s of [-1,1])objC(s*5,-ID+.35,4.1,.6,0,3);   /* 접수대 뒤 선반 */
     await BOOT.z();P(CYL(1,1,24),0,4,-ID+.12,1.3,.1,1.3,GOLD,{b:'ip',rx:PI/2});await BOOT.z();P(CYL(1,1,24),0,4,-ID+.15,1.05,.1,1.05,0x7a2a22,{b:'ip',rx:PI/2});await BOOT.z();P(BOX,0,4,-ID+.2,.25,1.4,.06,GOLD,IP);await BOOT.z();P(BOX,0,4.2,-ID+.2,1,.22,.06,GOLD,IP);}
@@ -20495,9 +20710,10 @@ async function buildGuildHallMap(K){
     await BOOT.z();for(const s of [-1,1]){P(CYL(.06,.08,6),bx+s*(BW/2-.6),.75,bz-.8,1,1.5,1,DARKW,IP);rndC(bx+s*(BW/2-.6),bz-.8,.2,0,1.8);P(BOX,bx+s*(BW/2-.6),1.62,bz-.8,.3,.34,.3,0xffd27a,{glow:true,b:'ip'});}
     await BOOT.z();MARCUS.guildBoard={x:cx+bx,z:cz+bz,y:0,hw:BW/2};}
   /* 술집 카운터 (동쪽 회랑 아래) */
-  await BOOT.z();{const xc=14.2;await BOOT.z();P(BOX,xc,.55,0,1,1.1,11,WOOD,IP);await BOOT.z();P(BOX,xc-.05,1.15,0,1.3,.1,11.4,DARKW,IP);await BOOT.z();objC(xc,0,1.3,11.4,0,3);   /* 브람 바 안쪽엔 못 들어간다 */
-    await BOOT.z();for(const sd of [-1,1])ctrGate(xc+.25,sd*5.45,HW-T,sd*5.45,.3);
-    await BOOT.z();for(let k=0;k<6;k++){const z=-4.5+k*1.8;P(CYL(1,1,8),xc-1.2,.75,z,.25,.08,.25,WOOD,IP);P(CYL(.06,.06,4),xc-1.2,.37,z,1,.74,1,DARKW,IP);rndC(xc-1.2,z,.2,0,.8);seatAdd(cx+xc-1.2,cz+z,.79,Math.PI/2);}
+  /* 몸통·상판·기둥·잔 걸이 들보·놋쇠 발걸이는 빚은 모양 FOODK 'Sgdesk:1' (앞이 홀 쪽 -x), 의자는 'Sbstool' */
+  await BOOT.z();{const xc=14.2;await BOOT.z();P(FOODK.geo('Sgdesk:1'),xc,0,0,1,1,1,0xffffff,{b:'sm',ry:-PI/2});await BOOT.z();objC(xc,0,1.3,11.4,0,3);   /* 브람 바 안쪽엔 못 들어간다 */
+    await BOOT.z();for(const sd of [-1,1])ctrGate(xc+.25,sd*5.45,0,HW-T-xc-.25,1);
+    await BOOT.z();for(let k=0;k<6;k++){const z=-4.5+k*1.8;P(FOODK.geo('Sbstool:'+k%3),xc-1.2,0,z,1,1,1,0xffffff,{b:'sm',ry:k*1.3});rndC(xc-1.2,z,.2,0,.8);seatAdd(cx+xc-1.2,cz+z,.79,Math.PI/2);}
     await BOOT.z();for(let k=0;k<5;k++)food(pick(['mug','mug','wine','bread','cheese']),xc+rr(-.15,.15),1.2,-4+k*2+rr(-.3,.3),rr(0,6.28));
     /* 뒤쪽: 술통 벽과 병 선반 */
     /* 술통: 받침 위에 넷·셋·둘로 맞닿게 쌓는다 (예전엔 통 사이가 벌어져 윗줄이 공중에 떠 있었다). 지름 .76, 간격 .78, 윗줄은 .675씩 올라 아랫줄 두 통 사이 골에 얹힌다 */
@@ -20691,8 +20907,7 @@ async function buildGuildHallMap(K){
     await BOOT.z();rug(0,14.3,0,3.2,1.4,0x5a3a22,0x8a6a3a);
     /* 접수대: 기름 등잔 둘·종·장부 더미 */
     await BOOT.z();{const zc=-12.6;await BOOT.z();for(const sd of [-1,1])oilLamp(sd*3.9,1.2,zc+.15);
-      await BOOT.z();P(CYL(.07,.09,10),1.4,1.215,zc+.25,1,.03,1,DARKW,IP);await BOOT.z();P(SPH,1.4,1.3,zc+.25,.08,.08,.08,GOLD,IP);await BOOT.z();P(SPH,1.4,1.39,zc+.25,.02,.03,.02,GOLD,IP);   /* 부르는 종 */
-      await BOOT.z();for(let k=0;k<3;k++)P(BOX,-1.3,1.24+k*.07,zc+.2,.36,.06,.26,[0x7a2a22,0x2a4a6a,0x3a5a3a][k],{b:'ip',ry:k*.12-.1});}   /* 장부 */
+      /* 부르는 종·장부는 Sgdtop:0 에 */}
     /* 벽난로 선반: 촛대 둘·항아리·작은 상자, 위에는 둥근 방패와 엇갈린 칼 */
     await BOOT.z();{const fx=-IN,fz=-11.5,my=3.18,mx=fx+1.05;
       await BOOT.z();for(const sd of [-1,1]){const z=fz+sd*1.6;P(CYL(.07,.09,8),mx,my+.02,z,1,.04,1,GOLD,IP);P(CYL(.025,.03,6),mx,my+.14,z,1,.24,1,GOLD,IP);P(CYL(.03,.03,6),mx,my+.32,z,1,.14,1,0xf0e8d8,IP);P(CONE(5),mx,my+.43,z,.03,.07,.03,0xffd070,{b:'ip',glow:true});halo(mx,my+.44,z,0);}
@@ -20702,7 +20917,7 @@ async function buildGuildHallMap(K){
       await BOOT.z();P(CYL(1,1,18),sx+.02,sy,fz,.44,.05,.44,0x7a2a22,{b:'ip',rz:PI/2});await BOOT.z();P(CYL(1,1,18),sx+.01,sy,fz,.47,.03,.47,IRON,{b:'ip',rz:PI/2});await BOOT.z();P(SPH,sx+.06,sy,fz,.04,.1,.1,GOLD,IP);
       await BOOT.z();P(BOX,sx+.05,sy,fz,.02,.7,.08,GOLD,IP);await BOOT.z();P(BOX,sx+.05,sy,fz,.02,.08,.7,GOLD,IP);}
     /* 브람의 바: 잔 걸이(기둥 셋 위 들보에 맥주잔이 거꾸로 매달림)·술통 꼭지·벽의 차림표 판·등잔 둘 */
-    await BOOT.z();{const xc=14.2;await BOOT.z();for(const z of [-4.9,0,4.9])P(BOX,xc,1.9,z,.1,1.4,.1,DARKW,IP);await BOOT.z();P(BOX,xc,2.62,0,.3,.1,10.2,DARKW,IP);await BOOT.z();P(BOX,xc,2.7,0,.36,.06,10.4,BEAM,IP);
+    await BOOT.z();{const xc=14.2;   /* 기둥 셋과 잔 걸이 들보(밑 y 2.565)는 Sgdesk:1 에 */
       await BOOT.z();for(let z=-4.5;z<=4.55;z+=.36){if(Math.abs(z)<.25)continue;for(const sd of [-1,1]){const mz=z+sd*.0;{const mc=pick2([0xb8b0a0,0x8a6a48,0xc8c0b0]);P(FOODK.geo(mc===0x8a6a48?'ware:18':'ware:17'),xc+sd*.1,2.515,mz,.9,.9,.9,0xffffff,{b:'fd',rx:PI,ry:sd*1.2+z});}P(BOX,xc+sd*.1,2.54,mz,.012,.06,.012,IRON,IP);}}
       await BOOT.z();for(const sd of [-1,1])oilLamp(xc,1.2,sd*3.6,.6,6);
       await BOOT.z();const bxx=HW-T-.55,z0=-4.72,G=.78;await BOOT.z();for(let k=0;k<4;k++){const z=z0+k*G;P(CYL(.025,.03,6),bxx-.55,.448,z,1,.14,1,GOLD,{b:'ip',rz:PI/2});P(BOX,bxx-.6,.54,z,.03,.16,.04,DARKW,IP);P(SPH,bxx-.6,.63,z,.035,.035,.035,0x7a2a22,IP);}   /* 꼭지 */
