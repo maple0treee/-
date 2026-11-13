@@ -15437,7 +15437,103 @@ function headCeil(x,z,y,g){if(g==null)g=y;let c=null;const ok=v=>v>=g+HEAD_H-.05
   for(const s of SURFACES){if(x<s.x0||x>s.x1||z<s.z0||z>s.z1)continue;let h=s.y;if(s.ramp==='x')h=s.ya+(s.yb-s.ya)*(x-s.x0)/(s.x1-s.x0);else if(s.ramp==='z')h=s.ya+(s.yb-s.ya)*(z-s.z0)/(s.z1-s.z0);if(s.fn){h=s.fn(x,z);if(h==null)continue;}else if(s.sp){h=surfSp(s,x,z,h);if(h==null)continue;}
     if(ok(h-.3))c=h-.3;}
   const hc=hallCeil(x,z);if(hc!=null&&ok(hc))c=hc;   /* 길드 회관·지하실 천장 */
+  const gc=geoCeil(x,z,g,y);if(gc!=null&&ok(gc))c=gc;   /* 건물 모양에서 찾은 천장 (아래 GEOC) */
   return c;}
+/* ---------- 모양에서 찾은 천장 (GEOC) ----------
+   손으로 적어 둔 천장(CEILS)·위층 바닥(SURFACES)·지하실 셈(hallCeil)이 빠진 건물에서는 뛰거나(이단 점프·도약) 날면 머리가 천장을 뚫고 올라갔다.
+   그래서 장면에 놓인 메시에서 '아래에서 올려다보이는 면'(천장·들보·위층 바닥 밑·문 머리판·처마 밑·계단 밑)을 2m 칸에 나눠 적어 두고 머리 위 천장으로 쓴다.
+   새로 짓는 건물·실내도 따로 적지 않아도 저절로 막힌다 (메시만 장면에 넣으면 된다).
+   빼는 것: InstancedMesh(나무·풀 같은 흩뿌린 것), 뼈대 메시, 사람 몸(userData.stick)·내 몸·카메라에 붙은 것, 끈 재질, 비치는 재질(빛·안개·기술 효과·유리),
+     아주 작은 면(0.01㎡ 밑), 땅에서 1.6m가 안 되는 윗면(양면·뒷면 재질의 땅), 너무 넓은 면(하늘 공 등), userData.noCeil 을 단 것과 그 아래.
+   새로 생긴 메시는 1초 동안 가만히 있어야 적고, 적어 둔 뒤 matrixWorld가 달라지면 버리고 다시 적는다 (세 번 넘게 움직이면 아예 뺀다). 숨겨진 것(다른 맵·먼 LOD)은 그때그때 빼고 본다.
+   메시를 훑는 일은 프레임마다 몇 ms씩 나눠서 가까운 것부터 한다 (geocTick) */
+const GEOC={cells:new Map(),seen:new WeakSet(),pend:[],live:[],bad:[],cur:null,walk:[],frame:0,walkT:-1e9,px:1e9,pz:1e9,CS:2,n:0};
+function geocKey(ix,iz){return ix*65536+iz;}
+/* 이 메시를 지금 천장으로 쳐도 되나: 장면에 붙어 있고, 위로 모두 보이고, 적을 때와 같은 자리 (프레임마다 한 번만 본다) */
+function geocLive(e){if(e.f===GEOC.frame)return e.ok;e.f=GEOC.frame;let ok=true;
+  for(let p=e.o;p;p=p.parent){if(!p.visible){ok=false;break;}if(p===scene)break;if(!p.parent){ok=false;e.gone=true;break;}}
+  if(ok){const m=e.o.matrixWorld.elements,s=e.mw;for(let i=0;i<16;i++)if(m[i]!==s[i]){ok=false;e.moved=true;break;}
+    const P=e.o.geometry&&e.o.geometry.attributes.position;if(!P||P.version!==e.pv||e.o.geometry!==e.geo){ok=false;e.moved=true;}}
+  if((e.gone||e.moved)&&!e.bad){e.bad=true;GEOC.bad.push(e);}
+  e.ok=ok;return ok;}
+function geocDrop(e){for(const k of e.keys){const L=GEOC.cells.get(k);if(!L)continue;for(let i=L.length-2;i>=0;i-=2)if(L[i]===e)L.splice(i,2);if(!L.length)GEOC.cells.delete(k);}
+  if(e.on)GEOC.n-=e.tri.length/9;e.keys=[];e.tri=null;e.on=false;e.acc=null;e.rng=null;e.ti=0;}
+/* 머리 위 가장 낮은 모양 천장 (발밑 바닥 g에서 사람 키만큼 위, 머리가 아직 뚫고 지나가지 않은 것) */
+function geoCeil(x,z,g,y){const CS=GEOC.CS,L=GEOC.cells.get(geocKey(Math.floor(x/CS),Math.floor(z/CS)));if(!L)return null;let c=null;const lo=g+HEAD_H-.05,lo2=y+HEAD_H-.5;
+  for(let i=0;i<L.length;i+=2){const e=L[i];if(!geocLive(e))continue;const T=e.tri,j=L[i+1]*9;
+    const x0=T[j],z0=T[j+2],x1=T[j+3],z1=T[j+5],x2=T[j+6],z2=T[j+8],d=(z1-z2)*(x0-x2)+(x2-x1)*(z0-z2);if(d>-1e-9&&d<1e-9)continue;
+    const l0=((z1-z2)*(x-x2)+(x2-x1)*(z-z2))/d;if(l0<-1e-4)continue;const l1=((z2-z0)*(x-x2)+(x0-x2)*(z-z2))/d;if(l1<-1e-4||l0+l1>1+1e-4)continue;
+    const h=l0*T[j+1]+l1*T[j+4]+(1-l0-l1)*T[j+7];if(h>=lo&&h>lo2&&(c==null||h<c))c=h;}
+  return c;}
+/* 적어 둘 때의 자리·땅 위 네모(bb)를 잡아 둔다 */
+const _gcB=new THREE.Box3();
+function geocSnap(e,t){const o=e.o,g=o.geometry;e.geo=g;e.mw=o.matrixWorld.elements.slice();e.pv=g.attributes.position.version;e.t=t;if(!g.boundingBox)g.computeBoundingBox();
+  _gcB.copy(g.boundingBox).applyMatrix4(o.matrixWorld);e.bb=[_gcB.min.x,_gcB.max.x,_gcB.min.z,_gcB.max.z];}
+function geocDist(e,x,z){const b=e.bb;return Math.hypot(Math.max(b[0]-x,0,x-b[1]),Math.max(b[2]-z,0,z-b[3]));}
+/* 수평으로 본 점(x,z)과 세모 사이 거리 (안에 있으면 0) */
+function geocTriDist(T,j,x,z){const x0=T[j],z0=T[j+2],x1=T[j+3],z1=T[j+5],x2=T[j+6],z2=T[j+8],d=(z1-z2)*(x0-x2)+(x2-x1)*(z0-z2);
+  if(Math.abs(d)>1e-9){const l0=((z1-z2)*(x-x2)+(x2-x1)*(z-z2))/d,l1=((z2-z0)*(x-x2)+(x0-x2)*(z-z2))/d;if(l0>=0&&l1>=0&&l0+l1<=1)return 0;}
+  const sg=(ax,az,bx,bz)=>{const ux=bx-ax,uz=bz-az,l=ux*ux+uz*uz,t=l>0?Math.max(0,Math.min(1,((x-ax)*ux+(z-az)*uz)/l)):0;return Math.hypot(x-ax-ux*t,z-az-uz*t);};
+  return Math.min(sg(x0,z0,x1,z1),sg(x1,z1,x2,z2),sg(x2,z2,x0,z0));}
+/* 메시 하나를 정해진 시간까지 훑는다 (못 끝내면 false, 다음 프레임에 이어서). 세모를 다 고르면 칸에 넣는다 */
+function geocScan(e,end){const o=e.o,g=e.geo,P=g.attributes.position,IL=!!P.isInterleavedBufferAttribute,off=IL?P.offset:0,stride=IL?P.data.stride:P.itemSize,AR=IL?P.data.array:P.array;
+  const ix=g.index?g.index.array:null,N=ix?ix.length:P.count,m=o.matrixWorld.elements;let k=0;
+  if(!e.rng){e.acc=[];e.ti=0;const det=m[0]*(m[5]*m[10]-m[6]*m[9])-m[4]*(m[1]*m[10]-m[2]*m[9])+m[8]*(m[1]*m[6]-m[2]*m[5]);e.flip=det<0;
+    const mats=Array.isArray(o.material)?o.material:[o.material],grp=g.groups&&g.groups.length&&Array.isArray(o.material)?g.groups:[{start:0,count:N,materialIndex:0}];
+    e.rng=[];for(const gr of grp){const mt=mats[gr.materialIndex||0];if(!mt||mt.visible===false||mt.colorWrite===false||mt.wireframe||mt.transparent||mt.depthWrite===false)continue;
+      e.rng.push([gr.start,Math.min(N,gr.start+(isFinite(gr.count)?gr.count:N)),mt.side]);}e.ri=0;e.i=e.rng.length?e.rng[0][0]:0;}
+  if(e.acc){const acc=e.acc;
+    while(e.ri<e.rng.length){const R=e.rng[e.ri],sd=R[2];if(e.i<R[0])e.i=R[0];
+      for(;e.i+2<R[1];e.i+=3){if((++k&255)===0&&performance.now()>end)return false;
+        const a=(ix?ix[e.i]:e.i)*stride+off,b=(ix?ix[e.i+1]:e.i+1)*stride+off,c=(ix?ix[e.i+2]:e.i+2)*stride+off;
+        let px=AR[a],py=AR[a+1],pz=AR[a+2];const ax=m[0]*px+m[4]*py+m[8]*pz+m[12],ay=m[1]*px+m[5]*py+m[9]*pz+m[13],az=m[2]*px+m[6]*py+m[10]*pz+m[14];
+        px=AR[b];py=AR[b+1];pz=AR[b+2];const bx=m[0]*px+m[4]*py+m[8]*pz+m[12],by=m[1]*px+m[5]*py+m[9]*pz+m[13],bz=m[2]*px+m[6]*py+m[10]*pz+m[14];
+        px=AR[c];py=AR[c+1];pz=AR[c+2];const cx=m[0]*px+m[4]*py+m[8]*pz+m[12],cy=m[1]*px+m[5]*py+m[9]*pz+m[13],cz=m[2]*px+m[6]*py+m[10]*pz+m[14];
+        const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx-ax,vy_=cy-ay,vz=cz-az,nx=uy*vz-uz*vy_,nz=ux*vy_-uy*vx;let ny=uz*vx-ux*vz;const L=Math.sqrt(nx*nx+ny*ny+nz*nz);
+        if(L<.02||L>8000)continue;   /* 넓이 0.01㎡ 밑(작은 장식), 4000㎡ 넘게(하늘 공 등)는 뺀다 */
+        ny/=L;if(e.flip)ny=-ny;const down=ny<-.5,up=ny>.5;if(!(sd===THREE.DoubleSide?(down||up):sd===THREE.BackSide?up:down))continue;   /* 아래에서 올려다보이는 면만 */
+        if(Math.max(ax,bx,cx)-Math.min(ax,bx,cx)>600||Math.max(az,bz,cz)-Math.min(az,bz,cz)>600)continue;
+        if(!down&&Math.max(ay,by,cy)<heightAt((ax+bx+cx)/3,(az+bz+cz)/3)+1.6)continue;   /* 양면·뒷면 재질 땅의 윗면 */
+        acc.push(ax,ay,az,bx,by,bz,cx,cy,cz);}
+      e.ri++;}
+    e.tri=new Float32Array(acc);e.acc=null;e.keys=[];e.ti=0;}
+  const T=e.tri,CS=GEOC.CS,n=T.length/9;
+  for(;e.ti<n;e.ti++){if((++k&63)===0&&performance.now()>end)return false;const t=e.ti,j=t*9,i0=Math.floor(Math.min(T[j],T[j+3],T[j+6])/CS),i1=Math.floor(Math.max(T[j],T[j+3],T[j+6])/CS),k0=Math.floor(Math.min(T[j+2],T[j+5],T[j+8])/CS),k1=Math.floor(Math.max(T[j+2],T[j+5],T[j+8])/CS);
+    const big=(i1-i0+1)*(k1-k0+1)>16;   /* 길쭉하거나 큰 세모(긴 회랑 지붕 등)는 겹치는 칸에만 넣는다 */
+    for(let ii=i0;ii<=i1;ii++)for(let kk=k0;kk<=k1;kk++){if(big&&geocTriDist(T,j,(ii+.5)*CS,(kk+.5)*CS)>CS*.72)continue;const key=geocKey(ii,kk);
+      let C=GEOC.cells.get(key);if(!C){C=[];GEOC.cells.set(key,C);}if(!C.length||C[C.length-2]!==e)e.keys.push(key);C.push(e,t);}}
+  e.on=true;e.f=-1;GEOC.n+=n;return true;}
+/* 장면을 몇 프레임에 나눠 훑으며 새 메시를 찾는다 (사람 몸·내 몸·카메라·noCeil 아래는 건너뛴다) */
+function geocWalk(end,t0){const W=GEOC.walk,pl=typeof player!=='undefined'?player:null;let k=0;
+  while(W.length){if((++k&127)===0&&performance.now()>end)return false;const o=W.pop();if(o===pl||o===camera||o.userData.stick||o.userData.noCeil)continue;
+    if(o.isMesh&&!o.isSkinnedMesh&&!o.isInstancedMesh&&!GEOC.seen.has(o)){GEOC.seen.add(o);const g=o.geometry,P=g&&g.attributes&&g.attributes.position;
+      if(P&&P.count>=3){const e={o,dyn:0,keys:[],tri:null,on:false,f:-1,ok:false,rng:null,acc:null,ti:0};geocSnap(e,t0);GEOC.pend.push(e);}}
+    const ch=o.children;for(let i=0;i<ch.length;i++)W.push(ch[i]);}
+  return true;}
+/* 프레임마다 (한 프레임 몇 ms까지만):
+   1) 움직였거나 장면에서 빠진 것을 지운다  2) 3초마다(멀리 옮겨 가면 바로) 장면을 다시 훑기 시작하고, 다 훑으면 가까운 순서로 줄 세우고 아주 먼 것(400m)은 지워 둔다
+   3) 가까운 것(160m 안)부터 메시를 훑어 칸에 넣는다 */
+function geocTick(){GEOC.frame++;if(!player)return;const t0=performance.now(),px=player.position.x,pz=player.position.z;
+  const near=!!GEOC.cur||(GEOC.pend.length>0&&GEOC.pend[0].d<20),end=t0+(near?4:1.5);
+  if(GEOC.bad.length){for(const e of GEOC.bad){e.bad=false;const wasOn=e.on;geocDrop(e);if(GEOC.cur===e)GEOC.cur=null;
+      if(e.gone){GEOC.seen.delete(e.o);e.dead=true;continue;}   /* 장면에서 떼어 낸 것: 다시 붙으면 새로 찾는다 */
+      e.moved=false;if(++e.dyn>3){e.dead=true;continue;}geocSnap(e,t0);e.d=geocDist(e,px,pz);if(wasOn)GEOC.pend.push(e);}
+    GEOC.bad.length=0;GEOC.live=GEOC.live.filter(e=>e.on);}
+  {const jump=Math.hypot(px-GEOC.px,pz-GEOC.pz)>30;
+    if(jump){for(const e of GEOC.pend)e.d=geocDist(e,px,pz);GEOC.pend.sort((a,b)=>a.d-b.d);}   /* 순간이동하면 줄을 바로 다시 세운다 */
+    if(!GEOC.walk.length&&(t0-GEOC.walkT>3000||jump)){GEOC.walkT=t0;GEOC.px=px;GEOC.pz=pz;GEOC.walk.push(scene);GEOC.walking=true;}else if(jump){GEOC.px=px;GEOC.pz=pz;}}
+  if(GEOC.walking&&geocWalk(t0+.6,t0)){GEOC.walking=false;
+    GEOC.pend=GEOC.pend.filter(e=>!e.dead&&!e.on);for(const e of GEOC.pend)e.d=geocDist(e,px,pz);GEOC.pend.sort((a,b)=>a.d-b.d);
+    GEOC.live=GEOC.live.filter(e=>{if(!e.on)return false;if(geocDist(e,px,pz)<=400)return true;geocDrop(e);e.d=1e9;GEOC.pend.push(e);return false;});}
+  let tries=GEOC.pend.length;
+  while(performance.now()<end){let e=GEOC.cur;
+    if(!e){if(tries--<=0)break;e=GEOC.pend[0];if(!e||e.d>160)break;GEOC.pend.shift();if(e.dead||e.on)continue;
+      /* 새로 생긴 것은 1초 동안 가만히 있어야 적는다 (날아가는 것·기술 효과 등) */
+      const m=e.o.matrixWorld.elements;let same=e.geo===e.o.geometry;for(let i=0;same&&i<16;i++)if(m[i]!==e.mw[i])same=false;
+      if(!same){if(++e.dyn>3){e.dead=true;continue;}geocSnap(e,t0);e.rng=null;e.acc=null;GEOC.pend.push(e);continue;}
+      if(t0-e.t<1000){GEOC.pend.push(e);continue;}
+      GEOC.cur=e;}
+    if(geocScan(e,end)){GEOC.cur=null;GEOC.live.push(e);}else break;}}
 function floorAt(x,z,y){
   let g=heightAt(x,z);
   // 늪의 깊은 물에서는 헤엄친다 (머리가 물 밖에 있게)
@@ -36618,11 +36714,11 @@ function loopBody(){if(HCHL.u)return;   /* 허칠을 서둘러 짓는 동안(로
   if(mode!=='title'&&player)tutTick(dt);
   else if(mode==='dialog'){
     /* 창을 열어도 세상은 멈추지 않는다: 공중에 있으면 떨어진다 */
-    if(P&&player&&!P.fly&&P.hp>0&&P.seat==null&&!CCAR.ride){const pos=player.position,ground=floorAt(pos.x,pos.z,pos.y);if(pos.y>ground+.001||vy>0){const y0=pos.y;vy-=26*dt;let py=pos.y+vy*dt;if(py<=ground){py=ground;vy=0;}pos.y=py;jumpY=Math.max(0,py-ground);camera.position.y+=py-y0;}}
+    if(P&&player&&!P.fly&&P.hp>0&&P.seat==null&&!CCAR.ride){const pos=player.position,ground=floorAt(pos.x,pos.z,pos.y);if(pos.y>ground+.001||vy>0){const y0=pos.y;vy-=26*dt;let py=pos.y+vy*dt;const ceil=vy>0?headCeil(pos.x,pos.z,pos.y,ground):null;if(ceil!=null&&py+HEAD_H>ceil){py=Math.max(pos.y,ceil-HEAD_H);vy=0;}if(py<=ground){py=ground;vy=0;}pos.y=py;jumpY=Math.max(0,py-ground);camera.position.y+=py-y0;}}
     if(P&&P.bowDraw)bowCancel();if(P&&P.ray)rayEnd();if(P&&P.flame){P.flame=null;sfxStop('mg_fire');if(myMoId==='flame'){swingT=1;myMo=null;myMoId='';}}updateViewModel(dt,0);updateNetMonsters(dt);for(const m of monsters)m.tag.hidden=true;
     if(npcCur&&npcCur.poses&&npcCur.mesh){npcCur.mesh.userData.pose=npcCur.poses.talk;animNpc(npcCur.mesh,tAll,dt);}}   /* 말하는 동안에도 몸짓을 이어 간다 (버키: 손짓하며 설명) */
   updateFx(dt);VFX.update(dt);updateAmbient(dt);seaTick(dt);if(typeof questMarkTick==='function')questMarkTick(dt);zoneMotes(dt);updateOthers(dt);animateDungeonLights(tAll);updatePortals(tAll);
-  if(mode!=='title'){const pp=player?player.position:camera.position;LightPool.update(dt,pp);InstChunks.update(camera.position);mapSplitTick(dt);for(const m of monsters)if(m.mesh)setFarHidden(m.mesh,m.mesh.position.distanceToSquared(camera.position)>95*95);}
+  if(mode!=='title'){const pp=player?player.position:camera.position;LightPool.update(dt,pp);InstChunks.update(camera.position);geocTick();mapSplitTick(dt);for(const m of monsters)if(m.mesh)setFarHidden(m.mesh,m.mesh.position.distanceToSquared(camera.position)>95*95);}
   Perf.tick();fpsTick();Rebase.tick(dt);HCHL.tick();LAZYG.tick();
   updateHazards(dt);updateTeles(dt);for(const f of lairFlames)f.scale.set(1+Math.sin(tAll*11+f.position.z)*.12,1+Math.sin(tAll*7+f.position.z)*.2,1);renderMirror(dt);
   if(mode==='world'){updateBossBar();
