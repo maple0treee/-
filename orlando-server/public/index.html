@@ -16806,8 +16806,9 @@ for(const p of PORTALS)p.fx=makePortal(p.x,p.z,p.ry,{color:p.color});
 /* 지하 신전 포탈의 방: 보스방으로 바로 가는 포탈 (감실 k: 0 = 회랑 입구, 45°씩 시계 반대. 회랑에서 보면 왼쪽부터 3·4·5, 3은 비어 있다).
    새 보스방이 생기면 비어 있는 감실(1·2·3·6·7) 하나에 한 줄 더하고 OR.HALL.HUB.GATES 에 그 번호를 넣는다 */
 const TEMPLE_GATES=[
-  {k:4,id:'tg_wyvern',name:'와이번 둥지',lv:30,color:0x8fe0c8,to:()=>({x:OR.WLAIR.x,z:OR.WLAIR.z+OR.WLAIR.r-5,yaw:0})},
-  {k:5,id:'tg_wyrm',name:'얼음 용의 잠자리',lv:100,color:0xa8dcff,to:()=>{const I=OR.ISLES.hlair,e=I.entry,H=OR.HCH,s0=H.areaOf('hlair').s[0],q=H.sAt(s0+6);return {x:e.x,z:e.z,yaw:Math.atan2(-(I.x+q.x-e.x),-(I.z+q.z-e.z))};}}];
+  {k:4,id:'tg_wyvern',out:'nest_out',name:'와이번 둥지',lv:30,color:0x8fe0c8,to:()=>({x:OR.WLAIR.x,z:OR.WLAIR.z+OR.WLAIR.r-5,yaw:0})},
+  {k:5,id:'tg_wyrm',out:'hlair_to_hden',name:'얼음 용의 잠자리',lv:100,color:0xa8dcff,to:()=>{const I=OR.ISLES.hlair,e=I.entry,H=OR.HCH,s0=H.areaOf('hlair').s[0],q=H.sAt(s0+6);return {x:e.x,z:e.z,yaw:Math.atan2(-(I.x+q.x-e.x),-(I.z+q.z-e.z))};}}];
+let BOSS_VIA=null;   /* {k: 감실 번호, out: 그 보스방을 나가는 문 id} — 포탈의 방에서 들어온 보스방 (다른 문을 지나면 지운다) */
 const templeGateFront=k=>{const B=OR.HALL.HUB,a=k*Math.PI/4;return {x:B.x+Math.cos(a)*(B.A-3.4),z:B.z+Math.sin(a)*(B.A-3.4)};};
 for(const G of TEMPLE_GATES){const B=OR.HALL.HUB,a=G.k*Math.PI/4,x=B.x+Math.cos(a)*(B.A+1.6),z=B.z+Math.sin(a)*(B.A+1.6);
   const p={id:G.id,x,z,ry:Math.PI/2-a,minLv:0,label:G.name,color:G.color,msg:null,get to(){return G.to();},lock:()=>P&&P.lv<G.lv?`Lv ${G.lv}부터 들어갈 수 있다`:null};
@@ -16823,10 +16824,14 @@ function closePortalChoice(){if($('#portalWin').hidden)return;$('#portalWin').hi
 addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#portalWin').hidden){closePortalChoice();e.stopImmediatePropagation();}},true);
 function usePortal(i){const p=PORTALS[i];if(!p)return;
   if(p.coach){openCoachMap(p);return;}
-  if(p.id==='east'&&P&&P.lv>=p.minLv&&P.got&&P.got.wyvern){openPortalChoice(p);return;}
+  if(p.id==='east'&&P&&P.lv>=p.minLv&&P.got&&P.got.wyvern){BOSS_VIA=null;openPortalChoice(p);return;}
   if(P&&P.lv<p.minLv){toast(`Lv ${p.minLv}부터 들어갈 수 있다`);return;}
   if(p.lock){const why=p.lock();if(why){toast(why);return;}}
   if(p.hole){hchHoleGo(p);return;}
+  /* 지하 신전 포탈의 방에서 보스방에 들어갔으면, 보스방을 나가는 문은 다시 포탈의 방(그 포탈 앞)으로 */
+  {const G=TEMPLE_GATES.find(g=>g.id===p.id);if(G){BOSS_VIA={k:G.k,out:G.out};}
+    else if(BOSS_VIA&&BOSS_VIA.out===p.id){const q=templeGateFront(BOSS_VIA.k);BOSS_VIA=null;sfx('door');const d={x:q.x,z:q.z,msg:null};warpTo(d.x,d.z,exitYaw(d,p),null);arriveBanner(d.x,d.z);return;}
+    else BOSS_VIA=null;}
   const alt=p.alt&&p.alt(),d=alt||p.to;sfx('door');warpTo(d.x,d.z,exitYaw(d,p),d.msg,d.y);arriveBanner(d.x,d.z);}
 /* 문·포탈을 지나 나오면 그 문을 등지고 선다: 도착 자리 가까이에 있는 문(포탈)에서 도착 자리 쪽을 바라본다. 가까운 문이 없으면 정해 둔 방향 그대로 */
 function exitYaw(d,from){let best=null,bd=7;for(const q of PORTALS){if(q===from||q.coach)continue;const dd=Math.hypot(q.x-d.x,q.z-d.z);if(dd<bd&&dd>.3){bd=dd;best=q;}}
@@ -32722,7 +32727,7 @@ function startGame(data){if(BOOT.on||BOOT.q){BOOT.wait(()=>startGame(data));retu
   if(OLD_LOOK||PM.data[ap.g])return startGameNow(data);
   const L=$('#loading');L.hidden=false;$('#loadMsg').textContent='모험가를 불러오는 중…';
   pmLoad(ap.g).catch(()=>{}).then(()=>{L.hidden=true;startGameNow(data);});}
-function startGameNow(data){if(JOB_ALIAS[data.job])data={...data,job:JOB_ALIAS[data.job]};
+function startGameNow(data){BOSS_VIA=null;if(JOB_ALIAS[data.job])data={...data,job:JOB_ALIAS[data.job]};
   try{LAZYG.prep(data.x||0,data.z||0);}catch(e){}   /* 들어갈 자리 가까이의 땅은 지금 끝까지 (LAZYG) */
   setTimeout(precompileAll,4000);setTimeout(precompileAll,12000);setTimeout(function wg(){if(!TW.done&&TW.list)return setTimeout(wg,1500);warmGpu();},1500);   /* 남은 것을 조금씩 올리는 중(titleWarm)이면 다 올린 뒤에 (한 번에 다 그리면 몇 초 멈춘다) */
   P={...data,buffs:{}};delete P.tab;saveStale=false;saveClaimT=Date.now();if(!P.id)P.id='c'+Date.now().toString(36);P.seat=null;P.ride=null;P.drunk=0;P.blackout=false;
