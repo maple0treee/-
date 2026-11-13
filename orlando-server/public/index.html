@@ -3429,6 +3429,44 @@ const BOOT=(()=>{const L=document.getElementById('loading'),M=document.getElemen
       open();for(const f of held.splice(0))_st.call(W,f,0);},
     /* 첫 화면이 그려진 뒤 가린 것을 걷는다 */
     done(){if(M)M.textContent='불러오는 중…';if(L)L.hidden=true;}};})();
+/* 땅 계산 저장 (GRC): 땅 판(groundGen·사냥터 땅 판)의 높이·색 계산은 첫 로딩에서 4초 가까이 걸린다 (클라우드 기준).
+   계산한 높이·색을 브라우저(IndexedDB)에 저장해 두고, 다음 접속부터는 꺼내 쓴다. 게임 코드가 한 글자라도 바뀌면(업데이트) 지문(ver)이 달라져
+   예전 것은 지우고 새로 계산한다. 저장이 안 되는 곳(사생활 보호 창, 막힌 시험판 등)은 예전처럼 매번 계산한다. 꺼낸 값은 계산한 값과 똑같다 (Float32 그대로) */
+const GRC=(()=>{const SRC=document.currentScript,DBN='orlando3d-ground',ST='g';let db=null,ver='',map=null,pend=[],on=false,fin=false;const cnt=new Map();
+  const req=r=>new Promise((ok,no)=>{r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error);});
+  const hash=async t=>{try{if(window.crypto&&crypto.subtle&&window.TextEncoder){const b=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)));let h='';for(let i=0;i<12;i++)h+=b[i].toString(16).padStart(2,'0');return h;}}catch(e){}
+    let a=0x811c9dc5,c=0x01000193;for(let i=0;i<t.length;i++){a^=t.charCodeAt(i);a=Math.imul(a,16777619);c=Math.imul(c^t.charCodeAt(i),2246822519);}return (a>>>0).toString(16)+(c>>>0).toString(16)+'n'+t.length;};
+  const ready=(async()=>{try{const t=SRC&&SRC.text;if(!t||t.length<1e5||!window.indexedDB)return;ver=await hash(t);
+      const o=indexedDB.open(DBN,1);o.onupgradeneeded=()=>{try{o.result.createObjectStore(ST);}catch(e){}};db=await req(o);
+      const tx=db.transaction(ST,'readonly'),os=tx.objectStore(ST),v=await req(os.get('ver'));
+      if(v===ver){const ks=await req(os.getAllKeys()),vs=await req(os.getAll());map=new Map();ks.forEach((k,i)=>{if(k!=='ver')map.set(k,vs[i]);});}
+      on=true;}catch(e){db=null;on=false;}fin=true;})();
+  return {ready,
+    /* 같은 땅을 두 번 지으면 #2, #3 … 으로 따로 */
+    key(b){const n=(cnt.get(b)||0)+1;cnt.set(b,n);return b+'#'+n;},
+    /* 저장된 높이(y)·색(c): 꼭짓점 수가 맞을 때만 */
+    get(k,n){const v=map&&map.get(k);if(!v||!v.y||v.y.length!==n||!v.c||v.c.length!==n*3)return null;map.delete(k);return v;},
+    put(k,pos,col){if(fin&&!on)return;const n=pos.count,y=new Float32Array(n),a=pos.array;for(let i=0;i<n;i++)y[i]=a[i*3+1];pend.push([k,{y,c:new Float32Array(col)}]);},
+    /* 다 지은 뒤 한 번에 쓴다 (버전이 바뀌었으면 예전 것을 다 지우고) */
+    async flush(){try{await ready;if(!on||!db||!pend.length){pend=[];return;}const P=pend;pend=[];
+      const tx=db.transaction(ST,'readwrite'),os=tx.objectStore(ST);const v=await req(os.get('ver'));if(v!==ver){os.clear();os.put(ver,'ver');}for(const [k,x] of P)os.put(x,k);
+      await new Promise(r=>{tx.oncomplete=tx.onerror=tx.onabort=r;});}catch(e){}map=null;}};})();
+/* 먼 땅 나중에 짓기 (LAZYG): 첫 로딩에서는 엑시즈 땅만 바로 짓고, 다른 지역 땅 판(밀골·마찻길·성·길드홀·사냥터 땅 판 …)은
+   모양(메시)만 만들어 두고 높이·색 계산은 다 지은 뒤로 미룬다. 홈 화면에서는 한 프레임에 10ms, 게임 안에서는 3ms씩 뒤에서 마저 짓고,
+   다 지은 땅만 장면에 넣는다. 게임에 들어갈 때와 게임 중에 아직 안 지은 땅 가까이(350m) 오면 그 땅은 바로 끝까지 짓는다.
+   다 지은 뒤 계산 결과를 저장한다 (GRC) */
+const LAZYG={on:true,jobs:[],flushed:false,
+  add(m,box,it){this.jobs.push({m,box,it,done:false});},
+  near(j,x,z,r){const b=j.box,dx=Math.max(b[0]-x,0,x-b[2]),dz=Math.max(b[1]-z,0,z-b[3]);return dx*dx+dz*dz<r*r;},
+  /* 땅을 다 지은 뒤에 할 일 (아직 안 지었으면 미뤄 두었다가) */
+  after(m,f){if(m&&m.userData.lazy)(m.userData.lazyPost||(m.userData.lazyPost=[])).push(f);else f();},
+  step(j){if(j.done)return true;const r=j.it.next();if(!r.done)return false;j.done=true;scene.add(j.m);const L=j.m.userData.lazyPost;delete j.m.userData.lazy;delete j.m.userData.lazyPost;if(L)for(const f of L){try{f();}catch(e){console.warn('lazyPost',e);}}
+    try{twAdd([j.m]);}catch(e){}return true;},
+  /* 그 자리 가까이의 땅은 지금 바로 끝까지 */
+  prep(x,z){for(const j of this.jobs)if(!j.done&&this.near(j,x,z,350))while(!this.step(j));},
+  tick(){if(BOOT.on)return;if(!this.jobs.length){if(!this.flushed){this.flushed=true;GRC.flush();}return;}
+    if(player&&mode!=='title')this.prep(player.position.x,player.position.z);
+    const t0=performance.now(),bud=mode==='title'?10:3;while(this.jobs.length&&performance.now()-t0<bud){if(this.step(this.jobs[0]))this.jobs.shift();}}};
 /* 성능: 움직이지 않은 물체는 매 프레임 행렬을 다시 만들지 않는다 (세상에 물체가 4만 개가 넘어 이것만으로 한 프레임 시간을 크게 잡아먹었다).
    자리·회전·크기가 지난번과 같으면 건너뛰고, 바뀌었을 때만 다시 계산한다. 다른 부모로 옮겨 붙으면 한 번 새로 계산한다 */
 (function(){const O=THREE.Object3D.prototype,_add=O.add;
@@ -16361,7 +16399,7 @@ const GFX=(()=>{
       return null;}
     scene.add(im);return im;};
   /* 건물 둘레 땅 그늘: 땅 꼭짓점 색에 곱한다. list: {x,z,hw,hd,cs,sn}(상자) 또는 {x,z,r}(원) */
-  const groundAO=(gm,list,reach=2.6,depth=.3)=>{if(!gm)return;const P=gm.geometry.attributes.position,C=gm.geometry.attributes.color;
+  const groundAO=(gm,list,reach=2.6,depth=.3)=>{if(!gm)return;if(gm.userData.lazy){LAZYG.after(gm,()=>groundAO(gm,list,reach,depth));return;}const P=gm.geometry.attributes.position,C=gm.geometry.attributes.color;
     const G=new Map(),CS=12;for(const o of list){const r=(o.r||Math.hypot(o.hw,o.hd))+reach;for(let i=Math.floor((o.x-r)/CS);i<=Math.floor((o.x+r)/CS);i++)for(let j=Math.floor((o.z-r)/CS);j<=Math.floor((o.z+r)/CS);j++){const k=i+','+j;if(!G.has(k))G.set(k,[]);G.get(k).push(o);}}
     for(let i=0;i<P.count;i++){const x=P.getX(i),z=P.getZ(i),L=G.get(Math.floor(x/CS)+','+Math.floor(z/CS));if(!L)continue;let d=1e9;
       for(const o of L){let e;if(o.r)e=Math.hypot(x-o.x,z-o.z)-o.r;else{const dx=x-o.x,dz=z-o.z,lx=Math.abs(dx*o.cs-dz*o.sn)-o.hw,lz=Math.abs(dx*o.sn+dz*o.cs)-o.hd;e=Math.hypot(Math.max(lx,0),Math.max(lz,0))+Math.min(Math.max(lx,lz),0);}if(e<d)d=e;}
@@ -19878,8 +19916,8 @@ async function buildCastle(K){
     if(inOuter(mx,my,-1)){const n=Math.sin(x*.13+z*.07)*Math.cos(x*.05-z*.11);c.set(n>.3?0xa89a72:0x8ea456).offsetHSL(0,0,s*.03);}
     if(inInner(mx,my,-2))c.set(0xb3a48a);
     if(plaza(mx,my)||approach(mx,my)||(Math.abs(mx)<13&&my>111&&my<128))c.set(0xb3a48a);},210);
-  await BOOT.z();if(gm){const P=gm.geometry.attributes.position,mt=new Float32Array(P.count);for(let i=0;i<P.count;i++){const mx=P.getX(i)-cx,my=P.getZ(i)-cz;mt[i]=plaza(mx,my)||inInner(mx,my,-2)?4:P.getY(i)>12?4:8;}
-    gm.geometry.setAttribute('mt',new THREE.BufferAttribute(mt,1));gm.material=MTEX.patch(new THREE.MeshStandardMaterial({vertexColors:true,roughness:1}),'g');}
+  await BOOT.z();if(gm){const castlePost=()=>{const P=gm.geometry.attributes.position,mt=new Float32Array(P.count);for(let i=0;i<P.count;i++){const mx=P.getX(i)-cx,my=P.getZ(i)-cz;mt[i]=plaza(mx,my)||inInner(mx,my,-2)?4:P.getY(i)>12?4:8;}
+    gm.geometry.setAttribute('mt',new THREE.BufferAttribute(mt,1));gm.material=MTEX.patch(new THREE.MeshStandardMaterial({vertexColors:true,roughness:1}),'g');};LAZYG.after(gm,castlePost);}   /* 땅 높이를 보니 땅을 다 지은 뒤에 (LAZYG) */
   /* 해자 물: 성벽 밑에서 바깥 둑까지 팔각 고리 한 장 */
   await BOOT.z();{const sh=new THREE.Shape(),po=castleOctPts(M.in+M.w+1.2);await BOOT.z();po.forEach(([x,y],i)=>i?sh.lineTo(x,-y):sh.moveTo(x,-y));await BOOT.z();sh.closePath();
     await BOOT.z();const hl=new THREE.Path(),pi=castleOctPts(0);await BOOT.z();pi.forEach(([x,y],i)=>i?hl.lineTo(x,-y):hl.moveTo(x,-y));await BOOT.z();hl.closePath();await BOOT.z();sh.holes.push(hl);
@@ -21746,44 +21784,44 @@ function hlKit(P,o0){const G=HLG,PI=Math.PI,K={};let _s=o0&&o0.seed||7171;const 
     if(addBooks)for(let i=0;i<n;i++){const yb=.08+i*(h-.12)/n,hh=(h-.12)/n-.05;const p=f.W(0,d/2-.08);addBooks(p.x,y0+yb+hh/2,p.z,w-.14,hh,ry);}};
   return K;}
 /* ===== 산장 안 (따로 된 맵) ===== */
-async function buildHechilLodge(){const I=OR.ISLES.hlodge;if(!I||HLODGE.ready)return;const L=HLODGE,G=HLG,PI=Math.PI,cx=I.x,cz=I.z;
-  const {IW,ZB,ZF,LX,ZP,F1,F2,C3,FR,SA,SB,GZ,CZ}=L,T=L.T;
-  const root=new THREE.Group();root.userData.hl=1;scene.add(root);L.root=root;
-  const B=hlBaker(new THREE.Matrix4().makeTranslation(cx,0,cz));B.fl=[0,.1,F1,F2];
-  const P=(g,x,y,z,sx,sy,sz,c,o)=>B.P(g,x,y,z,sx,sy,sz,c,o);const K=hlKit(P,{seed:5151}),C=K.C,rnd=K.rnd,rr=K.rr,fr=K.fr;K.MT(B.MT);
+async function buildHechilLodge(){const I=OR.ISLES.hlodge;await HCHL.y();if(!I||HLODGE.ready)return;await HCHL.y();const L=HLODGE,G=HLG,PI=Math.PI,cx=I.x,cz=I.z;
+  await HCHL.y();const {IW,ZB,ZF,LX,ZP,F1,F2,C3,FR,SA,SB,GZ,CZ}=L,T=L.T;
+  await HCHL.y();const root=new THREE.Group();await HCHL.y();root.userData.hl=1;await HCHL.y();scene.add(root);await HCHL.y();L.root=root;
+  await HCHL.y();const B=hlBaker(new THREE.Matrix4().makeTranslation(cx,0,cz));await HCHL.y();B.fl=[0,.1,F1,F2];
+  await HCHL.y();const P=(g,x,y,z,sx,sy,sz,c,o)=>B.P(g,x,y,z,sx,sy,sz,c,o);await HCHL.y();const K=hlKit(P,{seed:5151}),C=K.C,rnd=K.rnd,rr=K.rr,fr=K.fr;await HCHL.y();K.MT(B.MT);
   /* 빚은 음식·그릇(FOODK)은 따로 모아 굽기 때 한 덩어리로 (2026-11-10) */
-  const FLL=[],fkL=(key,x,y,z,ry=0,s=1,rz=0)=>{FLL.push([key,FOODK.T(cx+x,y,cz+z,ry,0,rz,s)]);};
+  await HCHL.y();const FLL=[],fkL=(key,x,y,z,ry=0,s=1,rz=0)=>{FLL.push([key,FOODK.T(cx+x,y,cz+z,ry,0,rz,s)]);};
   await HCHL.y();
   /* 부딪힘·바닥 */
   const wallC=(x0,z0,x1,z1,y0,y1,t=.4)=>{const Ln=Math.hypot(x1-x0,z1-z0);if(Ln<.05)return;const ry=Math.atan2(x1-x0,z1-z0);colliders.push({x:cx+(x0+x1)/2,z:cz+(z0+z1)/2,box:1,hw:t/2,hd:Ln/2,cs:Math.cos(ry),sn:Math.sin(ry),r:Math.hypot(t,Ln)/2,y0,y1,bld:true});};
-  const objC=(x,z,w,d,y,h)=>colliders.push({x:cx+x,z:cz+z,box:1,hw:w/2,hd:d/2,cs:1,sn:0,r:Math.hypot(w,d)/2,y0:y-.4,y1:y+h,bld:true});
-  const rndC=(x,z,r,y,h)=>colliders.push({x:cx+x,z:cz+z,r,y0:y-.4,y1:y+h,bld:true});
-  const floor=(x0,x1,z0,z1,y)=>SURFACES.push({x0:cx+x0,x1:cx+x1,z0:cz+z0,z1:cz+z1,y});
-  const seat=(x,z,y,ry,o)=>seatAdd(cx+x,cz+z,y,ry,o);
+  await HCHL.y();const objC=(x,z,w,d,y,h)=>colliders.push({x:cx+x,z:cz+z,box:1,hw:w/2,hd:d/2,cs:1,sn:0,r:Math.hypot(w,d)/2,y0:y-.4,y1:y+h,bld:true});
+  await HCHL.y();const rndC=(x,z,r,y,h)=>colliders.push({x:cx+x,z:cz+z,r,y0:y-.4,y1:y+h,bld:true});
+  await HCHL.y();const floor=(x0,x1,z0,z1,y)=>SURFACES.push({x0:cx+x0,x1:cx+x1,z0:cz+z0,z1:cz+z1,y});
+  await HCHL.y();const seat=(x,z,y,ry,o)=>seatAdd(cx+x,cz+z,y,ry,o);
   await HCHL.y();
   /* 빛 (가까운 셋만 켜진다, 층마다 따로 고른다) */
   const flr=y=>y<F1-.3?[0,F1]:y<F2-.3?[F1,F2]:[F2,30];
-  const glight=(x,y,z,int,dist,col=0xffb45a,yr=flr(y))=>{const Lt=new THREE.PointLight(col,int,dist,1.7);Lt.position.set(cx+x,y,cz+z);Lt.visible=false;if(yr)Lt.userData.yr=yr;Lt.userData.i0=int;Lt.userData.ph=rnd()*9;scene.add(Lt);L.plights.push(Lt);return Lt;};
-  const halo=(x,y,z,k=0)=>L.halos.push([cx+x,y,cz+z,k]);
-  const pool=(x,y,z,r,k=.3,col=0xffb050)=>L.pools.push([x,y,z,r,k,col]);
+  await HCHL.y();const glight=(x,y,z,int,dist,col=0xffb45a,yr=flr(y))=>{const Lt=new THREE.PointLight(col,int,dist,1.7);Lt.position.set(cx+x,y,cz+z);Lt.visible=false;if(yr)Lt.userData.yr=yr;Lt.userData.i0=int;Lt.userData.ph=rnd()*9;scene.add(Lt);L.plights.push(Lt);return Lt;};
+  await HCHL.y();const halo=(x,y,z,k=0)=>L.halos.push([cx+x,y,cz+z,k]);
+  await HCHL.y();const pool=(x,y,z,r,k=.3,col=0xffb050)=>L.pools.push([x,y,z,r,k,col]);
   await HCHL.y();
   /* 그림 붙인 판 */
-  const TG=new THREE.Group();TG.position.set(cx,0,cz);TG.userData.keepMx=true;root.add(TG);
-  const texM=(t,o={})=>new THREE.MeshStandardMaterial({map:t,roughness:.9,...o});
-  const tq=(m,x,y,z,w,h,ry,rx=0)=>{const q=new THREE.Mesh(G.PL,m);q.position.set(x,y,z);q.scale.set(w,h,1);q.rotation.set(rx,ry,0,'YXZ');q.receiveShadow=true;TG.add(q);return q;};
-  const VIEWT=hlodgeViewMat(cx,cz);L.views.push(VIEWT);
-  const view=(x,y,z,w,h,ry)=>tq(VIEWT,x,y,z,w,h,ry);
-  const PAINT=[0,1,2,3].map(k=>texM(HLT.paint(k),{roughness:.6}));let pi=0;const pic=(x,y,z,w,h,ry)=>tq(PAINT[pi++%4],x,y,z,w,h,ry);
-  const BOOKS=[1,2,3,4,5,6].map(k=>texM(HLT.books(k)));let bi=0;const books=(x,y,z,w,h,ry)=>{const m=BOOKS[bi++%6];const q=tq(m,x,y,z,w,h,ry);m.map.repeat.set(Math.max(1,w/1.6),1);m.map.wrapS=THREE.RepeatWrapping;};
-  const rugM=(seed,pal)=>texM(HLT.rug(seed,pal));const rug=(m,x,y,z,w,d,ry=0)=>{tq(m,x,y+.012,z,w,d,ry,-PI/2);P(G.BOX,x,y+.005,z,ry?d:w,.01,ry?w:d,0x3a1a10);};
+  const TG=new THREE.Group();await HCHL.y();TG.position.set(cx,0,cz);await HCHL.y();TG.userData.keepMx=true;await HCHL.y();root.add(TG);
+  await HCHL.y();const texM=(t,o={})=>new THREE.MeshStandardMaterial({map:t,roughness:.9,...o});
+  await HCHL.y();const tq=(m,x,y,z,w,h,ry,rx=0)=>{const q=new THREE.Mesh(G.PL,m);q.position.set(x,y,z);q.scale.set(w,h,1);q.rotation.set(rx,ry,0,'YXZ');q.receiveShadow=true;TG.add(q);return q;};
+  await HCHL.y();const VIEWT=hlodgeViewMat(cx,cz);await HCHL.y();L.views.push(VIEWT);
+  await HCHL.y();const view=(x,y,z,w,h,ry)=>tq(VIEWT,x,y,z,w,h,ry);
+  await HCHL.y();const PAINT=[0,1,2,3].map(k=>texM(HLT.paint(k),{roughness:.6}));await HCHL.y();let pi=0;await HCHL.y();const pic=(x,y,z,w,h,ry)=>tq(PAINT[pi++%4],x,y,z,w,h,ry);
+  await HCHL.y();const BOOKS=[1,2,3,4,5,6].map(k=>texM(HLT.books(k)));await HCHL.y();let bi=0;await HCHL.y();const books=(x,y,z,w,h,ry)=>{const m=BOOKS[bi++%6];const q=tq(m,x,y,z,w,h,ry);m.map.repeat.set(Math.max(1,w/1.6),1);m.map.wrapS=THREE.RepeatWrapping;};
+  await HCHL.y();const rugM=(seed,pal)=>texM(HLT.rug(seed,pal));await HCHL.y();const rug=(m,x,y,z,w,d,ry=0)=>{tq(m,x,y+.012,z,w,d,ry,-PI/2);P(G.BOX,x,y+.005,z,ry?d:w,.01,ry?w:d,0x3a1a10);};
 
   await HCHL.y();
   /* ===== 바닥 ===== */
   await HCHL.y();
   /* 1층 로비: 짙은 점판암 판돌 (줄마다 어긋나게, 판마다 빛깔이 조금씩) */
   P(G.BOX,0,.04,(ZB+ZP)/2,LX*2,.08,ZP-ZB,0x2e3134);
-  for(let z=ZB+.05,row=0;z<ZP-.05;z+=.62,row++){let x=-LX+.05-(row%2?.45:0);while(x<LX-.05){const w=rr(.7,1.15),a=Math.max(-LX+.05,x),b=Math.min(LX-.05,x+w);if(b-a>.1)P(G.BOX,(a+b)/2,.09,z+.29,b-a-.03,.025,.56,rnd()<.5?C.SLATE:C.SLATE2);x+=w;}}
-  floor(-LX,LX,ZB,ZP,.1);
+  await HCHL.y();for(let z=ZB+.05,row=0;z<ZP-.05;z+=.62,row++){let x=-LX+.05-(row%2?.45:0);while(x<LX-.05){const w=rr(.7,1.15),a=Math.max(-LX+.05,x),b=Math.min(LX-.05,x+w);if(b-a>.1)P(G.BOX,(a+b)/2,.09,z+.29,b-a-.03,.025,.56,rnd()<.5?C.SLATE:C.SLATE2);x+=w;}}
+  await HCHL.y();floor(-LX,LX,ZB,ZP,.1);
   await HCHL.y();
   /* 날개 1층: 넓은 마루 */
   for(const sd of [-1,1]){const a=sd*(LX+.2),b=sd*IW;P(G.BOX,(a+b)/2,.05,0,Math.abs(b-a),.1,ZF-ZB,C.PINE);for(let z=ZB+.22;z<ZF;z+=.22)P(G.BOX,(a+b)/2,.101,z,Math.abs(b-a),.004,.012,0x4a3018);floor(Math.min(a,b),Math.max(a,b),ZB,ZF,.1);}
@@ -21791,91 +21829,91 @@ async function buildHechilLodge(){const I=OR.ISLES.hlodge;if(!I||HLODGE.ready)re
   /* 위층 바닥판: 윗면 마루, 아랫면 판자와 들보 */
   const deck=(x0,x1,z0,z1,y,beams)=>{floor(x0,x1,z0,z1,y);P(G.BOX,(x0+x1)/2,y-.17,(z0+z1)/2,x1-x0,.34,z1-z0,C.PINE);for(let z=z0+.22;z<z1;z+=.22)P(G.BOX,(x0+x1)/2,y+.002,z,x1-x0,.004,.012,0x4a3018);
     P(G.BOX,(x0+x1)/2,y-.345,(z0+z1)/2,x1-x0,.01,z1-z0,0x9a6a40);if(beams)for(let x=x0+1.2;x<x1-.3;x+=1.8)P(G.RB(.26,.3,z1-z0,.03),x,y-.5,(z0+z1)/2,1,1,1,C.LOG[2]);};
-  for(const sd of [-1,1]){const a=sd>0?LX+.2:-IW,b=sd>0?IW:-LX-.2;deck(a,b,ZB,ZF,F1,1);deck(a,b,ZB,ZF,F2,1);}
+  await HCHL.y();for(const sd of [-1,1]){const a=sd>0?LX+.2:-IW,b=sd>0?IW:-LX-.2;deck(a,b,ZB,ZF,F1,1);deck(a,b,ZB,ZF,F2,1);}
   await HCHL.y();
   /* 2층 회랑 (로비 북쪽) */
   deck(-LX+.2,LX-.2,ZB,GZ,F1,0);
   await HCHL.y();
   /* 3층 바닥 = 로비 천장: 계단 구멍만 비운다. 아래로 굵은 통나무 들보 */
-  deck(SB.x1,LX-.2,ZB,ZP,F2,0);deck(-LX+.2,SB.x1,ZB,SB.z0,F2,0);deck(-LX+.2,SB.x1,SB.z1,ZP,F2,0);
-  for(let z=ZB+1.2;z<ZP;z+=2.2)P(G.LOGX,0,F2-.52,z,LX*2-.4,.38,.38,C.LOG[1]);P(G.LOGZ,-3.2,F2-.86,(ZB+ZP)/2,.32,.32,ZP-ZB-.2,C.LOG[3]);P(G.LOGZ,3.2,F2-.86,(ZB+ZP)/2,.32,.32,ZP-ZB-.2,C.LOG[3]);
+  deck(SB.x1,LX-.2,ZB,ZP,F2,0);await HCHL.y();deck(-LX+.2,SB.x1,ZB,SB.z0,F2,0);await HCHL.y();deck(-LX+.2,SB.x1,SB.z1,ZP,F2,0);
+  await HCHL.y();for(let z=ZB+1.2;z<ZP;z+=2.2)P(G.LOGX,0,F2-.52,z,LX*2-.4,.38,.38,C.LOG[1]);await HCHL.y();P(G.LOGZ,-3.2,F2-.86,(ZB+ZP)/2,.32,.32,ZP-ZB-.2,C.LOG[3]);await HCHL.y();P(G.LOGZ,3.2,F2-.86,(ZB+ZP)/2,.32,.32,ZP-ZB-.2,C.LOG[3]);
   await HCHL.y();
 
   /* ===== 바깥벽 (안쪽 면은 반쯤 묻힌 통나무) ===== */
   const ext=(axis,f,sd,a0,a1,y0,y1,holes)=>{const t=T;K.slab(axis,f-sd*t/2,a0,a1,y0,y1,holes,t,C.WAL);K.logs(axis,f,a0,a1,y0,y1,holes,.3);
     /* 부딪힘 (문 구멍만 비운다) */
     const doors=holes.filter(h=>h[2]<y0+.4).sort((p,q)=>p[0]-q[0]);let cur=a0;const seg=(u,v)=>{if(v-u<.05)return;axis==='x'?wallC(u,f-sd*t/2,v,f-sd*t/2,y0-.4,y1-.3,t+.2):wallC(f-sd*t/2,u,f-sd*t/2,v,y0-.4,y1-.3,t+.2);};for(const [c,w] of doors){seg(cur,c-w/2);cur=c+w/2;}seg(cur,a1);};
-  const W1=(c,w=1.3)=>[c,w,.95,3.35],W2=(c,w=1.5)=>[c,w,F1+.75,F1+3.05],W3=(c,w=1.5)=>[c,w,F2+.7,F2+2.65];
+  await HCHL.y();const W1=(c,w=1.3)=>[c,w,.95,3.35],W2=(c,w=1.5)=>[c,w,F1+.75,F1+3.05],W3=(c,w=1.5)=>[c,w,F2+.7,F2+2.65];
   await HCHL.y();
   /* 뒤(북)벽 */
-  ext('x',ZB,1,-IW,-LX-.2,0,F1,[]);ext('x',ZB,1,LX+.2,IW,0,F1,[]);ext('x',ZB,1,-LX+.2,LX-.2,0,F1,[]);
-  ext('x',ZB,1,-IW,-LX-.2,F1,F2,[W2(-15.2,1.1),W2(-10.4,1.1)]);ext('x',ZB,1,LX+.2,IW,F1,F2,[W2(10.4,1.1),W2(15.2,1.1)]);ext('x',ZB,1,-LX+.2,LX-.2,F1,F2,[W2(-5,1.3),W2(5,1.3)]);
-  ext('x',ZB,1,-IW,-LX-.2,F2,C3,[W3(-15.2,1.1),W3(-10.4,1.1)]);ext('x',ZB,1,LX+.2,IW,F2,C3,[W3(10.4,1.1),W3(15.2,1.1)]);ext('x',ZB,1,-LX+.2,LX-.2,F2,FR,[W3(-5,1.2),W3(5,1.2)]);
+  ext('x',ZB,1,-IW,-LX-.2,0,F1,[]);await HCHL.y();ext('x',ZB,1,LX+.2,IW,0,F1,[]);await HCHL.y();ext('x',ZB,1,-LX+.2,LX-.2,0,F1,[]);
+  await HCHL.y();ext('x',ZB,1,-IW,-LX-.2,F1,F2,[W2(-15.2,1.1),W2(-10.4,1.1)]);await HCHL.y();ext('x',ZB,1,LX+.2,IW,F1,F2,[W2(10.4,1.1),W2(15.2,1.1)]);await HCHL.y();ext('x',ZB,1,-LX+.2,LX-.2,F1,F2,[W2(-5,1.3),W2(5,1.3)]);
+  await HCHL.y();ext('x',ZB,1,-IW,-LX-.2,F2,C3,[W3(-15.2,1.1),W3(-10.4,1.1)]);await HCHL.y();ext('x',ZB,1,LX+.2,IW,F2,C3,[W3(10.4,1.1),W3(15.2,1.1)]);await HCHL.y();ext('x',ZB,1,-LX+.2,LX-.2,F2,FR,[W3(-5,1.2),W3(5,1.2)]);
   await HCHL.y();
   /* 날개 앞벽 */
   for(const sd of [-1,1]){const a=sd>0?LX+.2:-IW,b=sd>0?IW:-LX-.2;
     ext('x',ZF,-1,a,b,0,F1,[W1(sd*9.9),W1(sd*12.7),W1(sd*15.5)]);ext('x',ZF,-1,a,b,F1,F2,[W2(sd*10.3,1.7),W2(sd*15.1,1.7)]);ext('x',ZF,-1,a,b,F2,C3,[W3(sd*10.3,1.7),W3(sd*15.1,1.7)]);}
   await HCHL.y();
   /* 양쪽 박공벽 */
-  ext('z',-IW,1,ZB,ZF,0,F1,[W1(-3.6),W1(3.6)]);ext('z',IW,-1,ZB,ZF,0,F1,[W1(0),W1(3.6)]);
-  for(const sd of [-1,1]){ext('z',sd*IW,-sd,ZB,ZF,F1,F2,[W2(-4.9,1.0),W2(1.8,1.5)]);ext('z',sd*IW,-sd,ZB,ZF,F2,C3,[W3(-4.9,1.0),W3(1.8,1.5)]);}
+  ext('z',-IW,1,ZB,ZF,0,F1,[W1(-3.6),W1(3.6)]);await HCHL.y();ext('z',IW,-1,ZB,ZF,0,F1,[W1(0),W1(3.6)]);
+  await HCHL.y();for(const sd of [-1,1]){ext('z',sd*IW,-sd,ZB,ZF,F1,F2,[W2(-4.9,1.0),W2(1.8,1.5)]);ext('z',sd*IW,-sd,ZB,ZF,F2,C3,[W3(-4.9,1.0),W3(1.8,1.5)]);}
   await HCHL.y();
   /* 로비 앞벽 (앞으로 나온 박공): 정문, 큰 창 둘씩 두 층, 3층 큰 창 */
   const DOOR=[0,2.4,0,3.3];
-  ext('x',ZP,-1,-LX+.2,LX-.2,0,F1,[DOOR,[0,2.4,3.5,4.4],[-4.6,1.5,.9,3.9],[4.6,1.5,.9,3.9]]);ext('x',ZP,-1,-LX+.2,LX-.2,F1,F2,[[-4.6,1.5,F1+.4,F1+3.2],[4.6,1.5,F1+.4,F1+3.2],[0,2.6,F1+.6,F1+3.2]]);
-  ext('x',ZP,-1,-LX+.2,LX-.2,F2,FR,[[0,3.4,F2+.6,FR+.5]]);
-  for(const sd of [-1,1])ext('z',sd*(LX-.2),-sd,ZF+.4,ZP,0,F1,[[7.2,.9,1.0,3.2]]);
+  await HCHL.y();ext('x',ZP,-1,-LX+.2,LX-.2,0,F1,[DOOR,[0,2.4,3.5,4.4],[-4.6,1.5,.9,3.9],[4.6,1.5,.9,3.9]]);await HCHL.y();ext('x',ZP,-1,-LX+.2,LX-.2,F1,F2,[[-4.6,1.5,F1+.4,F1+3.2],[4.6,1.5,F1+.4,F1+3.2],[0,2.6,F1+.6,F1+3.2]]);
+  await HCHL.y();ext('x',ZP,-1,-LX+.2,LX-.2,F2,FR,[[0,3.4,F2+.6,FR+.5]]);
+  await HCHL.y();for(const sd of [-1,1])ext('z',sd*(LX-.2),-sd,ZF+.4,ZP,0,F1,[[7.2,.9,1.0,3.2]]);
   /* 앞으로 나온 박공의 옆벽은 1층에만 있었다: 2·3층 앞 구석(칸막이 끝과 앞벽 사이)에 어두운 틈이 나 있어
      3층 라운지에서 그 틈으로 걸어 들어가면 1층까지 떨어졌다 (2026-11-12). 2·3층에도 같은 옆벽을 세운다 */
-  for(const sd of [-1,1]){ext('z',sd*(LX-.2),-sd,ZF+.4,ZP,F1,F2,[]);ext('z',sd*(LX-.2),-sd,ZF+.4,ZP,F2,FR,[]);}
+  await HCHL.y();for(const sd of [-1,1]){ext('z',sd*(LX-.2),-sd,ZF+.4,ZP,F1,F2,[]);ext('z',sd*(LX-.2),-sd,ZF+.4,ZP,F2,FR,[]);}
   await HCHL.y();
   /* 창: 틀·살·창밖 그림·커튼 */
-  const wins=[];const win=(axis,f,c,w,yb,yt,sd,o={})=>{K.winIn(axis,f,c,w,yb,yt,sd,{view,...o});wins.push([axis,f,c,w,yb,yt,sd]);};
-  for(const c of [-15.2,-10.4,10.4,15.2])win('x',ZB,c,1.1,F1+.75,F1+3.05,1);for(const c of [-5,5])win('x',ZB,c,1.3,F1+.75,F1+3.05,1,{cur:0x6a2a24});
-  for(const c of [-15.2,-10.4,10.4,15.2])win('x',ZB,c,1.1,F2+.7,F2+2.65,1);for(const c of [-5,5])win('x',ZB,c,1.2,F2+.7,F2+2.65,1);
-  for(const sd of [-1,1]){for(const c of [9.9,12.7,15.5])win('x',ZF,sd*c,1.3,.95,3.35,-1,{cur:sd<0?0x2e4a36:0x7a2a22});
+  const wins=[];await HCHL.y();const win=(axis,f,c,w,yb,yt,sd,o={})=>{K.winIn(axis,f,c,w,yb,yt,sd,{view,...o});wins.push([axis,f,c,w,yb,yt,sd]);};
+  await HCHL.y();for(const c of [-15.2,-10.4,10.4,15.2])win('x',ZB,c,1.1,F1+.75,F1+3.05,1);await HCHL.y();for(const c of [-5,5])win('x',ZB,c,1.3,F1+.75,F1+3.05,1,{cur:0x6a2a24});
+  await HCHL.y();for(const c of [-15.2,-10.4,10.4,15.2])win('x',ZB,c,1.1,F2+.7,F2+2.65,1);await HCHL.y();for(const c of [-5,5])win('x',ZB,c,1.2,F2+.7,F2+2.65,1);
+  await HCHL.y();for(const sd of [-1,1]){for(const c of [9.9,12.7,15.5])win('x',ZF,sd*c,1.3,.95,3.35,-1,{cur:sd<0?0x2e4a36:0x7a2a22});
     win('x',ZF,sd*15.1,1.7,F1+.75,F1+3.05,-1,{cur:0x5a3a5a});win('x',ZF,sd*15.1,1.7,F2+.7,F2+2.65,-1,{cur:0x5a3a5a});
     win('z',sd*IW,-4.9,1.0,F1+.75,F1+3.05,-sd);win('z',sd*IW,-4.9,1.0,F2+.7,F2+2.65,-sd);}
-  win('x',ZF,-10.3,1.7,F1+.75,F1+3.05,-1,{cur:0x2e4a36});win('x',ZF,10.3,1.7,F1+.75,F1+3.05,-1,{cur:0x8a6a3a});win('x',ZF,-10.3,1.7,F2+.7,F2+2.65,-1,{cur:0x7a2a34});win('x',ZF,10.3,1.7,F2+.7,F2+2.65,-1,{cur:0x2e4a6a});
-  win('z',-IW,-3.6,1.3,.95,3.35,1,{cur:0x2e4a36});win('z',-IW,3.6,1.3,.95,3.35,1,{cur:0x2e4a36});win('z',IW,0,1.3,.95,3.35,-1,{cur:0x7a2a22});win('z',IW,3.6,1.3,.95,3.35,-1,{cur:0x7a2a22});
-  for(const sd of [-1,1]){win('z',sd*IW,1.8,1.5,F1+.75,F1+3.05,-sd,{cur:0x5a3a5a});win('z',sd*IW,1.8,1.5,F2+.7,F2+2.65,-sd,{cur:0x5a3a5a});}
-  for(const sd of [-1,1]){win('x',ZP,sd*4.6,1.5,.9,3.9,-1,{nh:3,cur:0x7a2a22});win('x',ZP,sd*4.6,1.5,F1+.4,F1+3.2,-1,{nh:3});win('z',sd*(LX-.2),7.2,.9,1.0,3.2,-sd);}
-  win('x',ZP,0,2.6,F1+.6,F1+3.2,-1,{nv:3,nh:2});win('x',ZP,0,2.4,3.5,4.4,-1,{nv:3,nh:0});
+  await HCHL.y();win('x',ZF,-10.3,1.7,F1+.75,F1+3.05,-1,{cur:0x2e4a36});await HCHL.y();win('x',ZF,10.3,1.7,F1+.75,F1+3.05,-1,{cur:0x8a6a3a});await HCHL.y();win('x',ZF,-10.3,1.7,F2+.7,F2+2.65,-1,{cur:0x7a2a34});await HCHL.y();win('x',ZF,10.3,1.7,F2+.7,F2+2.65,-1,{cur:0x2e4a6a});
+  await HCHL.y();win('z',-IW,-3.6,1.3,.95,3.35,1,{cur:0x2e4a36});await HCHL.y();win('z',-IW,3.6,1.3,.95,3.35,1,{cur:0x2e4a36});await HCHL.y();win('z',IW,0,1.3,.95,3.35,-1,{cur:0x7a2a22});await HCHL.y();win('z',IW,3.6,1.3,.95,3.35,-1,{cur:0x7a2a22});
+  await HCHL.y();for(const sd of [-1,1]){win('z',sd*IW,1.8,1.5,F1+.75,F1+3.05,-sd,{cur:0x5a3a5a});win('z',sd*IW,1.8,1.5,F2+.7,F2+2.65,-sd,{cur:0x5a3a5a});}
+  await HCHL.y();for(const sd of [-1,1]){win('x',ZP,sd*4.6,1.5,.9,3.9,-1,{nh:3,cur:0x7a2a22});win('x',ZP,sd*4.6,1.5,F1+.4,F1+3.2,-1,{nh:3});win('z',sd*(LX-.2),7.2,.9,1.0,3.2,-sd);}
+  await HCHL.y();win('x',ZP,0,2.6,F1+.6,F1+3.2,-1,{nv:3,nh:2});await HCHL.y();win('x',ZP,0,2.4,3.5,4.4,-1,{nv:3,nh:0});
   await HCHL.y();
   /* 3층 큰 창 (박공 쪽, 위가 둥글다) */
   win('x',ZP,0,3.4,F2+.6,FR+.5,-1,{nv:3,nh:3,view:(x,y,z,w,h,ry)=>tq(VIEWT,x,y,z,w,h,ry)});
   await HCHL.y();
   /* 정문: 두 짝 문틀과 위 불빛 창 */
-  {const f=fr(0,ZP-T/2+.02,PI);for(const s of [-1,1]){f(G.BOX,s*1.28,1.7,0,.18,3.5,T+.06,C.OAK2);}f(G.BOX,0,3.42,0,2.74,.2,T+.06,C.OAK2);f(G.RB(2.9,.14,.36,.03),0,3.56,-.22,1,1,1,C.OAK);
-    for(const s of [-1,1]){const g=fr(s*.6,ZP-T+.12,0);g(G.BOX,0,1.65,0,1.16,3.3,.1,0x5a3a22);for(let k=0;k<3;k++)g(G.BOX,0,.5+k*1.15,.06,1.0,.07,.04,C.IRON);g(G.BOX,0,1.65,.06,.07,3.2,.04,0x3e2616);g(G.SPH,-s*.42,1.1,.1,.09,.09,.06,C.BRASS);}}
+  {const f=fr(0,ZP-T/2+.02,PI);await HCHL.y();for(const s of [-1,1]){f(G.BOX,s*1.28,1.7,0,.18,3.5,T+.06,C.OAK2);}await HCHL.y();f(G.BOX,0,3.42,0,2.74,.2,T+.06,C.OAK2);await HCHL.y();f(G.RB(2.9,.14,.36,.03),0,3.56,-.22,1,1,1,C.OAK);
+    await HCHL.y();for(const s of [-1,1]){const g=fr(s*.6,ZP-T+.12,0);g(G.BOX,0,1.65,0,1.16,3.3,.1,0x5a3a22);for(let k=0;k<3;k++)g(G.BOX,0,.5+k*1.15,.06,1.0,.07,.04,C.IRON);g(G.BOX,0,1.65,.06,.07,3.2,.04,0x3e2616);g(G.SPH,-s*.42,1.1,.1,.09,.09,.06,C.BRASS);}}
   await HCHL.y();
 
   /* ===== 칸막이벽: 로비 양쪽 (회반죽 + 기둥), 날개 위층 복도·객실 ===== */
   const part=(axis,f,a0,a1,y0,y1,holes,th=.4,col=C.PLAS,nocol)=>{K.slab(axis,f,a0,a1,y0,y1,holes,th,col);
     if(!nocol){const doors=holes.filter(h=>h[2]<y0+.4).sort((p,q)=>p[0]-q[0]);let cur=a0;const seg=(u,v)=>{if(v-u<.05)return;axis==='x'?wallC(u,f,v,f,y0-.4,y1-.3,th+.15):wallC(f,u,f,v,y0-.4,y1-.3,th+.15);};for(const [c,w] of doors){seg(cur,c-w/2);cur=c+w/2;}seg(cur,a1);}};
-  const DW=1.3;for(const sd of [-1,1]){part('z',sd*LX,ZB,ZF+.4,0,F1,[[5.0,DW,0,2.8]]);part('z',sd*LX,ZB,ZF+.4,F1,F2,[[-4.9,1.2,F1,F1+2.4]]);part('z',sd*LX,ZB,ZF+.4,F2,FR,[[-4.9,1.2,F2,F2+2.4]]);
+  await HCHL.y();const DW=1.3;await HCHL.y();for(const sd of [-1,1]){part('z',sd*LX,ZB,ZF+.4,0,F1,[[5.0,DW,0,2.8]]);part('z',sd*LX,ZB,ZF+.4,F1,F2,[[-4.9,1.2,F1,F1+2.4]]);part('z',sd*LX,ZB,ZF+.4,F2,FR,[[-4.9,1.2,F2,F2+2.4]]);
     /* 로비 쪽 꾸밈: 아래 판벽(징두리), 굵은 기둥 */
     const fx=sd*(LX-.21);for(const [z0,z1,y0] of [[ZB,4.35],[5.65,ZF+.4]]){P(G.BOX,fx,.6,(z0+z1)/2,.05,1.1,z1-z0,C.OAK);P(G.BOX,fx-sd*.02,1.17,(z0+z1)/2,.06,.06,z1-z0,C.OAK2);}
     for(const z of [ZB+.3,-1.0,2.4,ZF+.3])P(G.RB(.36,FR-.4,.36,.05),sd*(LX-.24),(FR-.4)/2,z,1,1,1,C.LOG[0]);}
   await HCHL.y();
   /* 문틀 (칸막이 문) */
   const doorCase=(axis,f,c,w,y0,h,th=.44)=>{const F=axis==='z'?(x,y,z,sx,sy,sz)=>P(G.BOX,f,y,c+x,sz,sy,sx,C.OAK2):(x,y,z,sx,sy,sz)=>P(G.BOX,c+x,y,f,sx,sy,sz,C.OAK2);F(-w/2-.06,y0+h/2,0,.14,h,th);F(w/2+.06,y0+h/2,0,.14,h,th);F(0,y0+h+.07,0,w+.26,.16,th);F(0,y0+h+.2,0,w+.4,.08,th+.08);};   /* 머리판 아랫면을 1cm 내림: 문 구멍 위 벽 아랫면과 같은 높이라 회색 얼룩이 깜빡였다 */
-  for(const sd of [-1,1]){doorCase('z',sd*LX,5.0,DW,.1,2.7);doorCase('z',sd*LX,-4.9,1.2,F1,2.4);doorCase('z',sd*LX,-4.9,1.2,F2,2.4);}
+  await HCHL.y();for(const sd of [-1,1]){doorCase('z',sd*LX,5.0,DW,.1,2.7);doorCase('z',sd*LX,-4.9,1.2,F1,2.4);doorCase('z',sd*LX,-4.9,1.2,F2,2.4);}
   /* 칸막이 문간 문턱 (2026-11-12 원호: "허칠산장 바닥이 뚫려"): 로비 쪽 바닥은 ±(LX-.2)까지, 날개 바닥은 ±(LX+.2)부터라
      칸막이 두께만큼 발 디딜 곳이 비어 있었다. 2·3층 문간에 서면 1층으로 떨어졌다. 참나무 문턱을 깔고 그 윗면을 바닥으로 넣는다.
      윗면은 마루보다 2cm 높고, 양 끝은 문틀 안쪽 면보다 1cm 들어가 있다 (겹친 면 없음) */
-  for(const sd of [-1,1])for(const [zc,w,y] of [[5.0,DW,.1],[-4.9,1.2,F1],[-4.9,1.2,F2]]){P(G.BOX,sd*LX,y-.14,zc,.48,.32,w-.04,C.OAK2);floor(sd*LX-.3,sd*LX+.3,zc-w/2,zc+w/2,y+.02);}
+  await HCHL.y();for(const sd of [-1,1])for(const [zc,w,y] of [[5.0,DW,.1],[-4.9,1.2,F1],[-4.9,1.2,F2]]){P(G.BOX,sd*LX,y-.14,zc,.48,.32,w-.04,C.OAK2);floor(sd*LX-.3,sd*LX+.3,zc-w/2,zc+w/2,y+.02);}
   await HCHL.y();
   /* 위층 날개: 복도 벽(z CZ)과 방 사이 벽(x ±12.7). 문 자리: 안쪽 방 ±9.4, 바깥 방 ±14.2 */
   const RD=[9.4,14.2],OPEN={'1,1':1,'2,-1':1};   /* 열린 방: 2층 동쪽 안쪽(203호), 3층 서쪽 안쪽(302호) */
-  for(const [fl,y0,y1] of [[1,F1,F2],[2,F2,C3]])for(const sd of [-1,1]){const a=sd>0?LX+.2:-IW,b=sd>0?IW:-LX-.2;
+  await HCHL.y();for(const [fl,y0,y1] of [[1,F1,F2],[2,F2,C3]])for(const sd of [-1,1]){const a=sd>0?LX+.2:-IW,b=sd>0?IW:-LX-.2;
     part('x',CZ,Math.min(a,b),Math.max(a,b),y0,y1,RD.map(x=>[sd*x,1.0,y0,y0+2.25]),.2,C.PLAS);part('z',sd*12.7,CZ+.1,ZF,y0,y1,[],.2,C.PLAS);
     for(const x of RD)doorCase('x',CZ,sd*x,1.0,y0,2.25,.26);
     /* 복도 쪽 징두리: 문간은 비운다 (예전엔 한 장으로 문 아래쪽 1m를 가로막았다) */
     {const cut=RD.map(x=>sd*x).sort((p,q)=>p-q);let u=Math.min(a,b);for(const e of [...cut.map(x=>[x-.56,x+.56]),[Math.max(a,b),1e9]]){const v=e[0];if(v-u>.05){P(G.BOX,(u+v)/2,y0+.55,CZ-.12,v-u,1.0,.04,C.OAK);P(G.BOX,(u+v)/2,y0+1.07,CZ-.14,v-u,.05,.06,C.OAK2);}u=e[1];}}}
   await HCHL.y();
   /* 부엌 (식당 북동쪽 구석): 배식구로만 들여다보인다 */
-  part('z',13.6,ZB,-2.6,0,F1,[[-4.2,2.0,.95,2.1]],.25,C.PLAS2);part('x',-2.6,13.6,IW,0,F1,[[15.6,1.0,0,2.2]],.25,C.PLAS2);wallC(15.1,-2.6,16.1,-2.6,-.4,3,.3);
+  part('z',13.6,ZB,-2.6,0,F1,[[-4.2,2.0,.95,2.1]],.25,C.PLAS2);await HCHL.y();part('x',-2.6,13.6,IW,0,F1,[[15.6,1.0,0,2.2]],.25,C.PLAS2);await HCHL.y();wallC(15.1,-2.6,16.1,-2.6,-.4,3,.3);
   await HCHL.y();
 
   /* ===== 계단 ===== */
@@ -21887,112 +21925,112 @@ async function buildHechilLodge(){const I=OR.ISLES.hlodge;if(!I||HLODGE.ready)re
     SURFACES.push({x0:cx+S.x0,x1:cx+S.x1,z0:cz+S.z0,z1:cz+S.z1,ramp:'z',ya:lowAtZ1?yH:yL,yb:lowAtZ1?yL:yH});
     /* 난간: 돌린 기둥살·통나무 손잡이 (열린 쪽 x = S.x0 또는 x1) */
     return {hAt,len,ang};};
-  const rail=(x0,z0,x1,z1,ya,yb)=>{const Ln=Math.hypot(x1-x0,z1-z0),n=Math.max(1,Math.round(Ln/.2)),alongX=Math.abs(x1-x0)>Math.abs(z1-z0);
+  await HCHL.y();const rail=(x0,z0,x1,z1,ya,yb)=>{const Ln=Math.hypot(x1-x0,z1-z0),n=Math.max(1,Math.round(Ln/.2)),alongX=Math.abs(x1-x0)>Math.abs(z1-z0);
     for(let i=0;i<=n;i++){const t=i/n,x=x0+(x1-x0)*t,z=z0+(z1-z0)*t,y=ya+(yb-ya)*t;P(G.LATHE('bal'),x,y,z,.11,.86,.11,C.PINE);}
     const dy=yb-ya,len=Math.hypot(Ln,dy),ang=Math.atan2(dy,Ln);
     if(alongX){P(G.RB(len+.1,.09,.13,.04),(x0+x1)/2,(ya+yb)/2+.9,(z0+z1)/2,1,1,1,C.OAK,{rz:Math.sign(x1-x0)*ang});P(G.BOX,(x0+x1)/2,(ya+yb)/2+.03,(z0+z1)/2,len,.06,.12,C.OAK,{rz:Math.sign(x1-x0)*ang});}
     else{P(G.RB(.13,.09,len+.1,.04),(x0+x1)/2,(ya+yb)/2+.9,(z0+z1)/2,1,1,1,C.OAK,{rx:-Math.sign(z1-z0)*ang});P(G.BOX,(x0+x1)/2,(ya+yb)/2+.03,(z0+z1)/2,.12,.06,len,C.OAK,{rx:-Math.sign(z1-z0)*ang});}
     for(let i=0;i<=Math.ceil(Ln/.4);i++){const t=Math.min(1,i*.4/Ln),x=x0+(x1-x0)*t,z=z0+(z1-z0)*t,y=ya+(yb-ya)*t;colliders.push({x:cx+x,z:cz+z,r:.22,y0:y-.5,y1:y+1.4,bld:true});}};
-  const newel=(x,z,y,h=1.25)=>{P(G.RB(.2,h,.2,.03),x,y+h/2,z,1,1,1,C.OAK);P(G.LATHE('finial'),x,y+h,z,.24,.3,.24,C.OAK);rndC(x,z,.18,y,1.4);};
+  await HCHL.y();const newel=(x,z,y,h=1.25)=>{P(G.RB(.2,h,.2,.03),x,y+h/2,z,1,1,1,C.OAK);P(G.LATHE('finial'),x,y+h,z,.24,.3,.24,C.OAK);rndC(x,z,.18,y,1.4);};
   await HCHL.y();
   /* 1층 → 2층 (로비 동쪽 벽을 따라, 앞에서 뒤로 오른다) */
-  {const s=stair(SA,.1,F1,true);rail(SA.x0+.06,SA.z1,SA.x0+.06,SA.z0,.1+.0,F1);newel(SA.x0+.06,SA.z1+.05,.1);
-    for(let z=SA.z0+.2;z<=SA.z1-.1;z+=.4){const h=s.hAt(z);if(h>.6&&h<2.2)colliders.push({x:cx+SA.x0+.2,z:cz+z,r:.22,y0:-.4,y1:h-.5,bld:true});}
-    for(let x=SA.x0+.2;x<SA.x1;x+=.4)colliders.push({x:cx+x,z:cz+SA.z0+.3,r:.2,y0:-.4,y1:F1-1.2,bld:true});}
+  {const s=stair(SA,.1,F1,true);await HCHL.y();rail(SA.x0+.06,SA.z1,SA.x0+.06,SA.z0,.1+.0,F1);await HCHL.y();newel(SA.x0+.06,SA.z1+.05,.1);
+    await HCHL.y();for(let z=SA.z0+.2;z<=SA.z1-.1;z+=.4){const h=s.hAt(z);if(h>.6&&h<2.2)colliders.push({x:cx+SA.x0+.2,z:cz+z,r:.22,y0:-.4,y1:h-.5,bld:true});}
+    await HCHL.y();for(let x=SA.x0+.2;x<SA.x1;x+=.4)colliders.push({x:cx+x,z:cz+SA.z0+.3,r:.2,y0:-.4,y1:F1-1.2,bld:true});}
   await HCHL.y();
   /* 2층 → 3층 (회랑 서쪽 끝에서 로비 서쪽 벽을 따라 앞으로 오른다) */
-  {stair(SB,F1,F2,false);rail(SB.x1-.06,SB.z0,SB.x1-.06,SB.z1,F1,F2);newel(SB.x1-.06,SB.z0-.05,F1);}
+  {stair(SB,F1,F2,false);await HCHL.y();rail(SB.x1-.06,SB.z0,SB.x1-.06,SB.z1,F1,F2);await HCHL.y();newel(SB.x1-.06,SB.z0-.05,F1);}
   await HCHL.y();
   /* 회랑 가장자리 난간·기둥 (기둥은 1층 바닥까지 내려가 회랑을 받친다) */
-  rail(-5.6,GZ,5.6,GZ,F1,F1);for(const x of [-5.6,-2.7,2.7,5.6]){P(G.RB(.34,F1-.1,.34,.05),x,(F1+.1)/2-.17,GZ-.05,1,1,1,C.LOG[0]);rndC(x,GZ-.05,.24,0,F1-.5);
+  rail(-5.6,GZ,5.6,GZ,F1,F1);await HCHL.y();for(const x of [-5.6,-2.7,2.7,5.6]){P(G.RB(.34,F1-.1,.34,.05),x,(F1+.1)/2-.17,GZ-.05,1,1,1,C.LOG[0]);rndC(x,GZ-.05,.24,0,F1-.5);
     for(const s of [-1,1])if(Math.abs(x+s*.9)<5.7)P(G.BOX,x+s*.45,F1-.75,GZ-.05,.14,.9,.16,C.LOG[0],{rz:s*.78});}
-  P(G.RB(LX*2-.4,.34,.36,.05),0,F1-.52,GZ-.05,1,1,1,C.LOG[1]);
+  await HCHL.y();P(G.RB(LX*2-.4,.34,.36,.05),0,F1-.52,GZ-.05,1,1,1,C.LOG[1]);
   await HCHL.y();
   /* 3층 계단 구멍 둘레 */
-  rail(SB.x1,SB.z0,SB.x1,SB.z1,F2,F2);rail(-LX+.2,SB.z0,SB.x1,SB.z0,F2,F2);newel(SB.x1,SB.z0,F2);
+  rail(SB.x1,SB.z0,SB.x1,SB.z1,F2,F2);await HCHL.y();rail(-LX+.2,SB.z0,SB.x1,SB.z0,F2,F2);await HCHL.y();newel(SB.x1,SB.z0,F2);
   await HCHL.y();
 
   /* ===== 로비 ===== */
   await HCHL.y();
   /* 큰 냇돌 벽난로: 북쪽 벽 가운데, 굴뚝 몸은 3층 지붕 밑까지 */
   const stones=(x0,x1,y0,y1,zf,sd,sz=.32)=>{for(let y=y0+sz*.4;y<y1;y+=sz*.78)for(let x=x0+rnd()*sz*.5;x<x1;x+=sz*rr(.8,1.25)){const s=sz*rr(.75,1.15);P(G.ICO,x,y+rr(-.04,.04),zf+sd*s*.12,s*rr(1,1.4),s*rr(.7,.95),s*.55,C.STN[Math.floor(rnd()*C.STN.length)],{ry:rr(-.3,.3),rz:rr(-.4,.4)});}};
-  {const X0=-2.3,X1=2.3,ZF2=-4.9,H=FR+LX;P(G.BOX,0,H/2,(ZB+ZF2)/2,X1-X0,H,ZF2-ZB,0x6e6a62);stones(X0,X1,0,H,ZF2,1);for(const s of [-1,1])for(let z=ZB+.2;z<ZF2;z+=.32)for(let y=.2;y<H;y+=.36)P(G.ICO,s*X1,y,z,.3,.26,.38,C.STN[Math.floor(rnd()*7)],{ry:rr(0,3)});
-    objC(0,(ZB+ZF2)/2,X1-X0+.3,ZF2-ZB+.2,0,H);
+  await HCHL.y();{const X0=-2.3,X1=2.3,ZF2=-4.9,H=FR+LX;await HCHL.y();P(G.BOX,0,H/2,(ZB+ZF2)/2,X1-X0,H,ZF2-ZB,0x6e6a62);await HCHL.y();stones(X0,X1,0,H,ZF2,1);await HCHL.y();for(const s of [-1,1])for(let z=ZB+.2;z<ZF2;z+=.32)for(let y=.2;y<H;y+=.36)P(G.ICO,s*X1,y,z,.3,.26,.38,C.STN[Math.floor(rnd()*7)],{ry:rr(0,3)});
+    await HCHL.y();objC(0,(ZB+ZF2)/2,X1-X0+.3,ZF2-ZB+.2,0,H);
     /* 화덕 구멍 (안은 그을린 돌), 앞 받침돌, 쇠 받침 */
-    P(G.BOX,0,1.05,ZF2+.02,2.0,1.5,.08,0x141210);P(G.BOX,0,.3,ZF2-.3,2.0,.1,.6,0x2a2624);for(const s of [-1,1])P(G.BOX,s*1.0,1.05,ZF2-.3,.1,1.5,.6,0x2a2624);P(G.BOX,0,1.8,ZF2-.3,2.1,.1,.6,0x2a2624);
-    P(G.RB(4.0,.42,1.1,.06),0,.21,ZF2+.55,1,1,1,0x7a746a);for(let x=-1.8;x<1.9;x+=.6)P(G.BOX,x,.425,ZF2+.55,.58,.012,1.08,0x6e6a62);floor(-2,2,ZF2,ZF2+1.1,.42);
-    for(const s of [-1,1]){P(G.BOX,s*.5,.48,ZF2-.25,.06,.12,.6,C.IRON);P(G.LATHE('finial'),s*.5,.42,ZF2+.05,.12,.3,.12,C.IRON);}
-    for(let k=0;k<4;k++)P(G.LOGX,rr(-.2,.2),.58+k*.06,ZF2-.32+k*.04,rr(.8,1.0),.13,.13,0x5a3a22,{ry:rr(-.3,.3)});
+    await HCHL.y();P(G.BOX,0,1.05,ZF2+.02,2.0,1.5,.08,0x141210);await HCHL.y();P(G.BOX,0,.3,ZF2-.3,2.0,.1,.6,0x2a2624);await HCHL.y();for(const s of [-1,1])P(G.BOX,s*1.0,1.05,ZF2-.3,.1,1.5,.6,0x2a2624);await HCHL.y();P(G.BOX,0,1.8,ZF2-.3,2.1,.1,.6,0x2a2624);
+    await HCHL.y();P(G.RB(4.0,.42,1.1,.06),0,.21,ZF2+.55,1,1,1,0x7a746a);await HCHL.y();for(let x=-1.8;x<1.9;x+=.6)P(G.BOX,x,.425,ZF2+.55,.58,.012,1.08,0x6e6a62);await HCHL.y();floor(-2,2,ZF2,ZF2+1.1,.42);
+    await HCHL.y();for(const s of [-1,1]){P(G.BOX,s*.5,.48,ZF2-.25,.06,.12,.6,C.IRON);P(G.LATHE('finial'),s*.5,.42,ZF2+.05,.12,.3,.12,C.IRON);}
+    await HCHL.y();for(let k=0;k<4;k++)P(G.LOGX,rr(-.2,.2),.58+k*.06,ZF2-.32+k*.04,rr(.8,1.0),.13,.13,0x5a3a22,{ry:rr(-.3,.3)});
     /* 굵은 통나무 선반 (벽난로 위) */
-    P(G.RB(4.6,.3,.44,.05),0,2.2,ZF2+.18,1,1,1,C.LOG[2]);for(const s of [-1,1])P(G.RB(.26,.5,.36,.04),s*1.9,1.92,ZF2+.16,1,1,1,C.LOG[2]);
-    K.candle(-1.9,2.35,ZF2+.2,.24);K.candle(1.9,2.35,ZF2+.2,.24);K.candle(-1.5,2.35,ZF2+.25,.16);K.candle(1.5,2.35,ZF2+.25,.16);
+    await HCHL.y();P(G.RB(4.6,.3,.44,.05),0,2.2,ZF2+.18,1,1,1,C.LOG[2]);await HCHL.y();for(const s of [-1,1])P(G.RB(.26,.5,.36,.04),s*1.9,1.92,ZF2+.16,1,1,1,C.LOG[2]);
+    await HCHL.y();K.candle(-1.9,2.35,ZF2+.2,.24);await HCHL.y();K.candle(1.9,2.35,ZF2+.2,.24);await HCHL.y();K.candle(-1.5,2.35,ZF2+.25,.16);await HCHL.y();K.candle(1.5,2.35,ZF2+.25,.16);
     /* 선반 위: 탁상시계, 질그릇 두 개, 나무로 깎은 산양 두 마리 */
-    {const f=fr(0,ZF2+.2,0,2.35);f(G.RB(.42,.5,.2,.04),0,.25,0,1,1,1,C.OAK2);f(G.CYL(20),0,.33,.11,.26,.02,.26,0xf0e8d0,{rx:PI/2});f(G.BOX,0,.36,.125,.012,.09,.005,0x1a1a1a);f(G.BOX,.03,.33,.125,.07,.01,.005,0x1a1a1a);}
-    for(const s of [-1,1]){fkL('ware:4',s*.85,2.35,ZF2+.22,s<0?-2.2:-1,1.3);const f=fr(s*1.25,ZF2+.24,s*.6,2.35);f(G.RB(.24,.12,.09,.04),0,.17,0,1,1,1,0x8a6a44);f(G.RB(.06,.14,.06,.02),.1,.27,0,1,1,1,0x8a6a44);for(const t of [-1,1])for(const u of [-1,1])f(G.CYL(6),t*.08,.06,u*.03,.025,.12,.025,0x8a6a44);f(G.TOR(.012),.13,.36,0,.08,.08,.08,0x6a4a2a,{rz:1.2});}
+    await HCHL.y();{const f=fr(0,ZF2+.2,0,2.35);await HCHL.y();f(G.RB(.42,.5,.2,.04),0,.25,0,1,1,1,C.OAK2);await HCHL.y();f(G.CYL(20),0,.33,.11,.26,.02,.26,0xf0e8d0,{rx:PI/2});await HCHL.y();f(G.BOX,0,.36,.125,.012,.09,.005,0x1a1a1a);await HCHL.y();f(G.BOX,.03,.33,.125,.07,.01,.005,0x1a1a1a);}
+    await HCHL.y();for(const s of [-1,1]){fkL('ware:4',s*.85,2.35,ZF2+.22,s<0?-2.2:-1,1.3);const f=fr(s*1.25,ZF2+.24,s*.6,2.35);f(G.RB(.24,.12,.09,.04),0,.17,0,1,1,1,0x8a6a44);f(G.RB(.06,.14,.06,.02),.1,.27,0,1,1,1,0x8a6a44);for(const t of [-1,1])for(const u of [-1,1])f(G.CYL(6),t*.08,.06,u*.03,.025,.12,.025,0x8a6a44);f(G.TOR(.012),.13,.36,0,.08,.08,.08,0x6a4a2a,{rz:1.2});}
     /* 벽난로 위 그림 */
-    K.frame(0,3.3,ZF2+.02,2.2,1.5,0,pic);
+    await HCHL.y();K.frame(0,3.3,ZF2+.02,2.2,1.5,0,pic);
     /* 장작 바구니·불쏘시개 세트 */
-    {const f=fr(-2.75,ZF2+.55,0,.1);f(G.CYL(16),0,.25,0,.62,.5,.5,0x8a6a3a);for(let k=0;k<6;k++)f(G.LOGX,0,.5+k%2*.1,-.15+k*.06,.7,.12,.12,0x6a4a2a,{ry:rr(-.2,.2)});
-      const g=fr(2.6,ZF2+.4,0,.1);g(G.CYL(10),0,.03,0,.3,.06,.3,C.IRON);g(G.CYL(6),0,.45,0,.03,.9,.03,C.IRON);for(let k=0;k<3;k++){const a=k/3*PI*2;g(G.CYL(6),Math.cos(a)*.06,.45,Math.sin(a)*.06,.02,.8,.02,C.IRON,{rz:Math.cos(a)*.08});}g(G.TOR(.01),0,.92,0,.1,.1,.1,C.BRASS);}
-    if(typeof hearthAdd==='function')hearthAdd(cx,.62,cz+ZF2-.3,1.6);HLODGE.hearth=HEARTHS[HEARTHS.length-1];if(HLODGE.hearth&&HLODGE.hearth.li){HLODGE.hearth.li.userData.yr=[0,F1];HLODGE.hearth.g.rotation.y=-PI/2;}
-    pool(0,.11,ZF2+2.2,3.2,.32,0xff8a40);halo(0,1.1,ZF2-.1,2);glight(0,1.4,ZF2+1.2,1.8,15,0xff8a40);}
+    await HCHL.y();{const f=fr(-2.75,ZF2+.55,0,.1);await HCHL.y();f(G.CYL(16),0,.25,0,.62,.5,.5,0x8a6a3a);await HCHL.y();for(let k=0;k<6;k++)f(G.LOGX,0,.5+k%2*.1,-.15+k*.06,.7,.12,.12,0x6a4a2a,{ry:rr(-.2,.2)});
+      await HCHL.y();const g=fr(2.6,ZF2+.4,0,.1);await HCHL.y();g(G.CYL(10),0,.03,0,.3,.06,.3,C.IRON);await HCHL.y();g(G.CYL(6),0,.45,0,.03,.9,.03,C.IRON);await HCHL.y();for(let k=0;k<3;k++){const a=k/3*PI*2;g(G.CYL(6),Math.cos(a)*.06,.45,Math.sin(a)*.06,.02,.8,.02,C.IRON,{rz:Math.cos(a)*.08});}await HCHL.y();g(G.TOR(.01),0,.92,0,.1,.1,.1,C.BRASS);}
+    await HCHL.y();if(typeof hearthAdd==='function')hearthAdd(cx,.62,cz+ZF2-.3,1.6);await HCHL.y();HLODGE.hearth=HEARTHS[HEARTHS.length-1];await HCHL.y();if(HLODGE.hearth&&HLODGE.hearth.li){HLODGE.hearth.li.userData.yr=[0,F1];HLODGE.hearth.g.rotation.y=-PI/2;}
+    await HCHL.y();pool(0,.11,ZF2+2.2,3.2,.32,0xff8a40);await HCHL.y();halo(0,1.1,ZF2-.1,2);await HCHL.y();glight(0,1.4,ZF2+1.2,1.8,15,0xff8a40);}
   await HCHL.y();
   /* 앉는 자리: 벽난로 앞 소파 둘과 안락의자 둘, 낮은 탁자, 큰 깔개 */
-  {const RZ=-1.3;rug(rugM(3),0,.1,RZ,5.6,4.4);
-    K.sofa(-2.65,RZ,PI/2,2.4);K.sofa(2.65,RZ,-PI/2,2.4);for(const s of [-1,1])for(const t of [-.6,.6]){seat(s*2.5,RZ+t,.6,-s*PI/2);}objC(-2.65,RZ,.95,2.45,0,.95);objC(2.65,RZ,.95,2.45,0,.95);
-    K.chairW(-1.1,RZ+2.1,PI*.92);K.chairW(1.1,RZ+2.1,-PI*.92);seat(-1.1,RZ+2.05,.58,PI*.92);seat(1.1,RZ+2.05,.58,-PI*.92);rndC(-1.1,RZ+2.15,.45,0,.95);rndC(1.1,RZ+2.15,.45,0,.95);
-    K.table(0,RZ,1.5,.8,.42);objC(0,RZ,1.5,.8,0,.45);
+  {const RZ=-1.3;await HCHL.y();rug(rugM(3),0,.1,RZ,5.6,4.4);
+    await HCHL.y();K.sofa(-2.65,RZ,PI/2,2.4);await HCHL.y();K.sofa(2.65,RZ,-PI/2,2.4);await HCHL.y();for(const s of [-1,1])for(const t of [-.6,.6]){seat(s*2.5,RZ+t,.6,-s*PI/2);}await HCHL.y();objC(-2.65,RZ,.95,2.45,0,.95);await HCHL.y();objC(2.65,RZ,.95,2.45,0,.95);
+    await HCHL.y();K.chairW(-1.1,RZ+2.1,PI*.92);await HCHL.y();K.chairW(1.1,RZ+2.1,-PI*.92);await HCHL.y();seat(-1.1,RZ+2.05,.58,PI*.92);await HCHL.y();seat(1.1,RZ+2.05,.58,-PI*.92);await HCHL.y();rndC(-1.1,RZ+2.15,.45,0,.95);await HCHL.y();rndC(1.1,RZ+2.15,.45,0,.95);
+    await HCHL.y();K.table(0,RZ,1.5,.8,.42);await HCHL.y();objC(0,RZ,1.5,.8,0,.45);
     /* 탁자 위: 나무 쟁반·김 나는 머그 둘·책·솔방울 그릇 */
-    fkL('ware:0',-.3,.44,RZ,0,1.1);fkL('ware:10',-.4,.4535,RZ+.03,.4);fkL('ware:10',-.2,.4535,RZ-.05,2.6);
-    P(G.RB(.3,.05,.22,.01),.36,.445,RZ+.1,1,1,1,0x6a1e1a,{ry:.3});P(G.RB(.28,.04,.2,.01),.36,.49,RZ+.08,1,1,1,0x2a3a5a,{ry:.1});
-    P(G.LATHE('bowl'),.4,.44,RZ-.22,.26,.1,.26,0x8a6a44);for(let k=0;k<4;k++)P(G.SPH,.4+Math.cos(k*1.7)*.06,.52,RZ-.22+Math.sin(k*1.7)*.06,.07,.09,.07,0x6a4a2a);
+    await HCHL.y();fkL('ware:0',-.3,.44,RZ,0,1.1);await HCHL.y();fkL('ware:10',-.4,.4535,RZ+.03,.4);await HCHL.y();fkL('ware:10',-.2,.4535,RZ-.05,2.6);
+    await HCHL.y();P(G.RB(.3,.05,.22,.01),.36,.445,RZ+.1,1,1,1,0x6a1e1a,{ry:.3});await HCHL.y();P(G.RB(.28,.04,.2,.01),.36,.49,RZ+.08,1,1,1,0x2a3a5a,{ry:.1});
+    await HCHL.y();P(G.LATHE('bowl'),.4,.44,RZ-.22,.26,.1,.26,0x8a6a44);await HCHL.y();for(let k=0;k<4;k++)P(G.SPH,.4+Math.cos(k*1.7)*.06,.52,RZ-.22+Math.sin(k*1.7)*.06,.07,.09,.07,0x6a4a2a);
     /* 소파 옆 작은 탁자와 등잔 */
-    for(const s of [-1,1]){K.roundTable(s*2.75,RZ-1.65,.26,.6);K.lamp(s*2.75,.6,RZ-1.65,1.1);rndC(s*2.75,RZ-1.65,.3,0,.7);glight(s*2.75,1.2,RZ-1.65,.8,7,0xffc070);halo(s*2.75,.95,RZ-1.65,0);}
+    await HCHL.y();for(const s of [-1,1]){K.roundTable(s*2.75,RZ-1.65,.26,.6);K.lamp(s*2.75,.6,RZ-1.65,1.1);rndC(s*2.75,RZ-1.65,.3,0,.7);glight(s*2.75,1.2,RZ-1.65,.8,7,0xffc070);halo(s*2.75,.95,RZ-1.65,0);}
     /* 양털 깔개 (소파 사이) */
-    {const g=new THREE.CircleGeometry(.5,20),pp=g.attributes.position;for(let i=1;i<pp.count;i++){const x=pp.getX(i),y=pp.getY(i),a=Math.atan2(y,x),k=1+.12*Math.sin(a*7)+.08*Math.sin(a*13);pp.setXY(i,x*k,y*k);}g.rotateX(-PI/2);P(g,0,.125,RZ+1.25,1.3,1,.9,0xf0e8dc,{noao:1});}}
+    await HCHL.y();{const g=new THREE.CircleGeometry(.5,20),pp=g.attributes.position;await HCHL.y();for(let i=1;i<pp.count;i++){const x=pp.getX(i),y=pp.getY(i),a=Math.atan2(y,x),k=1+.12*Math.sin(a*7)+.08*Math.sin(a*13);pp.setXY(i,x*k,y*k);}await HCHL.y();g.rotateX(-PI/2);await HCHL.y();P(g,0,.125,RZ+1.25,1.3,1,.9,0xf0e8dc,{noao:1});}}
   await HCHL.y();
   /* 접수대: 로비 서쪽 (3층 계단 아래). 앞판은 판재 틀, 위는 두꺼운 상판 */
-  {const X=-4.6,Z0=-1.4,Z1=2.4,zm=(Z0+Z1)/2,Ln=Z1-Z0;P(G.BOX,X,.55,zm,.7,1.1,Ln,C.OAK2);P(G.RB(.9,.08,Ln+.2,.03),X,1.14,zm,1,1,1,C.OAK);
-    for(let k=0;k<5;k++){const z=Z0+Ln*(k+.5)/5;P(G.BOX,X+.36,.58,z,.03,.74,Ln/5-.18,0x5a3a20);P(G.BOX,X+.37,.58,z,.02,.6,Ln/5-.32,C.OAK2);}P(G.BOX,X+.37,.12,zm,.04,.12,Ln,C.OAK);P(G.BOX,X+.37,1.02,zm,.04,.08,Ln,C.OAK);
-    P(G.BOX,X-.55,.5,Z1-.2,.4,1.0,.3,C.OAK2);objC(X,zm,.8,Ln+.1,0,1.2);objC(X-.55,Z1-.2,.5,.4,0,1.1);
+  {const X=-4.6,Z0=-1.4,Z1=2.4,zm=(Z0+Z1)/2,Ln=Z1-Z0;await HCHL.y();P(G.BOX,X,.55,zm,.7,1.1,Ln,C.OAK2);await HCHL.y();P(G.RB(.9,.08,Ln+.2,.03),X,1.14,zm,1,1,1,C.OAK);
+    await HCHL.y();for(let k=0;k<5;k++){const z=Z0+Ln*(k+.5)/5;P(G.BOX,X+.36,.58,z,.03,.74,Ln/5-.18,0x5a3a20);P(G.BOX,X+.37,.58,z,.02,.6,Ln/5-.32,C.OAK2);}await HCHL.y();P(G.BOX,X+.37,.12,zm,.04,.12,Ln,C.OAK);await HCHL.y();P(G.BOX,X+.37,1.02,zm,.04,.08,Ln,C.OAK);
+    await HCHL.y();P(G.BOX,X-.55,.5,Z1-.2,.4,1.0,.3,C.OAK2);await HCHL.y();objC(X,zm,.8,Ln+.1,0,1.2);await HCHL.y();objC(X-.55,Z1-.2,.5,.4,0,1.1);
     /* 위: 큰 장부·깃펜·잉크병·놋쇠 종·등잔·열쇠 상자 */
-    P(G.RB(.42,.05,.56,.01),X,1.2,zm-.6,1,1,1,0x5a1e16,{ry:.15});P(G.BOX,X,1.228,zm-.6,.38,.012,.52,0xf0e6cc,{ry:.15});P(G.BOX,X,1.236,zm-.6,.004,.004,.5,0x8a7a5a,{ry:.15});
-    P(G.CYL(10),X+.08,1.22,zm-.15,.07,.07,.07,0x1a1a2a);P(G.BOX,X+.06,1.32,zm-.15,.01,.22,.04,0xf4f0e8,{rz:.4});
-    P(G.LATHE('cand'),X+.1,1.18,zm+.4,.12,.03,.12,C.BRASS);P(G.HEMI,X+.1,1.2,zm+.4,.1,.08,.1,C.BRASS);P(G.SPH,X+.1,1.29,zm+.4,.025,.025,.025,C.BRASS);
-    K.lamp(X,1.18,Z1-.25,.9);glight(X+.2,1.8,zm,.9,8,0xffc070);halo(X,1.5,Z1-.25,0);
+    await HCHL.y();P(G.RB(.42,.05,.56,.01),X,1.2,zm-.6,1,1,1,0x5a1e16,{ry:.15});await HCHL.y();P(G.BOX,X,1.228,zm-.6,.38,.012,.52,0xf0e6cc,{ry:.15});await HCHL.y();P(G.BOX,X,1.236,zm-.6,.004,.004,.5,0x8a7a5a,{ry:.15});
+    await HCHL.y();P(G.CYL(10),X+.08,1.22,zm-.15,.07,.07,.07,0x1a1a2a);await HCHL.y();P(G.BOX,X+.06,1.32,zm-.15,.01,.22,.04,0xf4f0e8,{rz:.4});
+    await HCHL.y();P(G.LATHE('cand'),X+.1,1.18,zm+.4,.12,.03,.12,C.BRASS);await HCHL.y();P(G.HEMI,X+.1,1.2,zm+.4,.1,.08,.1,C.BRASS);await HCHL.y();P(G.SPH,X+.1,1.29,zm+.4,.025,.025,.025,C.BRASS);
+    await HCHL.y();K.lamp(X,1.18,Z1-.25,.9);await HCHL.y();glight(X+.2,1.8,zm,.9,8,0xffc070);await HCHL.y();halo(X,1.5,Z1-.25,0);
     /* 열쇠 판: 칸막이벽에 칸칸이 열쇠 */
-    {const f=fr(-LX+.24,zm,PI/2,1.4);f(G.BOX,0,.55,0,1.8,1.1,.06,C.OAK2);f(G.RB(1.9,.08,.14,.02),0,1.12,.04,1,1,1,C.OAK);
-      for(let i=0;i<6;i++)for(let j=0;j<2;j++){const x=-.75+i*.3,y=.82-j*.5;f(G.BOX,x,y,.04,.26,.4,.02,0x5a3a20);f(G.CYL(6),x,y+.12,.07,.012,.04,.012,C.BRASS,{rx:PI/2});if((i+j*3)%5!==2){f(G.TOR(.03),x,y+.06,.08,.05,.05,.05,C.BRASS,{rx:PI/2});f(G.BOX,x,y-.04,.08,.014,.12,.01,C.BRASS);f(G.RB(.07,.1,.015,.005),x,y-.15,.08,1,1,1,0xc8b890);}}}
+    await HCHL.y();{const f=fr(-LX+.24,zm,PI/2,1.4);await HCHL.y();f(G.BOX,0,.55,0,1.8,1.1,.06,C.OAK2);await HCHL.y();f(G.RB(1.9,.08,.14,.02),0,1.12,.04,1,1,1,C.OAK);
+      await HCHL.y();for(let i=0;i<6;i++)for(let j=0;j<2;j++){const x=-.75+i*.3,y=.82-j*.5;f(G.BOX,x,y,.04,.26,.4,.02,0x5a3a20);f(G.CYL(6),x,y+.12,.07,.012,.04,.012,C.BRASS,{rx:PI/2});if((i+j*3)%5!==2){f(G.TOR(.03),x,y+.06,.08,.05,.05,.05,C.BRASS,{rx:PI/2});f(G.BOX,x,y-.04,.08,.014,.12,.01,C.BRASS);f(G.RB(.07,.1,.015,.005),x,y-.15,.08,1,1,1,0xc8b890);}}}
     /* 간판 (계단 밑에 걸린) */
-    {const m=texM(HLT.sign('허칠 산장'),{roughness:.7});const f=fr(-6.6,zm,PI/2,2.9);f(G.BOX,0,0,0,1.9,.55,.06,0x3e2614);tq(m,cx*0+f.W(0,.035).x,2.9,f.W(0,.035).z,1.8,.48,PI/2);for(const s of [-1,1])f(G.CYL(6),s*.7,.6,0,.02,.7,.02,C.IRON);}
+    await HCHL.y();{const m=texM(HLT.sign('허칠 산장'),{roughness:.7});await HCHL.y();const f=fr(-6.6,zm,PI/2,2.9);await HCHL.y();f(G.BOX,0,0,0,1.9,.55,.06,0x3e2614);await HCHL.y();tq(m,cx*0+f.W(0,.035).x,2.9,f.W(0,.035).z,1.8,.48,PI/2);await HCHL.y();for(const s of [-1,1])f(G.CYL(6),s*.7,.6,0,.02,.7,.02,C.IRON);}
     /* 안주인이 앉는 높은 걸상 */
-    K.stool(-6.1,zm+.6,0,.75);}
+    await HCHL.y();K.stool(-6.1,zm+.6,0,.75);}
   await HCHL.y();
   /* 들어오는 곳: 깔개·외투 걸이·장화 벤치·스키·눈신·화분 전나무 */
   {rug(rugM(7,['#3a2a1e','#8a6a3a','#d8c8a0','#5a3a22','#241810']),0,.1,ZP-1.5,2.6,1.8);
-    for(const s of [-1,1]){const f=fr(s*6.6,ZP-.7,0,.1);f(G.LATHE('post'),0,0,0,.36,1.9,.36,C.OAK);for(let k=0;k<4;k++){const a=k/4*PI*2+.4;f(G.BOX,Math.cos(a)*.14,1.76,Math.sin(a)*.14,.03,.03,.24,C.OAK2,{ry:-a,rx:-.6});}
+    await HCHL.y();for(const s of [-1,1]){const f=fr(s*6.6,ZP-.7,0,.1);f(G.LATHE('post'),0,0,0,.36,1.9,.36,C.OAK);for(let k=0;k<4;k++){const a=k/4*PI*2+.4;f(G.BOX,Math.cos(a)*.14,1.76,Math.sin(a)*.14,.03,.03,.24,C.OAK2,{ry:-a,rx:-.6});}
       f(G.RB(.42,.86,.26,.1),.12,1.25,.06,1,1,1,s<0?0x5a2a24:0x2e4a36,{rz:.08});rndC(s*6.6,ZP-.7,.35,0,1.9);}
-    K.bench(-5.2,ZP-.45,1.5,PI,.1);seat(-5.5,ZP-.45,.62,PI);seat(-4.9,ZP-.45,.62,PI);objC(-5.2,ZP-.45,1.5,.4,0,.5);
-    for(const x of [-5.5,-5.0])for(const s of [-1,1]){const f=fr(x+s*.07,ZP-.55,0,.1);f(G.RB(.12,.4,.28,.04),0,.2,0,1,1,1,0x3a2a1e);f(G.RB(.12,.1,.36,.04),0,.05,.05,1,1,1,0x2a1e14);}
+    await HCHL.y();K.bench(-5.2,ZP-.45,1.5,PI,.1);await HCHL.y();seat(-5.5,ZP-.45,.62,PI);await HCHL.y();seat(-4.9,ZP-.45,.62,PI);await HCHL.y();objC(-5.2,ZP-.45,1.5,.4,0,.5);
+    await HCHL.y();for(const x of [-5.5,-5.0])for(const s of [-1,1]){const f=fr(x+s*.07,ZP-.55,0,.1);f(G.RB(.12,.4,.28,.04),0,.2,0,1,1,1,0x3a2a1e);f(G.RB(.12,.1,.36,.04),0,.05,.05,1,1,1,0x2a1e14);}
     /* 스키 두 벌과 지팡이 (오른쪽 벽에 기대 둔) */
-    for(let k=0;k<4;k++){const f=fr(4.8+k*.16,ZP-.38,0,.1);f(G.RB(.09,2.0,.03,.012),0,1.0,0,1,1,1,k%2?0x8a4a2a:0x6a3a20,{rx:-.12});f(G.RB(.09,.2,.03,.012),0,2.02,.12,1,1,1,k%2?0x8a4a2a:0x6a3a20,{rx:-.9});}
-    for(const s of [-1,1]){const f=fr(5.6+s*.08,ZP-.36,0,.1);f(G.CYL(6),0,.75,0,.025,1.5,.025,0x3a3a3a,{rx:-.1});f(G.TOR(.04),0,.12,.02,.14,.14,.14,0x6a4a2a);}
+    await HCHL.y();for(let k=0;k<4;k++){const f=fr(4.8+k*.16,ZP-.38,0,.1);f(G.RB(.09,2.0,.03,.012),0,1.0,0,1,1,1,k%2?0x8a4a2a:0x6a3a20,{rx:-.12});f(G.RB(.09,.2,.03,.012),0,2.02,.12,1,1,1,k%2?0x8a4a2a:0x6a3a20,{rx:-.9});}
+    await HCHL.y();for(const s of [-1,1]){const f=fr(5.6+s*.08,ZP-.36,0,.1);f(G.CYL(6),0,.75,0,.025,1.5,.025,0x3a3a3a,{rx:-.1});f(G.TOR(.04),0,.12,.02,.14,.14,.14,0x6a4a2a);}
     /* 눈신 한 짝씩 벽에 */
-    for(const s of [-1,1]){const f=fr(LX-.24,ZP-2.0+s*.38,-PI/2,1.9);f(G.TOR(.05),0,0,0,.34,.34,.62,0x6a4a2a,{rx:PI/2});for(let k=-2;k<=2;k++)f(G.BOX,0,k*.06,.02,.3,.01,.01,0xc8b890);}
-    for(const s of [-1,1]){const f=fr(s*2.6,ZP-.75,0,.1);f(G.LATHE('pot'),0,0,0,.7,.7,.7,0x7a4a2e);f(G.CYL(18),0,.66,0,.6,.04,.6,0x3a2a1a);f(G.CYL(6),0,.95,0,.06,.6,.06,0x4a3020);
+    await HCHL.y();for(const s of [-1,1]){const f=fr(LX-.24,ZP-2.0+s*.38,-PI/2,1.9);f(G.TOR(.05),0,0,0,.34,.34,.62,0x6a4a2a,{rx:PI/2});for(let k=-2;k<=2;k++)f(G.BOX,0,k*.06,.02,.3,.01,.01,0xc8b890);}
+    await HCHL.y();for(const s of [-1,1]){const f=fr(s*2.6,ZP-.75,0,.1);f(G.LATHE('pot'),0,0,0,.7,.7,.7,0x7a4a2e);f(G.CYL(18),0,.66,0,.6,.04,.6,0x3a2a1a);f(G.CYL(6),0,.95,0,.06,.6,.06,0x4a3020);
       for(let k=0;k<5;k++){const h=.55-k*.09;f(G.CONE(9),0,1.05+k*.32,0,h*2,.6,h*2,C.FIR,{ry:k*.6});f(G.CONE(9),0,1.06+k*.32+.18,0,h*1.2,.18,h*1.2,0xe8eef2,{ry:k*.6});}rndC(s*2.6,ZP-.75,.42,0,2.5);}}
   await HCHL.y();
   /* 샹들리에 둘 (로비 천장에서 사슬로) */
   for(const z of [1.4,5.4]){K.chand(0,5.2,z,1.3,10,F2-.35);glight(0,5.0,z,1.5,18,0xffc070,[0,F2]);halo(0,5.4,z,2);for(let k=0;k<10;k++){const a=k/10*PI*2;halo(Math.cos(a)*1.3,5.5,z+Math.sin(a)*1.3,0);}}
   await HCHL.y();
   /* 로비 벽 그림·벽등 */
-  K.frame(-LX+.23,2.6,-2.6,1.3,.9,PI/2,pic);K.frame(LX-.23,2.4,6.4,1.1,.8,-PI/2,pic);
-  for(const [x,z,ry] of [[-LX+.22,6.4,PI/2],[LX-.22,-4.2,-PI/2],[-LX+.22,-4.2,PI/2]]){K.sconce(x,2.2,z,ry);glight(x+Math.sin(ry)*.4,2.2,z,.7,7);halo(x+Math.sin(ry)*.2,2.35,z,0);}
+  K.frame(-LX+.23,2.6,-2.6,1.3,.9,PI/2,pic);await HCHL.y();K.frame(LX-.23,2.4,6.4,1.1,.8,-PI/2,pic);
+  await HCHL.y();for(const [x,z,ry] of [[-LX+.22,6.4,PI/2],[LX-.22,-4.2,-PI/2],[-LX+.22,-4.2,PI/2]]){K.sconce(x,2.2,z,ry);glight(x+Math.sin(ry)*.4,2.2,z,.7,7);halo(x+Math.sin(ry)*.2,2.35,z,0);}
   await HCHL.y();
   /* 2층 회랑: 긴 의자·창 앞 작은 탁자 */
-  {K.bench(0,ZB+.55,2.4,0,F1);seat(-.6,ZB+.55,F1+.52,0);seat(.6,ZB+.55,F1+.52,0);objC(0,ZB+.55,2.4,.4,F1,.5);
-    for(const s of [-1,1]){K.roundTable(s*4.3,ZB+.6,.3,.7,F1);K.lamp(s*4.3,F1+.7,ZB+.6,.9);rndC(s*4.3,ZB+.6,.34,F1,.8);glight(s*4.3,F1+1.3,ZB+.8,.7,7);halo(s*4.3,F1+1.05,ZB+.6,0);K.chairW(s*3.2,ZB+.9,s*PI*.1,0x5a3a5a,F1);seat(s*3.2,ZB+.95,F1+.58,s*PI*.1);rndC(s*3.2,ZB+.9,.42,F1,.9);}
-    rug(rugM(11),0,F1,ZB+1.2,7.5,1.6);}
+  {K.bench(0,ZB+.55,2.4,0,F1);await HCHL.y();seat(-.6,ZB+.55,F1+.52,0);await HCHL.y();seat(.6,ZB+.55,F1+.52,0);await HCHL.y();objC(0,ZB+.55,2.4,.4,F1,.5);
+    await HCHL.y();for(const s of [-1,1]){K.roundTable(s*4.3,ZB+.6,.3,.7,F1);K.lamp(s*4.3,F1+.7,ZB+.6,.9);rndC(s*4.3,ZB+.6,.34,F1,.8);glight(s*4.3,F1+1.3,ZB+.8,.7,7);halo(s*4.3,F1+1.05,ZB+.6,0);K.chairW(s*3.2,ZB+.9,s*PI*.1,0x5a3a5a,F1);seat(s*3.2,ZB+.95,F1+.58,s*PI*.1);rndC(s*3.2,ZB+.9,.42,F1,.9);}
+    await HCHL.y();rug(rugM(11),0,F1,ZB+1.2,7.5,1.6);}
   await HCHL.y();
 
   /* ===== 식당 (동쪽 날개 1층) ===== */
@@ -22003,63 +22041,63 @@ async function buildHechilLodge(){const I=OR.ISLES.hlodge;if(!I||HLODGE.ready)re
           if(s<0)K.chair(x,z-.85,0);else K.chair(x,z+.85,PI);seat(x,z+s*.85,.5,s<0?0:PI);rndC(x,z+s*.85,.24,0,.5);}}
       for(let x=X0+1.1;x<X1-.5;x+=2.0){K.candle(x,.8,z,.22);halo(x,1.15,z,0);fkL('bread:1',x+.5,.797,z,.5);}
       fkL('ware:6',xm,.797,z,z,1.5);}
-    for(const z of [-1.0,2.9]){K.chand(13,2.7,z,.9,8,F1-.4);glight(13,2.6,z,1.2,12,0xffc070,[0,F1]);halo(13,2.95,z,1);}
+    await HCHL.y();for(const z of [-1.0,2.9]){K.chand(13,2.7,z,.9,8,F1-.4);glight(13,2.6,z,1.2,12,0xffc070,[0,F1]);halo(13,2.95,z,1);}
     /* 술 선반·바: 북쪽 벽 (부엌 서쪽) */
-    {const X0=8.5,X1=13.2,xm=(X0+X1)/2;P(G.BOX,xm,.55,ZB+1.25,X1-X0,1.1,.6,C.OAK2);P(G.RB(X1-X0+.2,.08,.8,.03),xm,1.14,ZB+1.25,1,1,1,C.OAK);for(let k=0;k<6;k++)P(G.BOX,X0+.4+k*.78,.56,ZB+1.56,.6,.8,.03,0x5a3a20);
-      objC(xm,ZB+1.25,X1-X0,.7,0,1.2);for(let x=X0+.5;x<X1;x+=.9){K.stool(x,ZB+2.1,0,.72);seat(x,ZB+2.1,.78,PI);rndC(x,ZB+2.1,.24,0,.75);}
-      K.shelf(xm,ZB+.2,X1-X0-.2,2.6,.34,0,.1);const BC=[0x2a4a2a,0x6a2a1a,0x3a2a1a,0x8a6a2a,0x2a3a4a,0xc8b070];for(let i=1;i<6;i++){const y=.1+.06+i*(2.6-.12)/6;for(let x=X0+.3;x<X1-.3;x+=rr(.12,.2))if(rnd()<.8)P(G.LATHE(rnd()<.7?'bottle':'jug'),x,y+.02,ZB+.3,.1,rr(.22,.32),.1,BC[Math.floor(rnd()*6)]);}
+    await HCHL.y();{const X0=8.5,X1=13.2,xm=(X0+X1)/2;await HCHL.y();P(G.BOX,xm,.55,ZB+1.25,X1-X0,1.1,.6,C.OAK2);await HCHL.y();P(G.RB(X1-X0+.2,.08,.8,.03),xm,1.14,ZB+1.25,1,1,1,C.OAK);await HCHL.y();for(let k=0;k<6;k++)P(G.BOX,X0+.4+k*.78,.56,ZB+1.56,.6,.8,.03,0x5a3a20);
+      await HCHL.y();objC(xm,ZB+1.25,X1-X0,.7,0,1.2);await HCHL.y();for(let x=X0+.5;x<X1;x+=.9){K.stool(x,ZB+2.1,0,.72);seat(x,ZB+2.1,.78,PI);rndC(x,ZB+2.1,.24,0,.75);}
+      await HCHL.y();K.shelf(xm,ZB+.2,X1-X0-.2,2.6,.34,0,.1);await HCHL.y();const BC=[0x2a4a2a,0x6a2a1a,0x3a2a1a,0x8a6a2a,0x2a3a4a,0xc8b070];await HCHL.y();for(let i=1;i<6;i++){const y=.1+.06+i*(2.6-.12)/6;for(let x=X0+.3;x<X1-.3;x+=rr(.12,.2))if(rnd()<.8)P(G.LATHE(rnd()<.7?'bottle':'jug'),x,y+.02,ZB+.3,.1,rr(.22,.32),.1,BC[Math.floor(rnd()*6)]);}
       /* 통 셋 (꼭지 달린) */
-      for(let k=0;k<3;k++){const x=X0+.8+k*1.2,f=fr(x,ZB+.95,0,1.18);f(G.LOGX,0,.24,0,.6,.48,.48,0x7a5232);for(const s of [-1,1])f(G.LOGX,s*.22,.24,0,.04,.5,.5,C.IRON);f(G.CYL(8),0,.15,.26,.04,.12,.04,C.BRASS,{rx:PI/2});}
-      K.frame(16.0,2.2,ZF-.06,.9,1.1,PI,(x,y,z,w,h,ry)=>tq(texM(HLT.board(['오늘의 차림','사슴고기 스튜','눈꽃 호밀빵','버섯 구이','따뜻한 사과주'])),x,y,z,w,h,ry));}
+      await HCHL.y();for(let k=0;k<3;k++){const x=X0+.8+k*1.2,f=fr(x,ZB+.95,0,1.18);f(G.LOGX,0,.24,0,.6,.48,.48,0x7a5232);for(const s of [-1,1])f(G.LOGX,s*.22,.24,0,.04,.5,.5,C.IRON);f(G.CYL(8),0,.15,.26,.04,.12,.04,C.BRASS,{rx:PI/2});}
+      await HCHL.y();K.frame(16.0,2.2,ZF-.06,.9,1.1,PI,(x,y,z,w,h,ry)=>tq(texM(HLT.board(['오늘의 차림','사슴고기 스튜','눈꽃 호밀빵','버섯 구이','따뜻한 사과주'])),x,y,z,w,h,ry));}
     /* 부엌: 배식구 너머 화덕·솥·걸어 둔 냄비와 마늘 */
-    {const f=fr(15.6,ZB+.4,0,.1);f(G.BOX,0,.6,0,2.4,1.2,.8,0x6e6a62);f(G.BOX,0,1.21,0,2.4,.04,.8,0x2a2624);f(G.BOX,0,1.9,-.15,2.6,1.4,.5,0x5a5650);
-      fkL('ware:8',15.1,1.32,ZB+.45,.3,1.25);fkL('ware:7',16.1,1.32,ZB+.45,-PI/2,1.8);
-      for(let k=0;k<5;k++){const ps=k%2?1.05:1.35;fkL(k===2?'ware:9':'ware:7',15.6-1.0+k*.5,k===2?2.18:2.5-.302*ps,ZB+.75-(k===2?.01:.0812*ps),PI/2,k===2?1:ps,k===2?0:PI/2);f(G.CYL(6),-1.0+k*.5,2.5,.35,.01,.2,.01,C.IRON);}
-      f(G.BOX,0,2.62,.35,2.4,.03,.03,C.IRON);for(let k=0;k<6;k++)f(G.SPH,-1.1+k*.42,2.15,.6,.08,.1,.08,0xe8e0c8);
-      P(G.BOX,13.85,.55,-4.2,.3,1.1,2.0,C.OAK2);P(G.RB(.5,.06,2.2,.02),13.8,.98,-4.2,1,1,1,C.OAK);for(let k=0;k<3;k++)fkL(k===1?'stew:0':'plate:1',13.8,1.01,-4.8+k*.6,k*1.3);
-      glight(15.4,1.8,-4.4,1.2,7,0xff9a50,[0,F1]);halo(15.1,1.5,-5.3,1);for(let k=0;k<5;k++)P(G.SPH,15.1+rr(-.6,.6),1.24,-5.3,.06,.06,.06,0xff7a20,{glow:1});
-      P(G.BOX,15.6,1.1,-2.68,.95,2.1,.06,0x5a3a22);P(G.SPH,15.25,1.05,-2.62,.05,.05,.05,C.BRASS);}
+    await HCHL.y();{const f=fr(15.6,ZB+.4,0,.1);await HCHL.y();f(G.BOX,0,.6,0,2.4,1.2,.8,0x6e6a62);await HCHL.y();f(G.BOX,0,1.21,0,2.4,.04,.8,0x2a2624);await HCHL.y();f(G.BOX,0,1.9,-.15,2.6,1.4,.5,0x5a5650);
+      await HCHL.y();fkL('ware:8',15.1,1.32,ZB+.45,.3,1.25);await HCHL.y();fkL('ware:7',16.1,1.32,ZB+.45,-PI/2,1.8);
+      await HCHL.y();for(let k=0;k<5;k++){const ps=k%2?1.05:1.35;fkL(k===2?'ware:9':'ware:7',15.6-1.0+k*.5,k===2?2.18:2.5-.302*ps,ZB+.75-(k===2?.01:.0812*ps),PI/2,k===2?1:ps,k===2?0:PI/2);f(G.CYL(6),-1.0+k*.5,2.5,.35,.01,.2,.01,C.IRON);}
+      await HCHL.y();f(G.BOX,0,2.62,.35,2.4,.03,.03,C.IRON);await HCHL.y();for(let k=0;k<6;k++)f(G.SPH,-1.1+k*.42,2.15,.6,.08,.1,.08,0xe8e0c8);
+      await HCHL.y();P(G.BOX,13.85,.55,-4.2,.3,1.1,2.0,C.OAK2);await HCHL.y();P(G.RB(.5,.06,2.2,.02),13.8,.98,-4.2,1,1,1,C.OAK);await HCHL.y();for(let k=0;k<3;k++)fkL(k===1?'stew:0':'plate:1',13.8,1.01,-4.8+k*.6,k*1.3);
+      await HCHL.y();glight(15.4,1.8,-4.4,1.2,7,0xff9a50,[0,F1]);await HCHL.y();halo(15.1,1.5,-5.3,1);await HCHL.y();for(let k=0;k<5;k++)P(G.SPH,15.1+rr(-.6,.6),1.24,-5.3,.06,.06,.06,0xff7a20,{glow:1});
+      await HCHL.y();P(G.BOX,15.6,1.1,-2.68,.95,2.1,.06,0x5a3a22);await HCHL.y();P(G.SPH,15.25,1.05,-2.62,.05,.05,.05,C.BRASS);}
     /* 식당 벽: 그림·벽등·사슴뿔 대신 겨울 화환 */
-    for(const x of [10.4,14.6]){K.sconce(x,2.4,ZF-.2,PI);glight(x,2.4,ZF-.6,.6,6,0xffb45a,[0,F1]);halo(x,2.55,ZF-.35,0);}
-    K.frame(IW-.2,2.3,-1.0,1.4,1.0,-PI/2,pic);
-    {const f=fr(LX+.25,2.6,PI/2,0);for(let k=0;k<26;k++){const a=k/26*PI*2;f(G.SPH,Math.cos(a)*.4,Math.sin(a)*.4,0,.16,.14,.12,k%3?C.FIR:0x3e5a40);}for(let k=0;k<6;k++){const a=k/6*PI*2+.3;f(G.SPH,Math.cos(a)*.42,Math.sin(a)*.42,.06,.06,.06,.06,0xb82a20);}f(G.RB(.18,.22,.04,.02),0,-.42,.08,1,1,1,0x8a1a18);}
-    rug(rugM(5,['#2e3a2a','#7a2a1e','#d8c8a0','#a8862e','#1e2418']),13,.1,.95,6.6,2.4);}
+    await HCHL.y();for(const x of [10.4,14.6]){K.sconce(x,2.4,ZF-.2,PI);glight(x,2.4,ZF-.6,.6,6,0xffb45a,[0,F1]);halo(x,2.55,ZF-.35,0);}
+    await HCHL.y();K.frame(IW-.2,2.3,-1.0,1.4,1.0,-PI/2,pic);
+    await HCHL.y();{const f=fr(LX+.25,2.6,PI/2,0);await HCHL.y();for(let k=0;k<26;k++){const a=k/26*PI*2;f(G.SPH,Math.cos(a)*.4,Math.sin(a)*.4,0,.16,.14,.12,k%3?C.FIR:0x3e5a40);}await HCHL.y();for(let k=0;k<6;k++){const a=k/6*PI*2+.3;f(G.SPH,Math.cos(a)*.42,Math.sin(a)*.42,.06,.06,.06,.06,0xb82a20);}await HCHL.y();f(G.RB(.18,.22,.04,.02),0,-.42,.08,1,1,1,0x8a1a18);}
+    await HCHL.y();rug(rugM(5,['#2e3a2a','#7a2a1e','#d8c8a0','#a8862e','#1e2418']),13,.1,.95,6.6,2.4);}
   await HCHL.y();
 
   /* ===== 서재 (서쪽 날개 1층): 책장·작은 벽난로·체스 탁자·벽시계 ===== */
   {/* 돌 벽난로 몸 (서쪽 벽) */
-    const FX=-IW+.45;P(G.BOX,FX-.2,FR/2,0,.9,FR-.2,2.8,0x6e6a62);for(let y=.15;y<FR-.2;y+=.26)for(let z=-1.35+rnd()*.12;z<1.4;z+=rr(.24,.34))P(G.ICO,FX+.25,y,z,rr(.24,.34),rr(.18,.24),rr(.3,.4),C.STN[Math.floor(rnd()*7)],{ry:PI/2+rr(-.3,.3),rx:rr(-.3,.3)});
-    objC(FX-.2,0,1.1,2.9,0,FR);P(G.BOX,FX+.32,.85,0,.06,1.1,1.3,0x141210);P(G.RB(.9,.32,1.9,.05),FX+.6,.16,0,1,1,1,0x7a746a);floor(FX+.15,FX+1.05,-.95,.95,.32);
-    P(G.RB(.36,.22,3.2,.04),FX+.45,1.72,0,1,1,1,C.LOG[2]);K.candle(FX+.45,1.83,-1.2,.2);K.candle(FX+.45,1.83,1.2,.2);P(G.LATHE('vase'),FX+.45,1.83,.5,.18,.34,.18,0x3a4a5a);
-    K.frame(FX+.33,2.8,0,1.3,.9,PI/2,pic);for(let k=0;k<3;k++)P(G.LOGZ,FX+.15,.4+k*.05,rr(-.15,.15),.11,.11,.7,0x5a3a22,{ry:rr(-.3,.3)});
-    if(typeof hearthAdd==='function'){hearthAdd(cx+FX+.18,.42,cz,1.0);const Hh=HEARTHS[HEARTHS.length-1];if(Hh&&Hh.li)Hh.li.userData.yr=[0,F1];}
-    pool(FX+2.2,.11,0,2.4,.28,0xff8a40);halo(FX+.2,.9,0,1);glight(FX+1.2,1.2,0,1.3,11,0xff8a40,[0,F1]);
+    const FX=-IW+.45;await HCHL.y();P(G.BOX,FX-.2,FR/2,0,.9,FR-.2,2.8,0x6e6a62);await HCHL.y();for(let y=.15;y<FR-.2;y+=.26)for(let z=-1.35+rnd()*.12;z<1.4;z+=rr(.24,.34))P(G.ICO,FX+.25,y,z,rr(.24,.34),rr(.18,.24),rr(.3,.4),C.STN[Math.floor(rnd()*7)],{ry:PI/2+rr(-.3,.3),rx:rr(-.3,.3)});
+    await HCHL.y();objC(FX-.2,0,1.1,2.9,0,FR);await HCHL.y();P(G.BOX,FX+.32,.85,0,.06,1.1,1.3,0x141210);await HCHL.y();P(G.RB(.9,.32,1.9,.05),FX+.6,.16,0,1,1,1,0x7a746a);await HCHL.y();floor(FX+.15,FX+1.05,-.95,.95,.32);
+    await HCHL.y();P(G.RB(.36,.22,3.2,.04),FX+.45,1.72,0,1,1,1,C.LOG[2]);await HCHL.y();K.candle(FX+.45,1.83,-1.2,.2);await HCHL.y();K.candle(FX+.45,1.83,1.2,.2);await HCHL.y();P(G.LATHE('vase'),FX+.45,1.83,.5,.18,.34,.18,0x3a4a5a);
+    await HCHL.y();K.frame(FX+.33,2.8,0,1.3,.9,PI/2,pic);await HCHL.y();for(let k=0;k<3;k++)P(G.LOGZ,FX+.15,.4+k*.05,rr(-.15,.15),.11,.11,.7,0x5a3a22,{ry:rr(-.3,.3)});
+    await HCHL.y();if(typeof hearthAdd==='function'){hearthAdd(cx+FX+.18,.42,cz,1.0);const Hh=HEARTHS[HEARTHS.length-1];if(Hh&&Hh.li)Hh.li.userData.yr=[0,F1];}
+    await HCHL.y();pool(FX+2.2,.11,0,2.4,.28,0xff8a40);await HCHL.y();halo(FX+.2,.9,0,1);await HCHL.y();glight(FX+1.2,1.2,0,1.3,11,0xff8a40,[0,F1]);
     /* 벽난로 앞 안락의자 넷·작은 둥근 탁자 */
-    rug(rugM(17,['#1e2c4a','#7a1e1c','#e6d6b4','#b8862e','#141a2e']),FX+2.6,.1,0,3.0,3.6);
-    for(const [x,z,ry] of [[FX+2.0,-1.35,PI*.15],[FX+2.0,1.35,PI*.85],[FX+3.4,-1.0,-PI*.3],[FX+3.4,1.0,-PI*.7]]){K.chairW(x,z,ry,[0x5a3a20,0x2e4a36][Math.floor(rnd()*2)]);seat(x+Math.sin(ry)*.05,z+Math.cos(ry)*.05,.58,ry);rndC(x,z,.42,0,.95);}
-    K.roundTable(FX+2.7,0,.36,.56);rndC(FX+2.7,0,.4,0,.6);P(G.RB(.3,.05,.22,.01),FX+2.7,.585,.05,1,1,1,0x5a1a1a,{ry:.7});P(G.LATHE('mug'),FX+2.55,.56,-.15,.08,.1,.08,0xd8cbb0);
+    await HCHL.y();rug(rugM(17,['#1e2c4a','#7a1e1c','#e6d6b4','#b8862e','#141a2e']),FX+2.6,.1,0,3.0,3.6);
+    await HCHL.y();for(const [x,z,ry] of [[FX+2.0,-1.35,PI*.15],[FX+2.0,1.35,PI*.85],[FX+3.4,-1.0,-PI*.3],[FX+3.4,1.0,-PI*.7]]){K.chairW(x,z,ry,[0x5a3a20,0x2e4a36][Math.floor(rnd()*2)]);seat(x+Math.sin(ry)*.05,z+Math.cos(ry)*.05,.58,ry);rndC(x,z,.42,0,.95);}
+    await HCHL.y();K.roundTable(FX+2.7,0,.36,.56);await HCHL.y();rndC(FX+2.7,0,.4,0,.6);await HCHL.y();P(G.RB(.3,.05,.22,.01),FX+2.7,.585,.05,1,1,1,0x5a1a1a,{ry:.7});await HCHL.y();P(G.LATHE('mug'),FX+2.55,.56,-.15,.08,.1,.08,0xd8cbb0);
     /* 책장: 북쪽 벽 가득, 사다리 */
-    for(let x=-IW+.9;x<-LX-1.0;x+=1.7){K.shelf(x,ZB+.22,1.62,3.6,.4,0,.1,books);objC(x,ZB+.3,1.7,.5,0,3.7);}
-    {const f=fr(-12,ZB+.75,0,.1);for(const s of [-1,1])f(G.BOX,s*.24,1.8,0,.06,3.6,.06,C.OAK,{rx:-.17});for(let k=0;k<10;k++)f(G.CYL(6),0,.2+k*.36,.06-k*.062,.04,.5,.04,C.OAK,{rz:PI/2});}
+    await HCHL.y();for(let x=-IW+.9;x<-LX-1.0;x+=1.7){K.shelf(x,ZB+.22,1.62,3.6,.4,0,.1,books);objC(x,ZB+.3,1.7,.5,0,3.7);}
+    await HCHL.y();{const f=fr(-12,ZB+.75,0,.1);await HCHL.y();for(const s of [-1,1])f(G.BOX,s*.24,1.8,0,.06,3.6,.06,C.OAK,{rx:-.17});await HCHL.y();for(let k=0;k<10;k++)f(G.CYL(6),0,.2+k*.36,.06-k*.062,.04,.5,.04,C.OAK,{rz:PI/2});}
     /* 체스 탁자 (남쪽 창가) */
-    {const X=-12.7,Z=3.3;K.table(X,Z,.8,.8,.72);objC(X,Z,.8,.8,0,.75);
-      for(let i=0;i<8;i++)for(let j=0;j<8;j++)P(G.BOX,X-.245+i*.07,.722,Z-.245+j*.07,.07,.004,.07,(i+j)%2?0xe8dcc0:0x3a2a1a);
-      for(let k=0;k<12;k++){const i=k%8,j=k<8?0:1,y=.73;for(const [s,col] of [[1,0xf0e8d4],[-1,0x2a1e14]]){const zz=Z+s*(.245-j*.07),xx=X-.245+i*.07;if(rnd()<.75)P(G.LATHE(j?'cand':'finial'),xx,y,zz,.04,j?.06:.09,.04,col);}}
-      K.chair(X-.75,Z,PI/2);K.chair(X+.75,Z,-PI/2);seat(X-.75,Z,.5,PI/2);seat(X+.75,Z,.5,-PI/2);rndC(X-.75,Z,.25,0,.5);rndC(X+.75,Z,.25,0,.5);
-      K.lamp(X+.3,.74,Z-.3,.7);glight(X,1.6,Z,.7,7,0xffc070,[0,F1]);halo(X+.3,.95,Z-.3,0);}
+    await HCHL.y();{const X=-12.7,Z=3.3;await HCHL.y();K.table(X,Z,.8,.8,.72);await HCHL.y();objC(X,Z,.8,.8,0,.75);
+      await HCHL.y();for(let i=0;i<8;i++)for(let j=0;j<8;j++)P(G.BOX,X-.245+i*.07,.722,Z-.245+j*.07,.07,.004,.07,(i+j)%2?0xe8dcc0:0x3a2a1a);
+      await HCHL.y();for(let k=0;k<12;k++){const i=k%8,j=k<8?0:1,y=.73;for(const [s,col] of [[1,0xf0e8d4],[-1,0x2a1e14]]){const zz=Z+s*(.245-j*.07),xx=X-.245+i*.07;if(rnd()<.75)P(G.LATHE(j?'cand':'finial'),xx,y,zz,.04,j?.06:.09,.04,col);}}
+      await HCHL.y();K.chair(X-.75,Z,PI/2);await HCHL.y();K.chair(X+.75,Z,-PI/2);await HCHL.y();seat(X-.75,Z,.5,PI/2);await HCHL.y();seat(X+.75,Z,.5,-PI/2);await HCHL.y();rndC(X-.75,Z,.25,0,.5);await HCHL.y();rndC(X+.75,Z,.25,0,.5);
+      await HCHL.y();K.lamp(X+.3,.74,Z-.3,.7);await HCHL.y();glight(X,1.6,Z,.7,7,0xffc070,[0,F1]);await HCHL.y();halo(X+.3,.95,Z-.3,0);}
     /* 창가 걸터앉는 자리 (쿠션) */
-    for(const x of [-15.5,-9.9]){P(G.BOX,x,.25,ZF-.5,1.4,.5,.5,C.OAK2);P(G.CUSH(1.3,.12,.46),x,.56,ZF-.5,1,1,1,0x5a2a24);P(G.CUSH(.4,.26,.14),x-.45,.72,ZF-.32,1,1,1,0xc8a46a,{ry:.2});seat(x-.3,ZF-.65,.66,PI);seat(x+.3,ZF-.65,.66,PI);objC(x,ZF-.5,1.4,.5,0,.6);}
+    await HCHL.y();for(const x of [-15.5,-9.9]){P(G.BOX,x,.25,ZF-.5,1.4,.5,.5,C.OAK2);P(G.CUSH(1.3,.12,.46),x,.56,ZF-.5,1,1,1,0x5a2a24);P(G.CUSH(.4,.26,.14),x-.45,.72,ZF-.32,1,1,1,0xc8a46a,{ry:.2});seat(x-.3,ZF-.65,.66,PI);seat(x+.3,ZF-.65,.66,PI);objC(x,ZF-.5,1.4,.5,0,.6);}
     /* 큰 괘종시계 (칸막이벽 앞) */
-    {const f=fr(-LX-.45,-2.4,-PI/2,.1);f(G.RB(.5,.42,.36,.03),0,.21,0,1,1,1,C.OAK2);f(G.RB(.4,1.3,.3,.03),0,1.07,0,1,1,1,C.OAK);f(G.BOX,0,1.05,.155,.24,.9,.02,0x2a1a10);f(G.CYL(6),0,1.2,.17,.012,.6,.012,C.BRASS);f(G.CYL(18),0,.86,.175,.12,.02,.12,C.BRASS,{rx:PI/2});
-      f(G.RB(.52,.56,.38,.04),0,2.0,0,1,1,1,C.OAK2);f(G.CYL(24),0,2.0,.195,.38,.02,.38,0xf0e8d0,{rx:PI/2});for(let k=0;k<12;k++){const a=k/12*PI*2;f(G.BOX,Math.sin(a)*.15,2.0+Math.cos(a)*.15,.21,.012,.035,.004,0x1a1a1a,{rz:-a});}
-      f(G.BOX,0,2.05,.215,.01,.12,.004,0x1a1a1a);f(G.BOX,.04,2.0,.215,.09,.01,.004,0x1a1a1a);f(G.EXT('clk',[[-.3,0],[.3,0],[.2,.14],[0,.2],[-.2,.14]]),0,2.28,0,1,1,.36,C.OAK);objC(-LX-.45,-2.4,.45,.6,0,2.5);}
-    K.chand(-12.7,2.8,0,.8,8,F1-.4);glight(-12.7,2.7,0,1.0,12,0xffc070,[0,F1]);halo(-12.7,3.05,0,1);
-    for(const z of [-3.6,3.6]){K.sconce(-IW+.22,2.4,z+1.0,PI/2);halo(-IW+.42,2.55,z+1.0,0);}}
+    await HCHL.y();{const f=fr(-LX-.45,-2.4,-PI/2,.1);await HCHL.y();f(G.RB(.5,.42,.36,.03),0,.21,0,1,1,1,C.OAK2);await HCHL.y();f(G.RB(.4,1.3,.3,.03),0,1.07,0,1,1,1,C.OAK);await HCHL.y();f(G.BOX,0,1.05,.155,.24,.9,.02,0x2a1a10);await HCHL.y();f(G.CYL(6),0,1.2,.17,.012,.6,.012,C.BRASS);await HCHL.y();f(G.CYL(18),0,.86,.175,.12,.02,.12,C.BRASS,{rx:PI/2});
+      await HCHL.y();f(G.RB(.52,.56,.38,.04),0,2.0,0,1,1,1,C.OAK2);await HCHL.y();f(G.CYL(24),0,2.0,.195,.38,.02,.38,0xf0e8d0,{rx:PI/2});await HCHL.y();for(let k=0;k<12;k++){const a=k/12*PI*2;f(G.BOX,Math.sin(a)*.15,2.0+Math.cos(a)*.15,.21,.012,.035,.004,0x1a1a1a,{rz:-a});}
+      await HCHL.y();f(G.BOX,0,2.05,.215,.01,.12,.004,0x1a1a1a);await HCHL.y();f(G.BOX,.04,2.0,.215,.09,.01,.004,0x1a1a1a);await HCHL.y();f(G.EXT('clk',[[-.3,0],[.3,0],[.2,.14],[0,.2],[-.2,.14]]),0,2.28,0,1,1,.36,C.OAK);await HCHL.y();objC(-LX-.45,-2.4,.45,.6,0,2.5);}
+    await HCHL.y();K.chand(-12.7,2.8,0,.8,8,F1-.4);await HCHL.y();glight(-12.7,2.7,0,1.0,12,0xffc070,[0,F1]);await HCHL.y();halo(-12.7,3.05,0,1);
+    await HCHL.y();for(const z of [-3.6,3.6]){K.sconce(-IW+.22,2.4,z+1.0,PI/2);halo(-IW+.42,2.55,z+1.0,0);}}
   await HCHL.y();
 
   /* ===== 위층 복도: 깔개 띠·벽등·작은 그림·방 번호, 닫힌 문 ===== */
   const runner=rugM(23,['#6a1e1c','#2e2418','#c8a46a','#8a5a2a','#3a1410']);
-  for(const [fl,y] of [[2,F1],[3,F2]])for(const sd of [-1,1]){const a=sd>0?LX+.2:-IW,b=sd>0?IW:-LX-.2,xm=(a+b)/2,zm=(ZB+CZ)/2;rug(runner,xm,y,zm,Math.abs(b-a)-.6,.9);
+  await HCHL.y();for(const [fl,y] of [[2,F1],[3,F2]])for(const sd of [-1,1]){const a=sd>0?LX+.2:-IW,b=sd>0?IW:-LX-.2,xm=(a+b)/2,zm=(ZB+CZ)/2;rug(runner,xm,y,zm,Math.abs(b-a)-.6,.9);
     K.chand(xm,y+2.35,zm,.35,5,y+3.0-.2);
     for(const x of [11.8,16.2]){K.sconce(sd*x,y+1.9,CZ-.13,PI);glight(sd*x,y+1.9,CZ-.5,.6,6,0xffb45a);halo(sd*x,y+2.05,CZ-.35,0);}
     K.frame(sd*12.7,y+1.55,ZB+.05,.7,.5,0,pic);
@@ -22104,127 +22142,127 @@ async function buildHechilLodge(){const I=OR.ISLES.hlodge;if(!I||HLODGE.ready)re
     K.chand(xm,y+2.35,zm,.45,6,y+2.9);glight(xm,y+2.3,zm,.9,8);halo(xm,y+2.6,zm,1);
     /* 열리고 닫히는 문 */
     if(typeof hdoorAdd==='function')hdoorAdd(cx+(sd>0?RD[0]+.5:-RD[0]+.5),y,cz+CZ,1.0,2.24,1,true,1,'lodge');};   /* 닫힌 방 문과 같은 생김새 */
-  room(1,F1,0);room(-1,F2,1);
+  await HCHL.y();room(1,F1,0);await HCHL.y();room(-1,F2,1);
   await HCHL.y();
 
   /* ===== 3층 전망 라운지 (로비 위, 지붕 밑 높은 천장) ===== */
   {const y=F2,RT=FR+LX,pitch=Math.atan2(RT-FR,LX);
     /* 비스듬한 천장 판자와 서까래, 가로보·대공 */
-    for(const sd of [-1,1]){const len=Math.hypot(LX,RT-FR);P(G.BOX,sd*LX/2,(FR+RT)/2+.02,(ZB+ZP)/2,len+.1,.06,ZP-ZB,0xa8784a,{rz:-sd*pitch});for(let z=ZB+.2;z<ZP;z+=.18)P(G.BOX,sd*LX/2,(FR+RT)/2-.015,z,len,.005,.01,0x6a4a2a,{rz:-sd*pitch});}
-    for(let z=ZB+1.4;z<ZP-.4;z+=2.5){for(const sd of [-1,1]){const len=Math.hypot(LX,RT-FR);P(G.LOGX,sd*LX/2,(FR+RT)/2-.22,z,len,.3,.3,C.LOG[2],{rz:-sd*pitch});}P(G.LOGX,0,FR+2.6,z,LX*1.2,.28,.28,C.LOG[1]);P(G.LOGZ,0,(FR+2.6+RT)/2-.2,z,.26,RT-FR-2.6,.26,C.LOG[0],{rx:PI/2});
+    await HCHL.y();for(const sd of [-1,1]){const len=Math.hypot(LX,RT-FR);P(G.BOX,sd*LX/2,(FR+RT)/2+.02,(ZB+ZP)/2,len+.1,.06,ZP-ZB,0xa8784a,{rz:-sd*pitch});for(let z=ZB+.2;z<ZP;z+=.18)P(G.BOX,sd*LX/2,(FR+RT)/2-.015,z,len,.005,.01,0x6a4a2a,{rz:-sd*pitch});}
+    await HCHL.y();for(let z=ZB+1.4;z<ZP-.4;z+=2.5){for(const sd of [-1,1]){const len=Math.hypot(LX,RT-FR);P(G.LOGX,sd*LX/2,(FR+RT)/2-.22,z,len,.3,.3,C.LOG[2],{rz:-sd*pitch});}P(G.LOGX,0,FR+2.6,z,LX*1.2,.28,.28,C.LOG[1]);P(G.LOGZ,0,(FR+2.6+RT)/2-.2,z,.26,RT-FR-2.6,.26,C.LOG[0],{rx:PI/2});
       for(const sd of [-1,1])P(G.BOX,sd*1.8,FR+3.6,z,.18,2.4,.18,C.LOG[0],{rz:sd*.95});}
-    P(G.LOGZ,0,RT-.25,(ZB+ZP)/2,.34,.34,ZP-ZB,C.LOG[1]);
+    await HCHL.y();P(G.LOGZ,0,RT-.25,(ZB+ZP)/2,.34,.34,ZP-ZB,C.LOG[1]);
     /* 박공 앞벽 (3층 큰 창 위 세모): 통나무 판 */
-    for(const [zf,sd] of [[ZP,-1],[ZB,1]]){const sh=[[-LX,FR],[LX,FR],[0,RT]];const hole=sd<0?[[-1.7,FR],[1.7,FR],[1.7,FR+.5],[1.2,FR+1.6],[0,FR+2.1],[-1.2,FR+1.6],[-1.7,FR+.5]]:null;
+    await HCHL.y();for(const [zf,sd] of [[ZP,-1],[ZB,1]]){const sh=[[-LX,FR],[LX,FR],[0,RT]];const hole=sd<0?[[-1.7,FR],[1.7,FR],[1.7,FR+.5],[1.2,FR+1.6],[0,FR+2.1],[-1.2,FR+1.6],[-1.7,FR+.5]]:null;
       P(G.EXT('gab'+sd,sh,hole?[hole]:[]),0,0,zf+sd*.3,1,1,.6,0x8c6038);}
-    {const s=new THREE.Shape();[[-1.7,0],[1.7,0],[1.7,.5],[1.2,1.6],[0,2.1],[-1.2,1.6],[-1.7,.5]].forEach(([x,yy],i)=>i?s.lineTo(x,yy):s.moveTo(x,yy));const g=new THREE.ShapeGeometry(s),pp=g.attributes.position,uv=g.attributes.uv;for(let i=0;i<pp.count;i++)uv.setXY(i,(pp.getX(i)+1.7)/3.4,pp.getY(i)/2.1);
-      const q=new THREE.Mesh(g,VIEWT);q.position.set(0,FR,ZP-.55);TG.add(q);for(const x of [-.6,.6])P(G.BOX,x,FR+.9,ZP-.62,.06,1.8,.06,C.OAK2);P(G.BOX,0,FR+1.0,ZP-.62,3.2,.06,.06,C.OAK2);}
-    ceilAdd(cx,cz,0,LX,(ZP-ZB)/2,RT-.5);
+    await HCHL.y();{const s=new THREE.Shape();await HCHL.y();[[-1.7,0],[1.7,0],[1.7,.5],[1.2,1.6],[0,2.1],[-1.2,1.6],[-1.7,.5]].forEach(([x,yy],i)=>i?s.lineTo(x,yy):s.moveTo(x,yy));await HCHL.y();const g=new THREE.ShapeGeometry(s),pp=g.attributes.position,uv=g.attributes.uv;await HCHL.y();for(let i=0;i<pp.count;i++)uv.setXY(i,(pp.getX(i)+1.7)/3.4,pp.getY(i)/2.1);
+      await HCHL.y();const q=new THREE.Mesh(g,VIEWT);await HCHL.y();q.position.set(0,FR,ZP-.55);await HCHL.y();TG.add(q);await HCHL.y();for(const x of [-.6,.6])P(G.BOX,x,FR+.9,ZP-.62,.06,1.8,.06,C.OAK2);await HCHL.y();P(G.BOX,0,FR+1.0,ZP-.62,3.2,.06,.06,C.OAK2);}
+    await HCHL.y();ceilAdd(cx,cz,0,LX,(ZP-ZB)/2,RT-.5);
     /* 굴뚝 몸 (북쪽 벽 가운데, 지붕 밑까지): 로비에서 올라온 냇돌 그대로 */
     /* 앉는 곳: 큰 창 앞 소파·망원경, 이젤에서 그림 그리는 자리, 책상 */
-    rug(rugM(41,['#3a2a4a','#c8a46a','#e8dcc4','#7a2a22','#241a30']),1.2,y,4.6,5.0,3.2);
-    K.sofa(1.2,4.0,PI,2.6,0x5a3a5a,y);objC(1.2,4.0,2.6,.95,y,.95);for(const t of [-.8,0,.8])seat(1.2+t,3.9,y+.6,PI);
-    for(const s of [-1,1]){K.chairW(1.2+s*2.1,5.4,s*PI*.6,0x2e4a36,y);seat(1.2+s*2.1,5.4,y+.58,s*PI*.6);rndC(1.2+s*2.1,5.4,.42,y,.95);}
-    K.table(1.2,5.3,1.2,.7,.42,0,y);objC(1.2,5.3,1.2,.7,y,.45);fkL('ware:4',1.0,y+.42,5.3,PI,1.1);for(const x of [1.3,1.5])fkL('ware:10',x,y+.42,5.25,x*3);
-    {const f=fr(-1.6,ZP-1.0,PI*.1,y);for(let k=0;k<3;k++){const a=k/3*PI*2;f(G.CYL(6),Math.cos(a)*.22,.55,Math.sin(a)*.22,.03,1.15,.03,C.OAK,{rx:Math.sin(a)*.2,rz:-Math.cos(a)*.2});}
-      f(G.CYL(16),0,1.18,.1,.11,.9,.11,C.BRASS,{rx:1.2});f(G.CYL(16),0,1.08,-.22,.07,.3,.07,0x3a2a1a,{rx:1.2});f(G.TOR(.2),0,1.33,.52,.12,.12,.12,C.BRASS,{rx:1.2-PI/2});rndC(-1.6,ZP-1.0,.35,y,1.4);}
-    {const f=fr(4.6,6.6,-PI*.85,y);f(G.BOX,0,.9,0,.05,1.8,.05,C.OAK,{rx:-.12});for(const s of [-1,1])f(G.BOX,s*.36,.85,.1,.05,1.75,.05,C.OAK,{rz:s*.18,rx:.05});f(G.BOX,0,.82,.02,.85,.05,.08,C.OAK);
-      const m=texM(HLT.paint(0),{roughness:.6});const p=f.W(0,.08);tq(m,p.x,y+1.24,p.z,.9,.68,f.ry,-.12);f(G.BOX,0,1.24,.05,.94,.72,.02,0xf0e8d8,{rx:-.12});rndC(4.6,6.6,.4,y,1.6);
-      P(G.RB(.5,.6,.4,.03),5.4,y+.3,6.3,1,1,1,C.OAK);for(let k=0;k<5;k++)P(G.CYL(8),5.25+k*.07,y+.66,6.25,.03,.12,.03,[0xb83a2a,0x2a4a8a,0xe8c040,0x2e6a3a,0xf0f0f0][k]);objC(5.4,6.3,.5,.4,y,.7);}
-    K.frame(-4.8,y+1.9,ZB+.05,1.2,1.2,0,(x,yy,z,w,h,ry)=>tq(texM(HLT.stars(),{roughness:.6}),x,yy,z,w,h,ry));
-    {const X=4.6,Z=-3.0;K.table(X,Z,1.4,.7,.76,0,y);objC(X,Z,1.4,.7,y,.8);K.chair(X,Z-.7,0,y);seat(X,Z-.7,y+.5,0);K.lamp(X+.45,y+.76,Z,.85);glight(X,y+1.4,Z,.7,7);halo(X+.45,y+1.0,Z,0);
-      for(let k=0;k<3;k++)P(G.RB(.32,.05,.24,.01),X-.3+k*.08,y+.785+k*.05,Z,1,1,1,[0x5a1a1a,0x2a3a5a,0x3a4a2a][k],{ry:k*.3});}
-    for(let x=-5;x<=-1;x+=2){K.shelf(x,ZB+.22,1.8,1.3,.36,0,y,books);objC(x,ZB+.3,1.9,.45,y,1.4);}
-    for(const z of [-2,3]){K.chand(1.2,y+3.4,z,.9,8,RT-1);glight(1.2,y+3.3,z,1.2,14);halo(1.2,y+3.6,z,1);}
-    rug(rugM(43),-3.5,y,-2.3,2.4,3.6);}
+    await HCHL.y();rug(rugM(41,['#3a2a4a','#c8a46a','#e8dcc4','#7a2a22','#241a30']),1.2,y,4.6,5.0,3.2);
+    await HCHL.y();K.sofa(1.2,4.0,PI,2.6,0x5a3a5a,y);await HCHL.y();objC(1.2,4.0,2.6,.95,y,.95);await HCHL.y();for(const t of [-.8,0,.8])seat(1.2+t,3.9,y+.6,PI);
+    await HCHL.y();for(const s of [-1,1]){K.chairW(1.2+s*2.1,5.4,s*PI*.6,0x2e4a36,y);seat(1.2+s*2.1,5.4,y+.58,s*PI*.6);rndC(1.2+s*2.1,5.4,.42,y,.95);}
+    await HCHL.y();K.table(1.2,5.3,1.2,.7,.42,0,y);await HCHL.y();objC(1.2,5.3,1.2,.7,y,.45);await HCHL.y();fkL('ware:4',1.0,y+.42,5.3,PI,1.1);await HCHL.y();for(const x of [1.3,1.5])fkL('ware:10',x,y+.42,5.25,x*3);
+    await HCHL.y();{const f=fr(-1.6,ZP-1.0,PI*.1,y);await HCHL.y();for(let k=0;k<3;k++){const a=k/3*PI*2;f(G.CYL(6),Math.cos(a)*.22,.55,Math.sin(a)*.22,.03,1.15,.03,C.OAK,{rx:Math.sin(a)*.2,rz:-Math.cos(a)*.2});}
+      await HCHL.y();f(G.CYL(16),0,1.18,.1,.11,.9,.11,C.BRASS,{rx:1.2});await HCHL.y();f(G.CYL(16),0,1.08,-.22,.07,.3,.07,0x3a2a1a,{rx:1.2});await HCHL.y();f(G.TOR(.2),0,1.33,.52,.12,.12,.12,C.BRASS,{rx:1.2-PI/2});await HCHL.y();rndC(-1.6,ZP-1.0,.35,y,1.4);}
+    await HCHL.y();{const f=fr(4.6,6.6,-PI*.85,y);await HCHL.y();f(G.BOX,0,.9,0,.05,1.8,.05,C.OAK,{rx:-.12});await HCHL.y();for(const s of [-1,1])f(G.BOX,s*.36,.85,.1,.05,1.75,.05,C.OAK,{rz:s*.18,rx:.05});await HCHL.y();f(G.BOX,0,.82,.02,.85,.05,.08,C.OAK);
+      await HCHL.y();const m=texM(HLT.paint(0),{roughness:.6});await HCHL.y();const p=f.W(0,.08);await HCHL.y();tq(m,p.x,y+1.24,p.z,.9,.68,f.ry,-.12);await HCHL.y();f(G.BOX,0,1.24,.05,.94,.72,.02,0xf0e8d8,{rx:-.12});await HCHL.y();rndC(4.6,6.6,.4,y,1.6);
+      await HCHL.y();P(G.RB(.5,.6,.4,.03),5.4,y+.3,6.3,1,1,1,C.OAK);await HCHL.y();for(let k=0;k<5;k++)P(G.CYL(8),5.25+k*.07,y+.66,6.25,.03,.12,.03,[0xb83a2a,0x2a4a8a,0xe8c040,0x2e6a3a,0xf0f0f0][k]);await HCHL.y();objC(5.4,6.3,.5,.4,y,.7);}
+    await HCHL.y();K.frame(-4.8,y+1.9,ZB+.05,1.2,1.2,0,(x,yy,z,w,h,ry)=>tq(texM(HLT.stars(),{roughness:.6}),x,yy,z,w,h,ry));
+    await HCHL.y();{const X=4.6,Z=-3.0;await HCHL.y();K.table(X,Z,1.4,.7,.76,0,y);await HCHL.y();objC(X,Z,1.4,.7,y,.8);await HCHL.y();K.chair(X,Z-.7,0,y);await HCHL.y();seat(X,Z-.7,y+.5,0);await HCHL.y();K.lamp(X+.45,y+.76,Z,.85);await HCHL.y();glight(X,y+1.4,Z,.7,7);await HCHL.y();halo(X+.45,y+1.0,Z,0);
+      await HCHL.y();for(let k=0;k<3;k++)P(G.RB(.32,.05,.24,.01),X-.3+k*.08,y+.785+k*.05,Z,1,1,1,[0x5a1a1a,0x2a3a5a,0x3a4a2a][k],{ry:k*.3});}
+    await HCHL.y();for(let x=-5;x<=-1;x+=2){K.shelf(x,ZB+.22,1.8,1.3,.36,0,y,books);objC(x,ZB+.3,1.9,.45,y,1.4);}
+    await HCHL.y();for(const z of [-2,3]){K.chand(1.2,y+3.4,z,.9,8,RT-1);glight(1.2,y+3.3,z,1.2,14);halo(1.2,y+3.6,z,1);}
+    await HCHL.y();rug(rugM(43),-3.5,y,-2.3,2.4,3.6);}
   await HCHL.y();
   /* 3층 날개 천장 */
   for(const sd of [-1,1]){const a=sd>0?LX+.2:-IW,b=sd>0?IW:-LX-.2;P(G.BOX,(a+b)/2,C3+.05,0,Math.abs(b-a),.1,ZF-ZB,0xa8784a);for(let x=Math.min(a,b)+1;x<Math.max(a,b);x+=1.6)P(G.RB(.2,.24,ZF-ZB,.03),x,C3-.12,0,1,1,1,C.LOG[2]);ceilAdd(cx+(a+b)/2,cz,0,Math.abs(b-a)/2,(ZF-ZB)/2,C3);}
   await HCHL.y();
 
   /* ===== 바깥: 눈 덮인 땅과 둘레 전나무 (창밖은 그림이지만, 3인칭으로 벽 밖이 보일 때) ===== */
-  {const g=new THREE.CircleGeometry(I.R,48).rotateX(-PI/2);const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0xeef2f6,roughness:.9}));m.position.set(cx,-.02,cz);m.receiveShadow=true;root.add(m);
-    const Bo=hlBaker(new THREE.Matrix4().makeTranslation(cx,0,cz));Bo.P(G.BOX,0,(FR+LX+1.5)/2,(ZB+ZP)/2,IW*2+2.4,FR+LX+1.5,ZP-ZB+2.4,0x5a3a22);Bo.mesh(root);}
+  {const g=new THREE.CircleGeometry(I.R,48).rotateX(-PI/2);await HCHL.y();const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0xeef2f6,roughness:.9}));await HCHL.y();m.position.set(cx,-.02,cz);await HCHL.y();m.receiveShadow=true;await HCHL.y();root.add(m);
+    await HCHL.y();const Bo=hlBaker(new THREE.Matrix4().makeTranslation(cx,0,cz));await HCHL.y();Bo.P(G.BOX,0,(FR+LX+1.5)/2,(ZB+ZP)/2,IW*2+2.4,FR+LX+1.5,ZP-ZB+2.4,0x5a3a22);await HCHL.y();Bo.mesh(root);}
 
   await HCHL.y();
   /* ===== 드나드는 문: 정문 안쪽 = 바깥 산장 문 앞으로 ===== */
-  {const g1=new THREE.Group();g1.position.set(cx,0,cz+ZP-.35);root.add(g1);
-    PORTALS.push({id:'hlodge_out',x:cx,z:cz+ZP-.35,ry:PI,hw:1.2,minLv:0,label:'산장 밖으로 나가기',to:L.outTo,msg:null,color:0xffd23a,door:1,fx:{g:g1,cols:[]}});}
+  {const g1=new THREE.Group();await HCHL.y();g1.position.set(cx,0,cz+ZP-.35);await HCHL.y();root.add(g1);
+    await HCHL.y();PORTALS.push({id:'hlodge_out',x:cx,z:cz+ZP-.35,ry:PI,hw:1.2,minLv:0,label:'산장 밖으로 나가기',to:L.outTo,msg:null,color:0xffd23a,door:1,fx:{g:g1,cols:[]}});}
 
   await HCHL.y();
   /* ===== 사람들 (이름 없는 꾸밈): 산장 안주인·일꾼·요리사·손님들 ===== */
   {const OUT=typeof CIT_OUTFIT!=='undefined'?CIT_OUTFIT:{};
-    const N=(look,pose,x,z,y,face,kind)=>{if(typeof makeNpcStick!=='function'||!look)return null;const g=makeNpcStick(look);const u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}if(typeof stickSlim==='function')stickSlim(g);g.position.set(cx+x,y,cz+z);g.rotation.y=face;g.visible=false;scene.add(g);
+    await HCHL.y();const N=(look,pose,x,z,y,face,kind)=>{if(typeof makeNpcStick!=='function'||!look)return null;const g=makeNpcStick(look);const u=g.userData;if(u.marker){g.remove(u.marker);u.marker=null;}if(typeof stickSlim==='function')stickSlim(g);g.position.set(cx+x,y,cz+z);g.rotation.y=face;g.visible=false;scene.add(g);
       rndC(x,z,.35,y,1.8);L.npcs.push({g,pose,ph:rnd()*9});if(typeof chatterAdd==='function')chatterAdd({kind,pos:()=>g.position,visible:()=>g.visible,look,pose:/^sit/.test(pose)?'idle':pose});return g;};
-    const take=(x,z,y)=>{let b=-1,bd=.9;for(let i=0;i<SEATS.length;i++){const s=SEATS[i];const d=Math.hypot(s.x-cx-x,s.z-cz-z);if(d<bd&&Math.abs(s.y-y)<.5&&!s.lie){bd=d;b=i;}}return b<0?null:SEATS.splice(b,1)[0];};
-    const sitN=(look,pose,x,z,y,kind)=>{const s=take(x,z,y);if(!s)return;N(look,pose,s.x-cx,s.z-cz,s.y-.47,s.ry,kind);};
-    N(OUT.c_innkeeper,'counter',-5.6,.6,.1,PI/2,'lodgehost');
-    N(OUT.c_maid,'sweep',-.8,5.8,.1,PI*.8,'lodgemaid');N(OUT.c_maid,'sweep',13,-4.75,F1+.02,PI/2,'lodgemaid');
-    N(OUT.c_cook,'counter',15.0,-4.2,.1,-PI/2,'lodgecook');
-    sitN(OUT.c_hunter,'sitdrink',-2.5,-1.9,.6,'lodgeguest');sitN(OUT.c_elder,'sittalk',2.5,-.7,.6,'lodgeguest');
-    N(OUT.c_bard,'lute',-3.4,1.1,.1,PI*.75,'lodgeguest');
-    sitN(OUT.c_merc,'sitdrink',10.4,-.15,.5,'lodgeguest');sitN(OUT.c_hunter,'sittalk',12.4,-1.85,.5,'lodgeguest');sitN(OUT.c_farmer_f,'sitdrink',14.4,3.75,.5,'lodgeguest');sitN(OUT.c_shepherd,'sittalk',9.4,2.05,.5,'lodgeguest');
-    sitN(OUT.c_courier,'sitdrink',11.3,ZB+2.1,.78,'lodgeguest');
-    sitN(OUT.c_scholar,'sittalk',-13.45,3.3,.5,'lodgeguest');sitN(OUT.c_old_knight,'sittalk',-11.95,3.3,.5,'lodgeguest');
-    sitN(OUT.c_scribe_old,'sitb',-IW+.45+2.0,-1.3,.58,'lodgeguest');
-    N(OUT.c_lady,'lookfar',-.3,ZP-1.1,F2,0,'lodgeguest');N(OUT.c_tailor||OUT.c_bard,'paint',4.3,6.0,F2,.46,'lodgeguest');
-    sitN(OUT.c_noble_m,'sittalk',3.2,ZB+.95,F1+.58,'lodgeguest');}
+    await HCHL.y();const take=(x,z,y)=>{let b=-1,bd=.9;for(let i=0;i<SEATS.length;i++){const s=SEATS[i];const d=Math.hypot(s.x-cx-x,s.z-cz-z);if(d<bd&&Math.abs(s.y-y)<.5&&!s.lie){bd=d;b=i;}}return b<0?null:SEATS.splice(b,1)[0];};
+    await HCHL.y();const sitN=(look,pose,x,z,y,kind)=>{const s=take(x,z,y);if(!s)return;N(look,pose,s.x-cx,s.z-cz,s.y-.47,s.ry,kind);};
+    await HCHL.y();N(OUT.c_innkeeper,'counter',-5.6,.6,.1,PI/2,'lodgehost');
+    await HCHL.y();N(OUT.c_maid,'sweep',-.8,5.8,.1,PI*.8,'lodgemaid');await HCHL.y();N(OUT.c_maid,'sweep',13,-4.75,F1+.02,PI/2,'lodgemaid');
+    await HCHL.y();N(OUT.c_cook,'counter',15.0,-4.2,.1,-PI/2,'lodgecook');
+    await HCHL.y();sitN(OUT.c_hunter,'sitdrink',-2.5,-1.9,.6,'lodgeguest');await HCHL.y();sitN(OUT.c_elder,'sittalk',2.5,-.7,.6,'lodgeguest');
+    await HCHL.y();N(OUT.c_bard,'lute',-3.4,1.1,.1,PI*.75,'lodgeguest');
+    await HCHL.y();sitN(OUT.c_merc,'sitdrink',10.4,-.15,.5,'lodgeguest');await HCHL.y();sitN(OUT.c_hunter,'sittalk',12.4,-1.85,.5,'lodgeguest');await HCHL.y();sitN(OUT.c_farmer_f,'sitdrink',14.4,3.75,.5,'lodgeguest');await HCHL.y();sitN(OUT.c_shepherd,'sittalk',9.4,2.05,.5,'lodgeguest');
+    await HCHL.y();sitN(OUT.c_courier,'sitdrink',11.3,ZB+2.1,.78,'lodgeguest');
+    await HCHL.y();sitN(OUT.c_scholar,'sittalk',-13.45,3.3,.5,'lodgeguest');await HCHL.y();sitN(OUT.c_old_knight,'sittalk',-11.95,3.3,.5,'lodgeguest');
+    await HCHL.y();sitN(OUT.c_scribe_old,'sitb',-IW+.45+2.0,-1.3,.58,'lodgeguest');
+    await HCHL.y();N(OUT.c_lady,'lookfar',-.3,ZP-1.1,F2,0,'lodgeguest');await HCHL.y();N(OUT.c_tailor||OUT.c_bard,'paint',4.3,6.0,F2,.46,'lodgeguest');
+    await HCHL.y();sitN(OUT.c_noble_m,'sittalk',3.2,ZB+.95,F1+.58,'lodgeguest');}
 
   await HCHL.y();
   /* ===== 불빛 번짐과 빛 웅덩이 (산장 안에서만 보인다) ===== */
-  {const grp=new THREE.Group();grp.position.set(cx,0,cz);grp.userData.keepMx=true;root.add(grp);L.fx=grp;L.haloM=[];
-    {const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d'),gr=x.createRadialGradient(32,32,0,32,32,32);
-      gr.addColorStop(0,'rgba(255,236,190,1)');gr.addColorStop(.18,'rgba(255,200,120,.6)');gr.addColorStop(.5,'rgba(255,170,80,.18)');gr.addColorStop(1,'rgba(255,150,60,0)');x.fillStyle=gr;x.fillRect(0,0,64,64);const tx=new THREE.CanvasTexture(c);
-      for(const [k,sz,op] of [[0,.55,.85],[1,1.4,.7],[2,2.4,.5]]){const Hs=L.halos.filter(h=>h[3]===k);if(!Hs.length)continue;const pos=new Float32Array(Hs.length*3);Hs.forEach((h,i)=>{pos[i*3]=h[0]-cx;pos[i*3+1]=h[1];pos[i*3+2]=h[2]-cz;});
+  {const grp=new THREE.Group();await HCHL.y();grp.position.set(cx,0,cz);await HCHL.y();grp.userData.keepMx=true;await HCHL.y();root.add(grp);await HCHL.y();L.fx=grp;await HCHL.y();L.haloM=[];
+    await HCHL.y();{const c=document.createElement('canvas');await HCHL.y();c.width=c.height=64;await HCHL.y();const x=c.getContext('2d'),gr=x.createRadialGradient(32,32,0,32,32,32);
+      await HCHL.y();gr.addColorStop(0,'rgba(255,236,190,1)');await HCHL.y();gr.addColorStop(.18,'rgba(255,200,120,.6)');await HCHL.y();gr.addColorStop(.5,'rgba(255,170,80,.18)');await HCHL.y();gr.addColorStop(1,'rgba(255,150,60,0)');await HCHL.y();x.fillStyle=gr;await HCHL.y();x.fillRect(0,0,64,64);await HCHL.y();const tx=new THREE.CanvasTexture(c);
+      await HCHL.y();for(const [k,sz,op] of [[0,.55,.85],[1,1.4,.7],[2,2.4,.5]]){const Hs=L.halos.filter(h=>h[3]===k);if(!Hs.length)continue;const pos=new Float32Array(Hs.length*3);Hs.forEach((h,i)=>{pos[i*3]=h[0]-cx;pos[i*3+1]=h[1];pos[i*3+2]=h[2]-cz;});
         const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));const m=new THREE.PointsMaterial({map:tx,size:sz,sizeAttenuation:true,transparent:true,opacity:op,depthWrite:false,blending:THREE.AdditiveBlending,color:0xffd0a0,toneMapped:false});
         const pts=new THREE.Points(g,m);pts.frustumCulled=false;pts.renderOrder=4;grp.add(pts);L.haloM.push({m,op});}}
-    {const c2=document.createElement('canvas');c2.width=c2.height=64;const x2=c2.getContext('2d'),g2=x2.createRadialGradient(32,32,0,32,32,32);
-      g2.addColorStop(0,'rgba(255,255,255,1)');g2.addColorStop(.35,'rgba(255,255,255,.55)');g2.addColorStop(.7,'rgba(255,255,255,.15)');g2.addColorStop(1,'rgba(255,255,255,0)');x2.fillStyle=g2;x2.fillRect(0,0,64,64);
-      const P3=[],C3=[],U3=[],I3=[],col=new THREE.Color();
-      for(const [x,y,z,r,k,cc] of L.pools){col.set(cc).multiplyScalar(k);const b=P3.length/3;for(const [a,c] of [[-r,-r],[r,-r],[r,r],[-r,r]]){P3.push(x+a,y,z+c);C3.push(col.r,col.g,col.b);}U3.push(0,0,1,0,1,1,0,1);I3.push(b,b+1,b+2,b,b+2,b+3);}
-      if(P3.length){const geo2=new THREE.BufferGeometry();geo2.setAttribute('position',new THREE.Float32BufferAttribute(P3,3));geo2.setAttribute('color',new THREE.Float32BufferAttribute(C3,3));geo2.setAttribute('uv',new THREE.Float32BufferAttribute(U3,2));geo2.setIndex(I3);
+    await HCHL.y();{const c2=document.createElement('canvas');await HCHL.y();c2.width=c2.height=64;await HCHL.y();const x2=c2.getContext('2d'),g2=x2.createRadialGradient(32,32,0,32,32,32);
+      await HCHL.y();g2.addColorStop(0,'rgba(255,255,255,1)');await HCHL.y();g2.addColorStop(.35,'rgba(255,255,255,.55)');await HCHL.y();g2.addColorStop(.7,'rgba(255,255,255,.15)');await HCHL.y();g2.addColorStop(1,'rgba(255,255,255,0)');await HCHL.y();x2.fillStyle=g2;await HCHL.y();x2.fillRect(0,0,64,64);
+      await HCHL.y();const P3=[],C3=[],U3=[],I3=[],col=new THREE.Color();
+      await HCHL.y();for(const [x,y,z,r,k,cc] of L.pools){col.set(cc).multiplyScalar(k);const b=P3.length/3;for(const [a,c] of [[-r,-r],[r,-r],[r,r],[-r,r]]){P3.push(x+a,y,z+c);C3.push(col.r,col.g,col.b);}U3.push(0,0,1,0,1,1,0,1);I3.push(b,b+1,b+2,b,b+2,b+3);}
+      await HCHL.y();if(P3.length){const geo2=new THREE.BufferGeometry();geo2.setAttribute('position',new THREE.Float32BufferAttribute(P3,3));geo2.setAttribute('color',new THREE.Float32BufferAttribute(C3,3));geo2.setAttribute('uv',new THREE.Float32BufferAttribute(U3,2));geo2.setIndex(I3);
         const pm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c2),vertexColors:true,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2,fog:false});
         const pmesh=new THREE.Mesh(geo2,pm);pmesh.frustumCulled=false;pmesh.renderOrder=3;grp.add(pmesh);}}}
   await HCHL.y();
   /* 굽기 */
-  L.mesh=B.mesh(root,true);L.nVert=B.n;
-  if(FLL.length){const fm=new THREE.Mesh(FOODK.merge(FLL),FOODK.mat());fm.receiveShadow=true;fm.add(new THREE.Object3D());root.add(fm);}
-  root.updateMatrixWorld(true);root.visible=false;
-  L.ready=true;}
+  L.mesh=B.mesh(root,true);await HCHL.y();L.nVert=B.n;
+  await HCHL.y();if(FLL.length){const fm=new THREE.Mesh(FOODK.merge(FLL),FOODK.mat());fm.receiveShadow=true;fm.add(new THREE.Object3D());root.add(fm);}
+  await HCHL.y();root.updateMatrixWorld(true);await HCHL.y();root.visible=false;
+  await HCHL.y();L.ready=true;}
 /* ===== 산장 바깥: parent 그룹 아래, 세계 자리 (wx,y0,wz), ry로 돌린다 (+z가 정문 쪽). 돌려주는 값은 예전 산장(HUTW)과 같은 이름:
    revive(쓰러지면 깨어나는 자리), smokeL(굴뚝 연기), light(문 등불), glow(창 재질 대신 밝기를 받는 것) ===== */
 async function hlodgeOutside(parent,wx,wz,y0,ry,o={}){const G=HLG,PI=Math.PI,L=HLODGE,OUT={};
-  const base=new THREE.Matrix4().compose(new THREE.Vector3(wx,y0,wz),new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),ry),new THREE.Vector3(1,1,1));
-  const B=hlBaker(base);B.fl=[0];const P=(g,x,y,z,sx,sy,sz,c,op)=>B.P(g,x,y,z,sx,sy,sz,c,op);const K=hlKit(P,{seed:8181}),C=K.C,rnd=K.rnd,rr=K.rr,fr=K.fr;K.MT(B.MT);
-  const cs=Math.cos(ry),sn=Math.sin(ry),W=(lx,lz)=>({x:wx+lx*cs+lz*sn,z:wz-lx*sn+lz*cs});
-  const boxC=(lx,lz,w,d,h,yb=-1)=>{const p=W(lx,lz);colliders.push({x:p.x,z:p.z,box:1,hw:w/2,hd:d/2,cs,sn,r:Math.hypot(w,d)/2,y0:y0+yb,y1:y0+h,bld:true});};
-  const rC=(lx,lz,r,h)=>{const p=W(lx,lz);colliders.push({x:p.x,z:p.z,r,y0:y0-1,y1:y0+h,bld:true});};
-  const {F1,F2,FR}=L,HW=18,ZB=-6.4,ZF=6.4,LX=8.1,ZP=8.8,TW=.6,TAN=Math.tan(50*PI/180),RIDGE=FR+6.4*TAN,PT=(RIDGE-FR)/LX;   /* 지붕: 날개는 50도, 가운데 박공은 같은 용마루 높이 */
-  const STN=()=>C.STN[Math.floor(rnd()*C.STN.length)];
+  await HCHL.y();const base=new THREE.Matrix4().compose(new THREE.Vector3(wx,y0,wz),new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),ry),new THREE.Vector3(1,1,1));
+  await HCHL.y();const B=hlBaker(base);await HCHL.y();B.fl=[0];await HCHL.y();const P=(g,x,y,z,sx,sy,sz,c,op)=>B.P(g,x,y,z,sx,sy,sz,c,op);await HCHL.y();const K=hlKit(P,{seed:8181}),C=K.C,rnd=K.rnd,rr=K.rr,fr=K.fr;await HCHL.y();K.MT(B.MT);
+  await HCHL.y();const cs=Math.cos(ry),sn=Math.sin(ry),W=(lx,lz)=>({x:wx+lx*cs+lz*sn,z:wz-lx*sn+lz*cs});
+  await HCHL.y();const boxC=(lx,lz,w,d,h,yb=-1)=>{const p=W(lx,lz);colliders.push({x:p.x,z:p.z,box:1,hw:w/2,hd:d/2,cs,sn,r:Math.hypot(w,d)/2,y0:y0+yb,y1:y0+h,bld:true});};
+  await HCHL.y();const rC=(lx,lz,r,h)=>{const p=W(lx,lz);colliders.push({x:p.x,z:p.z,r,y0:y0-1,y1:y0+h,bld:true});};
+  await HCHL.y();const {F1,F2,FR}=L,HW=18,ZB=-6.4,ZF=6.4,LX=8.1,ZP=8.8,TW=.6,TAN=Math.tan(50*PI/180),RIDGE=FR+6.4*TAN,PT=(RIDGE-FR)/LX;   /* 지붕: 날개는 50도, 가운데 박공은 같은 용마루 높이 */
+  await HCHL.y();const STN=()=>C.STN[Math.floor(rnd()*C.STN.length)];
   await HCHL.y();
   /* ----- 받침과 1층 냇돌 벽 ----- */
-  P(G.BOX,0,-.7,0,HW*2+.5,1.7,ZF-ZB+.5,0x6e6a62);P(G.BOX,0,-.7,(ZF+ZP)/2,LX*2+.5,1.7,ZP-ZF+.5,0x6e6a62);
-  const W1=(c,w=1.3)=>[c,w,.95,3.35],W2=(c,w=1.5)=>[c,w,F1+.75,F1+3.05],W3=(c,w=1.5)=>[c,w,F2+.7,F2+2.65];
-  const HOLE={front:[W1(-15.5),W1(-12.7),W1(-9.9),W1(9.9),W1(12.7),W1(15.5)],west:[W1(-3.6),W1(3.6)],east:[W1(0),W1(3.6)],pav:[[0,2.4,0,3.3],[0,2.4,3.5,4.4],[-4.6,1.5,.9,3.9],[4.6,1.5,.9,3.9]],pside:[[7.6,.9,1.0,3.2]]};
-  const stoneWall=(axis,f,sd,a0,a1,holes)=>{K.slab(axis,f-sd*TW/2,a0,a1,.1,F1,holes,TW,0x7c766c);
+  P(G.BOX,0,-.7,0,HW*2+.5,1.7,ZF-ZB+.5,0x6e6a62);await HCHL.y();P(G.BOX,0,-.7,(ZF+ZP)/2,LX*2+.5,1.7,ZP-ZF+.5,0x6e6a62);
+  await HCHL.y();const W1=(c,w=1.3)=>[c,w,.95,3.35],W2=(c,w=1.5)=>[c,w,F1+.75,F1+3.05],W3=(c,w=1.5)=>[c,w,F2+.7,F2+2.65];
+  await HCHL.y();const HOLE={front:[W1(-15.5),W1(-12.7),W1(-9.9),W1(9.9),W1(12.7),W1(15.5)],west:[W1(-3.6),W1(3.6)],east:[W1(0),W1(3.6)],pav:[[0,2.4,0,3.3],[0,2.4,3.5,4.4],[-4.6,1.5,.9,3.9],[4.6,1.5,.9,3.9]],pside:[[7.6,.9,1.0,3.2]]};
+  await HCHL.y();const stoneWall=(axis,f,sd,a0,a1,holes)=>{K.slab(axis,f-sd*TW/2,a0,a1,.1,F1,holes,TW,0x7c766c);
     /* 튀어나온 냇돌: 창·문 자리는 비운다 */
     for(let y=.3;y<F1-.1;y+=.34)for(let a=a0+rnd()*.3;a<a1-.1;a+=rr(.32,.5)){if(holes.some(([c,w,hb,ht])=>a>c-w/2-.15&&a<c+w/2+.15&&y>hb-.15&&y<ht+.15))continue;const s=rr(.26,.42);
       axis==='x'?P(G.ICO,a,y+rr(-.05,.05),f,s*rr(1.1,1.5),s*rr(.6,.85),s*.32,STN(),{rz:rr(-.3,.3),ry:rr(-.2,.2)}):P(G.ICO,f,y+rr(-.05,.05),a,s*.32,s*rr(.6,.85),s*rr(1.1,1.5),STN(),{rx:rr(-.3,.3),ry:rr(-.2,.2)});}
     /* 모서리 큰 돌 (번갈아 길게) */
     for(const e of [a0,a1])for(let y=.1,k=0;y<F1-.2;y+=.46,k++){const l=k%2?.9:.55;const m=e===a0?e+l/2-.02:e-l/2+.02;axis==='x'?P(G.RB(l,.42,.08,.03),m,y+.21,f+sd*.03,1,1,1,0x9c9486):P(G.RB(.08,.42,l,.03),f+sd*.03,y+.21,m,1,1,1,0x9c9486);}};
-  stoneWall('x',ZF,1,-HW,-LX,HOLE.front.filter(h=>h[0]<0));stoneWall('x',ZF,1,LX,HW,HOLE.front.filter(h=>h[0]>0));stoneWall('x',ZB,-1,-HW,HW,[]);
-  stoneWall('z',-HW,-1,ZB,ZF,HOLE.west);stoneWall('z',HW,1,ZB,ZF,HOLE.east);stoneWall('x',ZP,1,-LX,LX,HOLE.pav);for(const sd of [-1,1])stoneWall('z',sd*LX,sd,ZF,ZP,HOLE.pside);
+  await HCHL.y();stoneWall('x',ZF,1,-HW,-LX,HOLE.front.filter(h=>h[0]<0));await HCHL.y();stoneWall('x',ZF,1,LX,HW,HOLE.front.filter(h=>h[0]>0));await HCHL.y();stoneWall('x',ZB,-1,-HW,HW,[]);
+  await HCHL.y();stoneWall('z',-HW,-1,ZB,ZF,HOLE.west);await HCHL.y();stoneWall('z',HW,1,ZB,ZF,HOLE.east);await HCHL.y();stoneWall('x',ZP,1,-LX,LX,HOLE.pav);await HCHL.y();for(const sd of [-1,1])stoneWall('z',sd*LX,sd,ZF,ZP,HOLE.pside);
   await HCHL.y();
   /* 1층 위 굵은 나무 띠 (돌과 통나무 사이) */
   for(const [axis,f,a0,a1] of [['x',ZF,-HW-.1,-LX],['x',ZF,LX,HW+.1],['x',ZB,-HW-.1,HW+.1],['z',-HW,ZB,ZF],['z',HW,ZB,ZF],['x',ZP,-LX-.1,LX+.1],['z',-LX,ZF,ZP],['z',LX,ZF,ZP]])axis==='x'?P(G.RB(a1-a0,.26,.22,.04),(a0+a1)/2,F1+.02,f,1,1,1,C.LOG[1]):P(G.RB(.22,.26,a1-a0,.04),f,F1+.02,(a0+a1)/2,1,1,1,C.LOG[1]);
   await HCHL.y();
   /* ----- 2·3층 통나무 벽: 모서리마다 통나무 끝이 엇갈려 내민다 ----- */
   const logWall=(axis,f,sd,a0,a1,y0,y1,holes,ext=.35,off=0)=>{K.slab(axis,f-sd*TW/2,a0,a1,y0,y1,holes,TW,0x4a2e18);K.logs(axis,f-sd*.08,a0,a1,y0+off,y1+off,holes,.32,ext);};
-  const H2={front:[W2(-15.1,1.7),W2(-10.3,1.7),W2(10.3,1.7),W2(15.1,1.7),W3(-15.1,1.7),W3(-10.3,1.7),W3(10.3,1.7),W3(15.1,1.7)],back:[W2(-15.2,1.1),W2(-10.4,1.1),W2(-5,1.3),W2(5,1.3),W2(10.4,1.1),W2(15.2,1.1),W3(-15.2,1.1),W3(-10.4,1.1),W3(-5,1.2),W3(5,1.2),W3(10.4,1.1),W3(15.2,1.1)],
+  await HCHL.y();const H2={front:[W2(-15.1,1.7),W2(-10.3,1.7),W2(10.3,1.7),W2(15.1,1.7),W3(-15.1,1.7),W3(-10.3,1.7),W3(10.3,1.7),W3(15.1,1.7)],back:[W2(-15.2,1.1),W2(-10.4,1.1),W2(-5,1.3),W2(5,1.3),W2(10.4,1.1),W2(15.2,1.1),W3(-15.2,1.1),W3(-10.4,1.1),W3(-5,1.2),W3(5,1.2),W3(10.4,1.1),W3(15.2,1.1)],
     side:[W2(-4.9,1.0),W2(1.8,1.5),W3(-4.9,1.0),W3(1.8,1.5)],pav:[[-4.6,1.5,F1+.4,F1+3.2],[4.6,1.5,F1+.4,F1+3.2],[0,2.6,F1+.6,F1+3.2],[0,3.4,F2+.6,FR+.6]]};
-  logWall('x',ZF,1,-HW,-LX,F1+.15,FR,H2.front.filter(h=>h[0]<0),.35);logWall('x',ZF,1,LX,HW,F1+.15,FR,H2.front.filter(h=>h[0]>0),.35);logWall('x',ZB,-1,-HW,HW,F1+.15,FR,H2.back,.35);
-  logWall('z',-HW,-1,ZB,ZF,F1+.15,FR,H2.side,.35,.16);logWall('z',HW,1,ZB,ZF,F1+.15,FR,H2.side,.35,.16);
-  logWall('x',ZP,1,-LX,LX,F1+.15,FR,H2.pav,.35);for(const sd of [-1,1])logWall('z',sd*LX,sd,ZF,ZP,F1+.15,FR,[],.35,.16);
+  await HCHL.y();logWall('x',ZF,1,-HW,-LX,F1+.15,FR,H2.front.filter(h=>h[0]<0),.35);await HCHL.y();logWall('x',ZF,1,LX,HW,F1+.15,FR,H2.front.filter(h=>h[0]>0),.35);await HCHL.y();logWall('x',ZB,-1,-HW,HW,F1+.15,FR,H2.back,.35);
+  await HCHL.y();logWall('z',-HW,-1,ZB,ZF,F1+.15,FR,H2.side,.35,.16);await HCHL.y();logWall('z',HW,1,ZB,ZF,F1+.15,FR,H2.side,.35,.16);
+  await HCHL.y();logWall('x',ZP,1,-LX,LX,F1+.15,FR,H2.pav,.35);await HCHL.y();for(const sd of [-1,1])logWall('z',sd*LX,sd,ZF,ZP,F1+.15,FR,[],.35,.16);
   await HCHL.y();
   /* ----- 창: 짙은 나무 틀, 여섯 칸 유리 (밤엔 따뜻한 불빛), 덧문(초록·붉은빛), 창턱 눈, 2층 창에는 전나무 가지 꽃상자 ----- */
   const winOut=(axis,f,sd,c,w,yb,yt,o={})=>{const h=yt-yb,F=axis==='x'?(g,a,y,dz,sx,sy,sz,col,op)=>P(g,c+a,y,f+sd*dz,sx,sy,sz,col,op):(g,a,y,dz,sx,sy,sz,col,op)=>P(g,f+sd*dz,y,c+a,sz,sy,sx,col,op);
@@ -22235,11 +22273,11 @@ async function hlodgeOutside(parent,wx,wz,y0,ry,o={}){const G=HLG,PI=Math.PI,L=H
     if(o.shut){const col=o.shut;for(const s of [-1,1]){const ox=s*(w/2+.36),q=(dz,op)=>F(G.BOX,ox,yb+h/2,.06+dz,.62,h+.04,.05,col,op);q(0);for(let k=0;k<Math.round(h/.14);k++)F(G.BOX,ox,yb+.08+k*.14,.1,.56,.035,.025,0x2a1a10,{rx:.5});F(G.BOX,ox,yb+h/2,.09,.04,h-.1,.02,0x2a1a10);
       F(G.EXT('shh',[[-.12,0],[.12,0],[0,.22]],[[[ -.04,.06],[.04,.06],[0,.14]]]),ox,yt-.22,.12,1,1,.02,0x2a1a10);}}
     if(o.box){F(G.RB(w+.2,.26,.32,.03),0,yb-.22,.3,1,1,1,0x6a3a20);for(let k=0;k<Math.round(w/.18);k++)F(G.CONE(6),-w/2+.08+k*.18,yb+.02,.3,.18,.3,.18,C.FIR,{rx:rr(-.4,.4),rz:rr(-.4,.4)});F(G.RB(w+.24,.08,.34,.04),0,yb-.06,.3,1,1,1,C.SNOW);for(const s of [-1,1])F(G.BOX,s*(w/2-.05),yb-.42,.22,.05,.24,.16,0x3a2414,{rx:.6});}};
-  for(const [c,w,yb,yt] of HOLE.front)winOut('x',ZF,1,c,w,yb,yt,{shut:c<0?0x3e5a40:0x7a2a22});
-  for(const [c,w,yb,yt] of H2.front)winOut('x',ZF,1,c,w,yb,yt,{shut:yb<F2?0x3e5a40:0x7a2a22,box:yb<F2});
-  for(const [c,w,yb,yt] of H2.back)winOut('x',ZB,-1,c,w,yb,yt,{shut:0x3e5a40});
-  for(const sd of [-1,1]){for(const [c,w,yb,yt] of (sd<0?HOLE.west:HOLE.east))winOut('z',sd*HW,sd,c,w,yb,yt,{shut:0x7a2a22});for(const [c,w,yb,yt] of H2.side)winOut('z',sd*HW,sd,c,w,yb,yt,{shut:0x3e5a40,box:yb<F2});for(const [c,w,yb,yt] of HOLE.pside)winOut('z',sd*LX,sd,c,w,yb,yt);}
-  for(const [c,w,yb,yt] of HOLE.pav.slice(2))winOut('x',ZP,1,c,w,yb,yt,{shut:0x7a2a22});winOut('x',ZP,1,0,2.4,3.5,4.4);for(const [c,w,yb,yt] of H2.pav)winOut('x',ZP,1,c,w,yb,yt,{box:yb<F2&&c!==0});
+  await HCHL.y();for(const [c,w,yb,yt] of HOLE.front)winOut('x',ZF,1,c,w,yb,yt,{shut:c<0?0x3e5a40:0x7a2a22});
+  await HCHL.y();for(const [c,w,yb,yt] of H2.front)winOut('x',ZF,1,c,w,yb,yt,{shut:yb<F2?0x3e5a40:0x7a2a22,box:yb<F2});
+  await HCHL.y();for(const [c,w,yb,yt] of H2.back)winOut('x',ZB,-1,c,w,yb,yt,{shut:0x3e5a40});
+  await HCHL.y();for(const sd of [-1,1]){for(const [c,w,yb,yt] of (sd<0?HOLE.west:HOLE.east))winOut('z',sd*HW,sd,c,w,yb,yt,{shut:0x7a2a22});for(const [c,w,yb,yt] of H2.side)winOut('z',sd*HW,sd,c,w,yb,yt,{shut:0x3e5a40,box:yb<F2});for(const [c,w,yb,yt] of HOLE.pside)winOut('z',sd*LX,sd,c,w,yb,yt);}
+  await HCHL.y();for(const [c,w,yb,yt] of HOLE.pav.slice(2))winOut('x',ZP,1,c,w,yb,yt,{shut:0x7a2a22});await HCHL.y();winOut('x',ZP,1,0,2.4,3.5,4.4);await HCHL.y();for(const [c,w,yb,yt] of H2.pav)winOut('x',ZP,1,c,w,yb,yt,{box:yb<F2&&c!==0});
   await HCHL.y();
   /* ----- 박공벽: 세로 판자와 덧댄 띠, 다락 창. 가운데 박공엔 큰 아치 창과 새긴 지붕틀 ----- */
   const gable=(axis,f,sd,half,y0,top,arch)=>{const n=Math.round(half*2/.24);for(let i=0;i<n;i++){const a=-half+(i+.5)*half*2/n,hh=(top-y0)*(1-Math.abs(a)/half);if(hh<.05)continue;
@@ -22247,35 +22285,35 @@ async function hlodgeOutside(parent,wx,wz,y0,ry,o={}){const G=HLG,PI=Math.PI,L=H
       axis==='x'?P(G.BOX,a,y0+hh/2,f+sd*.03,half*2/n-.01,hh,.06,i%2?0x6a4426:0x5e3c22):P(G.BOX,f+sd*.03,y0+hh/2,a,.06,hh,half*2/n-.01,i%2?0x6a4426:0x5e3c22);
       if(i%2===0&&!arch)axis==='x'?P(G.BOX,a+half/n,y0+hh/2,f+sd*.07,.06,hh,.04,0x3a2414):P(G.BOX,f+sd*.07,y0+hh/2,a+half/n,.04,hh,.06,0x3a2414);}
     const sh=[[-half,0],[half,0],[0,top-y0]];axis==='x'?P(G.EXT('gb'+half,sh),0,y0,f-sd*.15,1,1,.3,0x3e2616):P(G.EXT('gb'+half,sh),f-sd*.15,y0,0,1,1,.3,0x3e2616,{ry:PI/2});};
-  for(const sd of [-1,1]){gable('z',sd*HW,sd,ZF,FR,RIDGE);winOut('z',sd*HW,sd,0,.9,FR+2.6,FR+3.8,{});
+  await HCHL.y();for(const sd of [-1,1]){gable('z',sd*HW,sd,ZF,FR,RIDGE);winOut('z',sd*HW,sd,0,.9,FR+2.6,FR+3.8,{});
     /* 다락 창 위 작은 눈썹 지붕 */
     P(G.RB(.3,.08,1.4,.03),sd*(HW+.2),FR+4.0,0,1,1,1,0x3a2414);}
-  gable('x',ZP,1,LX,FR,RIDGE,1);
-  {/* 아치 창 유리와 살 */const s=new THREE.Shape();[[-1.7,0],[1.7,0],[1.7,.5],[1.2,1.6],[0,2.1],[-1.2,1.6],[-1.7,.5]].forEach(([x,y],i)=>i?s.lineTo(x,y):s.moveTo(x,y));const g=new THREE.ShapeGeometry(s);P(g,0,FR,ZP-.16,1,1,1,0xffc070,{win:1});
-    for(const x of [-.6,.6])P(G.BOX,x,FR+.9,ZP-.1,.07,1.8,.06,0x3a2414);P(G.BOX,0,FR+1.0,ZP-.1,3.2,.07,.06,0x3a2414);P(G.TOR(.06),0,FR+.3,ZP+.02,3.6,1,3.6,0x3a2414,{rx:PI/2});
+  await HCHL.y();gable('x',ZP,1,LX,FR,RIDGE,1);
+  await HCHL.y();{/* 아치 창 유리와 살 */const s=new THREE.Shape();await HCHL.y();[[-1.7,0],[1.7,0],[1.7,.5],[1.2,1.6],[0,2.1],[-1.2,1.6],[-1.7,.5]].forEach(([x,y],i)=>i?s.lineTo(x,y):s.moveTo(x,y));await HCHL.y();const g=new THREE.ShapeGeometry(s);await HCHL.y();P(g,0,FR,ZP-.16,1,1,1,0xffc070,{win:1});
+    await HCHL.y();for(const x of [-.6,.6])P(G.BOX,x,FR+.9,ZP-.1,.07,1.8,.06,0x3a2414);await HCHL.y();P(G.BOX,0,FR+1.0,ZP-.1,3.2,.07,.06,0x3a2414);await HCHL.y();P(G.TOR(.06),0,FR+.3,ZP+.02,3.6,1,3.6,0x3a2414,{rx:PI/2});
     /* 새긴 지붕틀: 대공·빗보·가로보 */
-    P(G.RB(LX*1.4,.24,.2,.04),0,FR+3.0,ZP+.12,1,1,1,0x3a2414);P(G.RB(.22,RIDGE-FR-3.2,.2,.04),0,(FR+3.1+RIDGE)/2,ZP+.12,1,1,1,0x3a2414);
-    for(const s of [-1,1]){P(G.RB(.18,2.2,.18,.04),s*1.0,FR+4.2,ZP+.13,1,1,1,0x3a2414,{rz:s*.7});P(G.RB(.16,1.4,.16,.04),s*3.2,FR+2.0,ZP+.12,1,1,1,0x3a2414,{rz:-s*.5});}
+    await HCHL.y();P(G.RB(LX*1.4,.24,.2,.04),0,FR+3.0,ZP+.12,1,1,1,0x3a2414);await HCHL.y();P(G.RB(.22,RIDGE-FR-3.2,.2,.04),0,(FR+3.1+RIDGE)/2,ZP+.12,1,1,1,0x3a2414);
+    await HCHL.y();for(const s of [-1,1]){P(G.RB(.18,2.2,.18,.04),s*1.0,FR+4.2,ZP+.13,1,1,1,0x3a2414,{rz:s*.7});P(G.RB(.16,1.4,.16,.04),s*3.2,FR+2.0,ZP+.12,1,1,1,0x3a2414,{rz:-s*.5});}
     /* 박공 간판 */
-    const m=new THREE.MeshStandardMaterial({map:HLT.sign('허칠 산장'),roughness:.7});OUT.signM=m;}
+    await HCHL.y();const m=new THREE.MeshStandardMaterial({map:HLT.sign('허칠 산장'),roughness:.7});await HCHL.y();OUT.signM=m;}
   await HCHL.y();
   /* ----- 지붕: 판자 위 두꺼운 눈, 처마 끝 둥글게 처진 눈과 고드름, 박공 끝 새긴 박공널 ----- */
   const ov=1.0,icM=0xdcefff;
-  const roofSide=(sd)=>{/* 날개 지붕 (용마루가 x 방향) */const run=-ZB+ov,len=run/Math.cos(50*PI/180),ang=50*PI/180,zc=sd*run/2,yc=RIDGE-run/2*TAN;
+  await HCHL.y();const roofSide=(sd)=>{/* 날개 지붕 (용마루가 x 방향) */const run=-ZB+ov,len=run/Math.cos(50*PI/180),ang=50*PI/180,zc=sd*run/2,yc=RIDGE-run/2*TAN;
     P(G.BOX,0,yc,zc,HW*2+2*ov,.22,len,0x3a2818,{rx:sd*ang});P(G.RB(HW*2+2*ov+.2,.5,len+.1,.22),0,yc+.34/Math.cos(ang),zc,1,1,1,C.SNOW,{rx:sd*ang,noao:1});
     /* 처마 끝 눈 둥근 덩이·고드름 */
     const ez=sd*(run+.05),ey=RIDGE-run*TAN+.12;P(G.LOGX,0,ey,ez,HW*2+2*ov+.3,.5,.62,C.SNOW,{noao:1});
     for(let x=-HW-ov+.2;x<HW+ov-.2;x+=rr(.22,.55)){if(rnd()<.35)continue;const l=rr(.15,.9);P(G.CONE(5),x,ey-.2-l/2,ez+sd*.05,rr(.06,.12),l,rr(.06,.12),icM,{rx:PI,noao:1});}};
-  roofSide(1);roofSide(-1);
-  P(G.LOGX,0,RIDGE+.42,0,HW*2+2*ov+.2,.62,.7,C.SNOW,{noao:1});
+  await HCHL.y();roofSide(1);await HCHL.y();roofSide(-1);
+  await HCHL.y();P(G.LOGX,0,RIDGE+.42,0,HW*2+2*ov+.2,.62,.7,C.SNOW,{noao:1});
   await HCHL.y();
   /* 가운데 박공 지붕 (용마루가 z 방향, 앞으로 ov만큼 더 나온다) */
   {const ang=Math.atan(PT),run=LX+ov,len=run/Math.cos(ang),Z0=-1,Z1=ZP+ov,zm=(Z0+Z1)/2;
-    for(const sd of [-1,1]){const xc=sd*run/2,yc=RIDGE-run/2*PT;P(G.BOX,xc,yc,zm,len,.22,Z1-Z0,0x3a2818,{rz:-sd*ang});P(G.RB(len+.1,.5,Z1-Z0+.2,.22),xc,yc+.34/Math.cos(ang),zm,1,1,1,C.SNOW,{rz:-sd*ang,noao:1});
+    await HCHL.y();for(const sd of [-1,1]){const xc=sd*run/2,yc=RIDGE-run/2*PT;P(G.BOX,xc,yc,zm,len,.22,Z1-Z0,0x3a2818,{rz:-sd*ang});P(G.RB(len+.1,.5,Z1-Z0+.2,.22),xc,yc+.34/Math.cos(ang),zm,1,1,1,C.SNOW,{rz:-sd*ang,noao:1});
       const ex=sd*(run+.05),ey=RIDGE-run*PT+.12;P(G.LOGZ,ex,ey,(ZF+1+Z1)/2,.62,.5,Z1-ZF-.6,C.SNOW,{noao:1});for(let z=ZF+1.3;z<Z1-.1;z+=rr(.25,.5)){if(rnd()<.3)continue;const l=rr(.15,.8);P(G.CONE(5),ex+sd*.05,ey-.2-l/2,z,rr(.06,.12),l,rr(.06,.12),icM,{rx:PI,noao:1});}
       /* 박공널: 끝을 깎은 판이 지붕 끝을 따라 */
       P(G.RB(len+.2,.36,.1,.04),xc,yc-.1,Z1+.02,1,1,1,0x3a2414,{rz:-sd*ang});for(let k=1;k<8;k++){const t=k/8,x=sd*run*t,y=RIDGE-run*t*PT-.42;P(G.EXT('barg',[[-.12,0],[.12,0],[0,-.28]]),x,y,Z1+.03,1,1,.06,0x3a2414);}}
-    P(G.LOGZ,0,RIDGE+.42,(Z0+Z1)/2+.5,.7,.62,Z1-Z0-1,C.SNOW,{noao:1});P(G.LATHE('finial'),0,RIDGE+.5,Z1-.1,.3,1.1,.3,0x3a2414);}
+    await HCHL.y();P(G.LOGZ,0,RIDGE+.42,(Z0+Z1)/2+.5,.7,.62,Z1-Z0-1,C.SNOW,{noao:1});await HCHL.y();P(G.LATHE('finial'),0,RIDGE+.5,Z1-.1,.3,1.1,.3,0x3a2414);}
   await HCHL.y();
   /* 날개 박공 끝 박공널 */
   for(const sx of [-1,1]){const run=-ZB+ov;for(const sd of [-1,1]){const zc=sd*run/2,yc=RIDGE-run/2*TAN,len=run/Math.cos(50*PI/180);P(G.RB(.1,.36,len+.2,.04),sx*(HW+ov+.02),yc-.1,zc,1,1,1,0x3a2414,{rx:sd*50*PI/180});}}
@@ -22293,58 +22331,58 @@ async function hlodgeOutside(parent,wx,wz,y0,ry,o={}){const G=HLG,PI=Math.PI,L=H
   await HCHL.y();
   /* ----- 현관 지붕 (정문 앞): 돌 받침 위 굵은 기둥 넷, 눈 덮인 박공 지붕, 매단 간판과 등불 ----- */
   {const X=3.0,Z0=ZP+.8,Z1=ZP+4.6,YB=3.7,run=X+.6,ang=40*PI/180,top=YB+run*Math.tan(ang);
-    for(const x of [-X,X])for(const z of [Z0,Z1]){P(G.RB(.8,.7,.8,.06),x,.35,z,1,1,1,0x8e887c);for(let k=0;k<6;k++)P(G.ICO,x+rr(-.35,.35),rr(.1,.6),z+(k%2?.4:-.4),.3,.24,.12,STN());P(G.RB(.36,YB-.7,.36,.06),x,.7+(YB-.7)/2,z,1,1,1,C.LOG[0]);
+    await HCHL.y();for(const x of [-X,X])for(const z of [Z0,Z1]){P(G.RB(.8,.7,.8,.06),x,.35,z,1,1,1,0x8e887c);for(let k=0;k<6;k++)P(G.ICO,x+rr(-.35,.35),rr(.1,.6),z+(k%2?.4:-.4),.3,.24,.12,STN());P(G.RB(.36,YB-.7,.36,.06),x,.7+(YB-.7)/2,z,1,1,1,C.LOG[0]);
       for(const s of [-1,1])P(G.BOX,x,YB-.45,z+s*.45,.16,.8,.16,C.LOG[0],{rx:s*.75});boxC(x,z,.8,.8,YB);}
-    for(const x of [-X,X])P(G.RB(.34,.36,Z1-Z0+1.0,.05),x,YB+.18,(Z0+Z1)/2,1,1,1,C.LOG[1]);for(const z of [Z0,Z1])P(G.RB(X*2+.8,.3,.3,.05),0,YB+.15,z,1,1,1,C.LOG[1]);
-    for(const sd of [-1,1]){const len=run/Math.cos(ang),xc=sd*run/2,yc=top-run/2*Math.tan(ang);P(G.BOX,xc,yc+.3,(Z0+Z1)/2+.1,len,.18,Z1-Z0+1.6,0x3a2818,{rz:-sd*ang});P(G.RB(len+.1,.44,Z1-Z0+1.8,.2),xc,yc+.62,(Z0+Z1)/2+.1,1,1,1,C.SNOW,{rz:-sd*ang,noao:1});
+    await HCHL.y();for(const x of [-X,X])P(G.RB(.34,.36,Z1-Z0+1.0,.05),x,YB+.18,(Z0+Z1)/2,1,1,1,C.LOG[1]);await HCHL.y();for(const z of [Z0,Z1])P(G.RB(X*2+.8,.3,.3,.05),0,YB+.15,z,1,1,1,C.LOG[1]);
+    await HCHL.y();for(const sd of [-1,1]){const len=run/Math.cos(ang),xc=sd*run/2,yc=top-run/2*Math.tan(ang);P(G.BOX,xc,yc+.3,(Z0+Z1)/2+.1,len,.18,Z1-Z0+1.6,0x3a2818,{rz:-sd*ang});P(G.RB(len+.1,.44,Z1-Z0+1.8,.2),xc,yc+.62,(Z0+Z1)/2+.1,1,1,1,C.SNOW,{rz:-sd*ang,noao:1});
       for(let z=Z0-.6;z<Z1+.8;z+=rr(.25,.5)){if(rnd()<.35)continue;const l=rr(.12,.6);P(G.CONE(5),sd*(run+.05),YB+.2-l/2,z,.08,l,.08,icM,{rx:PI,noao:1});}}
-    P(G.LOGZ,0,top+.62,(Z0+Z1)/2+.1,.5,.44,Z1-Z0+1.8,C.SNOW,{noao:1});
+    await HCHL.y();P(G.LOGZ,0,top+.62,(Z0+Z1)/2+.1,.5,.44,Z1-Z0+1.8,C.SNOW,{noao:1});
     /* 앞 박공: 세모 판·대공, 큰 간판 */
-    P(G.EXT('pcg',[[-run,0],[run,0],[0,top-YB]]),0,YB+.3,Z1+.85,1,1,.12,0x5e3c22);P(G.RB(.18,top-YB-.4,.16,.04),0,YB+.3+(top-YB-.4)/2,Z1+.93,1,1,1,0x3a2414);
-    for(const s of [-1,1])P(G.RB(.14,1.6,.14,.04),s*.9,YB+1.0,Z1+.93,1,1,1,0x3a2414,{rz:s*.9});
-    {const sm=new THREE.Mesh(G.PL,OUT.signM);const p=W(0,Z1+.95);sm.position.set(p.x,y0+YB-.55,p.z);sm.rotation.y=ry;sm.scale.set(2.6,.72,1);sm.castShadow=true;parent.add(sm);P(G.RB(2.8,.86,.08,.03),0,YB-.55,Z1+.9,1,1,1,0x2a180c);for(const s of [-1,1])P(G.CYL(6),s*1.1,YB-.05,Z1+.9,.03,.3,.03,C.IRON);}
+    await HCHL.y();P(G.EXT('pcg',[[-run,0],[run,0],[0,top-YB]]),0,YB+.3,Z1+.85,1,1,.12,0x5e3c22);await HCHL.y();P(G.RB(.18,top-YB-.4,.16,.04),0,YB+.3+(top-YB-.4)/2,Z1+.93,1,1,1,0x3a2414);
+    await HCHL.y();for(const s of [-1,1])P(G.RB(.14,1.6,.14,.04),s*.9,YB+1.0,Z1+.93,1,1,1,0x3a2414,{rz:s*.9});
+    await HCHL.y();{const sm=new THREE.Mesh(G.PL,OUT.signM);await HCHL.y();const p=W(0,Z1+.95);await HCHL.y();sm.position.set(p.x,y0+YB-.55,p.z);await HCHL.y();sm.rotation.y=ry;await HCHL.y();sm.scale.set(2.6,.72,1);await HCHL.y();sm.castShadow=true;await HCHL.y();parent.add(sm);await HCHL.y();P(G.RB(2.8,.86,.08,.03),0,YB-.55,Z1+.9,1,1,1,0x2a180c);await HCHL.y();for(const s of [-1,1])P(G.CYL(6),s*1.1,YB-.05,Z1+.9,.03,.3,.03,C.IRON);}
     /* 매단 등불 둘 */
-    for(const z of [Z0+.9,Z1-.9]){P(G.CYL(6),0,YB-.2,z,.025,.4,.025,C.IRON);P(G.RB(.3,.42,.3,.04),0,YB-.64,z,1,1,1,0x2a2826);P(G.BOX,0,YB-.64,z,.24,.32,.24,0xffd080,{glow:1});P(G.CONE(4),0,YB-.36,z,.42,.2,.42,0x2a2826,{ry:PI/4});}
+    await HCHL.y();for(const z of [Z0+.9,Z1-.9]){P(G.CYL(6),0,YB-.2,z,.025,.4,.025,C.IRON);P(G.RB(.3,.42,.3,.04),0,YB-.64,z,1,1,1,0x2a2826);P(G.BOX,0,YB-.64,z,.24,.32,.24,0xffd080,{glow:1});P(G.CONE(4),0,YB-.36,z,.42,.2,.42,0x2a2826,{ry:PI/4});}
     /* 돌 깐 바닥과 계단 */
-    for(let z=ZP+.1;z<Z1+1.4;z+=.5)for(let x=-X-.6+(Math.round(z*2)%2?.25:0);x<X+.6;x+=rr(.5,.8))P(G.BOX,x,.04,z,.48,.08,.46,rnd()<.5?0x8e887c:0x7c766c);}
+    await HCHL.y();for(let z=ZP+.1;z<Z1+1.4;z+=.5)for(let x=-X-.6+(Math.round(z*2)%2?.25:0);x<X+.6;x+=rr(.5,.8))P(G.BOX,x,.04,z,.48,.08,.46,rnd()<.5?0x8e887c:0x7c766c);}
   await HCHL.y();
   /* 정문: 두 짝 나무 문, 쇠 띠·고리, 문 위 불빛 창, 양옆 등 */
   {for(const s of [-1,1]){P(G.BOX,s*.6,1.7,ZP+.03,1.16,3.3,.1,0x5a3a22);for(let k=0;k<3;k++)P(G.BOX,s*.55,.5+k*1.15,ZP+.1,1.0,.08,.04,C.IRON);P(G.TOR(.12),s*.22,1.4,ZP+.12,.22,.22,.22,C.BRASS,{rx:PI/2});
       P(G.RB(.18,3.6,.3,.04),s*1.3,1.8,ZP+.08,1,1,1,0x3a2414);const lp=fr(s*1.75,ZP+.25,0,2.6);lp(G.BOX,0,0,-.1,.06,.06,.3,C.IRON);lp(G.RB(.26,.4,.26,.04),0,-.1,.06,1,1,1,0x2a2826);lp(G.BOX,0,-.1,.06,.2,.3,.2,0xffd080,{glow:1});lp(G.CONE(4),0,.18,.06,.36,.16,.36,0x2a2826,{ry:PI/4});}
-    P(G.RB(2.9,.18,.4,.04),0,3.6,ZP+.1,1,1,1,0x3a2414);
-    const Lt=new THREE.PointLight(0xffb868,0,16,1.6);const p=W(0,ZP+1.6);Lt.position.set(p.x,y0+3.0,p.z);parent.add(Lt);OUT.light=Lt;}
+    await HCHL.y();P(G.RB(2.9,.18,.4,.04),0,3.6,ZP+.1,1,1,1,0x3a2414);
+    await HCHL.y();const Lt=new THREE.PointLight(0xffb868,0,16,1.6);await HCHL.y();const p=W(0,ZP+1.6);await HCHL.y();Lt.position.set(p.x,y0+3.0,p.z);await HCHL.y();parent.add(Lt);await HCHL.y();OUT.light=Lt;}
   await HCHL.y();
   /* ----- 굴뚝 셋: 로비 벽난로(뒤 지붕), 서재 벽난로(서쪽 박공 밖, 땅에서부터), 부엌(뒤 지붕 동쪽) ----- */
   const chim=(x,z,w,d,y0c,y1c)=>{P(G.BOX,x,(y0c+y1c)/2,z,w,y1c-y0c,d,0x6e6a62);for(let y=y0c+.15;y<y1c;y+=.3)for(const [fx,fz,lw,ax] of [[x,z+d/2,w,'x'],[x,z-d/2,w,'x'],[x+w/2,z,d,'z'],[x-w/2,z,d,'z']])for(let a=-lw/2+rnd()*.15;a<lw/2-.05;a+=rr(.28,.4)){const s=rr(.24,.34);ax==='x'?P(G.ICO,fx+a,y,fz,s*1.2,s*.75,s*.35,STN()):P(G.ICO,fx,y,fz+a,s*.35,s*.75,s*1.2,STN());}
     P(G.RB(w+.4,.24,d+.4,.05),x,y1c+.1,z,1,1,1,0x5a5650);for(const s of [-1,1])P(G.CYL(10),x+s*w*.22,y1c+.45,z,.3,.5,.3,0x8a5a3a);P(G.RB(w+.5,.16,d+.5,.08),x,y1c+.26,z,1,1,1,C.SNOW,{noao:1});return {x,z,y:y1c+.8};};
-  const CH=[chim(0,-3.3,2.0,1.5,FR,RIDGE+2.2),chim(-HW-.75,0,1.8,1.2,F1,RIDGE+1.6),chim(15.6,-4.4,1.1,1.1,FR,RIDGE-1.2)];
-  {const x=-HW-.75;P(G.BOX,x,F1/2,0,2.6,F1,1.5,0x6e6a62);for(let y=.2;y<F1+.6;y+=.3)for(let a=-1.2+rnd()*.1;a<1.25;a+=rr(.28,.4))P(G.ICO,x-.76,y,a,.12,.22,.36,STN());P(G.BOX,x,F1+.35,0,2.7,.3,1.6,0x5a5650);P(G.RB(2.8,.2,1.7,.08),x,F1+.55,0,1,1,1,C.SNOW,{noao:1});boxC(x,0,2.6,1.5,RIDGE+2);}
+  await HCHL.y();const CH=[chim(0,-3.3,2.0,1.5,FR,RIDGE+2.2),chim(-HW-.75,0,1.8,1.2,F1,RIDGE+1.6),chim(15.6,-4.4,1.1,1.1,FR,RIDGE-1.2)];
+  await HCHL.y();{const x=-HW-.75;await HCHL.y();P(G.BOX,x,F1/2,0,2.6,F1,1.5,0x6e6a62);await HCHL.y();for(let y=.2;y<F1+.6;y+=.3)for(let a=-1.2+rnd()*.1;a<1.25;a+=rr(.28,.4))P(G.ICO,x-.76,y,a,.12,.22,.36,STN());await HCHL.y();P(G.BOX,x,F1+.35,0,2.7,.3,1.6,0x5a5650);await HCHL.y();P(G.RB(2.8,.2,1.7,.08),x,F1+.55,0,1,1,1,C.SNOW,{noao:1});await HCHL.y();boxC(x,0,2.6,1.5,RIDGE+2);}
   await HCHL.y();
   /* ----- 둘레: 눈 쌓인 벽 밑, 장작더미, 벤치, 썰매, 스키 꽂이, 길가 등불 ----- */
   for(const [ax,f,a0,a1,sd] of [['x',ZF,-HW,-LX,1],['x',ZF,LX,HW,1],['x',ZB,-HW,HW,-1],['z',-HW,ZB,ZF,-1],['z',HW,ZB,ZF,1]])for(let a=a0+.6;a<a1-.4;a+=rr(.8,1.6)){const s=rr(.8,1.6);ax==='x'?P(G.HEMI,a,-.05,f+sd*.25,s*1.6,rr(.25,.5),rr(.7,1.1),C.SNOW,{noao:1}):P(G.HEMI,f+sd*.25,-.05,a,rr(.7,1.1),rr(.25,.5),s*1.6,C.SNOW,{noao:1});}
-  {const X=-HW-.9;for(let r=0;r<6;r++)for(let k=0;k<14-r;k++)P(G.LOGX,X-.1,.18+r*.3,2.0+k*.28+r*.14,.9,.3,.3,[0x7a5634,0x6a4a2c,0x8a6640][(r+k)%3],{rx:rr(0,1)});P(G.RB(1.2,.3,4.4,.15),X-.1,1.98,3.95,1,1,1,C.SNOW,{noao:1});boxC(X-.1,4.0,1.1,4.3,1.8);
-    for(let r=0;r<5;r++)for(let k=0;k<12-r;k++)P(G.LOGX,X-.1,.18+r*.3,-2.0-k*.28-r*.14,.9,.3,.3,[0x7a5634,0x6a4a2c,0x8a6640][(r+k+1)%3],{rx:rr(0,1)});P(G.RB(1.2,.3,3.8,.15),X-.1,1.68,-3.6,1,1,1,C.SNOW,{noao:1});boxC(X-.1,-3.6,1.1,3.8,1.5);}
-  for(const s of [-1,1]){const x=s*5.4,z=ZP+1.3;K.bench(x,z,1.7,PI*0+0,0);P(G.RB(1.6,.12,.4,.06),x,.56,z,1,1,1,C.SNOW,{noao:1});boxC(x,z,1.7,.5,.6);const q=W(x,z);if(typeof seatAdd==='function'){seatAdd(q.x,q.z,y0+.54,ry);}}
-  {const f=fr(7.2,ZP+.9,-.3,0);for(const s of [-1,1])f(G.RB(.08,.12,1.6,.03),s*.3,.1,0,1,1,1,0x6a4426);for(const s of [-1,1])f(G.TOR(.04),s*.3,.25,.82,.3,.3,.3,0x6a4426,{rz:PI/2});for(let k=0;k<5;k++)f(G.BOX,0,.26,-.6+k*.3,.7,.04,.18,0x8a5a32);boxC(7.2,ZP+.9,.9,1.7,.4);}
-  {const f=fr(-7.4,ZP+.4,0,0);f(G.BOX,0,.9,0,1.6,.08,.12,0x5a3a22);f(G.BOX,0,.4,0,1.6,.08,.12,0x5a3a22);for(const s of [-1,1])f(G.BOX,s*.75,.6,0,.1,1.2,.1,0x3a2414);for(let k=0;k<6;k++)f(G.RB(.09,1.9,.03,.012),-.6+k*.24,.95,.05,1,1,1,[0x8a4a2a,0x2e4a6a,0x6a3a20][k%3],{rx:-.1});boxC(-7.4,ZP+.4,1.7,.5,1.5);}
-  for(const [x,z] of [[-2.6,ZP+7.5],[2.6,ZP+7.5],[-2.6,ZP+12],[2.6,ZP+12]]){P(G.CYL(8),x,.9,z,.12,1.8,.12,0x2a2826);P(G.RB(.3,.4,.3,.04),x,2.0,z,1,1,1,0x2a2826);P(G.BOX,x,2.0,z,.22,.3,.22,0xffd080,{glow:1});P(G.CONE(4),x,2.3,z,.4,.2,.4,0x2a2826,{ry:PI/4});P(G.CONE(4),x,2.42,z,.42,.12,.42,C.SNOW,{ry:PI/4,noao:1});rC(x,z,.15,2.4);}
+  await HCHL.y();{const X=-HW-.9;await HCHL.y();for(let r=0;r<6;r++)for(let k=0;k<14-r;k++)P(G.LOGX,X-.1,.18+r*.3,2.0+k*.28+r*.14,.9,.3,.3,[0x7a5634,0x6a4a2c,0x8a6640][(r+k)%3],{rx:rr(0,1)});await HCHL.y();P(G.RB(1.2,.3,4.4,.15),X-.1,1.98,3.95,1,1,1,C.SNOW,{noao:1});await HCHL.y();boxC(X-.1,4.0,1.1,4.3,1.8);
+    await HCHL.y();for(let r=0;r<5;r++)for(let k=0;k<12-r;k++)P(G.LOGX,X-.1,.18+r*.3,-2.0-k*.28-r*.14,.9,.3,.3,[0x7a5634,0x6a4a2c,0x8a6640][(r+k+1)%3],{rx:rr(0,1)});await HCHL.y();P(G.RB(1.2,.3,3.8,.15),X-.1,1.68,-3.6,1,1,1,C.SNOW,{noao:1});await HCHL.y();boxC(X-.1,-3.6,1.1,3.8,1.5);}
+  await HCHL.y();for(const s of [-1,1]){const x=s*5.4,z=ZP+1.3;K.bench(x,z,1.7,PI*0+0,0);P(G.RB(1.6,.12,.4,.06),x,.56,z,1,1,1,C.SNOW,{noao:1});boxC(x,z,1.7,.5,.6);const q=W(x,z);if(typeof seatAdd==='function'){seatAdd(q.x,q.z,y0+.54,ry);}}
+  await HCHL.y();{const f=fr(7.2,ZP+.9,-.3,0);await HCHL.y();for(const s of [-1,1])f(G.RB(.08,.12,1.6,.03),s*.3,.1,0,1,1,1,0x6a4426);await HCHL.y();for(const s of [-1,1])f(G.TOR(.04),s*.3,.25,.82,.3,.3,.3,0x6a4426,{rz:PI/2});await HCHL.y();for(let k=0;k<5;k++)f(G.BOX,0,.26,-.6+k*.3,.7,.04,.18,0x8a5a32);await HCHL.y();boxC(7.2,ZP+.9,.9,1.7,.4);}
+  await HCHL.y();{const f=fr(-7.4,ZP+.4,0,0);await HCHL.y();f(G.BOX,0,.9,0,1.6,.08,.12,0x5a3a22);await HCHL.y();f(G.BOX,0,.4,0,1.6,.08,.12,0x5a3a22);await HCHL.y();for(const s of [-1,1])f(G.BOX,s*.75,.6,0,.1,1.2,.1,0x3a2414);await HCHL.y();for(let k=0;k<6;k++)f(G.RB(.09,1.9,.03,.012),-.6+k*.24,.95,.05,1,1,1,[0x8a4a2a,0x2e4a6a,0x6a3a20][k%3],{rx:-.1});await HCHL.y();boxC(-7.4,ZP+.4,1.7,.5,1.5);}
+  await HCHL.y();for(const [x,z] of [[-2.6,ZP+7.5],[2.6,ZP+7.5],[-2.6,ZP+12],[2.6,ZP+12]]){P(G.CYL(8),x,.9,z,.12,1.8,.12,0x2a2826);P(G.RB(.3,.4,.3,.04),x,2.0,z,1,1,1,0x2a2826);P(G.BOX,x,2.0,z,.22,.3,.22,0xffd080,{glow:1});P(G.CONE(4),x,2.3,z,.4,.2,.4,0x2a2826,{ry:PI/4});P(G.CONE(4),x,2.42,z,.42,.12,.42,C.SNOW,{ry:PI/4,noao:1});rC(x,z,.15,2.4);}
   await HCHL.y();
   /* 부딪힘: 건물 몸통·박공·굴뚝 */
-  boxC(0,0,HW*2+.2,ZF-ZB+.2,RIDGE+1);boxC(0,(ZF+ZP)/2,LX*2+.2,ZP-ZF+.3,RIDGE);boxC(-HW-.75,0,1.9,1.3,RIDGE+2);
+  boxC(0,0,HW*2+.2,ZF-ZB+.2,RIDGE+1);await HCHL.y();boxC(0,(ZF+ZP)/2,LX*2+.2,ZP-ZF+.3,RIDGE);await HCHL.y();boxC(-HW-.75,0,1.9,1.3,RIDGE+2);
   await HCHL.y();
   /* 굽기 */
-  const g=new THREE.Group();g.userData.hl=1;parent.add(g);OUT.mesh=B.mesh(g,true);OUT.g=g;OUT.nVert=B.n;
+  const g=new THREE.Group();await HCHL.y();g.userData.hl=1;await HCHL.y();parent.add(g);await HCHL.y();OUT.mesh=B.mesh(g,true);await HCHL.y();OUT.g=g;await HCHL.y();OUT.nVert=B.n;
   await HCHL.y();
   /* 연기 */
-  {const tex=edgeMistTex(),SL=[];for(const c of CH){const p=W(c.x,c.z);for(let i=0;i<16;i++){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xd8d8d8,transparent:true,opacity:0,depthWrite:false,fog:true}));sp.userData={ph:i/16,o:new THREE.Vector3(p.x,y0+c.y,p.z)};parent.add(sp);SL.push(sp);}}OUT.smokeS=SL;
-    OUT.smokeL={L:[],o:new THREE.Vector3()};}
+  {const tex=edgeMistTex(),SL=[];await HCHL.y();for(const c of CH){const p=W(c.x,c.z);for(let i=0;i<16;i++){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xd8d8d8,transparent:true,opacity:0,depthWrite:false,fog:true}));sp.userData={ph:i/16,o:new THREE.Vector3(p.x,y0+c.y,p.z)};parent.add(sp);SL.push(sp);}}await HCHL.y();OUT.smokeS=SL;
+    await HCHL.y();OUT.smokeL={L:[],o:new THREE.Vector3()};}
   await HCHL.y();
   /* 드나드는 문: 바깥 정문 → 산장 안 */
-  {const I=OR.ISLES.hlodge,dp=W(0,ZP+.35),g1=new THREE.Group();g1.position.set(dp.x,y0,dp.z);parent.add(g1);
-    if(I)PORTALS.push({id:'hlodge_in',x:dp.x,z:dp.z,ry,hw:1.3,minLv:0,label:'산장으로 들어가기',to:{x:I.x,z:I.z+L.ZP-2.4,yaw:0,y:.1},msg:null,color:0xffd23a,door:1,fx:{g:g1,cols:[]}});
-    const op=W(0,ZP+3.0);L.outTo.x=op.x;L.outTo.z=op.z;L.outTo.yaw=Math.atan2(-sn,-cs);}
-  {const rv=W(0,ZP+6.2);OUT.revive={x:rv.x,z:rv.z,yaw:Math.atan2(-sn,-cs)};const sp=W(5.4,ZP+1.3);OUT.seat={x:sp.x,z:sp.z};}
-  OUT.glow={emissiveIntensity:1};OUT.R=24;L.out=OUT;return OUT;}
+  {const I=OR.ISLES.hlodge,dp=W(0,ZP+.35),g1=new THREE.Group();await HCHL.y();g1.position.set(dp.x,y0,dp.z);await HCHL.y();parent.add(g1);
+    await HCHL.y();if(I)PORTALS.push({id:'hlodge_in',x:dp.x,z:dp.z,ry,hw:1.3,minLv:0,label:'산장으로 들어가기',to:{x:I.x,z:I.z+L.ZP-2.4,yaw:0,y:.1},msg:null,color:0xffd23a,door:1,fx:{g:g1,cols:[]}});
+    await HCHL.y();const op=W(0,ZP+3.0);await HCHL.y();L.outTo.x=op.x;await HCHL.y();L.outTo.z=op.z;await HCHL.y();L.outTo.yaw=Math.atan2(-sn,-cs);}
+  await HCHL.y();{const rv=W(0,ZP+6.2);await HCHL.y();OUT.revive={x:rv.x,z:rv.z,yaw:Math.atan2(-sn,-cs)};await HCHL.y();const sp=W(5.4,ZP+1.3);await HCHL.y();OUT.seat={x:sp.x,z:sp.z};}
+  await HCHL.y();OUT.glow={emissiveIntensity:1};await HCHL.y();OUT.R=24;await HCHL.y();L.out=OUT;await HCHL.y();return OUT;}
 /* 산장 매 프레임: 안에 있을 때만 사람·불빛 번짐을 보이고, 불꽃이 흔들리고, 창밖 그림은 날빛을 따른다. 바깥 굴뚝 연기와 밤 창불도 여기서 */
 /* 산장 창밖 (2026-11-11 원호: "창문들에 바깥 그림 붙여놓은 게 부자연스러워")
    그림을 유리에 붙이지 않고, 창 너머로 실제 바깥을 들여다보는 것처럼 그린다 (재질 하나, 그림 파일 없음).
@@ -25638,14 +25676,21 @@ await BOOT.y();await (async function buildIsles(){
   /* 땅 짓기는 꼭짓점이 수만~수십만 개라 오래 걸린다: 처음 불러올 때(groundA)는 꼭짓점 8천 개마다 한 번씩 쉰다. 만드는 땅은 똑같다 */
   const groundGen=function*(I,colorFn,N=110,hFn){let gap=1e9;for(const k of OR.ISLE_ORDER){const J=OR.ISLES[k];if(J===I)continue;gap=Math.min(gap,Math.hypot(J.x-I.x,J.z-I.z)-J.R-I.R);}
     const E=I.id==='subcus'?30:Math.max(30,Math.min(240,gap/2-6)),S=I.R*2+E*2,N2=Math.round(N*S/(I.R*2+60)),g=new THREE.PlaneGeometry(S,S,N2,N2);g.rotateX(-Math.PI/2);g.translate(I.x,0,I.z);
-    const pos=g.attributes.position,cols=[],tmp=new THREE.Color();
-    for(let i=0;i<pos.count;i++){if((i&2047)===2047)yield;const x=pos.getX(i),z=pos.getZ(i),h=hFn?hFn(x,z):heightAt(x,z);pos.setY(i,h);
-      /* 경계 밖 색은 경계 조금 안쪽 색을 그대로 이어 쓴다 (가장자리 바위색 띠가 생기지 않게) */
-      {const dx=x-I.x,dz=z-I.z,d=Math.hypot(dx,dz),Rk=I.R-10;if(I.id!=='subcus'&&d>Rk){const k=Rk/d;colorFn(I.x+dx*k,I.z+dz*k,heightAt(I.x+dx*k,I.z+dz*k),tmp);}else colorFn(x,z,h,tmp);}cols.push(tmp.r,tmp.g,tmp.b);}
-    g.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));g.computeVertexNormals();
+    const pos=g.attributes.position,gk=GRC.key('isle|'+I.id+'|'+N2);
+    /* 높이·색 계산 (저장해 둔 것이 있으면 꺼내 쓴다, GRC) */
+    const fill=function*(){const cols=[],tmp=new THREE.Color(),hit=GRC.get(gk,pos.count);
+      if(hit){const a=pos.array;for(let i=0;i<pos.count;i++)a[i*3+1]=hit.y[i];g.setAttribute('color',new THREE.BufferAttribute(hit.c,3));}
+      else{for(let i=0;i<pos.count;i++){if((i&2047)===2047)yield;const x=pos.getX(i),z=pos.getZ(i),h=hFn?hFn(x,z):heightAt(x,z);pos.setY(i,h);
+        /* 경계 밖 색은 경계 조금 안쪽 색을 그대로 이어 쓴다 (가장자리 바위색 띠가 생기지 않게) */
+        {const dx=x-I.x,dz=z-I.z,d=Math.hypot(dx,dz),Rk=I.R-10;if(I.id!=='subcus'&&d>Rk){const k=Rk/d;colorFn(I.x+dx*k,I.z+dz*k,heightAt(I.x+dx*k,I.z+dz*k),tmp);}else colorFn(x,z,h,tmp);}cols.push(tmp.r,tmp.g,tmp.b);}
+        g.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));GRC.put(gk,pos,g.attributes.color.array);}
+      g.computeVertexNormals();g.computeBoundingSphere();g.computeBoundingBox();};
     /* 풀밭 땅은 풀·흙 무늬(MTEX 8)와 부드러운 빛으로. 눈산·모래섬·동굴은 무늬 없이 부드럽게만 */
     let gmt;if(/^(arbus|kaolis|subcus)$/.test(I.id))gmt=new THREE.MeshStandardMaterial({vertexColors:true,roughness:1});else{g.setAttribute('mt',new THREE.BufferAttribute(new Float32Array(pos.count).fill(8),1));gmt=MTEX.patch(new THREE.MeshStandardMaterial({vertexColors:true,roughness:1}),'g');}
-    const m=new THREE.Mesh(g,gmt);m.receiveShadow=true;scene.add(m);return m;};
+    const m=new THREE.Mesh(g,gmt);m.receiveShadow=true;
+    /* 엑시즈 말고는 첫 로딩에서 미룬다 (LAZYG): 모양만 돌려주고 장면에는 다 지은 뒤 넣는다 */
+    if(LAZYG.on&&I.id!=='marcus'){m.userData.lazy=true;LAZYG.add(m,[I.x-S/2,I.z-S/2,I.x+S/2,I.z+S/2],fill());return m;}
+    yield* fill();scene.add(m);return m;};
   const ground=(...a)=>{const it=groundGen(...a);let r;while(!(r=it.next()).done);return r.value;};
   const groundA=async(...a)=>{const it=groundGen(...a);let r,n=0;while(!(r=it.next()).done)await((++n&3)===0?BOOT.y():BOOT.z());return r.value;};   /* 2천 꼭짓점마다 쉴 틈 (진행 %는 예전처럼 8천마다) */
   /* 자리 고르기: 그 땅 안에서, 들어오는 자리와 이미 놓은 것들을 피해서 */
@@ -25856,10 +25901,15 @@ await BOOT.y();await (async function buildIsles(){
     for(let ti=0;ti<TN;ti++)for(let tj=0;tj<TN;tj++){const x0=TX0+ti*TS,z0=TZ0+tj*TS;let m=1e9;for(let a=0;a<=8;a++)for(let b=0;b<=8;b++)m=Math.min(m,OR.MH.walkD(x0+a*TS/8,z0+b*TS/8));if(m<250)TILES.push({x0,z0,x1:x0+TS,z1:z0+TS});}
     for(const T of TILES){await BOOT.y();const {x0,x1,z0,z1}=T;
       const nx=Math.round((x1-x0)/3.6),nz=Math.round((z1-z0)/3.6),g=new THREE.PlaneGeometry(x1-x0,z1-z0,nx,nz);g.rotateX(-Math.PI/2);g.translate((x0+x1)/2,0,(z0+z1)/2);
-      const pos=g.attributes.position,cols=[],tmp=new THREE.Color();
-      for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i),h=mhHeight(x,z);pos.setY(i,h);colAt(x,z,h,tmp);cols.push(tmp.r,tmp.g,tmp.b);}
-      g.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));g.computeVertexNormals();g.setAttribute('mt',new THREE.BufferAttribute(new Float32Array(pos.count).fill(8),1));
-      const m=new THREE.Mesh(g,MTEX.patch(new THREE.MeshStandardMaterial({vertexColors:true,roughness:1}),'g'));m.receiveShadow=true;scene.add(m);ISLE_FX.mhTiles.push(m);}
+      const pos=g.attributes.position,gk=GRC.key('mht|'+x0+'|'+z0+'|'+nx+'|'+nz);
+      /* 높이·색 계산은 다 지은 뒤 (LAZYG, 저장해 둔 것이 있으면 꺼내 쓴다 GRC) */
+      const fill=function*(){const cols=[],tmp=new THREE.Color(),hit=GRC.get(gk,pos.count);
+        if(hit){const a=pos.array;for(let i=0;i<pos.count;i++)a[i*3+1]=hit.y[i];g.setAttribute('color',new THREE.BufferAttribute(hit.c,3));}
+        else{for(let i=0;i<pos.count;i++){if((i&2047)===2047)yield;const x=pos.getX(i),z=pos.getZ(i),h=mhHeight(x,z);pos.setY(i,h);colAt(x,z,h,tmp);cols.push(tmp.r,tmp.g,tmp.b);}
+          g.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));GRC.put(gk,pos,g.attributes.color.array);}
+        g.computeVertexNormals();g.computeBoundingSphere();g.computeBoundingBox();};
+      g.setAttribute('mt',new THREE.BufferAttribute(new Float32Array(pos.count).fill(8),1));
+      const m=new THREE.Mesh(g,MTEX.patch(new THREE.MeshStandardMaterial({vertexColors:true,roughness:1}),'g'));m.receiveShadow=true;ISLE_FX.mhTiles.push(m);m.userData.lazy=true;LAZYG.add(m,[x0,z0,x1,z1],fill());}
     /* 땅 안 꾸밈 (예전 그대로 + 새 땅). 길·물·나가는 자리는 피한다 */
     const dr=(x,z)=>MHR.near(x,z).d,dry=(x,z)=>heightAt(x,z)>-.15;
     for(const id of OR.MHUNT){await BOOT.y();const I=ISLES[id],kd=I.kind,P=placer(I);
@@ -26151,6 +26201,8 @@ const HCH_VEILS=[];
    - 처음 들어갈 때(순간이동·문·마차·저장된 자리가 허칠): 로딩 화면을 띄우고 다 지은 뒤에 넘어간다
    - 게임에 들어가 한참 지나면 프레임마다 몇 ms씩 미리 지어 둔다 (그러면 들어갈 때 기다리지 않는다)
    짓는 코드·난수는 예전 그대로라 지은 모습은 똑같다 */
+function twAdd(objs){if(!objs||!objs.length)return;if(!TW.done){if(TW.list)for(const o of objs)TW.list.push(o);return;}   /* 아직 목록을 안 만들었으면 나중에 장면을 훑을 때 들어간다 */
+  TW.list=objs.slice();TW.lights=[];scene.traverse(o=>{if(o.isLight)TW.lights.push(o);});TW.i=0;TW.rt=twRT();TW.tmp=new THREE.Scene();TW.more=1;TW.done=false;}
 const HCHL={st:0,done:false,u:0,last:0,cbs:[],t0:0,
   isH(x,z){if(!(x>=800))return false;const I=OR.isleAt(x,z);return !!I&&(I.id==='hlodge'||!!OR.HCH.fam(I.id));},
   /* 쉬어 가기: 급하면(로딩 화면) 40ms마다 잠깐, 시작 창이면 12ms, 게임 안이면 프레임마다 4ms만 */
@@ -26161,10 +26213,12 @@ const HCHL={st:0,done:false,u:0,last:0,cbs:[],t0:0,
     (async()=>{try{await buildHMaps();}catch(e){console.warn('hmaps',e);}
       try{await buildHechilLodge();}catch(e){console.warn('hlodge',e);}
       try{await buildHCave();}catch(e){console.warn('hcave',e);}
-      this.finish(scene.children.filter(c=>!before.has(c)));})();},
-  finish(added){this.done=true;
-    try{const b=new THREE.Box3(),v=new THREE.Vector3();mergeStaticGroups(3,added.filter(c=>c.isGroup&&!b.setFromObject(c).isEmpty()&&b.getCenter(v).x>=9000));}catch(e){console.warn('hchl merge',e);}   /* 첫 로딩 끝에 하던 것과 똑같이: 움직이지 않는 묶음은 하나로 합치고, 먼 좌표는 작게 옮긴다 */
-    try{Rebase.run();}catch(e){}
+      await this.finish(scene.children.filter(c=>!before.has(c)));})();},
+  /* 합치기·옮기기도 조금씩 쉬어 가며 (한 번에 하면 게임 안에서 0.5초쯤 멈췄다) */
+  async finish(added){const go=async it=>{while(!it.next().done){const p=this.y();if(p)await p;}};
+    try{const b=new THREE.Box3(),v=new THREE.Vector3();await go(mergeStaticGen(3,added.filter(c=>c.isGroup&&!b.setFromObject(c).isEmpty()&&b.getCenter(v).x>=9000)));}catch(e){console.warn('hchl merge',e);}   /* 첫 로딩 끝에 하던 것과 똑같이: 움직이지 않는 묶음은 하나로 합치고, 먼 좌표는 작게 옮긴다 */
+    try{await go(Rebase.gen());}catch(e){}
+    this.done=true;
     try{if(typeof MOV_CACHE!=='undefined')for(const k in MOV_CACHE)delete MOV_CACHE[k];if(typeof hechZoneImg==='function')hechZoneImg.K={};}catch(e){}   /* 다 짓기 전에 그린 지도(나무 자리 없음)는 버린다 */
     /* 새로 지은 것도 그래픽카드에 조금씩 미리 올린다 (titleWarm) */
     try{const objs=[];for(const c of added)c.traverse(o=>{if(!o.isLight&&(o.isMesh||o.isPoints||o.isLine||o.isSprite))objs.push(o);});
@@ -26233,16 +26287,16 @@ function hchMerge(list){let n=0;const G=list.map(g=>{const q=g.index?g.toNonInde
   for(const g of G){const c=g.attributes.position.count;pos.set(g.attributes.position.array,o*3);nor.set(g.attributes.normal.array,o*3);if(col&&g.attributes.color)col.set(g.attributes.color.array,o*3);o+=c;}
   const out=new THREE.BufferGeometry();out.setAttribute('position',new THREE.BufferAttribute(pos,3));out.setAttribute('normal',new THREE.BufferAttribute(nor,3));if(col)out.setAttribute('color',new THREE.BufferAttribute(col,3));return out;}
 async function hchTopDecor(root,M,cx,cz,hAt){
-  let _s=4241;const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647,rr=(a,b)=>a+rnd()*(b-a),sm=OR.smooth,C=OR.HCH;
-  const Y=hAt(0,0),YC=Y-34;HTOP.root=root;HTOP.Y=Y;HTOP.YC=YC;
-  const U={uT:{value:0},uNT:{value:NAT.noiseTex},uHor:SKY.hor,uZen:SKY.zen,uSun:SKY.sun,uL:{value:1},uN:{value:0},uTint:{value:new THREE.Color(1,1,1)},uC:{value:new THREE.Vector3(cx,YC,cz)}};HTOP.U=U;
-  const M4=new THREE.Matrix4(),q4=new THREE.Quaternion(),e4=new THREE.Euler(),v4=new THREE.Vector3(),s4=new THREE.Vector3(),c4=new THREE.Color();
-  const inst=(geo,mat,L,shadow=true)=>{const m=new THREE.InstancedMesh(geo,mat,L.length);L.forEach((t,i)=>{e4.set(t.rx||0,t.ry||0,t.rz||0);q4.setFromEuler(e4);s4.set(t.sx||t.s,t.sy||t.s,t.sz||t.s);v4.set(cx+t.x,t.y,cz+t.z);M4.compose(v4,q4,s4);m.setMatrixAt(i,M4);if(t.c){m.setColorAt(i,t.c);}});
+  let _s=4241;await HCHL.y();const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647,rr=(a,b)=>a+rnd()*(b-a),sm=OR.smooth,C=OR.HCH;
+  await HCHL.y();const Y=hAt(0,0),YC=Y-34;await HCHL.y();HTOP.root=root;await HCHL.y();HTOP.Y=Y;await HCHL.y();HTOP.YC=YC;
+  await HCHL.y();const U={uT:{value:0},uNT:{value:NAT.noiseTex},uHor:SKY.hor,uZen:SKY.zen,uSun:SKY.sun,uL:{value:1},uN:{value:0},uTint:{value:new THREE.Color(1,1,1)},uC:{value:new THREE.Vector3(cx,YC,cz)}};await HCHL.y();HTOP.U=U;
+  await HCHL.y();const M4=new THREE.Matrix4(),q4=new THREE.Quaternion(),e4=new THREE.Euler(),v4=new THREE.Vector3(),s4=new THREE.Vector3(),c4=new THREE.Color();
+  await HCHL.y();const inst=(geo,mat,L,shadow=true)=>{const m=new THREE.InstancedMesh(geo,mat,L.length);L.forEach((t,i)=>{e4.set(t.rx||0,t.ry||0,t.rz||0);q4.setFromEuler(e4);s4.set(t.sx||t.s,t.sy||t.s,t.sz||t.s);v4.set(cx+t.x,t.y,cz+t.z);M4.compose(v4,q4,s4);m.setMatrixAt(i,M4);if(t.c){m.setColorAt(i,t.c);}});
     if(m.instanceColor)m.instanceColor.needsUpdate=true;m.castShadow=shadow;m.receiveShadow=true;root.add(m);return m;};
-  const vsW='varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}';
+  await HCHL.y();const vsW='varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}';
   /* ===== 구름 바다: 벼랑 아래를 덮고 지평선까지. 해 쪽 비탈은 밝고 반대쪽은 푸른 그늘, 천천히 흐른다 ===== */
-  {const g=new THREE.RingGeometry(18,1500,128,44);g.rotateX(-Math.PI/2);
-    const m=new THREE.ShaderMaterial({uniforms:U,vertexShader:vsW,transparent:true,depthWrite:false,fog:false,
+  await HCHL.y();{const g=new THREE.RingGeometry(18,1500,128,44);await HCHL.y();g.rotateX(-Math.PI/2);
+    await HCHL.y();const m=new THREE.ShaderMaterial({uniforms:U,vertexShader:vsW,transparent:true,depthWrite:false,fog:false,
       fragmentShader:`uniform float uT,uL;uniform sampler2D uNT;uniform vec3 uHor,uZen,uSun,uTint,uC;varying vec3 vW;
 float den(vec2 p){vec4 a=texture2D(uNT,p*.0019+vec2(uT*.0007,uT*.0003));vec4 b=texture2D(uNT,p*.0061+vec2(-uT*.0013,uT*.0009)+.37);vec4 c=texture2D(uNT,p*.021+vec2(uT*.0026,-uT*.0018)+.71);
   return a.r*.52+b.g*.31+c.b*.17;}
@@ -26254,17 +26308,17 @@ void main(){vec2 p=vW.xz;float d=den(p);vec2 sd=normalize(uSun.xz+vec2(1e-4));fl
   float far=smoothstep(320.,1400.,dist);col=mix(col,uHor*1.03,far*.75);
   float a=mix(.42,1.,smoothstep(.27,.5,d));a=mix(a,1.,smoothstep(140.,520.,dist));a*=smoothstep(1500.,1250.,length(p-uC.xz));
   gl_FragColor=linearToOutputTexel(vec4(col,a));`+ORL_GRADE+`}`});
-    const ms=new THREE.Mesh(g,m);ms.position.set(cx,YC,cz);ms.renderOrder=-5;ms.frustumCulled=false;root.add(ms);}
+    await HCHL.y();const ms=new THREE.Mesh(g,m);await HCHL.y();ms.position.set(cx,YC,cz);await HCHL.y();ms.renderOrder=-5;await HCHL.y();ms.frustumCulled=false;await HCHL.y();root.add(ms);}
   /* 벼랑에 걸린 구름 자락: 구름 바다와 벼랑이 만나는 금을 흐리게 가린다 */
-  {const N=70,pp=new Float32Array(N*3),sd=[];for(let i=0;i<N;i++){const a=rr(0,6.28),r=rr(40,150);sd.push({a,r,y:YC+rr(1,9),w:rr(.004,.012)*(rnd()<.5?-1:1)});}
-    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pp,3));
-    const m=new THREE.PointsMaterial({map:edgeMistTex(),color:0xffffff,size:46,sizeAttenuation:true,transparent:true,opacity:.55,depthWrite:false,fog:true});
-    const pts=new THREE.Points(g,m);pts.frustumCulled=false;pts.renderOrder=-4;root.add(pts);HTOP.wisp={pts,pp,sd};}
+  await HCHL.y();{const N=70,pp=new Float32Array(N*3),sd=[];await HCHL.y();for(let i=0;i<N;i++){const a=rr(0,6.28),r=rr(40,150);sd.push({a,r,y:YC+rr(1,9),w:rr(.004,.012)*(rnd()<.5?-1:1)});}
+    await HCHL.y();const g=new THREE.BufferGeometry();await HCHL.y();g.setAttribute('position',new THREE.BufferAttribute(pp,3));
+    await HCHL.y();const m=new THREE.PointsMaterial({map:edgeMistTex(),color:0xffffff,size:46,sizeAttenuation:true,transparent:true,opacity:.55,depthWrite:false,fog:true});
+    await HCHL.y();const pts=new THREE.Points(g,m);await HCHL.y();pts.frustumCulled=false;await HCHL.y();pts.renderOrder=-4;await HCHL.y();root.add(pts);await HCHL.y();HTOP.wisp={pts,pp,sd};}
   await HCHL.y();
   /* ===== 먼 설산: 구름을 뚫고 솟은 봉우리들 (안개가 멀수록 하늘빛으로 바래게 한다) ===== */
   {const L=[],SN=new THREE.Color(.95,.97,1),SN2=new THREE.Color(.78,.84,.93),RK=new THREE.Color(.27,.28,.32),RK2=new THREE.Color(.4,.39,.4);
     /* 봉우리 하나: 등줄기(능선) 서너 갈래가 꼭대기에서 뻗어 내린 산. 높이 = 능선을 따라 솟고 사이 골짜기는 깊게 패인다. 가파른 바위벽엔 눈이 붙지 않는다 */
-    const peak=(ang,dist,h,w)=>{const px=Math.cos(ang)*dist,pz=Math.sin(ang)*dist,R=26,S=56,sd=rr(0,99),nr=3+Math.floor(rnd()*3),ra=[...Array(nr)].map(()=>rr(0,6.28)),pos=[],idx=[];
+    await HCHL.y();const peak=(ang,dist,h,w)=>{const px=Math.cos(ang)*dist,pz=Math.sin(ang)*dist,R=26,S=56,sd=rr(0,99),nr=3+Math.floor(rnd()*3),ra=[...Array(nr)].map(()=>rr(0,6.28)),pos=[],idx=[];
       for(let i=0;i<=R;i++){const k=i/R;for(let j=0;j<=S;j++){const a=j/S*Math.PI*2;let rid=0;for(const q of ra){const d=Math.atan2(Math.sin(a-q),Math.cos(a-q));rid=Math.max(rid,Math.exp(-d*d*9));}
         const rg=HECH.ridged(Math.cos(a)*1.6+sd,Math.sin(a)*1.6+k*2.6,4),rad=w*Math.pow(1-k,1.15)*(.55+.55*rid+.28*rg),y=YC-50+h*Math.pow(k,.9)*(1+.05*rid)+(rg-.5)*h*.1*(1-k*k);
         pos.push(cx+px+Math.cos(a)*rad,y,cz+pz+Math.sin(a)*rad);}}
@@ -26273,19 +26327,19 @@ void main(){vec2 p=vW.xz;float d=den(p);vec2 sd=normalize(uSun.xz+vec2(1e-4));fl
       const N=g.attributes.normal,P=g.attributes.position,col=[];for(let v=0;v<P.count;v++){const ny=N.getY(v),k=(P.getY(v)-YC+50)/h,n=HECH.fbm(P.getX(v)*.02,P.getZ(v)*.02+P.getY(v)*.03,3);
         const snow=sm(.55,.75,ny+(n-.5)*.4+k*.1)*sm(.12,.3,k+(n-.5)*.2);c4.copy(RK).lerp(RK2,n);c4.lerp(SN2,snow).lerp(SN,snow*sm(.3,.8,ny));col.push(c4.r,c4.g,c4.b);}
       g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));L.push(g.toNonIndexed());};
-    const PK=[[.3,560,170,200],[.75,820,280,330],[1.25,470,95,140],[1.9,700,200,260],[2.5,1050,340,420],[2.95,620,140,190],[3.5,900,250,320],[4.05,520,120,160],[4.6,760,215,280],[5.15,1150,360,460],[5.7,640,170,220],[6.05,980,240,330]];
-    for(const [a,d,h,w] of PK){peak(a+rr(-.08,.08),d,h,w);if(rnd()<.7)peak(a+rr(.07,.15),d*rr(1.04,1.18),h*rr(.5,.75),w*.75);}
-    const m=new THREE.Mesh(hchMerge(L),new THREE.MeshStandardMaterial({vertexColors:true,roughness:.9,metalness:0}));m.frustumCulled=false;root.add(m);}
+    await HCHL.y();const PK=[[.3,560,170,200],[.75,820,280,330],[1.25,470,95,140],[1.9,700,200,260],[2.5,1050,340,420],[2.95,620,140,190],[3.5,900,250,320],[4.05,520,120,160],[4.6,760,215,280],[5.15,1150,360,460],[5.7,640,170,220],[6.05,980,240,330]];
+    await HCHL.y();for(const [a,d,h,w] of PK){peak(a+rr(-.08,.08),d,h,w);if(rnd()<.7)peak(a+rr(.07,.15),d*rr(1.04,1.18),h*rr(.5,.75),w*.75);await HCHL.y();}
+    await HCHL.y();const m=new THREE.Mesh(hchMerge(L),new THREE.MeshStandardMaterial({vertexColors:true,roughness:.9,metalness:0}));await HCHL.y();m.frustumCulled=false;await HCHL.y();root.add(m);}
   await HCHL.y();
   /* ===== 별과 오로라 (밤에만 서서히) ===== */
-  {const N=1400,pp=new Float32Array(N*3),aS=new Float32Array(N);for(let i=0;i<N;i++){const a=rr(0,6.28),y=Math.pow(rnd(),.7);const r=Math.sqrt(1-y*y);pp[i*3]=Math.cos(a)*r*1200;pp[i*3+1]=y*1200+20;pp[i*3+2]=Math.sin(a)*r*1200;aS[i]=rr(0,1);}
-    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pp,3));g.setAttribute('aS',new THREE.BufferAttribute(aS,1));
-    const m=new THREE.ShaderMaterial({uniforms:U,transparent:true,depthWrite:false,fog:false,blending:THREE.AdditiveBlending,
+  {const N=1400,pp=new Float32Array(N*3),aS=new Float32Array(N);await HCHL.y();for(let i=0;i<N;i++){const a=rr(0,6.28),y=Math.pow(rnd(),.7);const r=Math.sqrt(1-y*y);pp[i*3]=Math.cos(a)*r*1200;pp[i*3+1]=y*1200+20;pp[i*3+2]=Math.sin(a)*r*1200;aS[i]=rr(0,1);}
+    await HCHL.y();const g=new THREE.BufferGeometry();await HCHL.y();g.setAttribute('position',new THREE.BufferAttribute(pp,3));await HCHL.y();g.setAttribute('aS',new THREE.BufferAttribute(aS,1));
+    await HCHL.y();const m=new THREE.ShaderMaterial({uniforms:U,transparent:true,depthWrite:false,fog:false,blending:THREE.AdditiveBlending,
       vertexShader:'uniform float uT;attribute float aS;varying float vA;void main(){vec4 w=vec4(position+cameraPosition,1.);vA=aS;gl_Position=projectionMatrix*viewMatrix*w;gl_PointSize=1.+aS*aS*2.2;}',
       fragmentShader:'uniform float uT,uN;varying float vA;void main(){vec2 q=gl_PointCoord-.5;float k=1.-smoothstep(.15,.5,length(q));float tw=.65+.35*sin(uT*(1.5+vA*3.)+vA*40.);gl_FragColor=vec4(vec3(.9,.94,1.)*k*tw*uN*(.35+.65*vA),1.);}'});
-    const st=new THREE.Points(g,m);st.frustumCulled=false;st.renderOrder=-900;root.add(st);HTOP.stars=st;}
-  {const g=new THREE.CylinderGeometry(1,1,1,96,1,true,Math.PI*.95,Math.PI*1.1);   /* 북쪽 하늘 (−z) 을 감싸는 넓은 띠 */
-    const m=new THREE.ShaderMaterial({uniforms:U,transparent:true,depthWrite:false,fog:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,
+    await HCHL.y();const st=new THREE.Points(g,m);await HCHL.y();st.frustumCulled=false;await HCHL.y();st.renderOrder=-900;await HCHL.y();root.add(st);await HCHL.y();HTOP.stars=st;}
+  await HCHL.y();{const g=new THREE.CylinderGeometry(1,1,1,96,1,true,Math.PI*.95,Math.PI*1.1);   /* 북쪽 하늘 (−z) 을 감싸는 넓은 띠 */
+    await HCHL.y();const m=new THREE.ShaderMaterial({uniforms:U,transparent:true,depthWrite:false,fog:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,
       vertexShader:'varying vec2 vU;void main(){vU=uv;vec4 w=modelMatrix*vec4(position,1.);w.xyz+=cameraPosition;gl_Position=projectionMatrix*viewMatrix*w;}',
       fragmentShader:`uniform float uT,uN;uniform sampler2D uNT;varying vec2 vU;
 void main(){if(uN<.01)discard;float u=vU.x,v=vU.y;
@@ -26297,7 +26351,7 @@ void main(){if(uN<.01)discard;float u=vU.x,v=vU.y;
   vec3 c=mix(vec3(.18,1.,.55),vec3(.15,.75,.95),smoothstep(.05,.3,y));c=mix(c,vec3(.75,.35,.95),smoothstep(.25,.6,y)*.7);
   float a=band*ray*fold*uN*.55*smoothstep(0.,.08,u)*smoothstep(1.,.92,u);
   gl_FragColor=vec4(c*a,1.);}`});
-    const au=new THREE.Mesh(g,m);au.scale.set(1000,520,1000);au.position.set(0,230,0);au.frustumCulled=false;au.renderOrder=-899;root.add(au);HTOP.aur=au;}
+    await HCHL.y();const au=new THREE.Mesh(g,m);await HCHL.y();au.scale.set(1000,520,1000);await HCHL.y();au.position.set(0,230,0);await HCHL.y();au.frustumCulled=false;await HCHL.y();au.renderOrder=-899;await HCHL.y();root.add(au);await HCHL.y();HTOP.aur=au;}
   await HCHL.y();
   /* ===== 옛 선돌: 돌탑 둘레 고리와 북쪽 길목의 돌문. 바람 맞는 쪽(서쪽)과 머리에 서리가 두껍게 붙었다 ===== */
   const stoneGeo=(()=>{const g=new THREE.BoxGeometry(1,1,1,3,8,2);g.translate(0,.5,0);const P=g.attributes.position,col=[];
@@ -26307,48 +26361,48 @@ void main(){if(uN<.01)discard;float u=vU.x,v=vU.y;
       c4.setRGB(.42,.42,.43).lerp(new THREE.Color(.3,.32,.3),sm(.55,.75,n)*.6);const n2=HECH.fbm(P.getX(i)*9+3,P.getZ(i)*9+y*7,3),rime=Math.max(sm(-.2,.6,-nx)*sm(.4,.6,n+y*.2),sm(.35,.8,ny),sm(.8,.97,y)*.85,sm(.56,.66,n2)*.8)*.95;   /* 서리: 바람 맞는 쪽·머리·군데군데 얼룩 */
       if(sm(.6,.7,HECH.fbm(P.getX(i)*6+9,y*5,2))>.5)c4.lerp(new THREE.Color(.52,.5,.36),.35);   /* 돌이끼 */c4.lerp(new THREE.Color(.94,.96,.99),rime);col.push(c4.r,c4.g,c4.b);}
     g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));return g;})();
-  {const S=[],P0=M.cairn,ring=[];for(let k=0;k<9;k++){const a=k/9*Math.PI*2+.17;if(Math.abs(Math.sin(a))>.93)continue;ring.push(a);}   /* 길이 지나는 남·북은 비운다 */
-    for(const a of ring){const r=9.2+rr(-.5,.5),x=P0.x+Math.cos(a)*r,z=P0.z+Math.sin(a)*r,h=rr(2.2,3.3);S.push({x,z,y:hAt(x,z)-.35,sx:rr(.9,1.25),sy:h,sz:rr(.5,.7),ry:-a+Math.PI/2+rr(-.12,.12),rz:rr(-.06,.06)});colliders.push({x:cx+x,z:cz+z,r:.7,h:h});}
-    {const z=-27,y=hAt(0,z);for(const sx of [-1,1]){S.push({x:sx*2.3,z,y:y-.4,sx:1.15,sy:4.2,sz:.75,ry:0,rz:sx*.03});colliders.push({x:cx+sx*2.3,z:cz+z,r:.75,h:4});}
+  await HCHL.y();{const S=[],P0=M.cairn,ring=[];await HCHL.y();for(let k=0;k<9;k++){const a=k/9*Math.PI*2+.17;if(Math.abs(Math.sin(a))>.93)continue;ring.push(a);}   /* 길이 지나는 남·북은 비운다 */
+    await HCHL.y();for(const a of ring){const r=9.2+rr(-.5,.5),x=P0.x+Math.cos(a)*r,z=P0.z+Math.sin(a)*r,h=rr(2.2,3.3);S.push({x,z,y:hAt(x,z)-.35,sx:rr(.9,1.25),sy:h,sz:rr(.5,.7),ry:-a+Math.PI/2+rr(-.12,.12),rz:rr(-.06,.06)});colliders.push({x:cx+x,z:cz+z,r:.7,h:h});}
+    await HCHL.y();{const z=-27,y=hAt(0,z);await HCHL.y();for(const sx of [-1,1]){S.push({x:sx*2.3,z,y:y-.4,sx:1.15,sy:4.2,sz:.75,ry:0,rz:sx*.03});colliders.push({x:cx+sx*2.3,z:cz+z,r:.75,h:4});}
     }
-    const sm2=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.92});inst(stoneGeo,sm2,S);
-    {const z=-27,y=hAt(0,z),g=new THREE.BoxGeometry(5.6,.85,1.0,10,2,3),P=g.attributes.position,col=[];   /* 돌문 위에 얹은 들보 돌: 거칠게 깎은 넓적한 돌, 위엔 눈 */
-      for(let i=0;i<P.count;i++){const x=P.getX(i),yy=P.getY(i),zz=P.getZ(i),n=HECH.fbm(x*.9+3,yy*2+zz*2,3)-.5;P.setXYZ(i,x*(1+(Math.abs(x)>2.7?n*.15:0)),yy+n*.18+(yy>0?-.06*Math.abs(x)/2.8:0),zz*(1+n*.3));}
-      g.computeVertexNormals();const N=g.attributes.normal;for(let i=0;i<P.count;i++){const n=HECH.fbm(P.getX(i)*3,P.getZ(i)*3+P.getY(i),2);c4.setRGB(.42,.42,.43).lerp(new THREE.Color(.94,.96,.99),Math.max(sm(.4,.85,N.getY(i)),sm(-.1,.6,-N.getX(i))*sm(.45,.6,n)));col.push(c4.r,c4.g,c4.b);}
-      g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));const L=new THREE.Mesh(g,sm2);L.position.set(cx,y+4.1,cz+z);L.castShadow=L.receiveShadow=true;root.add(L);}}
+    await HCHL.y();const sm2=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.92});await HCHL.y();inst(stoneGeo,sm2,S);
+    await HCHL.y();{const z=-27,y=hAt(0,z),g=new THREE.BoxGeometry(5.6,.85,1.0,10,2,3),P=g.attributes.position,col=[];   /* 돌문 위에 얹은 들보 돌: 거칠게 깎은 넓적한 돌, 위엔 눈 */
+      await HCHL.y();for(let i=0;i<P.count;i++){const x=P.getX(i),yy=P.getY(i),zz=P.getZ(i),n=HECH.fbm(x*.9+3,yy*2+zz*2,3)-.5;P.setXYZ(i,x*(1+(Math.abs(x)>2.7?n*.15:0)),yy+n*.18+(yy>0?-.06*Math.abs(x)/2.8:0),zz*(1+n*.3));}
+      await HCHL.y();g.computeVertexNormals();await HCHL.y();const N=g.attributes.normal;await HCHL.y();for(let i=0;i<P.count;i++){const n=HECH.fbm(P.getX(i)*3,P.getZ(i)*3+P.getY(i),2);c4.setRGB(.42,.42,.43).lerp(new THREE.Color(.94,.96,.99),Math.max(sm(.4,.85,N.getY(i)),sm(-.1,.6,-N.getX(i))*sm(.45,.6,n)));col.push(c4.r,c4.g,c4.b);}
+      await HCHL.y();g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));await HCHL.y();const L=new THREE.Mesh(g,sm2);await HCHL.y();L.position.set(cx,y+4.1,cz+z);await HCHL.y();L.castShadow=L.receiveShadow=true;await HCHL.y();root.add(L);}}
   await HCHL.y();
   /* ===== 깃발 줄: 돌탑 꼭대기에서 네 장대로 처진 줄, 줄마다 빛바랜 깃발이 바람에 펄럭인다 ===== */
   {const P0=M.cairn,top=new THREE.Vector3(cx+P0.x,hAt(P0.x,P0.z)+2.55,cz+P0.z),fl=[],line=[],cols=[0x9b2f2a,0xd2a64a,0xece4d0,0x3e5f8a,0x3f6e48];
-    const wood=new THREE.MeshStandardMaterial({color:0x5a3e26,roughness:.9});
-    [.55,2.05,3.75,5.35].forEach((a,pi)=>{const x=P0.x+Math.cos(a)*6.3,z=P0.z+Math.sin(a)*6.3,y=hAt(x,z),pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.09,3.4,7),wood);pole.position.set(cx+x,y+1.55,cz+z);pole.rotation.z=rr(-.05,.05);pole.castShadow=true;root.add(pole);colliders.push({x:cx+x,z:cz+z,r:.2,h:3.2});
+    await HCHL.y();const wood=new THREE.MeshStandardMaterial({color:0x5a3e26,roughness:.9});
+    await HCHL.y();[.55,2.05,3.75,5.35].forEach((a,pi)=>{const x=P0.x+Math.cos(a)*6.3,z=P0.z+Math.sin(a)*6.3,y=hAt(x,z),pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.09,3.4,7),wood);pole.position.set(cx+x,y+1.55,cz+z);pole.rotation.z=rr(-.05,.05);pole.castShadow=true;root.add(pole);colliders.push({x:cx+x,z:cz+z,r:.2,h:3.2});
       const end=new THREE.Vector3(cx+x,y+3.15,cz+z),L=top.distanceTo(end),n=Math.floor(L/.5);
       for(let i=0;i<=n;i++){const k=i/n,p=top.clone().lerp(end,k);p.y-=Math.sin(k*Math.PI)*L*.12;line.push(p);if(i>0&&i<n)fl.push({x:p.x-cx,z:p.z-cz,y:p.y-.02,s:1,ry:Math.atan2(end.x-top.x,end.z-top.z)+Math.PI/2,c:c4.set(cols[(i+pi)%5]).clone()});}
       line.push(null);});
-    {const pts=[];for(let i=0;i+1<line.length;i++)if(line[i]&&line[i+1])pts.push(line[i],line[i+1]);const g=new THREE.BufferGeometry().setFromPoints(pts);root.add(new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x3a2c20})));}
-    const g=new THREE.PlaneGeometry(.3,.38,3,4);g.translate(0,-.19,0);
-    const m=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.95,side:THREE.DoubleSide});
-    m.onBeforeCompile=sh=>{sh.uniforms.uT=U.uT;sh.vertexShader='uniform float uT;\n'+sh.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
+    await HCHL.y();{const pts=[];await HCHL.y();for(let i=0;i+1<line.length;i++)if(line[i]&&line[i+1])pts.push(line[i],line[i+1]);await HCHL.y();const g=new THREE.BufferGeometry().setFromPoints(pts);await HCHL.y();root.add(new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x3a2c20})));}
+    await HCHL.y();const g=new THREE.PlaneGeometry(.3,.38,3,4);await HCHL.y();g.translate(0,-.19,0);
+    await HCHL.y();const m=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.95,side:THREE.DoubleSide});
+    await HCHL.y();m.onBeforeCompile=sh=>{sh.uniforms.uT=U.uT;sh.vertexShader='uniform float uT;\n'+sh.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
 {float ph=instanceMatrix[3].x*1.7+instanceMatrix[3].z*1.3,k=-position.y/.38;transformed.z+=(sin(uT*7.+ph-position.x*9.)*.12+sin(uT*13.+ph*2.)*.04+.1)*k;transformed.x+=sin(uT*5.+ph)*.03*k;}`);};
-    m.customProgramCacheKey=()=>'htop-flag';
-    const im=inst(g,m,fl);HTOP.flags=im;}
+    await HCHL.y();m.customProgramCacheKey=()=>'htop-flag';
+    await HCHL.y();const im=inst(g,m,fl);await HCHL.y();HTOP.flags=im;}
   await HCHL.y();
   /* ===== 얼음 결정: 길가 눈 속에서 솟은 육각 기둥 무리 (햇빛에 반짝인다) ===== */
   {const cl=(()=>{const L=[];for(let k=0;k<7;k++){const h=k?rr(.45,1.1):1.5,r=h*rr(.13,.18),c=new THREE.CylinderGeometry(r,r,h,6,1),t=new THREE.ConeGeometry(r,r*2.2,6,1);t.translate(0,h/2+r*1.1,0);
         const g=hchMerge([c,t]);g.translate(0,h/2,0);g.rotateZ(k?rr(-.7,.7):rr(-.1,.1));g.rotateX(k?rr(-.6,.6):0);g.rotateY(rr(0,6.28));L.push(g);}return hchMerge(L);})();
-    const m=new THREE.MeshStandardMaterial({color:0xcfeeff,roughness:.04,metalness:.32,transparent:true,opacity:.8,emissive:0x3a7aa8,emissiveIntensity:.45});
-    const L=[],C0=M.C[0];for(let k=0;k<26;k++){const s=rr(6,M.len-10),p=C.cAt(C0,s),sd=rnd()<.5?-1:1,e=k<6?rr(-.5,1.5):rr(-3.2,-.8),lat=sd*(p.w+e),x=p.x-p.uz*lat,z=p.z+p.ux*lat;
+    await HCHL.y();const m=new THREE.MeshStandardMaterial({color:0xcfeeff,roughness:.04,metalness:.32,transparent:true,opacity:.8,emissive:0x3a7aa8,emissiveIntensity:.45});
+    await HCHL.y();const L=[],C0=M.C[0];await HCHL.y();for(let k=0;k<26;k++){const s=rr(6,M.len-10),p=C.cAt(C0,s),sd=rnd()<.5?-1:1,e=k<6?rr(-.5,1.5):rr(-3.2,-.8),lat=sd*(p.w+e),x=p.x-p.uz*lat,z=p.z+p.ux*lat;
       if(M.hole&&Math.hypot(x-M.hole.x,z-M.hole.z)<M.hole.r+3)continue;const s0=k<6?rr(1.6,2.4):rr(.5,1.2);L.push({x,z,y:hAt(x,z)-.12*s0,s:s0,ry:rr(0,6.28)});if(s0>1)colliders.push({x:cx+x,z:cz+z,r:.4*s0,h:1.5*s0});}
-    inst(cl,m,L);}
+    await HCHL.y();inst(cl,m,L);}
   /* ===== 눈가루: 벼랑 끝에서 바람에 날려 허공으로 흩어지는 눈 (점마다 투명도·크기) ===== */
-  {const N=260,pp=new Float32Array(N*3),aA=new Float32Array(N),sd=[];for(let i=0;i<N;i++){sd.push({life:0,age:rr(0,3),vx:0,vy:0,vz:0});pp[i*3+1]=-9999;}
-    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pp,3));g.setAttribute('aA',new THREE.BufferAttribute(aA,1));
-    const m=new THREE.ShaderMaterial({uniforms:{uMap:{value:edgeMistTex()}},transparent:true,depthWrite:false,fog:false,
+  await HCHL.y();{const N=260,pp=new Float32Array(N*3),aA=new Float32Array(N),sd=[];await HCHL.y();for(let i=0;i<N;i++){sd.push({life:0,age:rr(0,3),vx:0,vy:0,vz:0});pp[i*3+1]=-9999;}
+    await HCHL.y();const g=new THREE.BufferGeometry();await HCHL.y();g.setAttribute('position',new THREE.BufferAttribute(pp,3));await HCHL.y();g.setAttribute('aA',new THREE.BufferAttribute(aA,1));
+    await HCHL.y();const m=new THREE.ShaderMaterial({uniforms:{uMap:{value:edgeMistTex()}},transparent:true,depthWrite:false,fog:false,
       vertexShader:'attribute float aA;varying float vA;void main(){vA=aA;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;gl_PointSize=min(260.,(5.+aA*7.)*300./max(1.,-mv.z));}',
       fragmentShader:'uniform sampler2D uMap;varying float vA;void main(){vec4 t=texture2D(uMap,gl_PointCoord);gl_FragColor=vec4(vec3(.96,.98,1.),t.a*vA*.85);}'});
-    const pts=new THREE.Points(g,m);pts.frustumCulled=false;root.add(pts);HTOP.spin={pts,pp,aA,sd};}
+    await HCHL.y();const pts=new THREE.Points(g,m);await HCHL.y();pts.frustumCulled=false;await HCHL.y();root.add(pts);await HCHL.y();HTOP.spin={pts,pp,aA,sd};}
   await HCHL.y();
   await hchTopHole(root,M,cx,cz,hAt);
-  HTOP.ready=true;}
+  await HCHL.y();HTOP.ready=true;}
 /* 꼭대기 북쪽 끝의 굴 구멍: 눈 턱이 둥글게 꺾여 들어가고, 안쪽은 얼음 낀 바위 벽이 캄캄한 어둠으로 떨어진다.
    턱 아래로 고드름, 옆엔 박아 둔 나무 말뚝에서 밧줄이 구멍 속으로 늘어져 있고, 구멍에선 찬 김이 피어오른다 */
 async function hchTopHole(root,M,cx,cz,hAt){const O=M.hole,sm=OR.smooth,HM=HMAP;let _s=913;const rnd=()=>(_s=(_s*16807)%2147483647)/2147483647,rr=(a,b)=>a+rnd()*(b-a);
@@ -26727,7 +26781,7 @@ async function buildHCave(){
   const ds=1.0,NS=Math.ceil(C.TL/ds),run=async it=>{let r;while(!(r=it.next()).done)await HCHL.y();return r.value;};
   /* ===== 굴 벽·천장: 굴 길을 따라 단면 고리를 잇는다. 단면은 바닥 가장자리에서 둥근 천장으로, 바깥쪽으로만 울퉁불퉁 (걷는 자리를 먹지 않게) ===== */
   const wallGen=function*(){const M=28,pos=[],col=[],idx=[];
-    for(let i=0;i<=NS;i++){if((i&31)===31)yield;const s=Math.min(C.TL,i*ds),p=at(s),[ux,uz]=dir(s),nx=-uz,nz=ux,b=H.base(s),ent=1-OR.smooth(6,36,s);
+    for(let i=0;i<=NS;i++){if((i&7)===7)yield;const s=Math.min(C.TL,i*ds),p=at(s),[ux,uz]=dir(s),nx=-uz,nz=ux,b=H.base(s),ent=1-OR.smooth(6,36,s);
       for(let j=0;j<=M;j++){const th=-.2+(Math.PI+.4)*j/M,cs=Math.cos(th),sn=Math.max(0,Math.sin(th)),out=th<0||th>Math.PI;
         const lat=cs*p.w*(out?1.06:1),y=out?b+.15:b+1.3+(p.c-1.3)*Math.pow(sn,.45),wx=p.x+nx*lat,wz=p.z+nz*lat,nn=n3(wx,y,wz),push=.2+(nn*.9+rg(wx,y,wz)*1.6)*(.45+.55*sn)+OR.smooth(LS0,LS0+18,s)*OR.smooth(.45,.8,n3(wx*.7+9,y*.6,wz*.7))*1.6*sn;   /* 용의 잠자리: 벽에서 얼음 혹이 부풀어 나온다 */
         pos.push(cx+wx+nx*Math.sign(cs)*Math.abs(cs)*push,y+sn*push*.7,cz+wz+nz*Math.sign(cs)*Math.abs(cs)*push);
@@ -26736,7 +26790,7 @@ async function buildHCave(){
     /* 막힌 끝 */
     {const p=at(C.TL),c0=pos.length/3;pos.push(cx+p.x,H.base(C.TL)+p.c*.5,cz+p.z);col.push(ROCK.r,ROCK.g,ROCK.b);const r0=NS*(M+1);for(let j=0;j<M;j++)idx.push(r0+j,r0+j+1,c0);}
     {const p=at(0),[ux,uz]=dir(0),c0=pos.length/3;pos.push(cx+p.x-ux*1.6,H.base(0)+p.c*.5,cz+p.z-uz*1.6);tmp.copy(ROCK2).lerp(FROST,.5);col.push(tmp.r,tmp.g,tmp.b);for(let j=0;j<M;j++)idx.push(j+1,j,c0);idx.push(0,M,c0);}   /* 첫머리도 막혔다 (2026-11-11: 들어오는 길은 천장 구멍) */
-    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();return g;};
+    yield;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();return g;};
   const wallM=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.88,side:THREE.DoubleSide,shadowSide:THREE.BackSide});
   {const m=new THREE.Mesh(await run(wallGen()),wallM);m.castShadow=true;m.receiveShadow=true;root.add(m);}
   /* ===== 바닥: 얼음이 군데군데 깔리고, 입구 쪽엔 바람에 날려 들어온 눈 ===== */
@@ -31718,6 +31772,7 @@ function startGame(data){if(BOOT.on||BOOT.q){BOOT.wait(()=>startGame(data));retu
   const L=$('#loading');L.hidden=false;$('#loadMsg').textContent='모험가를 불러오는 중…';
   pmLoad(ap.g).catch(()=>{}).then(()=>{L.hidden=true;startGameNow(data);});}
 function startGameNow(data){if(JOB_ALIAS[data.job])data={...data,job:JOB_ALIAS[data.job]};
+  try{LAZYG.prep(data.x||0,data.z||0);}catch(e){}   /* 들어갈 자리 가까이의 땅은 지금 끝까지 (LAZYG) */
   setTimeout(precompileAll,4000);setTimeout(precompileAll,12000);setTimeout(function wg(){if(!TW.done&&TW.list)return setTimeout(wg,1500);warmGpu();},1500);   /* 남은 것을 조금씩 올리는 중(titleWarm)이면 다 올린 뒤에 (한 번에 다 그리면 몇 초 멈춘다) */
   P={...data,buffs:{}};delete P.tab;saveStale=false;saveClaimT=Date.now();if(!P.id)P.id='c'+Date.now().toString(36);P.seat=null;P.ride=null;P.drunk=0;P.blackout=false;
   wpnMigrate(data);P.gold=data.gold||0;P.equip={weapon:null,sub:null,helm:null,armor:null,boots:null,acc:null,...(data.equip||{})};
@@ -31932,7 +31987,7 @@ function drunkBlackout(){if(!P||!player||warping)return;const f=$('#fade');f.cla
   setTimeout(()=>{P.blackout=false;const q=player.position;let bx=q.x,bz=q.z;for(let k=0;k<12;k++){const a=Math.random()*Math.PI*2,d=4+Math.random()*9,x=q.x+Math.cos(a)*d,z=q.z+Math.sin(a)*d;const p={x,z};if(typeof OR.worldClamp==='function')OR.worldClamp(p,.5);if(Math.hypot(p.x-q.x,p.z-q.z)>3){bx=p.x;bz=p.z;break;}}
     player.position.set(bx,floorAt(bx,bz,q.y+1),bz);pvel.x=pvel.z=0;vy=0;P.drunk=Math.max(0,P.drunk-2.5);if(P.seat!=null){P.seat=null;sitting=false;}
     log('…정신을 차려 보니 엉뚱한 곳에 있다. 중간 기억이 없다','sys');publishPresence(true);setTimeout(()=>f.classList.remove('on'),300);},2600);}
-function warpTo(x,z,yaw,msg,fy){if(!HCHL.done&&HCHL.isH(x,z)){if(!warping)HCHL.need(()=>warpTo(x,z,yaw,msg,fy));return;}standUp=null;if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.seat!=null){P.seat=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
+function warpTo(x,z,yaw,msg,fy){if(!HCHL.done&&HCHL.isH(x,z)){if(!warping)HCHL.need(()=>warpTo(x,z,yaw,msg,fy));return;}try{LAZYG.prep(x,z);}catch(e){}standUp=null;if(CCAR.ride){CCAR.ride=null;sitting=false;}if(P&&P.seat!=null){P.seat=null;sitting=false;}if(P&&P.ride&&typeof rideOff==='function')rideOff(true);
   if(warping)return;warping=true;
   const f=$('#fade');f.classList.add('on');
   setTimeout(()=>{const gy=heightAt(x,z);player.position.set(x,Math.max(gy,floorAt(x,z,fy!=null?fy:gy+20)),z);   /* fy: 여러 층 건물 안에서는 도착할 층 높이 */pvel.x=pvel.z=0;vy=0;cam.yaw=yaw;cam.pitch=0;
@@ -36316,7 +36371,7 @@ function loopBody(){if(HCHL.u)return;   /* 허칠을 서둘러 짓는 동안(로
     if(npcCur&&npcCur.poses&&npcCur.mesh){npcCur.mesh.userData.pose=npcCur.poses.talk;animNpc(npcCur.mesh,tAll,dt);}}   /* 말하는 동안에도 몸짓을 이어 간다 (버키: 손짓하며 설명) */
   updateFx(dt);VFX.update(dt);updateAmbient(dt);seaTick(dt);if(typeof questMarkTick==='function')questMarkTick(dt);zoneMotes(dt);updateOthers(dt);animateDungeonLights(tAll);updatePortals(tAll);
   if(mode!=='title'){const pp=player?player.position:camera.position;LightPool.update(dt,pp);InstChunks.update(camera.position);mapSplitTick(dt);for(const m of monsters)if(m.mesh)setFarHidden(m.mesh,m.mesh.position.distanceToSquared(camera.position)>95*95);}
-  Perf.tick();fpsTick();Rebase.tick(dt);HCHL.tick();
+  Perf.tick();fpsTick();Rebase.tick(dt);HCHL.tick();LAZYG.tick();
   updateHazards(dt);updateTeles(dt);for(const f of lairFlames)f.scale.set(1+Math.sin(tAll*11+f.position.z)*.12,1+Math.sin(tAll*7+f.position.z)*.2,1);renderMirror(dt);
   if(mode==='world'){updateBossBar();
     if(shakeT>0){shakeT-=dt;const a=shakeT*.12;camera.position.x+=rnd(-a,a);camera.position.y+=rnd(-a,a);}}
@@ -36377,7 +36432,7 @@ await BOOT.z();if(window.ORLANDO_WS){
 function bootGo(){if(!BOOT.q){BOOT.done();return;}const t0=performance.now();
   (function w(){const n=TW.list?TW.list.length:0;if(!TW.done&&!warmGpu.done&&performance.now()-t0<800){BOOT.msg('불러오는 중… '+Math.min(99,90+Math.floor(9*(n?TW.i/n:0)))+'%');requestAnimationFrame(w);return;}
     BOOT.done();BOOT.run();})();}
-await BOOT.y(true);EWHOOK=null;EWQ.length=0;BOOT.ready();loop();requestAnimationFrame(()=>requestAnimationFrame(bootGo));
+await BOOT.y(true);EWHOOK=null;EWQ.length=0;LAZYG.on=false;BOOT.ready();loop();requestAnimationFrame(()=>requestAnimationFrame(bootGo));
 
 /* ---------- 메인 퀘스트 · 옛 친구의 책 ----------
    메인 퀘스트는 퀘스트 창 맨 위 '메인' 칸에 뜬다. 하나가 끝나면 조건에 맞는 다음 것이 뜬다.
