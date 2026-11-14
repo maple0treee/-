@@ -215,6 +215,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brass);outline-
 .mtag .mb{position:relative}.mtag.ex .mb::after{content:'';position:absolute;left:var(--ex,25%);top:0;bottom:0;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 2px #000}
 .mtag.ex.low .mb i{background:#ffc93a}
 #bossbar .bar{position:relative}#bossbar.ex .bar::after{content:'';position:absolute;left:var(--ex,25%);top:0;bottom:0;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 2px #000}#bossbar.ex.low #bossHp{background:#ffc93a}
+/* 하얀 피해 바: 방금 깎인 만큼 잠깐 남았다가 뒤따라 줄어든다 */
+#bossbar .bar #bossTrail{background:linear-gradient(180deg,#fffaf0 0%,#f2e6cf 45%,#cbbb9c 100%);transition:none;width:100%}
 .ptag b{font-weight:700;font-size:13px;color:var(--peer)}
 .ptag span{font-size:11px;color:var(--parch)}
 
@@ -1346,7 +1348,7 @@ select{background:linear-gradient(#2e2216,#140e08);color:#f4ead2;border:1px soli
     <div id="mbtns" hidden><button id="mJump" type="button">점프</button><button id="mAtk" type="button">공격</button></div>
     <button id="interact" hidden>F · 상호작용</button>
     <div id="prompt" class="panel" hidden role="alertdialog"><div id="promptText"></div><div class="row"><button id="promptYes" type="button">수락</button><button id="promptNo" type="button">거절</button></div></div>
-    <section id="bossbar" class="panel" hidden aria-label="보스"><div class="bn"><b>보스</b><span id="bossNum" class="num">0</span></div><div class="bar hp big"><i id="bossHp"></i></div></section>
+    <section id="bossbar" class="panel" hidden aria-label="보스"><div class="bn"><b>보스</b><span id="bossNum" class="num">0</span></div><div class="bar hp big"><i id="bossTrail"></i><i id="bossHp"></i></div></section>
   </div>
 
   <div id="banner"><div class="t" id="bT"></div><div class="s" id="bS"></div></div>
@@ -38329,13 +38331,19 @@ function bigBanner(t,sub){
   const w=document.createElement('div');const b=document.createElement('b');b.textContent=t;const s=document.createElement('span');s.textContent=sub;w.append(b,s);o.appendChild(w);
   document.body.appendChild(o);setTimeout(()=>o.remove(),2600);
 }
+const BTRAIL={m:null,f:1,w:1,hold:0,t:0};
 function updateBossBar(){
   const bar=$('#bossbar');
   const drag=!inDungeon()&&player?monsters.find(m=>{if(!m.D.dragon||m.dying!==null)return false;const A=arenaOfD(m.D);return Math.hypot(player.position.x-A.x,player.position.z-A.z)<A.r+14;}):null;
   const boss=inDungeon()?monsters.find(m=>m.D.boss&&m.dying===null):drag;
   if(!boss){if(!bar.hidden)bar.hidden=true;return;}
   bar.querySelector('.bn b').textContent=boss.D.name;bar.classList.toggle('dragon',!!boss.D.dragon);
-  bar.hidden=false;$('#bossHp').style.width=Math.max(0,boss.hp/boss.mh*100)+'%';bar.classList.toggle('ex',isRogueLine());bar.classList.toggle('low',isRogueLine()&&boss.hp<boss.mh*execTh(boss));bar.style.setProperty('--ex',execTh(boss)*100+'%');
+  const f=Math.max(0,boss.hp/boss.mh),now=performance.now(),T=BTRAIL;
+  if(T.m!==boss||f>T.f){T.m=boss;T.f=f;T.w=f;T.hold=0;}   /* 다른 보스로 바뀌거나 체력이 차면 바로 맞춘다 */
+  else if(f<T.f){T.f=f;T.hold=now+550;}                     /* 맞을 때마다 잠깐 멈췄다가 */
+  if(T.w>f&&now>T.hold){const dt=Math.min(.1,(now-(T.t||now))/1000);T.w=Math.max(f,T.w-Math.max(.12,(T.w-f)*2.2)*dt);}   /* 뒤따라 줄어든다 */
+  T.t=now;$('#bossTrail').style.width=T.w*100+'%';
+  bar.hidden=false;$('#bossHp').style.width=f*100+'%';bar.classList.toggle('ex',isRogueLine());bar.classList.toggle('low',isRogueLine()&&boss.hp<boss.mh*execTh(boss));bar.style.setProperty('--ex',execTh(boss)*100+'%');
   const ph=boss.D.frost?(boss.hp<boss.mh*.3?'3단계 · 분노':boss.hp<boss.mh*.65?'2단계':'1단계'):boss.D.dragon?(boss.hp<boss.mh*.25?'3단계 · 분노':boss.hp<boss.mh*.55?'2단계':'1단계'):boss.hp<boss.mh*.33?'3단계 · 분노':boss.hp<boss.mh*.66?'2단계':'1단계';
   $('#bossNum').textContent=`${ph} · ${Math.max(0,Math.ceil(boss.hp)).toLocaleString('ko-KR')} / ${boss.mh.toLocaleString('ko-KR')}`;
   bar.classList.toggle('vuln',(boss.vulnT||0)>0);
